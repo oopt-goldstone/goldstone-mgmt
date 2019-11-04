@@ -1,0 +1,9 @@
+[submodule "sm/sysrepo"]
+	path = sm/sysrepo
+	url = https://github.com/sysrepo/sysrepo.git
+[submodule "sm/libyang"]
+	path = sm/libyang
+	url = https://github.com/CESNET/libyang.git
+[submodule "sm/openconfig"]
+	path = sm/openconfig
+	url = https://github.com/openconfig/public.git
