@@ -1,0 +1,449 @@
+module goldstone-onlp {
+
+  yang-version "1.1";
+
+  namespace "http://goldstone.net/yang/onlp";
+
+  prefix "gs-onlp";
+
+  revision "2019-11-01" {
+      reference "0.1.0";
+  }
+
+  grouping platform-fan-top-config {
+    leaf rpm {
+        type uint32;
+    }
+
+    leaf percentage {
+        type uint8;
+    }
+
+    leaf mode {
+        type enumeration {
+            enum OFF;
+            enum SLOW;
+            enum NORMAL;
+            enum FAST;
+        }
+    }
+
+    leaf direction {
+        type enumeration {
+            enum B2F;
+            enum F2B;
+        }
+    }
+  }
+
+  grouping platform-fan-top-state {
+    leaf-list capability {
+          type enumeration {
+              enum B2F;
+              enum F2B;
+              enum SET_RPM;
+              enum SET_PERCENTAGE;
+              enum GET_RPM;
+              enum GET_PERCENTAGE;
+          }
+      }
+
+      leaf-list status {
+          type enumeration {
+              enum PRESENT;
+              enum FAILED;
+              enum B2F;
+              enum F2B;
+          }
+      }
+  }
+
+  grouping platform-fan-top {
+
+    container fan {
+      container config {
+        uses platform-fan-top-config;
+      }
+  
+      container state {
+        config false;
+  
+        uses platform-fan-top-config;
+        uses platform-fan-top-state;
+      }
+    }
+  }
+
+  grouping platform-thermal-top-config {
+  }
+
+  grouping platform-thermal-top-state {
+    leaf-list capability {
+      type enumeration {
+        enum GET_TEMPERATURE;
+        enum GET_WARNING_THRESHOLD;
+        enum GET_ERROR_THRESHOLD;
+        enum GET_SHUTDOWN_THRESHOLD;
+      }
+    }
+
+    leaf-list status {
+      type enumeration {
+        enum PRESENT;
+        enum FAILED;
+      }
+    }
+
+    leaf temperature {
+        type int32;
+        units milli-celsius;
+    }
+
+    container thresholds {
+      leaf warning {
+        type int32;
+        units milli-celcius;
+      }
+      leaf error {
+        type int32;
+        units milli-celcius;
+      }
+      leaf shutdown {
+        type int32;
+        units milli-celcius;
+      }
+    }
+  }
+
+  grouping platform-thermal-top {
+
+    container thermal {
+      container config {
+        uses platform-thermal-top-config;
+      }
+  
+      container state {
+        config false;
+  
+        uses platform-thermal-top-config;
+        uses platform-thermal-top-state;
+      }
+    }
+  }
+
+  grouping platform-led-top-config {
+    leaf mode {
+      type enumeration {
+        enum OFF;
+        enum ON;
+        enum BLINKING;
+        enum RED;
+        enum RED_BLINKING;
+        enum ORANGE;
+        enum ORANGE_BLINKING;
+        enum YELLOW;
+        enum YELLOW_BLINKING;
+        enum GREEN;
+        enum GREEN_BLINKING;
+        enum BLUE;
+        enum BLUE_BLINKING;
+        enum PURPLE;
+        enum PURPLE_BLINKING;
+        enum AUTO;
+        enum AUTO_BLINKING;
+      }
+    }
+
+    leaf character {
+        type string {
+            length "1";
+        }
+    }
+  }
+
+  grouping platform-led-top-state {
+    leaf-list capability {
+      type enumeration {
+        enum ON_OFF;
+        enum CHAR;
+        enum RED;
+        enum RED_BLINKING;
+        enum ORANGE;
+        enum ORANGE_BLINKING;
+        enum YELLOW;
+        enum YELLOW_BLINKING;
+        enum GREEN;
+        enum GREEN_BLINKING;
+        enum BLUE;
+        enum BLUE_BLINKING;
+        enum PURPLE;
+        enum PURPLE_BLINKING;
+        enum AUTO;
+        enum AUTO_BLINKING;
+      }
+    }
+
+    leaf-list status {
+      type enumeration {
+        enum PRESENT;
+        enum FAILED;
+        enum ON;
+      }
+    }
+  }
+
+  grouping platform-led-top {
+
+    container led {
+      container config {
+        uses platform-led-top-config;
+      }
+  
+      container state {
+        config false;
+  
+        uses platform-led-top-config;
+        uses platform-led-top-state;
+      }
+    }
+  }
+
+  grouping platform-sys-top-config {
+  }
+
+  grouping platform-sys-top-state {
+    container onie {
+        leaf product-name {
+          type string;
+        }
+        leaf part-number {
+          type string;
+        }
+        leaf serial-number {
+          type string;
+        }
+    }
+
+    leaf cpld-version {
+      type string;
+    }
+
+    leaf other-versions {
+      type string;
+    }
+  }
+
+  grouping platform-sys-top {
+
+    container sys {
+      container config {
+        uses platform-sys-top-config;
+      }
+  
+      container state {
+        config false;
+  
+        uses platform-sys-top-config;
+        uses platform-sys-top-state;
+      }
+    }
+  }
+
+  grouping platform-psu-top-config {
+  }
+
+  grouping platform-psu-top-state {
+    leaf-list capability {
+      type enumeration {
+        enum AC;
+        enum DC12;
+        enum DC48;
+        enum VIN;
+        enum VOUT;
+        enum IIN;
+        enum IOUT;
+        enum PIN;
+        enum POUT;
+      }
+    }
+
+    leaf-list status {
+      type enumeration {
+        enum PRESENT;
+        enum FAILED;
+        enum UNPLUGGED;
+      }
+    }
+
+    leaf model {
+      type string;
+    }
+
+    leaf serial {
+      type string;
+    }
+
+    leaf input-voltage {
+      type int32;
+      units milli-volts;
+    }
+
+    leaf output-voltage {
+      type int32;
+      units milli-volts;
+    }
+
+    leaf input-current {
+      type int32;
+      units milli-amps;
+    }
+
+    leaf output-current {
+      type int32;
+      units milli-amps;
+    }
+
+    leaf input-power {
+      type int32;
+      units milli-watts;
+    }
+
+    leaf output-power {
+      type int32;
+      units milli-watts;
+    }
+  }
+
+  grouping platform-psu-top {
+
+    container psu {
+      container config {
+        uses platform-psu-top-config;
+      }
+  
+      container state {
+        config false;
+  
+        uses platform-psu-top-config;
+        uses platform-psu-top-state;
+      }
+    }
+  }
+
+  grouping platform-component-config {
+    description
+      "Configuration data for components";
+
+    leaf name {
+      type string;
+      description
+        "Device name for the component -- this may not be a
+        configurable parameter on many implementations.  Where
+        component preconfiguration is supported, for example,
+        the component name may be configurable.";
+    }
+  }
+
+  grouping platform-component-state {
+    description
+      "Operational state data for device components.";
+
+    leaf type {
+      type enumeration {
+          enum SYS;
+          enum THERMAL;
+          enum FAN;
+          enum PSU;
+          enum LED;
+          enum MODULE;
+          enum RTC;
+      }
+      description
+        "Type of component as identified by the system";
+    }
+
+    leaf id {
+      type uint32;
+      description
+        "Unique identifier assigned by the system for the
+        component";
+    }
+
+    leaf description {
+      type string;
+      description
+        "System-supplied description of the component";
+    }
+
+    leaf parent {
+      type leafref {
+        path "../../../component/config/name";
+      }
+      description
+        "Reference to the name of the parent component.  Note that
+        this reference must be kept synchronized with the
+        corresponding subcomponent reference from the parent
+        component.";
+    }
+
+    leaf-list children {
+        type leafref {
+            path "../../../component/config/name";
+        }
+    }
+  }
+
+
+
+  grouping platform-component-top {
+    description
+      "Top-level grouping for components in the device inventory";
+
+    container components {
+      description
+        "Enclosing container for the components in the system.";
+
+      list component {
+        key "name";
+        description
+          "List of components, keyed by component name.";
+
+        leaf name {
+          type leafref {
+            path "../config/name";
+          }
+          description
+            "References the component name";
+        }
+
+        container config {
+          description
+            "Configuration data for each component";
+
+          uses platform-component-config;
+        }
+
+        container state {
+
+          config false;
+
+          description
+            "Operational state data for each component";
+
+          uses platform-component-config;
+          uses platform-component-state;
+
+        }
+
+        uses platform-fan-top;
+        uses platform-thermal-top;
+        uses platform-led-top;
+        uses platform-sys-top;
+        uses platform-psu-top;
+      }
+    }
+  }
+
+  uses platform-component-top;
+
+}
