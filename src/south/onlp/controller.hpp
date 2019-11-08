@@ -1,11 +1,19 @@
 #ifndef __CONTROLLER_HPP__
 #define __CONTROLLER_HPP__
 
+
+#include <map>
+#include <vector>
+#include <sstream>
+
+#include <libyang/Libyang.hpp>
+#include <sysrepo-cpp/Sysrepo.hpp>
+#include <sysrepo-cpp/Connection.hpp>
+#include <sysrepo-cpp/Session.hpp>
+#include <sysrepo-cpp/Xpath.hpp>
+
 extern "C" {
 
-#include <libyang/libyang.h>
-#include <sysrepo.h>
-#include <sysrepo/xpath.h>
 #include <onlp/onlp.h>
 #include <onlp/oids.h>
 #include <onlp/fan.h>
@@ -16,28 +24,21 @@ extern "C" {
 
 }
 
-#include <iostream>
-#include <map>
-#include <vector>
-#include <sstream>
-#include <csignal>
-#include <unistd.h>
-
-class ONLPController {
+class ONLPController : public sysrepo::Callback {
     public:
-        ONLPController(sr_session_ctx_t* sess);
+        ONLPController(sysrepo::S_Session& sess);
         ~ONLPController();
         void loop();
 
-        int get_oper_items(sr_session_ctx_t *session, const char *module_name, const char *xpath, const char *request_xpath,
-                           uint32_t request_id, lyd_node **parent);
+        int module_change(sysrepo::S_Session session, const char *module_name, const char *xpath, sr_event_t event, uint32_t request_id, void *private_data);
+        int oper_get_items(sysrepo::S_Session session, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, libyang::S_Data_Node &parent, void *private_data);
 
     private:
-        sr_session_ctx_t* m_sess;
-        sr_subscription_ctx_t* m_subscription;
+        sysrepo::S_Session m_sess;
+        sysrepo::S_Subscribe m_subscribe;
         std::map<std::string, onlp_oid_t> m_component_map;
 
-        void _init(ly_ctx* ly_ctx, std::map<onlp_oid_type_t, std::vector<onlp_oid_t>>& map, lyd_node* parent, const std::string& prefix, onlp_oid_type_t type);
+        void _init(libyang::S_Context& ctx, std::map<onlp_oid_type_t, std::vector<onlp_oid_t>>& map, libyang::S_Data_Node& parent, const std::string& prefix, onlp_oid_type_t type);
 };
 
 #endif // __CONTROLLER_HPP__
