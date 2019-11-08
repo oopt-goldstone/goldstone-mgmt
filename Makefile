@@ -16,9 +16,13 @@ init:
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/system/openconfig-alarm-types.yang
 
 south: onlp openconfig-converter
+north: cli
 
 onlp:
-	$(MAKE) -C src/south/onlp/
+	$(MAKE) -C src/south/onlp
 
 openconfig-converter:
 	$(MAKE) -C src/south/openconfig-converter
+
+cli:
+	$(MAKE) -C src/north/cli
