@@ -7,3 +7,6 @@
 [submodule "sm/openconfig"]
 	path = sm/openconfig
 	url = https://github.com/openconfig/public.git
+[submodule "src/south/tai/sm/oopt-tai"]
+	path = src/south/tai/sm/oopt-tai
+	url = git@github.com:Telecominfraproject/oopt-tai.git
