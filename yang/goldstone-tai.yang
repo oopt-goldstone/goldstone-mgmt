@@ -1,0 +1,373 @@
+module goldstone-tai {
+
+  yang-version "1.1";
+
+  namespace "http://goldstone.net/yang/tai";
+
+  prefix "gs-tai";
+
+  revision "2019-11-01" {
+      reference "0.1.0";
+  }
+
+  grouping tai-network-interface-config {
+      leaf name {
+          type string;
+      }
+      leaf tx-dis {
+          type boolean;
+      }
+      leaf output-power {
+          type decimal64 {
+              fraction-digits 2;
+          }
+          units dBm;
+      }
+      leaf modulation-format {
+          type enumeration {
+            enum bpsk;
+            enum dp-bpsk;
+            enum qpsk;
+            enum dp-qpsk;
+            enum 8-qam;
+            enum dp-8-wam;
+            enum 16-qam;
+            enum dp-16-qam;
+            enum 32-qam;
+            enum dp-32-qam;
+            enum 64-qam;
+            enum dp-64-qam;
+          }
+      }
+      leaf differential-encoding {
+          type boolean;
+      }
+  }
+
+  grouping tai-network-interface-state {
+      leaf id {
+          type uint32;
+      }
+      leaf description {
+          type string;
+      }
+      leaf-list tx-align-status {
+          type enumeration {
+            enum loss;
+            enum out;
+            enum cmu-lock;
+            enum ref-clock;
+            enum timing;
+          }
+      }
+      leaf-list rx-align-status {
+          type enumeration {
+            enum modem-sync;
+            enum modem-lock;
+            enum loss;
+            enum out;
+            enum timing;
+          }
+      }
+      leaf-list tx-grid-spacing {
+          type enumeration {
+              enum 100ghz;
+              enum 50ghz;
+              enum 33ghz;
+              enum 25ghz;
+              enum 12_5ghz;
+              enum 6_25ghz;
+          }
+      }
+      leaf current-output-power {
+          type decimal64 {
+              fraction-digits 2;
+          }
+          units dBm;
+      }
+      leaf current-pre-fec-ber {
+          type string;
+      }
+      leaf current-post-fec-ber {
+          type string;
+      }
+      leaf current-ber-period {
+          type uint32;
+      }
+      leaf oper-status {
+          type enumeration {
+            enum reset;
+            enum initialize;
+            enum low-power;
+            enum high-power-up;
+            enum tx-off;
+            enum tx-turn-on;
+            enum ready;
+            enum tx-turn-off;
+            enum high-power-down;
+            enum fault;
+          }
+      }
+  }
+
+  grouping tai-host-interface-config {
+      leaf name {
+          type string;
+      }
+      leaf signal-rate {
+        type enumeration {
+            enum 100gbe;
+            enum 200gbe;
+            enum 400gbe;
+            enum otu4;
+        }
+      }
+      leaf fec-type {
+        type enumeration {
+            enum none;
+            enum rs;
+            enum fc;
+        }
+      }
+      leaf loopback-type {
+        type enumeration {
+          enum none;
+          enum shallow;
+          enum deep;
+        }
+      }
+  }
+
+  grouping tai-host-interface-state {
+      leaf id {
+          type uint32;
+      }
+      leaf description {
+          type string;
+      }
+      leaf-list lane-fault {
+        type enumeration {
+            enum loss-of-lock;
+            enum tx-fifo-error;
+        }
+      }
+      leaf-list tx-align-status {
+        type enumeration {
+            enum cdr-lock-fault;
+            enum loss;
+            enum out;
+            enum deskew-lock;
+        }
+      }
+      leaf ethernet-in-octet {
+        type uint32;
+      }
+      leaf ethernet-in-packets {
+        type uint32;
+      }
+      leaf ethernet-in-fcs-errors {
+        type uint32;
+      }
+      leaf ethernet-in-mac-errors {
+        type uint32;
+      }
+      leaf ethernet-out-octet {
+        type uint32;
+      }
+      leaf ethernet-out-packets {
+        type uint32;
+      }
+      leaf ethernet-out-fcs-errors {
+        type uint32;
+      }
+      leaf ethernet-out-mac-errors {
+        type uint32;
+      }
+      leaf-list tx-pcs-alarm {
+        type enumeration {
+            enum loss-of-signal;
+            enum loss-of-frame;
+            enum illegal-alignment-marker;
+            enum remote-fault;
+            enum local-fault;
+            enum hi-ber;
+            enum bip-error;
+            enum deskew-error;
+        }
+      }
+      leaf-list rx-pcs-alarm {
+        type enumeration {
+            enum loss-of-signal;
+            enum loss-of-frame;
+            enum illegal-alignment-marker;
+            enum remote-fault;
+            enum local-fault;
+            enum hi-ber;
+            enum bip-error;
+            enum deskew-error;
+        }
+      }
+  }
+
+  grouping tai-module-config {
+    description
+      "Configuration data for components";
+
+    leaf name {
+      type string;
+      description
+        "Device name for the component -- this may not be a
+        configurable parameter on many implementations.  Where
+        component preconfiguration is supported, for example,
+        the component name may be configurable.";
+    }
+
+    leaf admin-status {
+        type enumeration {
+        enum down;
+        enum up;
+        }
+    }
+
+  }
+
+  grouping tai-module-state {
+    description
+      "Operational state data for device components.";
+
+    leaf id {
+      type uint32;
+      description
+        "Unique identifier assigned by the system for the
+        component";
+    }
+
+    leaf description {
+      type string;
+      description
+        "System-supplied description of the component";
+    }
+
+    leaf vendor-name {
+        type string;
+        description "Vendor name of the module";
+    }
+
+    leaf vendor-part-number {
+        type string;
+    }
+
+    leaf vendor-serial-number {
+        type string;
+    }
+
+    leaf firmware-version {
+        type string;
+    }
+
+    leaf oper-status {
+        type enumeration {
+        enum initialize;
+        enum ready;
+        }
+    }
+
+    leaf temparature {
+        type int32;
+        units milli-celcius;
+    }
+
+    leaf power-supply-voltage {
+        type int32;
+        units milli-volts;
+    }
+
+  }
+
+  grouping tai-component-top {
+    description
+      "Top-level grouping for components in the device inventory";
+
+    container modules {
+      description
+        "Enclosing container for the components in the system.";
+
+      list module {
+        key "name";
+        description
+          "List of components, keyed by component name.";
+
+        leaf name {
+          type leafref {
+            path "../config/name";
+          }
+          description
+            "References the component name";
+        }
+
+        container config {
+          description
+            "Configuration data for each component";
+
+          uses tai-module-config;
+        }
+
+        container state {
+
+          config false;
+
+          description
+            "Operational state data for each component";
+
+          uses tai-module-config;
+          uses tai-module-state;
+
+        }
+
+        list network-interface {
+            key "name";
+            leaf name {
+                type leafref {
+                    path "../config/name";
+                }
+            }
+
+            container config {
+                uses tai-network-interface-config;
+            }
+
+            container state {
+                config false;
+
+                uses tai-network-interface-config;
+                uses tai-network-interface-state;
+            }
+        }
+
+        list host-interface {
+            key "name";
+            leaf name {
+                type leafref {
+                    path "../config/name";
+                }
+            }
+
+            container config {
+                uses tai-host-interface-config;
+            }
+
+            container state {
+                config false;
+
+                uses tai-host-interface-config;
+                uses tai-host-interface-state;
+            }
+        }
+
+      }
+    }
+  }
+
+  uses tai-component-top;
+
+}
