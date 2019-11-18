@@ -99,31 +99,31 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
                 parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/admin-status").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
             }
         }
-        m_client.GetAttribute(oid, TAI_MODULE_ATTR_VENDOR_PART_NUMBER, value);
-        if ( value != "" ) {
-            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/vendor-part-number").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-        }
-        m_client.GetAttribute(oid, TAI_MODULE_ATTR_VENDOR_SERIAL_NUMBER, value);
-        if ( value != "" ) {
-            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/vendor-serial-number").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-        }
-        m_client.GetAttribute(oid, TAI_MODULE_ATTR_FIRMWARE_VERSION, value);
-        if ( value != "" ) {
-            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/firmware-version").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-        }
-        m_client.GetAttribute(oid, TAI_MODULE_ATTR_OPER_STATUS, value);
-        if ( value != "" ) {
-            trim(value);
-            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/oper-status").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-        }
-        m_client.GetAttribute(oid, TAI_MODULE_ATTR_TEMP, value);
-        if ( value != "" ) {
-            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/temparature").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-        }
-        m_client.GetAttribute(oid, TAI_MODULE_ATTR_POWER, value);
-        if ( value != "" ) {
-            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/power-supply-voltage").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-        }
+//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_VENDOR_PART_NUMBER, value);
+//        if ( value != "" ) {
+//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/vendor-part-number").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+//        }
+//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_VENDOR_SERIAL_NUMBER, value);
+//        if ( value != "" ) {
+//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/vendor-serial-number").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+//        }
+//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_FIRMWARE_VERSION, value);
+//        if ( value != "" ) {
+//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/firmware-version").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+//        }
+//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_OPER_STATUS, value);
+//        if ( value != "" ) {
+//            trim(value);
+//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/oper-status").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+//        }
+//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_TEMP, value);
+//        if ( value != "" ) {
+//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/temparature").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+//        }
+//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_POWER, value);
+//        if ( value != "" ) {
+//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/power-supply-voltage").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+//        }
     }
 
     return SR_ERR_OK;

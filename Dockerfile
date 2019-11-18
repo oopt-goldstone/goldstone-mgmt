@@ -31,9 +31,15 @@ COPY --from=cmake /cmake-3.16.0-rc3-Linux-x86_64/bin/* /usr/bin/
 COPY --from=cmake /cmake-3.16.0-rc3-Linux-x86_64/share/cmake-3.16 /usr/share/cmake-3.16
 
 COPY --from=grpc-tmp /usr/local/lib/libgrpc* /usr/local/lib/
+COPY --from=grpc-tmp /usr/local/lib/libgpr* /usr/local/lib/
+COPY --from=grpc-tmp /usr/local/lib/libproto* /usr/local/lib/
 RUN ldconfig
 COPY --from=grpc-tmp /usr/local/bin/* /usr/local/bin/
-COPY --from=grpc-tmp /usr/local/include/* /usr/local/include/
+COPY --from=grpc-tmp /usr/local/include/google /usr/local/include/google
+COPY --from=grpc-tmp /usr/local/include/grpc   /usr/local/include/grpc
+COPY --from=grpc-tmp /usr/local/include/grpc++ /usr/local/include/grpc++
+COPY --from=grpc-tmp /usr/local/include/grpcpp /usr/local/include/grpcpp
+COPY --from=grpc-tmp /usr/local/lib/pkgconfig/* /usr/local/lib/pkgconfig/
 
 COPY --from=swig /usr/local/bin/ccache-swig /usr/local/bin/
 COPY --from=swig /usr/local/bin/swig /usr/local/bin/
