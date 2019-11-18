@@ -1,4 +1,16 @@
-.PHONY: docker-image bash init south onlp openconfig-converter
+.PHONY: docker-image bash init south onlp openconfig-converter docker
+
+ifndef DOCKER_CMD
+    DOCKER_CMD=bash
+endif
+
+ifndef DOCKER_IMAGE
+    DOCKER_IMAGE=sysrepo-builder
+endif
+
+docker:
+	DOCKER_CMD='make north' $(MAKE) cmd
+	DOCKER_CMD='make south' $(MAKE) cmd
 
 ifndef SYSREPO_IMAGE
     SYSREPO_IMAGE := sysrepo
@@ -8,10 +20,16 @@ all: init south north
 	./src/south/onlp/main
 
 docker-image:
-	docker build -t sysrepo .
+	docker build -t sysrepo-builder .
+
+docker-run-image:
+	docker build -f Dockerfile.run -t sysrepo .
 
 bash:
-	docker run --net host -it -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform --privileged --rm --name sysrepo $(SYSREPO_IMAGE) bash
+	$(MAKE) cmd
+
+cmd:
+	docker run --net host -it -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform --privileged --rm $(DOCKER_IMAGE) $(DOCKER_CMD)
 
 init:
 	$(RM) -r /sysrepo/builds/repository/ /dev/shm/sr*
@@ -35,8 +53,7 @@ openconfig-converter:
 cli:
 	$(MAKE) -C src/north/cli
 
-.PHONY: test
-
-test:
-	g++ -g -std=c++11 -o test test.cpp -lyang-cpp -lyang
-	LD_LIBRARY_PATH=/usr/local/lib ./test
+clean:
+	$(MAKE) -C src/south/onlp clean
+	$(MAKE) -C src/south/openconfig-converter clean
+	$(MAKE) -C src/north/cli clean
