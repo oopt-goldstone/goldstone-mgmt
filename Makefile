@@ -8,16 +8,14 @@ ifndef DOCKER_IMAGE
     DOCKER_IMAGE=sysrepo-builder
 endif
 
+all: north south
+
 docker:
-	DOCKER_CMD='make north' $(MAKE) cmd
-	DOCKER_CMD='make south' $(MAKE) cmd
+	DOCKER_CMD='make' $(MAKE) cmd
 
 ifndef SYSREPO_IMAGE
     SYSREPO_IMAGE := sysrepo
 endif
-
-all: init south north
-	./src/south/onlp/main
 
 docker-image:
 	docker build -t sysrepo-builder .
@@ -41,7 +39,7 @@ init:
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/platform/openconfig-platform-psu.yang
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/system/openconfig-alarm-types.yang
 
-south: onlp openconfig-converter
+south: onlp openconfig-converter tai
 north: cli
 
 onlp:
@@ -50,10 +48,14 @@ onlp:
 openconfig-converter:
 	$(MAKE) -C src/south/openconfig-converter
 
+tai:
+	$(MAKE) -C src/south/tai
+
 cli:
 	$(MAKE) -C src/north/cli
 
 clean:
 	$(MAKE) -C src/south/onlp clean
 	$(MAKE) -C src/south/openconfig-converter clean
+	$(MAKE) -C src/south/tai clean
 	$(MAKE) -C src/north/cli clean
