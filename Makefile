@@ -1,4 +1,4 @@
-.PHONY: docker-image bash init south onlp openconfig-converter docker
+.PHONY: docker-image bash init south onlp openconfig-converter docker yang
 
 ifndef DOCKER_CMD
     DOCKER_CMD=bash
@@ -22,6 +22,14 @@ docker-image:
 
 docker-run-image:
 	docker build -f Dockerfile.run -t sysrepo .
+
+docker-yang-generator-image:
+	docker build -f Dockerfile.clang -t yang-generator .
+
+yang: yang/goldstone-tai.yang
+
+yang/goldstone-tai.yang:
+	docker run -it -v `pwd`:/data -w /data yang-generator bash -c './tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h | pyang -f yang > /data/$@'
 
 bash:
 	$(MAKE) cmd

@@ -10,3 +10,6 @@
 [submodule "src/south/tai/sm/oopt-tai"]
 	path = src/south/tai/sm/oopt-tai
 	url = git@github.com:Telecominfraproject/oopt-tai.git
+[submodule "sm/oopt-tai"]
+	path = sm/oopt-tai
+	url = https://github.com/Telecominfraproject/oopt-tai.git
