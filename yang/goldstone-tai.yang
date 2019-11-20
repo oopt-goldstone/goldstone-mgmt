@@ -1,373 +1,580 @@
 module goldstone-tai {
-
-  yang-version "1.1";
-
+  yang-version 1.1;
   namespace "http://goldstone.net/yang/tai";
+  prefix gs-tai;
 
-  prefix "gs-tai";
-
-  revision "2019-11-01" {
-      reference "0.1.0";
-  }
-
-  grouping tai-network-interface-config {
-      leaf name {
-          type string;
-      }
-      leaf tx-dis {
-          type boolean;
-      }
-      leaf output-power {
-          type decimal64 {
-              fraction-digits 2;
-          }
-          units dBm;
-      }
-      leaf modulation-format {
-          type enumeration {
-            enum bpsk;
-            enum dp-bpsk;
-            enum qpsk;
-            enum dp-qpsk;
-            enum 8-qam;
-            enum dp-8-wam;
-            enum 16-qam;
-            enum dp-16-qam;
-            enum 32-qam;
-            enum dp-32-qam;
-            enum 64-qam;
-            enum dp-64-qam;
-          }
-      }
-      leaf differential-encoding {
-          type boolean;
-      }
-  }
-
-  grouping tai-network-interface-state {
-      leaf id {
-          type uint32;
-      }
-      leaf description {
-          type string;
-      }
-      leaf-list tx-align-status {
-          type enumeration {
-            enum loss;
-            enum out;
-            enum cmu-lock;
-            enum ref-clock;
-            enum timing;
-          }
-      }
-      leaf-list rx-align-status {
-          type enumeration {
-            enum modem-sync;
-            enum modem-lock;
-            enum loss;
-            enum out;
-            enum timing;
-          }
-      }
-      leaf-list tx-grid-spacing {
-          type enumeration {
-              enum 100ghz;
-              enum 50ghz;
-              enum 33ghz;
-              enum 25ghz;
-              enum 12_5ghz;
-              enum 6_25ghz;
-          }
-      }
-      leaf current-output-power {
-          type decimal64 {
-              fraction-digits 2;
-          }
-          units dBm;
-      }
-      leaf current-pre-fec-ber {
-          type string;
-      }
-      leaf current-post-fec-ber {
-          type string;
-      }
-      leaf current-ber-period {
-          type uint32;
-      }
-      leaf oper-status {
-          type enumeration {
-            enum reset;
-            enum initialize;
-            enum low-power;
-            enum high-power-up;
-            enum tx-off;
-            enum tx-turn-on;
-            enum ready;
-            enum tx-turn-off;
-            enum high-power-down;
-            enum fault;
-          }
-      }
-  }
-
-  grouping tai-host-interface-config {
-      leaf name {
-          type string;
-      }
-      leaf signal-rate {
-        type enumeration {
-            enum 100gbe;
-            enum 200gbe;
-            enum 400gbe;
-            enum otu4;
-        }
-      }
-      leaf fec-type {
-        type enumeration {
-            enum none;
-            enum rs;
-            enum fc;
-        }
-      }
-      leaf loopback-type {
-        type enumeration {
-          enum none;
-          enum shallow;
-          enum deep;
-        }
-      }
-  }
-
-  grouping tai-host-interface-state {
-      leaf id {
-          type uint32;
-      }
-      leaf description {
-          type string;
-      }
-      leaf-list lane-fault {
-        type enumeration {
-            enum loss-of-lock;
-            enum tx-fifo-error;
-        }
-      }
-      leaf-list tx-align-status {
-        type enumeration {
-            enum cdr-lock-fault;
-            enum loss;
-            enum out;
-            enum deskew-lock;
-        }
-      }
-      leaf ethernet-in-octet {
-        type uint32;
-      }
-      leaf ethernet-in-packets {
-        type uint32;
-      }
-      leaf ethernet-in-fcs-errors {
-        type uint32;
-      }
-      leaf ethernet-in-mac-errors {
-        type uint32;
-      }
-      leaf ethernet-out-octet {
-        type uint32;
-      }
-      leaf ethernet-out-packets {
-        type uint32;
-      }
-      leaf ethernet-out-fcs-errors {
-        type uint32;
-      }
-      leaf ethernet-out-mac-errors {
-        type uint32;
-      }
-      leaf-list tx-pcs-alarm {
-        type enumeration {
-            enum loss-of-signal;
-            enum loss-of-frame;
-            enum illegal-alignment-marker;
-            enum remote-fault;
-            enum local-fault;
-            enum hi-ber;
-            enum bip-error;
-            enum deskew-error;
-        }
-      }
-      leaf-list rx-pcs-alarm {
-        type enumeration {
-            enum loss-of-signal;
-            enum loss-of-frame;
-            enum illegal-alignment-marker;
-            enum remote-fault;
-            enum local-fault;
-            enum hi-ber;
-            enum bip-error;
-            enum deskew-error;
-        }
-      }
+  revision 2019-11-01 {
+    reference
+      "0.1.0";
   }
 
   grouping tai-module-config {
-    description
-      "Configuration data for components";
-
     leaf name {
       type string;
-      description
-        "Device name for the component -- this may not be a
-        configurable parameter on many implementations.  Where
-        component preconfiguration is supported, for example,
-        the component name may be configurable.";
     }
-
+    leaf location {
+      description
+        "The location of the module";
+      type string;
+    }
     leaf admin-status {
-        type enumeration {
+      description
+        "The admin state of the module";
+      type enumeration {
+        enum unknown;
         enum down;
         enum up;
-        }
+      }
     }
-
   }
 
   grouping tai-module-state {
-    description
-      "Operational state data for device components.";
-
     leaf id {
       type uint32;
-      description
-        "Unique identifier assigned by the system for the
-        component";
     }
-
     leaf description {
       type string;
-      description
-        "System-supplied description of the component";
     }
-
     leaf vendor-name {
-        type string;
-        description "Vendor name of the module";
+      description
+        "The module vendor's name";
+      type string;
     }
-
     leaf vendor-part-number {
-        type string;
+      description
+        "The module vendor's part number";
+      type string;
     }
-
     leaf vendor-serial-number {
-        type string;
+      description
+        "The module vendor's serial number";
+      type string;
     }
-
     leaf firmware-version {
-        type string;
+      description
+        "The module firmware version";
+      type string;
     }
-
     leaf oper-status {
-        type enumeration {
+      description
+        "The operational state of the module";
+      type enumeration {
+        enum unknown;
         enum initialize;
         enum ready;
-        }
+      }
     }
-
-    leaf temparature {
-        type int32;
-        units milli-celcius;
+    leaf temp {
+      description
+        "The internal temperature of the module";
+      type decimal64 {
+        fraction-digits 2;
+      }
     }
-
-    leaf power-supply-voltage {
-        type int32;
-        units milli-volts;
+    leaf power {
+      description
+        "The power supply voltage";
+      type decimal64 {
+        fraction-digits 2;
+      }
     }
+    leaf num-host-interfaces {
+      description
+        "The number of host interfaces on the module";
+      type uint32;
+    }
+    leaf num-network-interfaces {
+      description
+        "The number of network interfaces on the module";
+      type uint32;
+    }
+  }
 
+  grouping tai-host-interface-config {
+    leaf name {
+      type string;
+    }
+    leaf index {
+      description
+        "The location of the host interface";
+      type uint32;
+    }
+    leaf signal-rate {
+      description
+        "signal rate";
+      type enumeration {
+        enum unknown;
+        enum 100-gbe;
+        enum 200-gbe;
+        enum 400-gbe;
+        enum otu4;
+      }
+    }
+    leaf fec-type {
+      description
+        "FEC type";
+      type enumeration {
+        enum none;
+        enum rs;
+        enum fc;
+      }
+    }
+    leaf loopback-type {
+      description
+        "Loopback type";
+      type enumeration {
+        enum none;
+        enum shallow;
+        enum deep;
+      }
+    }
+  }
+
+  grouping tai-host-interface-state {
+    leaf id {
+      type uint32;
+    }
+    leaf description {
+      type string;
+    }
+    leaf-list tx-align-status {
+      description
+        "TX Alignment Status";
+      type enumeration {
+        enum cdr-lock-fault;
+        enum loss;
+        enum out;
+        enum deskew-lock;
+      }
+    }
+    leaf ethernet-in-octets {
+      type uint32;
+    }
+    leaf ethernet-in-packets {
+      type uint32;
+    }
+    leaf ethernet-in-fcs-errors {
+      type uint32;
+    }
+    leaf ethernet-in-mac-errors {
+      type uint32;
+    }
+    leaf ethernet-out-octets {
+      type uint32;
+    }
+    leaf ethernet-out-packets {
+      type uint32;
+    }
+    leaf ethernet-out-fcs-errors {
+      type uint32;
+    }
+    leaf ethernet-out-mac-errors {
+      type uint32;
+    }
+    leaf-list tx-pcs-alarm {
+      description
+        "TX Ethernet PCS Alarm";
+      type enumeration {
+        enum loss-of-signal;
+        enum loss-of-frame;
+        enum illegal-alignment-marker;
+        enum remote-fault;
+        enum local-fault;
+        enum hi-ber;
+        enum bip-error;
+        enum deskew-error;
+      }
+    }
+    leaf-list rx-pcs-alarm {
+      description
+        "RX Ethernet PCS Alarm";
+      type enumeration {
+        enum loss-of-signal;
+        enum loss-of-frame;
+        enum illegal-alignment-marker;
+        enum remote-fault;
+        enum local-fault;
+        enum hi-ber;
+        enum bip-error;
+        enum deskew-error;
+      }
+    }
+  }
+
+  grouping tai-network-interface-config {
+    leaf name {
+      type string;
+    }
+    leaf index {
+      description
+        "The location of the network interface";
+      type uint32;
+    }
+    leaf tx-dis {
+      description
+        "TX Disable";
+      type boolean;
+    }
+    leaf output-power {
+      description
+        "The TX output power in dBm";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf tx-laser-freq {
+      description
+        "The TX laser frequency in Hz";
+      type uint64;
+    }
+    leaf tx-fine-tune-laser-freq {
+      description
+        "The TX laser fine tune frequency in Hz";
+      type int64;
+    }
+    leaf modulation-format {
+      description
+        "The modulation format";
+      type enumeration {
+        enum unknown;
+        enum bpsk;
+        enum dp-bpsk;
+        enum qpsk;
+        enum dp-qpsk;
+        enum 8-qam;
+        enum dp-8-qam;
+        enum 16-qam;
+        enum dp-16-qam;
+        enum 32-qam;
+        enum dp-32-qam;
+        enum 64-qam;
+        enum dp-64-qam;
+      }
+    }
+    leaf differential-encoding {
+      description
+        "Differential phase encoding";
+      type boolean;
+    }
+    leaf pulse-shaping-tx {
+      description
+        "Pulse shaping enabled on TX";
+      type boolean;
+    }
+    leaf pulse-shaping-rx {
+      description
+        "Pulse shaping enabled on RX";
+      type boolean;
+    }
+    leaf pulse-shaping-tx-beta {
+      description
+        "Pulse shaping beta on TX";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf pulse-shaping-rx-beta {
+      description
+        "Pulse shaping beta on RX";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf voa-rx {
+      description
+        "RX VOA attenuation in dB";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf loopback-type {
+      description
+        "Loopback type";
+      type enumeration {
+        enum none;
+        enum shallow;
+        enum deep;
+      }
+    }
+    leaf prbs-type {
+      description
+        "PRBS type";
+      type enumeration {
+        enum none;
+        enum prbs7;
+        enum prbs9;
+        enum prbs11;
+        enum prbs15;
+        enum prbs20;
+        enum prbs23;
+        enum prbs31;
+      }
+    }
+    leaf ch1-freq {
+      description
+        "Channel 1 frequency in Hz";
+      type uint64;
+    }
+  }
+
+  grouping tai-network-interface-state {
+    leaf id {
+      type uint32;
+    }
+    leaf description {
+      type string;
+    }
+    leaf-list tx-align-status {
+      description
+        "The transmit alignment status";
+      type enumeration {
+        enum loss;
+        enum out;
+        enum cmu-lock;
+        enum ref-clock;
+        enum timing;
+      }
+    }
+    leaf-list rx-align-status {
+      description
+        "The receive alignment status";
+      type enumeration {
+        enum modem-sync;
+        enum modem-lock;
+        enum loss;
+        enum out;
+        enum timing;
+      }
+    }
+    leaf tx-grid-spacing {
+      description
+        "TX Grid Spacing";
+      type enumeration {
+        enum unknown;
+        enum 100-ghz;
+        enum 50-ghz;
+        enum 33-ghz;
+        enum 25-ghz;
+        enum 12-5-ghz;
+        enum 6-25-ghz;
+      }
+    }
+    leaf current-output-power {
+      description
+        "The current measured TX output power in dBm";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf current-pre-fec-ber {
+      description
+        "The current pre-FEC bit error rate";
+      type binary {
+        length "4";
+      }
+    }
+    leaf current-ber-period {
+      description
+        "The time period over which the current pre-FEC bit error rate was";
+      type uint32;
+    }
+    leaf oper-status {
+      description
+        "The operational state of the network interface";
+      type enumeration {
+        enum unknown;
+        enum reset;
+        enum initialize;
+        enum low-power;
+        enum high-power-up;
+        enum tx-off;
+        enum tx-turn-on;
+        enum ready;
+        enum tx-turn-off;
+        enum high-power-down;
+        enum fault;
+      }
+    }
+    leaf min-laser-freq {
+      description
+        "The TX/RX minimum laser frequency in Hz";
+      type uint64;
+    }
+    leaf max-laser-freq {
+      description
+        "The TX/RX maximum laster frequency in Hz";
+      type uint64;
+    }
+    leaf-list laser-grid-support {
+      description
+        "The laser grid spacing support. A bitfield of the supported grid";
+      type enumeration {
+        enum unknown;
+        enum 100-ghz;
+        enum 50-ghz;
+        enum 33-ghz;
+        enum 25-ghz;
+        enum 12-5-ghz;
+        enum 6-25-ghz;
+      }
+    }
+    leaf current-input-power {
+      description
+        "The total current RX input power in dBm";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf current-post-voa-total-power {
+      description
+        "The total current post-VOA RX input power in dBm";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf current-provisioned-channel-power {
+      description
+        "The current RX input power in the provisioned channel in dBm";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf current-tx-laser-freq {
+      description
+        "The current TX laser frequency in Hz";
+      type uint64;
+    }
+    leaf-list rx-otu-status {
+      description
+        "Rx OTU Status with Open ROADM Multi-Source Agreement";
+      type enumeration {
+        enum loss-of-frame;
+        enum loss-of-multiframe;
+        enum backward-defect-indication;
+        enum alarm-inidication-signal;
+        enum err;
+      }
+    }
+    leaf-list rx-odu-status {
+      description
+        "Rx ODU Status with Open ROADM Multi-Source Agreement";
+      type enumeration {
+        enum backward-defect-indication;
+        enum alarm-inidication-signal;
+        enum open-connection-inidication;
+        enum locked-defect;
+        enum err;
+      }
+    }
+    leaf-list rx-opu-status {
+      description
+        "Rx OPU Status with Open ROADM Multi-Source Agreement";
+      type enumeration {
+        enum payload-mismatch;
+        enum client-signal-fail;
+        enum err;
+      }
+    }
+    leaf-list rx-ts-status {
+      description
+        "Rx Training Sequence Status";
+      type enumeration {
+        enum loss-of-lock;
+        enum err;
+      }
+    }
+    leaf current-chromatic-dispersion {
+      description
+        "Current Chromatic Dispersion (CD) in ps/nm";
+      type uint64;
+    }
+    leaf current-differential-group-delay {
+      description
+        "Current Differential Group Delay (DGD) in ps";
+      type uint32;
+    }
+    leaf current-snr {
+      description
+        "Current Signal-to-Noise Ratio (SNR) in dB";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf current-post-fec-ber {
+      description
+        "The current post-FEC bit error rate";
+      type binary {
+        length "4";
+      }
+    }
+    leaf current-prbs-ber {
+      description
+        "The current PRBS bit error rate";
+      type binary {
+        length "4";
+      }
+    }
+    leaf current-post-voa-provisioned-channel-power {
+      description
+        "The current post-VOA RX input power in the provisioned channel in dBm";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
   }
 
   grouping tai-component-top {
-    description
-      "Top-level grouping for components in the device inventory";
-
     container modules {
-      description
-        "Enclosing container for the components in the system.";
-
       list module {
         key "name";
-        description
-          "List of components, keyed by component name.";
-
         leaf name {
           type leafref {
             path "../config/name";
           }
-          description
-            "References the component name";
         }
-
         container config {
-          description
-            "Configuration data for each component";
-
           uses tai-module-config;
         }
-
         container state {
-
           config false;
-
-          description
-            "Operational state data for each component";
-
           uses tai-module-config;
           uses tai-module-state;
-
         }
-
         list network-interface {
-            key "name";
-            leaf name {
-                type leafref {
-                    path "../config/name";
-                }
+          key "name";
+          leaf name {
+            type leafref {
+              path "../config/name";
             }
-
-            container config {
-                uses tai-network-interface-config;
-            }
-
-            container state {
-                config false;
-
-                uses tai-network-interface-config;
-                uses tai-network-interface-state;
-            }
+          }
+          container config {
+            uses tai-network-interface-config;
+          }
+          container state {
+            config false;
+            uses tai-network-interface-config;
+            uses tai-network-interface-state;
+          }
         }
-
         list host-interface {
-            key "name";
-            leaf name {
-                type leafref {
-                    path "../config/name";
-                }
+          key "name";
+          leaf name {
+            type leafref {
+              path "../config/name";
             }
-
-            container config {
-                uses tai-host-interface-config;
-            }
-
-            container state {
-                config false;
-
-                uses tai-host-interface-config;
-                uses tai-host-interface-state;
-            }
+          }
+          container config {
+            uses tai-host-interface-config;
+          }
+          container state {
+            config false;
+            uses tai-host-interface-config;
+            uses tai-host-interface-state;
+          }
         }
-
       }
     }
   }
 
   uses tai-component-top;
-
 }
