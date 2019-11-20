@@ -1,8 +1,9 @@
-TAISH_DIR := sm/oopt-tai/tools/taish/
+TAI_DIR := ../../../sm/oopt-tai
+TAISH_DIR := $(TAI_DIR)/tools/taish/
 
 .DEFAULT_GOAL := all
 
-INCLUDE := -I sm/oopt-tai/inc
+INCLUDE := -I $(TAI_DIR)/inc
 
 all: main
 
