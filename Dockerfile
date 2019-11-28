@@ -51,7 +51,8 @@ COPY --from=swig /usr/local/share/swig /usr/local/share/swig
 ADD sm/libyang libyang
 RUN rm -rf libyang/builds && mkdir -p libyang/builds && cd libyang/builds && ls ../ && cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DGEN_PYTHON_BINDINGS=ON -DGEN_PYTHON_VERSION=3 .. && cmake --build . && cmake --install .
 ADD sm/sysrepo sysrepo
-RUN rm -rf sysrepo/builds && mkdir -p sysrepo/builds && cd sysrepo/builds && cmake -DGEN_CPP_BINDINGS=ON .. && make && make install
+RUN mkdir -p /var/lib/sysrepo
+RUN rm -rf sysrepo/builds && mkdir -p sysrepo/builds && cd sysrepo/builds && cmake -DGEN_CPP_BINDINGS=ON -DREPO_PATH=/var/lib/sysrepo/ .. && make && make install
 RUN mkdir -p /usr/local/include/utils && cp sysrepo/src/utils/xpath.h /usr/local/include/utils/
 
 #RUN cd sysrepo/swig/python && make clean && make _sysrepo.so

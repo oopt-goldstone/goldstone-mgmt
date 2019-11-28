@@ -18,13 +18,13 @@ ifndef SYSREPO_IMAGE
 endif
 
 docker-image:
-	docker build -t sysrepo-builder .
+	docker build $(DOCKER_BUILD_OPTION) -t sysrepo-builder .
 
 docker-run-image:
-	docker build -f Dockerfile.run -t sysrepo .
+	docker build $(DOCKER_BUILD_OPTION) -f Dockerfile.run -t sysrepo .
 
 docker-yang-generator-image:
-	docker build -f Dockerfile.clang -t yang-generator .
+	docker build $(DOCKER_BUILD_OPTION) -f Dockerfile.clang -t yang-generator .
 
 yang: yang/goldstone-tai.yang
 
@@ -38,7 +38,7 @@ cmd:
 	docker run --net host -it -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform --privileged --rm $(DOCKER_IMAGE) $(DOCKER_CMD)
 
 init:
-	$(RM) -r /sysrepo/builds/repository/ /dev/shm/sr*
+	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2` /dev/shm/sr*
 	sysrepoctl -s /data/yang --install /data/yang/goldstone-onlp.yang
 	sysrepoctl -s /data/yang --install /data/yang/goldstone-tai.yang
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/platform/openconfig-platform-types.yang
