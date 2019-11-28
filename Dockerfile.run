@@ -27,6 +27,9 @@ COPY --from=0 /usr/lib/python3/dist-packages/yang.py  /usr/lib/python3/dist-pack
 COPY --from=0 /src/north/cli/sysrepo-py/python/_sysrepo.so /usr/lib/python3/dist-packages/
 COPY --from=0 /src/north/cli/sysrepo-py/python/sysrepo.py /usr/lib/python3/dist-packages/
 
+COPY --from=0 /usr/local/bin/sysrepocfg /usr/local/bin/sysrepocfg
+COPY --from=0 /usr/local/bin/sysrepoctl /usr/local/bin/sysrepoctl
+
 RUN ldconfig
 
 RUN apt install -qy make vim
