@@ -51,81 +51,195 @@ ev_to_str(sr_event_t ev)
     }
 }
 
+static int _key_value(const std::string& xpath, const std::string& key, int& out) {
+    sysrepo::Xpath_Ctx xpath_ctx;
+    char tmp[128] = {0};
+    xpath.copy(tmp, 128);
+    auto ptr = xpath_ctx.key_value(tmp, key.c_str(), "name");
+    if ( ptr == nullptr ) {
+        return -1;
+    }
+    try {
+        out = std::stoi(std::string(ptr));
+    } catch ( ... ) {
+        return -1;
+    }
+    return 0;
+}
+
+object_info TAIController::object_info_from_xpath(const std::string& xpath) {
+    object_info info = {0};
+    info.oid = TAI_NULL_OBJECT_ID;
+    int module, netif, hostif;
+    const std::string prefix = "/goldstone-tai:modules";
+    if ( _key_value(xpath, "module", module) < 0 ) {
+        return info;
+    }
+    auto it = m_modules.find(std::to_string(module));
+    if ( it == m_modules.end() ) {
+        return info;
+    }
+    auto n = _key_value(xpath, "network-interface", netif);
+    auto h = _key_value(xpath, "host-interface", hostif);
+    info.xpath_prefix = prefix + "/module[name='" + it->first + "']";
+    if ( n < 0 && h < 0 ) {
+        info.type = tai::TAIObjectType::MODULE;
+        info.oid = it->second.oid();
+        return info;
+    }
+    if ( n == 0 ) {
+        info.type = tai::TAIObjectType::NETIF;
+        auto v = it->second.netifs(netif);
+        info.oid = v.oid();
+        info.xpath_prefix += "/network-interface[name='" + std::to_string(netif) + "']";
+        return info;
+    }
+    info.type = tai::TAIObjectType::HOSTIF;
+    auto v = it->second.hostifs(hostif);
+    info.oid = v.oid();
+    info.xpath_prefix += "/host-interface[name='" + std::to_string(hostif) + "']";
+    return info;
+}
+
 int TAIController::module_change(sysrepo::S_Session session, const char *module_name, const char *xpath, sr_event_t event, uint32_t request_id, void *private_data) {
-    std::cout << "\n\n ========== EVENT " << ev_to_str(event) << " CHANGES: ====================================\n\n" << std::endl;
+    if ( event == SR_EV_DONE ) {
+        return SR_ERR_OK;
+    }
+    std::cout << "========== EVENT " << ev_to_str(event) << " CHANGES: ====================================" << std::endl;
+    auto it = session->get_changes_iter("//.");
+    sysrepo::S_Change change;
+    while ( (change = session->get_change_next(it)) != nullptr ) {
+        if ( change->oper() == SR_OP_CREATED || change->oper() == SR_OP_MODIFIED ) {
+            auto n = change->new_val();
+            auto info = object_info_from_xpath(std::string(n->xpath()));
+            if ( info.oid == TAI_NULL_OBJECT_ID ) {
+                std::cout << "failed to find oid with xpath: " << n->xpath() << std::endl;
+                continue;
+            }
+            std::cout << "xpath: " << n->xpath() << ", oid: " << info.oid << std::endl;
+            {
+                sysrepo::Xpath_Ctx xpath_ctx;
+                char tmp[128] = {0};
+                std::string(n->xpath()).copy(tmp, 128);
+                auto v = xpath_ctx.node(tmp, "config");
+                if ( v == nullptr ) {
+                    std::cout << "failed to find config node: " << n->xpath() << std::endl;
+                    continue;
+                }
+                v = xpath_ctx.last_node(nullptr);
+                if ( v == nullptr ) {
+                    std::cout << "failed to find last node: " << n->xpath() << std::endl;
+                    continue;
+                }
+                if ( m_client.SetAttribute(info.oid, info.type, std::string(v), n->val_to_string()) ) {
+                    std::cout << "failed to set attribute: " << v << std::endl;
+                    continue;
+                }
+            }
+        }
+    }
     return SR_ERR_OK;
 }
 
-static int _populate_oper_data(libyang::S_Context& ctx, libyang::S_Data_Node& parent, const std::string& name, const std::string& path, const std::string& value) {
-    std::stringstream xpath;
-    xpath << "/goldstone-tai:modules/module[name='" << name << "']/" << path;
-    parent->new_path(ctx, xpath.str().c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+static int _oper_data_filter(const char *path, tai::TAIObjectType type) {
+    std::string v(path);
+    switch (type) {
+    case tai::TAIObjectType::MODULE:
+        if ( v.find("network-interface") != std::string::npos ) {
+            return 1;
+        }
+        if ( v.find("host-interface") != std::string::npos ) {
+            return 1;
+        }
+        break;
+    case tai::TAIObjectType::NETIF:
+        return (v.find("network-interface") != std::string::npos) ? 0 : 1;
+    case tai::TAIObjectType::HOSTIF:
+        return (v.find("host-interface") != std::string::npos) ? 0 : 1;
+    }
+    return 0;
+}
+
+int TAIController::oper_get_single_item(sysrepo::S_Session session, const object_info& info, const char *request_xpath, libyang::S_Data_Node &parent) {
+    sysrepo::Xpath_Ctx xpath_ctx;
+    char tmp[128] = {0};
+    std::string(request_xpath).copy(tmp, 128);
+    auto v = xpath_ctx.node(tmp, "state");
+    if ( v == nullptr ) {
+        std::cout << "failed to find state node: " << request_xpath << std::endl;
+        return 1;
+    }
+    v = xpath_ctx.last_node(nullptr);
+    if ( v == nullptr ) {
+        std::cout << "failed to find last node: " << request_xpath << std::endl;
+        return 1;
+    }
+
+    tai::AttributeMetadata meta;
+    m_client.GetAttributeMetadata(info.type, std::string(v), meta);
+    std::string value;
+    if ( m_client.GetAttribute(info.oid, meta.attr_id(), value) ) {
+        std::cout << "failed to get attribute: " << meta.short_name() << std::endl;
+        return -1;
+    }
+    trim(value);
+    auto ly_ctx = session->get_context();
+    parent->new_path(ly_ctx, (info.xpath_prefix + "/state/" + meta.short_name()).c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
     return 0;
 }
 
 int TAIController::oper_get_items(sysrepo::S_Session session, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, libyang::S_Data_Node &parent, void *private_data) {
     auto ly_ctx = session->get_context();
-    sysrepo::Xpath_Ctx xpath_ctx;
-    std::string m, n, h;
-    auto ptr = xpath_ctx.key_value(const_cast<char*>(request_xpath), "module", "name");
-    if ( ptr != nullptr ) {
-        m = std::string(ptr);
-    }
-    xpath_ctx.recover();
-    ptr = xpath_ctx.key_value(const_cast<char*>(request_xpath), "network-interface", "name");
-    if ( ptr != nullptr ) {
-        n = std::string(ptr);
-    }
-    xpath_ctx.recover();
-    ptr = xpath_ctx.key_value(const_cast<char*>(request_xpath), "host-interface", "name");
-    if ( ptr != nullptr ) {
-        h = std::string(ptr);
-    }
-    if ( m == "" ) {
+    auto info = object_info_from_xpath(std::string(request_xpath));
+    if ( info.oid == TAI_NULL_OBJECT_ID ) {
         std::cout << "get all" << std::endl;
         return SR_ERR_OK;
     }
-    if ( n == "" && h == "" ) {
-        auto it = m_modules.find(m);
-        if ( it == m_modules.end() ) {
-            std::cout << "no module found with location: " << m << std::endl;
-        }
-        auto oid = it->second.oid();
-        {
-            std::string value;
-            m_client.GetAttribute(oid, TAI_MODULE_ATTR_ADMIN_STATUS, value);
-            if ( value != "" ) {
-                trim(value);
-                parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/admin-status").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-            }
-        }
-//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_VENDOR_PART_NUMBER, value);
-//        if ( value != "" ) {
-//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/vendor-part-number").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-//        }
-//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_VENDOR_SERIAL_NUMBER, value);
-//        if ( value != "" ) {
-//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/vendor-serial-number").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-//        }
-//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_FIRMWARE_VERSION, value);
-//        if ( value != "" ) {
-//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/firmware-version").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-//        }
-//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_OPER_STATUS, value);
-//        if ( value != "" ) {
-//            trim(value);
-//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/oper-status").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-//        }
-//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_TEMP, value);
-//        if ( value != "" ) {
-//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/temparature").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-//        }
-//        m_client.GetAttribute(oid, TAI_MODULE_ATTR_POWER, value);
-//        if ( value != "" ) {
-//            parent->new_path(ly_ctx, ("/goldstone-tai:modules/module[name='" + m + "']/state/power-supply-voltage").c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-//        }
+    if ( _oper_data_filter(path, info.type) ) {
+        return SR_ERR_OK;
     }
 
+    auto ret = oper_get_single_item(session, info, request_xpath, parent);
+    if ( ret == 0 ) {
+        return SR_ERR_OK;
+    } else if ( ret < 0 ) {
+        return SR_ERR_SYS;
+    }
+
+    std::vector<tai::AttributeMetadata> list;
+    if ( m_client.ListAttributeMetadata(info.type, list) ) {
+        std::cout << "failed to get attribute metadata list" << std::endl;
+        return SR_ERR_OK;
+    }
+
+    std::cout << "path: " << path << "request_xpath: " << request_xpath << ", info: " << info.xpath_prefix  << std::endl;
+
+    int limit;
+    if ( info.type == tai::TAIObjectType::MODULE ) {
+        limit = TAI_MODULE_ATTR_CUSTOM_RANGE_START;
+    } else if ( info.type == tai::TAIObjectType::NETIF ) {
+        limit = TAI_NETWORK_INTERFACE_ATTR_CUSTOM_RANGE_START;
+    } else {
+        limit = TAI_HOST_INTERFACE_ATTR_CUSTOM_RANGE_START;
+    }
+
+    for ( const auto& m : list ) {
+        std::string value;
+        if ( m.attr_id() > limit ) {
+            continue;
+        }
+        if ( m_client.GetAttribute(info.oid, m.attr_id(), value) ) {
+            std::cout << "failed to get attribute: " << m.short_name() << std::endl;
+            continue;
+        }
+        trim(value);
+        std::cout << "attr: " << m.short_name() << ": " << value << std::endl;
+        try {
+            parent->new_path(ly_ctx, (info.xpath_prefix + "/state/" + m.short_name()).c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+        } catch (...) {
+            std::cout << "failed to add path" << std::endl;
+        }
+    }
     return SR_ERR_OK;
 }
 
@@ -158,7 +272,9 @@ TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscri
 
     m_subscribe->module_change_subscribe(mod_name, callback);
 
-    sess->replace_config(data, SR_DS_RUNNING, mod_name);
+    if ( data != nullptr ) {
+        sess->replace_config(data, SR_DS_RUNNING, mod_name);
+    }
 
     sess->session_switch_ds(SR_DS_OPERATIONAL);
 
@@ -170,10 +286,14 @@ TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscri
         std::string value;
         m_client.GetAttribute(module.oid(), TAI_MODULE_ATTR_VENDOR_NAME, value);
         sess->set_item_str((xpath + "state/vendor-name").c_str(), value.c_str());
-        m_subscribe->oper_get_items_subscribe(mod_name, (xpath + "state").c_str(), callback);
-        m_subscribe->oper_get_items_subscribe(mod_name, (xpath + "network-interface[name='0']/state").c_str(), callback);
-        m_subscribe->oper_get_items_subscribe(mod_name, (xpath + "host-interface[name='0']/state").c_str(), callback);
     }
+
+    std::string xpath = "/goldstone-tai:modules/module/";
+
+    m_subscribe->oper_get_items_subscribe(mod_name, (xpath + "state").c_str(), callback);
+    m_subscribe->oper_get_items_subscribe(mod_name, (xpath + "network-interface/state").c_str(), callback);
+    m_subscribe->oper_get_items_subscribe(mod_name, (xpath + "host-interface/state").c_str(), callback);
+
     sess->apply_changes();
 }
 
@@ -199,10 +319,6 @@ int main() {
     sysrepo::Logs().set_stderr(SR_LL_DBG);
     sysrepo::S_Connection conn(new sysrepo::Connection);
     sysrepo::S_Session sess(new sysrepo::Session(conn));
-
-//    libyang::set_log_verbosity(LY_LLDBG);
-//    libyang::set_log_options(LY_LOLOG);
-//    ly_set_log_clb(log_callback, 0);
 
     try {
         auto controller = std::shared_ptr<TAIController>(new TAIController(sess));
