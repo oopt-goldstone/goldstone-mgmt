@@ -41,13 +41,14 @@ init:
 	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2` /dev/shm/sr*
 	sysrepoctl -s /data/yang --install /data/yang/goldstone-onlp.yang
 	sysrepoctl -s /data/yang --install /data/yang/goldstone-tai.yang
+	sysrepoctl -s /data/yang --install /data/yang/goldstone-sonic-interface.yang
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/platform/openconfig-platform-types.yang
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/platform/openconfig-platform.yang
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/platform/openconfig-platform-fan.yang
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/platform/openconfig-platform-psu.yang
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/system/openconfig-alarm-types.yang
 
-south: onlp openconfig-converter tai
+south: onlp openconfig-converter tai sonic-interface
 north: cli
 
 onlp:
@@ -59,6 +60,8 @@ openconfig-converter:
 tai:
 	$(MAKE) -C src/south/tai
 
+sonic-interface:
+	$(MAKE) -C src/south/sonic-interface
 cli:
 	$(MAKE) -C src/north/cli
 
