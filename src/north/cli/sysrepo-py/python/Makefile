@@ -2,8 +2,8 @@ all: sysrepo.py _sysrepo.so
 
 SYSREPO_DIR := ../../../../../sm/sysrepo
 
-PYTHON_HEADER_DIR := /usr/include/python3.4
-PYTHON_LIB := python3.4m
+PYTHON_HEADER_DIR := /usr/local/include/python3.8
+PYTHON_LIB := python3.8
 
 sysrepo.py sysrepo_wrap.cxx: sysrepo.i Makefile
 	swig -threads -c++ -python -I/usr/local/include -I$(SYSREPO_DIR) -I$(SYSREPO_DIR)/swig/cpp/src sysrepo.i

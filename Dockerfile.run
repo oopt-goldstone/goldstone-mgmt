@@ -6,13 +6,9 @@ RUN rm `find /usr/lib/x86_64-linux-gnu -type l`
 ADD src src
 RUN make -C src/north/cli/sysrepo-py/python
 
-FROM ubuntu:14.04
+FROM python:3.8
 
-RUN apt update && apt install -qy --no-install-recommends python3 python3-pip libpython3.4
-RUN pip3 install prompt_toolkit
-
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
-RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
+RUN pip install prompt_toolkit pyang
 
 COPY --from=0 /usr/local/lib /usr/local/lib
 
@@ -21,15 +17,15 @@ ADD onlp/libonlp-platform.so /lib/x86_64-linux-gnu/
 ADD onlp/libonlp-platform-defaults.so /lib/x86_64-linux-gnu/
 RUN ln -s libonlp-platform.so /lib/x86_64-linux-gnu/libonlp-platform.so.1
 
-COPY --from=0 /usr/lib/python3/dist-packages/_yang.so /usr/lib/python3/dist-packages/
-COPY --from=0 /usr/lib/python3/dist-packages/yang.py  /usr/lib/python3/dist-packages/
+RUN apt update && apt install -qy make vim
 
-COPY --from=0 /src/north/cli/sysrepo-py/python/_sysrepo.so /usr/lib/python3/dist-packages/
-COPY --from=0 /src/north/cli/sysrepo-py/python/sysrepo.py /usr/lib/python3/dist-packages/
+COPY --from=0 /usr/local/lib/python3.8/site-packages/_yang.so /usr/local/lib/python3.8/site-packages/
+COPY --from=0 /usr/local/lib/python3.8/site-packages/yang.py  /usr/local/lib/python3.8/site-packages/
+
+COPY --from=0 /src/north/cli/sysrepo-py/python/_sysrepo.so /usr/local/lib/python3.8/site-packages/
+COPY --from=0 /src/north/cli/sysrepo-py/python/sysrepo.py  /usr/local/lib/python3.8/site-packages/
 
 COPY --from=0 /usr/local/bin/sysrepocfg /usr/local/bin/sysrepocfg
 COPY --from=0 /usr/local/bin/sysrepoctl /usr/local/bin/sysrepoctl
 
 RUN ldconfig
-
-RUN apt install -qy make vim
