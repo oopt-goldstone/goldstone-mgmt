@@ -27,7 +27,7 @@ $(GRPC_FILES): $(TAISH_DIR)/proto/tai.proto
 	protoc --grpc_out=. --plugin=protoc-gen-grpc=`which grpc_cpp_plugin` -I $(TAISH_DIR)proto tai.proto
 
 main: $(GRPC_FILES) Makefile $(OBJS)
-	g++ -g -std=c++11 -I /usr/local/include/sysrepo -o main $(OBJS) -lyang-cpp -lSysrepo-cpp $(LIB) -lgrpc++_reflection -lpthread -lyang -lsysrepo
+	g++ -g -std=c++11 -o main $(OBJS) -lyang-cpp -lSysrepo-cpp $(LIB) -lgrpc++_reflection -lpthread -lyang -lsysrepo
 
 clean:
 	$(RM) $(GRPC_FILES) main *.o

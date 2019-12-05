@@ -1,7 +1,9 @@
 #include <iostream>
 #include <csignal>
 #include <thread>
+#include <cstdlib>
 
+#include "base64.hpp"
 #include "controller.hpp"
 
 #include "tai.h"
@@ -25,6 +27,17 @@ static inline void rtrim(std::string &s) {
 static inline void trim(std::string &s) {
     ltrim(s);
     rtrim(s);
+}
+
+static uint32_t pack754_32(float f) {
+    uint32_t *p;
+    p = (uint32_t*)&f;
+    return *p;
+}
+
+static std::string ieeefloat32(float f) {
+    auto b = pack754_32(f);
+    return base64::encode({ static_cast<base64::byte>((b >> 24) & 0xff), static_cast<base64::byte>((b >> 16) & 0xff), static_cast<base64::byte>((b >> 8) & 0xff), static_cast<base64::byte>(b & 0xff) });
 }
 
 static void
@@ -182,9 +195,31 @@ int TAIController::oper_get_single_item(sysrepo::S_Session session, const object
         std::cout << "failed to get attribute: " << meta.short_name() << std::endl;
         return -1;
     }
+
     trim(value);
+    auto xpath = info.xpath_prefix + "/state/" + meta.short_name();
+
+    if ( meta.usage() == "<float>" ) {
+        auto s = parent->schema();
+        auto set = s->find_path(xpath.c_str());
+        auto sc = set->schema()[0];
+
+        if ( sc->nodetype() == LYS_LEAF ) {
+            auto leaf = libyang::Schema_Node_Leaf(sc);
+            auto f = std::atof(value.c_str());
+            switch ( leaf.type()->base() ) {
+            case LY_TYPE_DEC64:
+                value = std::to_string(f);
+                break;
+            case LY_TYPE_BINARY:
+                value = ieeefloat32(f);
+                break;
+            }
+        }
+    }
+
     auto ly_ctx = session->get_context();
-    parent->new_path(ly_ctx, (info.xpath_prefix + "/state/" + meta.short_name()).c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+    parent->new_path(ly_ctx, xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
     return 0;
 }
 
