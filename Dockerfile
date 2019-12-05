@@ -1,4 +1,4 @@
-FROM ubuntu:14.04 AS grpc
+FROM ubuntu:18.04 AS grpc
 
 RUN apt update && apt install -qy g++ make git dh-autoreconf pkg-config
 RUN git clone https://github.com/grpc/grpc.git && cd grpc; git submodule update --init --recursive; make install; cd third_party/protobuf; make install
@@ -8,24 +8,33 @@ FROM grpc AS grpc-tmp
 RUN rm `find /usr/local/lib -type l`
 RUN rm `find /usr/lib/x86_64-linux-gnu -type l`
 
-FROM ubuntu:14.04 AS swig
+FROM ubuntu:18.04 AS swig
 
 RUN apt update && apt install -qy g++ make bison automake git libpcre3 libpcre3-dev
 RUN git clone https://github.com/swig/swig.git && cd swig && ./autogen.sh && ./configure && make && make install
 
-FROM ubuntu:14.04 AS cmake
+FROM ubuntu:18.04 AS cmake
 
 RUN apt update && apt install -qy wget
 RUN wget https://github.com/Kitware/CMake/releases/download/v3.16.0-rc3/cmake-3.16.0-rc3-Linux-x86_64.tar.gz \
         && tar xvf cmake-3.16.0-rc3-Linux-x86_64.tar.gz
 
-FROM ubuntu:14.04
+#FROM ubuntu:18.04 AS python3.8
+##
+#RUN apt update && apt install -qy wget build-essential libssl-dev zlib1g-dev libncurses5-dev libncursesw5-dev libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev libbz2-dev libexpat1-dev liblzma-dev libffi-dev uuid-dev
+#RUN cd Python-3.8.0 && ./configure --enable-shared  && make -j `nproc`
 
-RUN apt update && apt install -qy gcc make git libpcre3-dev g++ python3 libpython3-dev python3-pip vim pkg-config bison wget
-RUN pip3 install prompt_toolkit
+FROM ubuntu:18.04
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
-RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
+RUN apt update && apt install -qy git libpcre3-dev vim pkg-config bison
+RUN apt update && apt install -qy wget build-essential libssl-dev zlib1g-dev libncurses5-dev libncursesw5-dev libreadline-dev libsqlite3-dev libgdbm-dev libdb5.3-dev libbz2-dev libexpat1-dev liblzma-dev libffi-dev uuid-dev
+
+RUN wget https://www.python.org/ftp/python/3.8.0/Python-3.8.0.tar.xz && tar xf Python-3.8.0.tar.xz
+RUN cd Python-3.8.0 && ./configure --enable-shared && make -j `nproc` && make install && ldconfig
+
+RUN update-alternatives --install /usr/bin/python python /usr/local/bin/python3 10
+RUN update-alternatives --install /usr/bin/pip pip /usr/local/bin/pip3 10
+RUN pip install --upgrade pip
 
 COPY --from=cmake /cmake-3.16.0-rc3-Linux-x86_64/bin/* /usr/bin/
 COPY --from=cmake /cmake-3.16.0-rc3-Linux-x86_64/share/cmake-3.16 /usr/share/cmake-3.16
@@ -33,7 +42,7 @@ COPY --from=cmake /cmake-3.16.0-rc3-Linux-x86_64/share/cmake-3.16 /usr/share/cma
 COPY --from=grpc-tmp /usr/local/lib/libgrpc* /usr/local/lib/
 COPY --from=grpc-tmp /usr/local/lib/libgpr* /usr/local/lib/
 COPY --from=grpc-tmp /usr/local/lib/libproto* /usr/local/lib/
-RUN ldconfig
+
 COPY --from=grpc-tmp /usr/local/bin/* /usr/local/bin/
 COPY --from=grpc-tmp /usr/local/include/google /usr/local/include/google
 COPY --from=grpc-tmp /usr/local/include/grpc   /usr/local/include/grpc
@@ -43,10 +52,9 @@ COPY --from=grpc-tmp /usr/local/lib/pkgconfig/* /usr/local/lib/pkgconfig/
 
 COPY --from=swig /usr/local/bin/ccache-swig /usr/local/bin/
 COPY --from=swig /usr/local/bin/swig /usr/local/bin/
-COPY --from=swig /lib/x86_64-linux-gnu/libpcre.so.3.13.1 /lib/x86_64-linux-gnu/
-RUN ldconfig
-
 COPY --from=swig /usr/local/share/swig /usr/local/share/swig
+
+RUN ldconfig
 
 ADD sm/libyang libyang
 RUN rm -rf libyang/builds && mkdir -p libyang/builds && cd libyang/builds && ls ../ && cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DGEN_PYTHON_BINDINGS=ON -DGEN_PYTHON_VERSION=3 .. && cmake --build . && cmake --install .
@@ -69,3 +77,5 @@ ADD onlp/IOF /usr/local/include/IOF
 
 RUN ldconfig
 RUN ln -s libonlp-platform.so /lib/x86_64-linux-gnu/libonlp-platform.so.1
+
+RUN pip install pyang
