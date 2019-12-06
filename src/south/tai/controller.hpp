@@ -36,6 +36,7 @@ class TAIController : public sysrepo::Callback {
         sysrepo::S_Subscribe m_subscribe;
         TAIClient m_client;
         std::map<std::string, tai::Module> m_modules;
+        bool _initialized;
 };
 
 #endif // __CONTROLLER_HPP__
