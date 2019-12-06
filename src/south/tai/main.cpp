@@ -118,6 +118,9 @@ int TAIController::module_change(sysrepo::S_Session session, const char *module_
     if ( event == SR_EV_DONE ) {
         return SR_ERR_OK;
     }
+    if ( !_initialized ) {
+        return SR_ERR_OK;
+    }
     std::cout << "========== EVENT " << ev_to_str(event) << " CHANGES: ====================================" << std::endl;
     auto it = session->get_changes_iter("//.");
     sysrepo::S_Change change;
@@ -146,7 +149,7 @@ int TAIController::module_change(sysrepo::S_Session session, const char *module_
                 }
                 if ( m_client.SetAttribute(info.oid, info.type, std::string(v), n->val_to_string()) ) {
                     std::cout << "failed to set attribute: " << v << std::endl;
-                    continue;
+                    return SR_ERR_SYS;
                 }
             }
         }
@@ -173,31 +176,8 @@ static int _oper_data_filter(const char *path, tai::TAIObjectType type) {
     return 0;
 }
 
-int TAIController::oper_get_single_item(sysrepo::S_Session session, const object_info& info, const char *request_xpath, libyang::S_Data_Node &parent) {
-    sysrepo::Xpath_Ctx xpath_ctx;
-    char tmp[128] = {0};
-    std::string(request_xpath).copy(tmp, 128);
-    auto v = xpath_ctx.node(tmp, "state");
-    if ( v == nullptr ) {
-        std::cout << "failed to find state node: " << request_xpath << std::endl;
-        return 1;
-    }
-    v = xpath_ctx.last_node(nullptr);
-    if ( v == nullptr ) {
-        std::cout << "failed to find last node: " << request_xpath << std::endl;
-        return 1;
-    }
-
-    tai::AttributeMetadata meta;
-    m_client.GetAttributeMetadata(info.type, std::string(v), meta);
-    std::string value;
-    if ( m_client.GetAttribute(info.oid, meta.attr_id(), value) ) {
-        std::cout << "failed to get attribute: " << meta.short_name() << std::endl;
-        return -1;
-    }
-
+static void _format_value(std::string& value, const std::string& xpath, libyang::S_Data_Node& parent, const tai::AttributeMetadata& meta) {
     trim(value);
-    auto xpath = info.xpath_prefix + "/state/" + meta.short_name();
 
     if ( meta.usage() == "<float>" ) {
         auto s = parent->schema();
@@ -217,6 +197,33 @@ int TAIController::oper_get_single_item(sysrepo::S_Session session, const object
             }
         }
     }
+}
+
+int TAIController::oper_get_single_item(sysrepo::S_Session session, const object_info& info, const char *request_xpath, libyang::S_Data_Node &parent) {
+    sysrepo::Xpath_Ctx xpath_ctx;
+    char tmp[128] = {0};
+    std::string(request_xpath).copy(tmp, 128);
+    auto v = xpath_ctx.node(tmp, "state");
+    if ( v == nullptr ) {
+        session->set_error("failed to find state node", request_xpath);
+        return 1;
+    }
+    v = xpath_ctx.last_node(nullptr);
+    if ( v == nullptr ) {
+        session->set_error("failed to find last node", request_xpath);
+        return 1;
+    }
+
+    tai::AttributeMetadata meta;
+    m_client.GetAttributeMetadata(info.type, std::string(v), meta);
+    std::string value;
+    if ( m_client.GetAttribute(info.oid, meta.attr_id(), value) ) {
+        session->set_error(request_xpath, ("failed to get attribute: " + meta.short_name()).c_str());
+        return -1;
+    }
+
+    auto xpath = info.xpath_prefix + "/state/" + meta.short_name();
+    _format_value(value, xpath, parent, meta);
 
     auto ly_ctx = session->get_context();
     parent->new_path(ly_ctx, xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
@@ -226,28 +233,19 @@ int TAIController::oper_get_single_item(sysrepo::S_Session session, const object
 int TAIController::oper_get_items(sysrepo::S_Session session, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, libyang::S_Data_Node &parent, void *private_data) {
     auto ly_ctx = session->get_context();
     auto info = object_info_from_xpath(std::string(request_xpath));
+    std::cout << "xpath: " << path << ", request-xpath: " << request_xpath << std::endl;
     if ( info.oid == TAI_NULL_OBJECT_ID ) {
-        std::cout << "get all" << std::endl;
         return SR_ERR_OK;
     }
     if ( _oper_data_filter(path, info.type) ) {
         return SR_ERR_OK;
     }
 
-    auto ret = oper_get_single_item(session, info, request_xpath, parent);
-    if ( ret == 0 ) {
-        return SR_ERR_OK;
-    } else if ( ret < 0 ) {
-        return SR_ERR_SYS;
-    }
-
     std::vector<tai::AttributeMetadata> list;
     if ( m_client.ListAttributeMetadata(info.type, list) ) {
         std::cout << "failed to get attribute metadata list" << std::endl;
-        return SR_ERR_OK;
+        return SR_ERR_SYS;
     }
-
-    std::cout << "path: " << path << "request_xpath: " << request_xpath << ", info: " << info.xpath_prefix  << std::endl;
 
     int limit;
     if ( info.type == tai::TAIObjectType::MODULE ) {
@@ -256,6 +254,13 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
         limit = TAI_NETWORK_INTERFACE_ATTR_CUSTOM_RANGE_START;
     } else {
         limit = TAI_HOST_INTERFACE_ATTR_CUSTOM_RANGE_START;
+    }
+
+    auto ret = oper_get_single_item(session, info, request_xpath, parent);
+    if ( ret == 0 ) {
+        return SR_ERR_OK;
+    } else if ( ret < 0 ) {
+        return SR_ERR_SYS;
     }
 
     for ( const auto& m : list ) {
@@ -267,10 +272,11 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
             std::cout << "failed to get attribute: " << m.short_name() << std::endl;
             continue;
         }
-        trim(value);
+        auto xpath = info.xpath_prefix + "/state/" + m.short_name();
+        _format_value(value, xpath, parent, m);
         std::cout << "attr: " << m.short_name() << ": " << value << std::endl;
         try {
-            parent->new_path(ly_ctx, (info.xpath_prefix + "/state/" + m.short_name()).c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ly_ctx, xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
         } catch (...) {
             std::cout << "failed to add path" << std::endl;
         }
@@ -281,6 +287,8 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
 TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscribe(new sysrepo::Subscribe(sess)), m_client(grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials())) {
     std::vector<tai::Module> modules;
     m_client.ListModule(modules);
+
+    _initialized = false;
 
     auto ly_ctx = sess->get_context();
     libyang::S_Data_Node data = nullptr;
@@ -330,6 +338,8 @@ TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscri
     m_subscribe->oper_get_items_subscribe(mod_name, (xpath + "host-interface/state").c_str(), callback);
 
     sess->apply_changes();
+
+    _initialized = true;
 }
 
 TAIController::~TAIController() {
