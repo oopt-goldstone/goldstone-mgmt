@@ -60,12 +60,8 @@ ADD sm/libyang libyang
 RUN rm -rf libyang/builds && mkdir -p libyang/builds && cd libyang/builds && ls ../ && cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DGEN_PYTHON_BINDINGS=ON -DGEN_PYTHON_VERSION=3 .. && cmake --build . && cmake --install .
 ADD sm/sysrepo sysrepo
 RUN mkdir -p /var/lib/sysrepo
-RUN rm -rf sysrepo/builds && mkdir -p sysrepo/builds && cd sysrepo/builds && cmake -DGEN_CPP_BINDINGS=ON -DREPO_PATH=/var/lib/sysrepo/ .. && make && make install
+RUN rm -rf sysrepo/builds && mkdir -p sysrepo/builds && cd sysrepo/builds && cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DREPO_PATH=/var/lib/sysrepo/ .. && make && make install
 RUN mkdir -p /usr/local/include/utils && cp sysrepo/src/utils/xpath.h /usr/local/include/utils/
-
-#RUN cd sysrepo/swig/python && make clean && make _sysrepo.so
-#RUN cp sysrepo/swig/python/sysrepo.py /usr/lib/python3/dist-packages/
-#RUN cp sysrepo/swig/python/_sysrepo.so /usr/lib/python3/dist-packages/
 
 ADD onlp/libonlp.so /lib/x86_64-linux-gnu/
 ADD onlp/libonlp-platform.so /lib/x86_64-linux-gnu/
@@ -78,4 +74,8 @@ ADD onlp/IOF /usr/local/include/IOF
 RUN ldconfig
 RUN ln -s libonlp-platform.so /lib/x86_64-linux-gnu/libonlp-platform.so.1
 
-RUN pip install pyang
+RUN apt install -qy libclang1-6.0
+
+RUN pip install pyang clang jinja2 prompt_toolkit
+
+ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.8/tai.py
