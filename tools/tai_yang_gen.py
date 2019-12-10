@@ -68,7 +68,7 @@ if __name__ == '__main__':
         m.add(state)
 
         config.add(Statement('leaf', 'name', Statement('type', 'string')))
-        state.add(Statement('leaf', 'id', Statement('type', 'uint32')))
+        state.add(Statement('leaf', 'id', Statement('type', 'uint64')))
         state.add(Statement('leaf', 'description', Statement('type', 'string')))
 
         for attr in obj.get_attributes():
