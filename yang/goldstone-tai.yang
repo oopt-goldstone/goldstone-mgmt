@@ -30,7 +30,7 @@ module goldstone-tai {
 
   grouping tai-module-state {
     leaf id {
-      type uint32;
+      type uint64;
     }
     leaf description {
       type string;
@@ -132,7 +132,7 @@ module goldstone-tai {
 
   grouping tai-host-interface-state {
     leaf id {
-      type uint32;
+      type uint64;
     }
     leaf description {
       type string;
@@ -319,7 +319,7 @@ module goldstone-tai {
 
   grouping tai-network-interface-state {
     leaf id {
-      type uint32;
+      type uint64;
     }
     leaf description {
       type string;
