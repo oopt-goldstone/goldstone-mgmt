@@ -8,7 +8,7 @@ ifndef DOCKER_IMAGE
     DOCKER_IMAGE=sysrepo-builder
 endif
 
-all: north south
+all: south
 
 docker:
 	DOCKER_CMD='make' $(MAKE) cmd
@@ -46,7 +46,6 @@ init:
 	sysrepoctl -s /data/sm/openconfig/  --install /data/sm/openconfig/release/models/system/openconfig-alarm-types.yang
 
 south: onlp openconfig-converter tai sonic-interface
-north: cli
 
 onlp:
 	$(MAKE) -C src/south/onlp
@@ -59,11 +58,8 @@ tai:
 
 sonic-interface:
 	$(MAKE) -C src/south/sonic-interface
-cli:
-	$(MAKE) -C src/north/cli
 
 clean:
 	$(MAKE) -C src/south/onlp clean
 	$(MAKE) -C src/south/openconfig-converter clean
 	$(MAKE) -C src/south/tai clean
-	$(MAKE) -C src/north/cli clean
