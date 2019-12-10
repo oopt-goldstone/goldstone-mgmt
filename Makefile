@@ -23,13 +23,10 @@ docker-image:
 docker-run-image:
 	docker build $(DOCKER_BUILD_OPTION) -f Dockerfile.run -t sysrepo .
 
-docker-yang-generator-image:
-	docker build $(DOCKER_BUILD_OPTION) -f Dockerfile.clang -t yang-generator .
-
 yang: yang/goldstone-tai.yang
 
-yang/goldstone-tai.yang:
-	docker run -it -v `pwd`:/data -w /data yang-generator bash -c './tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h | pyang -f yang > /data/$@'
+yang/goldstone-tai.yang: ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h
+	docker run -it -v `pwd`:/data -w /data $(DOCKER_IMAGE) bash -c './tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h | pyang -f yang > /data/$@'
 
 bash:
 	$(MAKE) cmd
