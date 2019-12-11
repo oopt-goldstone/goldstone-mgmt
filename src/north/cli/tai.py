@@ -49,7 +49,7 @@ class TAICompleter(Completer):
             for c in self.attrnames():
                 if c.startswith(document.text):
                     yield Completion(c, start_position=-len(document.text))
-        elif len(t) > 2:
+        elif len(t) > 2 or (len(t) == 2 and document.text[-1] == ' '):
             # invalid input for both get() and set(). no completion possible
             return
         else:

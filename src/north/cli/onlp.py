@@ -3,7 +3,7 @@ import os
 
 sys.path.append('.')
 
-from base import Object, InvalidInput, VALUE_T
+from base import Object, InvalidInput
 import json
 import yang as ly
 import sysrepo as sr
@@ -52,7 +52,7 @@ class Fan(Component):
 
         attrs = WordCompleter(['percentage'])
 
-        @self.command(completers=[attrs, VALUE_T])
+        @self.command(attrs)
         def set(args):
             if len(args) != 2:
                 raise InvalidInput('usage: set <attribute> <value>[cr]')
@@ -81,25 +81,25 @@ class Platform(Object):
             print(tree.print_mem(ly.LYD_JSON, 0))
             self.session.session_switch_ds(sr.SR_DS_RUNNING)
 
-        @self.command(completers=[WordCompleter(self._components('fan'))])
+        @self.command(WordCompleter(self._components('fan')))
         def fan(args):
             if len(args) != 1:
                 raise InvalidInput('usage: fan <name>')
             return Fan(self.session, self, 'fan', args[0])
 
-        @self.command(completers=[WordCompleter(self._components('thermal'))])
+        @self.command(WordCompleter(self._components('thermal')))
         def thermal(args):
             if len(args) != 1:
                 raise InvalidInput('usage: thermal <name>')
             return Component(self.session, self, 'thermal', args[0])
 
-        @self.command(completers=[WordCompleter(self._components('psu'))])
+        @self.command(WordCompleter(self._components('psu')))
         def psu(args):
             if len(args) != 1:
                 raise InvalidInput('usage: psu <name>')
             return Component(self.session, self, 'psu', args[0])
 
-        @self.command(completers=[WordCompleter(self._components('led'))])
+        @self.command(WordCompleter(self._components('led')))
         def led(args):
             if len(args) != 1:
                 raise InvalidInput('usage: led <name>')
@@ -110,4 +110,4 @@ class Platform(Object):
 
     def _components(self, type_):
         d = self._component_map
-        return [v['name'] for v in d['goldstone-onlp:components']['component'] if v['state']['type'] == type_.upper()]
+        return [v['name'] for v in d.get('goldstone-onlp:components', {}).get('component', []) if v['state']['type'] == type_.upper()]

@@ -1,18 +1,11 @@
-import yang as ly
-import sysrepo as sr
-import pyang
-
-import json
-
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import Completer, Completion, WordCompleter
 from prompt_toolkit import print_formatted_text as print
 
-VALUE_T = None
-
 class InvalidInput(Exception):
-    def __init__(self, msg):
+    def __init__(self, msg, candidates=[]):
         self.msg = msg
+        self.candidates = candidates
 
     def __str__(self):
         return self.msg
@@ -37,12 +30,17 @@ class Object(object):
             self._commands[func.__name__] = {'func': _inner, 'completer': completer}
         return f
 
-    def help(self, text='?', short=True):
-        text = text.strip()
-        if text == '?':
-            return ', '.join(self.commands())
-        else:
-            return 'WIP'
+    def help(self, text='', short=True):
+        text = text.lstrip()
+        try:
+            v = text.split()
+            if len(text) > 0 and text[-1] == ' ':
+                # needs to show all candidates for the next argument
+                v.append(' ')
+            line = self.complete_input(v)
+        except InvalidInput as e:
+            return ', '.join(e.candidates)
+        return line[-1].strip()
 
     def commands(self):
         return list(self._commands.keys())
@@ -75,12 +73,16 @@ class Object(object):
                     yield v
 
     def complete_input(self, line):
+
+        if len(line) == 0:
+            raise InvalidInput('invalid command. available commands: {}'.format(self.commands()), self.commands())
+
         for i in range(len(line)):
             doc = Document(' '.join(line[:i+1]))
             c = list(self.completion(doc))
             if len(c) == 0:
                 if i == 0:
-                    raise InvalidInput('invalid command. available commands: {}'.format(self.commands()))
+                    raise InvalidInput('invalid command. available commands: {}'.format(self.commands()), self.commands())
                 else:
                     # t[0] must be already completed
                     v = self._commands.get(line[0])
@@ -94,12 +96,16 @@ class Object(object):
                         if len(candidates) == 0:
                             continue
 
-                        raise InvalidInput('invalid argument. candidates: {}'.format(candidates))
+                        raise InvalidInput('invalid argument. candidates: {}'.format(candidates), candidates)
+                    else:
+                        # no command completer, the command doesn't take any argument
+                        continue
             elif len(c) > 1:
-                # search perfect match
+                # search for a perfect match
                 t = [v for v in c if v.text == line[i]]
                 if len(t) == 0:
-                    raise InvalidInput('ambiguous {}. candidates: {}'.format('command' if i == 0 else 'argument', [v.text for v in c]))
+                    candidates = [v.text for v in c]
+                    raise InvalidInput('ambiguous {}. candidates: {}'.format('command' if i == 0 else 'argument', candidates), candidates)
                 c[0] = t[0]
             line[i] = c[0].text
         return line 

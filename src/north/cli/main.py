@@ -82,9 +82,10 @@ class GoldstoneShell(object):
         def _(event):
             buf = event.current_buffer
             original_text = buf.text
+            help_msg = event.app.shell.context.help(buf.text)
             buf.insert_text('?')
-            buf.insert_line_below()
-            buf.insert_text(event.app.shell.context.help(buf.text))
+            buf.insert_line_below(copy_margin=False)
+            buf.insert_text(help_msg)
             event.app.exit('')
             event.app.shell.default_input = original_text
 
