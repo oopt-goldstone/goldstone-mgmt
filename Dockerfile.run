@@ -3,9 +3,6 @@ FROM sysrepo-builder
 RUN rm `find /usr/local/lib -type l`
 RUN rm `find /usr/lib/x86_64-linux-gnu -type l`
 
-ADD src src
-RUN make -C src/north/cli/sysrepo-py/python
-
 FROM python:3.8
 
 RUN pip install prompt_toolkit pyang
@@ -22,8 +19,8 @@ RUN apt update && apt install -qy make vim
 COPY --from=0 /usr/local/lib/python3.8/site-packages/_yang.so /usr/local/lib/python3.8/site-packages/
 COPY --from=0 /usr/local/lib/python3.8/site-packages/yang.py  /usr/local/lib/python3.8/site-packages/
 
-COPY --from=0 /src/north/cli/sysrepo-py/python/_sysrepo.so /usr/local/lib/python3.8/site-packages/
-COPY --from=0 /src/north/cli/sysrepo-py/python/sysrepo.py  /usr/local/lib/python3.8/site-packages/
+COPY --from=0 /usr/local/lib/python3.8/site-packages/_sysrepo.so /usr/local/lib/python3.8/site-packages/
+COPY --from=0 /usr/local/lib/python3.8/site-packages/sysrepo.py  /usr/local/lib/python3.8/site-packages/
 
 COPY --from=0 /usr/local/bin/sysrepocfg /usr/local/bin/sysrepocfg
 COPY --from=0 /usr/local/bin/sysrepoctl /usr/local/bin/sysrepoctl
