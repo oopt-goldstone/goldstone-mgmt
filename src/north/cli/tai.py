@@ -4,7 +4,7 @@ import re
 
 sys.path.append('.')
 
-from base import Object, InvalidInput
+from base import Object, InvalidInput, Completer
 import pyang
 import json
 import yang as ly
@@ -13,7 +13,7 @@ import base64
 import struct
 
 from prompt_toolkit.document import Document
-from prompt_toolkit.completion import WordCompleter, Completer, Completion, FuzzyCompleter
+from prompt_toolkit.completion import WordCompleter, Completion, FuzzyCompleter
 
 TIMEOUT_MS = 10000
 
@@ -23,6 +23,11 @@ class TAICompleter(Completer):
     def __init__(self, config, state=None):
         self.config = config
         self.state = state
+
+        # when self.state != None, this completer is used for get() command
+        # which doesn't take value. so we don't need to do any completion 
+        hook = lambda : self.state != None
+        super(TAICompleter, self).__init__(self.attrnames, self.valuenames, hook)
 
     def attrnames(self):
         l = [v.arg for v in self.config.substmts]
@@ -41,44 +46,6 @@ class TAICompleter(Completer):
                 else:
                     return []
         return []
-
-    def get_completions(self, document, complete_event=None):
-        t = document.text.split()
-        if len(t) == 0 or (len(t) == 1 and document.text[-1] != ' '):
-            # attribute name completion
-            for c in self.attrnames():
-                if c.startswith(document.text):
-                    yield Completion(c, start_position=-len(document.text))
-        elif len(t) > 2 or (len(t) == 2 and document.text[-1] == ' '):
-            # invalid input for both get() and set(). no completion possible
-            return
-        else:
-            # value completion
-
-            # when self.state != None, this completer is used for get() command
-            # which doesn't take value. so we don't need to do any completion 
-            if self.state != None:
-                return
-
-            # complete the first argument
-            doc = Document(t[0])
-            c = list(self.get_completions(doc))
-            if len(c) == 0:
-                return
-            elif len(c) > 1:
-                # search perfect match
-                l = [v.text for v in c if v.text == t[0]]
-                if len(l) == 0:
-                    return
-                attrname = l[0]
-            else:
-                attrname = c[0].text
-
-            text = t[1] if len(t) > 1 else ''
-
-            for c in self.valuenames(attrname):
-                if c.startswith(text):
-                    yield Completion(c, start_position=-len(text))
 
 class TAIObject(Object):
 

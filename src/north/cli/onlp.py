@@ -3,7 +3,7 @@ import os
 
 sys.path.append('.')
 
-from base import Object, InvalidInput
+from base import Object, InvalidInput, Completer
 import json
 import yang as ly
 import sysrepo as sr
@@ -34,6 +34,10 @@ class Component(Object):
         return '{}({})'.format(self._type, self.name)
 
 
+class FanCompleter(Completer):
+    def __init__(self):
+        super(FanCompleter, self).__init__(lambda : ['percentage'])
+
 class Fan(Component):
 
     def __init__(self, *args):
@@ -50,9 +54,7 @@ class Fan(Component):
             fan = d[self._type]
             print(d)
 
-        attrs = WordCompleter(['percentage'])
-
-        @self.command(attrs)
+        @self.command(FanCompleter())
         def set(args):
             if len(args) != 2:
                 raise InvalidInput('usage: set <attribute> <value>[cr]')
@@ -81,25 +83,25 @@ class Platform(Object):
             print(tree.print_mem(ly.LYD_JSON, 0))
             self.session.session_switch_ds(sr.SR_DS_RUNNING)
 
-        @self.command(WordCompleter(self._components('fan')))
+        @self.command(WordCompleter(lambda : self._components('fan')))
         def fan(args):
             if len(args) != 1:
                 raise InvalidInput('usage: fan <name>')
             return Fan(self.session, self, 'fan', args[0])
 
-        @self.command(WordCompleter(self._components('thermal')))
+        @self.command(WordCompleter(lambda : self._components('thermal')))
         def thermal(args):
             if len(args) != 1:
                 raise InvalidInput('usage: thermal <name>')
             return Component(self.session, self, 'thermal', args[0])
 
-        @self.command(WordCompleter(self._components('psu')))
+        @self.command(WordCompleter(lambda : self._components('psu')))
         def psu(args):
             if len(args) != 1:
                 raise InvalidInput('usage: psu <name>')
             return Component(self.session, self, 'psu', args[0])
 
-        @self.command(WordCompleter(self._components('led')))
+        @self.command(WordCompleter(lambda : self._components('led')))
         def led(args):
             if len(args) != 1:
                 raise InvalidInput('usage: led <name>')

@@ -1,5 +1,6 @@
 from prompt_toolkit.document import Document
-from prompt_toolkit.completion import Completer, Completion, WordCompleter
+from prompt_toolkit.completion import Completion, WordCompleter
+from prompt_toolkit.completion import Completer as PromptCompleter
 from prompt_toolkit import print_formatted_text as print
 
 class InvalidInput(Exception):
@@ -9,6 +10,57 @@ class InvalidInput(Exception):
 
     def __str__(self):
         return self.msg
+
+class Completer(PromptCompleter):
+    def __init__(self, attrnames, valuenames=[], hook=None):
+        if type(attrnames) == list:
+            self._attrnames = lambda : attrnames
+        else:
+            self._attrnames = attrnames
+
+        if type(valuenames) == list:
+            self._valuenames = lambda _ : valuenames
+        else:
+            self._valuenames = valuenames
+
+        self._hook = hook
+
+    def get_completions(self, document, complete_event=None):
+        t = document.text.split()
+        if len(t) == 0 or (len(t) == 1 and document.text[-1] != ' '):
+            # attribute name completion
+            for c in self._attrnames():
+                if c.startswith(document.text):
+                    yield Completion(c, start_position=-len(document.text))
+        elif len(t) > 2 or (len(t) == 2 and document.text[-1] == ' '):
+            # invalid input for both get() and set(). no completion possible
+            return
+        else:
+            # value completion
+
+            if self._hook and self._hook():
+                return
+
+            # complete the first argument
+            doc = Document(t[0])
+            c = list(self.get_completions(doc))
+            if len(c) == 0:
+                return
+            elif len(c) > 1:
+                # search perfect match
+                l = [v.text for v in c if v.text == t[0]]
+                if len(l) == 0:
+                    return
+                attrname = l[0]
+            else:
+                attrname = c[0].text
+
+            text = t[1] if len(t) > 1 else ''
+
+            for c in self._valuenames(attrname):
+                if c.startswith(text):
+                    yield Completion(c, start_position=-len(text))
+
 
 class Object(object):
     XPATH = ''
