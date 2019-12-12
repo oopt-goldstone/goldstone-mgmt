@@ -154,40 +154,33 @@ print_change(sr_change_oper_t op, sr_val_t *old_val, sr_val_t *new_val)
 //    }
 }
 
-static int _populate_oper_data(libyang::S_Context& ctx, libyang::S_Data_Node& parent, const std::string& name, const std::string& path, const std::string& value) {
-    std::stringstream xpath;
-    xpath << "/goldstone-onlp:components/component[name='" << name << "']/" << path;
-    parent->new_path(ctx, xpath.str().c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
-    return 0;
-}
-
 #define SET_OPER_STATUS(type, prefix, value) \
     if ( (info.status & prefix ## _ ## value) > 0 ) { \
-        _populate_oper_data(ctx, parent, name, #type "/state/status", #value); \
+        parent->new_path(ctx, (p + "status").c_str(), #value, LYD_ANYDATA_CONSTSTRING, 0); \
     }
 
-static int _populate_oper_data_oid(libyang::S_Context& ctx, libyang::S_Data_Node& parent, const std::string& name, onlp_oid_t oid) {
+static int _populate_oper_data_oid(libyang::S_Context& ctx, libyang::S_Data_Node& parent, const std::string& prefix, onlp_oid_t oid) {
+    auto p = prefix + "/state/";
     switch (ONLP_OID_TYPE_GET(oid)) {
     case ONLP_OID_TYPE_THERMAL:
         {
             onlp_thermal_info_t info;
             onlp_thermal_info_get(oid, &info);
-            _populate_oper_data(ctx, parent, name, "thermal/state/temperature", std::to_string(info.mcelsius));
+            parent->new_path(ctx, (p + "temperature").c_str(), std::to_string(info.mcelsius).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
             if ( (info.status & ONLP_THERMAL_STATUS_PRESENT) > 0 ) {
-                _populate_oper_data(ctx, parent, name, "thermal/state/status", "PRESENT");
+                parent->new_path(ctx, (p + "status").c_str(), "PRESENT", LYD_ANYDATA_CONSTSTRING, 0);
             }
             if ( (info.status & ONLP_THERMAL_STATUS_FAILED) > 0 ) {
-                _populate_oper_data(ctx, parent, name, "thermal/state/status", "FAILED");
+                parent->new_path(ctx, (p + "status").c_str(), "FAILED", LYD_ANYDATA_CONSTSTRING, 0);
             }
         }
         break;
     case ONLP_OID_TYPE_FAN:
         {
-            std::cout << "FAN" << std::endl;
             onlp_fan_info_t info;
             onlp_fan_info_get(oid, &info);
-            _populate_oper_data(ctx, parent, name, "fan/state/rpm", std::to_string(info.rpm));
-            _populate_oper_data(ctx, parent, name, "fan/state/percentage", std::to_string(info.percentage));
+            parent->new_path(ctx, (p + "rpm").c_str(), std::to_string(info.rpm).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ctx, (p + "percentage").c_str(), std::to_string(info.percentage).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
             std::string mode;
             switch (info.mode) {
             case ONLP_FAN_MODE_OFF:
@@ -204,7 +197,7 @@ static int _populate_oper_data_oid(libyang::S_Context& ctx, libyang::S_Data_Node
                 break;
             }
             if ( mode.size() > 0 ) {
-                _populate_oper_data(ctx, parent, name, "fan/state/mode", mode);
+                parent->new_path(ctx, (p + "mode").c_str(), mode.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
             }
             SET_OPER_STATUS(fan, ONLP_FAN_STATUS, PRESENT)
             SET_OPER_STATUS(fan, ONLP_FAN_STATUS, FAILED)
@@ -219,14 +212,14 @@ static int _populate_oper_data_oid(libyang::S_Context& ctx, libyang::S_Data_Node
             SET_OPER_STATUS(psu, ONLP_PSU_STATUS, PRESENT)
             SET_OPER_STATUS(psu, ONLP_PSU_STATUS, FAILED)
             SET_OPER_STATUS(psu, ONLP_PSU_STATUS, UNPLUGGED)
-            _populate_oper_data(ctx, parent, name, "psu/state/input-current", std::to_string(info.miin));
-            _populate_oper_data(ctx, parent, name, "psu/state/output-current", std::to_string(info.miout));
-            _populate_oper_data(ctx, parent, name, "psu/state/input-voltage", std::to_string(info.mvin));
-            _populate_oper_data(ctx, parent, name, "psu/state/output-voltage", std::to_string(info.mvout));
-            _populate_oper_data(ctx, parent, name, "psu/state/input-power", std::to_string(info.mpin));
-            _populate_oper_data(ctx, parent, name, "psu/state/output-power", std::to_string(info.mpout));
-            _populate_oper_data(ctx, parent, name, "psu/state/model", info.model);
-            _populate_oper_data(ctx, parent, name, "psu/state/serial", info.serial);
+            parent->new_path(ctx, (p + "input-current").c_str(), std::to_string(info.miin).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ctx, (p + "output-current").c_str(), std::to_string(info.miout).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ctx, (p + "input-voltage").c_str(), std::to_string(info.mvin).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ctx, (p + "output-voltage").c_str(), std::to_string(info.mvout).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ctx, (p + "input-power").c_str(), std::to_string(info.mpin).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ctx, (p + "output-power").c_str(), std::to_string(info.mpout).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ctx, (p + "model").c_str(), info.model, LYD_ANYDATA_CONSTSTRING, 0);
+            parent->new_path(ctx, (p + "serial").c_str(), info.serial, LYD_ANYDATA_CONSTSTRING, 0);
         }
         break;
     case ONLP_OID_TYPE_LED:
@@ -291,9 +284,9 @@ static int _populate_oper_data_oid(libyang::S_Context& ctx, libyang::S_Data_Node
                 break;
             }
             if ( mode.size() > 0 ) {
-                _populate_oper_data(ctx, parent, name, "led/state/mode", mode);
+                parent->new_path(ctx, (p + "mode").c_str(), mode.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
             }
-            _populate_oper_data(ctx, parent, name, "led/state/character", std::to_string(info.character));
+            parent->new_path(ctx, (p + "character").c_str(), std::to_string(info.character).c_str(), LYD_ANYDATA_CONSTSTRING, 0);
         }
     }
     return SR_ERR_OK;
@@ -315,52 +308,100 @@ static const std::string PLATFORM_MODULE_NAME = "goldstone-onlp";
     }
 
 int ONLPController::module_change(sysrepo::S_Session session, const char *module_name, const char *xpath, sr_event_t event, uint32_t request_id, void *private_data) {
+    if ( event == SR_EV_DONE ) {
+        return SR_ERR_OK;
+    }
+    if ( !_initialized ) {
+        return SR_ERR_OK;
+    }
     std::cout << "\n\n ========== EVENT " << ev_to_str(event) << " CHANGES: ====================================\n\n" << std::endl;
-//    sr_change_iter_t *it;
-//    sr_get_changes_iter(session, "//.", &it);
-//
-//    sr_change_oper_t oper;
-//    sr_val_t *old_value = NULL, *new_value = NULL;
-//
-//    int rc = SR_ERR_OK;
-//    while ((rc = sr_get_change_next(session, it, &oper, &old_value, &new_value)) == SR_ERR_OK) {
-//        print_change(oper, old_value, new_value);
-//        sr_free_val(old_value);
-//        sr_free_val(new_value);
-//    }
-//
-//    sr_free_change_iter(it);
-//    printf("\n\n ========== EVENT %s CHANGES end\n", ev_to_str(event));
+    return SR_ERR_OK;
+}
 
+static int _key_value(const std::string& xpath, const std::string& key, std::string& name) {
+    sysrepo::Xpath_Ctx xpath_ctx;
+    char tmp[128] = {0};
+    xpath.copy(tmp, 128);
+    auto ptr = xpath_ctx.key_value(tmp, key.c_str(), "name");
+    if ( ptr == nullptr ) {
+        return -1;
+    }
+    name = std::string(ptr);
+    return 0;
+}
+
+object_info ONLPController::object_info_from_xpath(const std::string& xpath) {
+    object_info info = {0};
+    std::string name;
+    const std::string prefix = "/goldstone-onlp:components/component";
+    if ( _key_value(xpath, "component", name) < 0 ) {
+        return info;
+    }
+    auto it = m_component_map.find(name);
+    if ( it == m_component_map.end() ) {
+        return info;
+    }
+
+    info.xpath_prefix = prefix + "[name='" + name + "']";
+
+    info.oid = it->second;
+    info.type = static_cast<onlp_oid_type_t>(ONLP_OID_TYPE_GET(info.oid));
+    switch (info.type) {
+    case ONLP_OID_TYPE_THERMAL:
+        info.xpath_prefix += "/thermal";
+        break;
+    case ONLP_OID_TYPE_FAN:
+        info.xpath_prefix += "/fan";
+        break;
+    case ONLP_OID_TYPE_PSU:
+        info.xpath_prefix += "/psu";
+        break;
+    case ONLP_OID_TYPE_LED:
+        info.xpath_prefix += "/led";
+    }
+    return info;
+}
+
+static int _oper_data_filter(const char *path, onlp_oid_type_t type) {
+    std::string v(path);
+    switch (type) {
+    case ONLP_OID_TYPE_SYS:
+        return (v.find("sys") != std::string::npos) ? 0 : 1;
+    case ONLP_OID_TYPE_THERMAL:
+        return (v.find("thermal") != std::string::npos) ? 0 : 1;
+    case ONLP_OID_TYPE_FAN:
+        return (v.find("fan") != std::string::npos) ? 0 : 1;
+    case ONLP_OID_TYPE_PSU:
+        return (v.find("psu") != std::string::npos) ? 0 : 1;
+    case ONLP_OID_TYPE_LED:
+        return (v.find("led") != std::string::npos) ? 0 : 1;
+    case ONLP_OID_TYPE_MODULE:
+        return (v.find("module") != std::string::npos) ? 0 : 1;
+    case ONLP_OID_TYPE_RTC:
+        return (v.find("rtc") != std::string::npos) ? 0 : 1;
+    default:
+        return 1;
+    }
     return 0;
 }
 
 int ONLPController::oper_get_items(sysrepo::S_Session session, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, libyang::S_Data_Node &parent, void *private_data) {
     auto ly_ctx = session->get_context();
-    sysrepo::Xpath_Ctx xpath_ctx;
-    auto n = xpath_ctx.key_value(const_cast<char*>(request_xpath), "component", "name");
-    std::cout << "xpath: " << path << ", request_xpath: " << request_xpath << std::endl;
-    if ( n == nullptr ) {
-        for ( auto& v : m_component_map ) {
-            _populate_oper_data_oid(ly_ctx, parent, v.first, v.second);
-        }
+    auto info = object_info_from_xpath(std::string(request_xpath));
+
+    if ( _oper_data_filter(path, info.type) ) {
         return SR_ERR_OK;
     }
-    auto name = std::string(n);
 
-    auto it = m_component_map.find(name);
-    if ( it == m_component_map.end() ) {
-        std::cout << request_xpath << " : not found" << std::endl;
-        return SR_ERR_NOT_FOUND;
-    }
-    auto oid = it->second;
-    return _populate_oper_data_oid(ly_ctx, parent, name, oid);
+    return _populate_oper_data_oid(ly_ctx, parent, info.xpath_prefix, info.oid);
 }
 
 ONLPController::ONLPController(sysrepo::S_Session& sess) : m_sess(sess), m_subscribe(new sysrepo::Subscribe(sess)) {
     onlp_init();
     std::map<onlp_oid_type_t, std::vector<onlp_oid_t>> map;
     onlp_oid_iterate(0, static_cast<onlp_oid_type_t>(0), iter__, &map);
+
+    _initialized = false;
 
     auto ly_ctx = sess->get_context();
     auto xpath = "/goldstone-onlp:components/component[name='sys']/config/name";
@@ -475,7 +516,15 @@ ONLPController::ONLPController(sysrepo::S_Session& sess) : m_sess(sess), m_subsc
         sess->set_item_str((xpath + "state/type").c_str(), type.c_str());
     }
     sess->apply_changes();
-    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component[name='sys']/state", callback);
+
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/state", callback);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/fan/state", callback);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/thermal/state", callback);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/led/state", callback);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/sys/state", callback);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/psu/state", callback);
+
+    _initialized = false;
 }
 
 ONLPController::~ONLPController() {

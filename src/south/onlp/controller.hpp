@@ -24,6 +24,12 @@ extern "C" {
 
 }
 
+struct object_info {
+    onlp_oid_t oid;
+    onlp_oid_type_t type;
+    std::string xpath_prefix;
+};
+
 class ONLPController : public sysrepo::Callback {
     public:
         ONLPController(sysrepo::S_Session& sess);
@@ -37,8 +43,10 @@ class ONLPController : public sysrepo::Callback {
         sysrepo::S_Session m_sess;
         sysrepo::S_Subscribe m_subscribe;
         std::map<std::string, onlp_oid_t> m_component_map;
+        object_info object_info_from_xpath(const std::string& xpath);
 
         void _init(libyang::S_Context& ctx, std::map<onlp_oid_type_t, std::vector<onlp_oid_t>>& map, libyang::S_Data_Node& parent, const std::string& prefix, onlp_oid_type_t type);
+        bool _initialized;
 };
 
 #endif // __CONTROLLER_HPP__
