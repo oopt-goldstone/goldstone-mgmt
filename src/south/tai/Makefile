@@ -1,9 +1,10 @@
-TAI_DIR := ../../../sm/oopt-tai
+PROJECT_DIR := ../../../
+TAI_DIR := $(PROJECT_DIR)/sm/oopt-tai
 TAISH_DIR := $(TAI_DIR)/tools/taish/
 
 .DEFAULT_GOAL := all
 
-INCLUDE := -I $(TAI_DIR)/inc
+INCLUDE := -I $(TAI_DIR)/inc -I $(PROJECT_DIR)/include
 
 all: main
 

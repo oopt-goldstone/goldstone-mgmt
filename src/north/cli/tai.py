@@ -74,11 +74,13 @@ class TAIObject(Object):
                 raise InvalidInput('usage: get <name>')
             self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
             try:
-                item = self.session.get_item('{}/state/{}'.format(self.xpath(), args[0]))
-                if args[0] in self._get_hook:
-                    print(self._get_hook[args[0]](item))
-                else:
-                    print(item.val_to_string())
+                items = self.session.get_items('{}/state/{}'.format(self.xpath(), args[0]))
+                for i in range(items.val_cnt()):
+                    item = items.val(i)
+                    if args[0] in self._get_hook:
+                        print(self._get_hook[args[0]](item))
+                    else:
+                        print(item.val_to_string())
             except RuntimeError:
                 err = self.session.get_error()
                 if err.error_cnt() > 0:
