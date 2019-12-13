@@ -6,7 +6,11 @@
 #include "base64.hpp"
 #include "controller.hpp"
 
+#include "json.hpp"
+
 #include "tai.h"
+
+using json = nlohmann::json;
 
 volatile int exit_application = 0;
 
@@ -176,14 +180,16 @@ static int _oper_data_filter(const char *path, tai::TAIObjectType type) {
     return 0;
 }
 
-static void _format_value(std::string& value, const std::string& xpath, libyang::S_Data_Node& parent, const tai::AttributeMetadata& meta) {
+static std::vector<std::string> _format_value(std::string& value, const std::string& xpath, libyang::S_Data_Node& parent, const tai::AttributeMetadata& meta) {
     trim(value);
 
-    if ( meta.usage() == "<float>" ) {
-        auto s = parent->schema();
-        auto set = s->find_path(xpath.c_str());
-        auto sc = set->schema()[0];
+    auto s = parent->schema();
+    auto set = s->find_path(xpath.c_str());
+    auto sc = set->schema()[0];
 
+    std::vector<std::string> ret;
+
+    if ( meta.usage() == "<float>" ) {
         if ( sc->nodetype() == LYS_LEAF ) {
             auto leaf = libyang::Schema_Node_Leaf(sc);
             auto f = std::atof(value.c_str());
@@ -196,7 +202,19 @@ static void _format_value(std::string& value, const std::string& xpath, libyang:
                 break;
             }
         }
+        ret.emplace_back(value);
+    } else if ( meta.usage()[0] == '[' ) { // dirty hack to detect enum type. needs improvement
+        auto j = json::parse(value);
+        if (!j.is_array()) {
+            return ret;
+        }
+        for ( const auto& e : j ) {
+            ret.emplace_back(e.get<std::string>());
+        }
+    } else {
+        ret.emplace_back(value);
     }
+    return ret;
 }
 
 int TAIController::oper_get_single_item(sysrepo::S_Session session, const object_info& info, const char *request_xpath, libyang::S_Data_Node &parent) {
@@ -223,10 +241,11 @@ int TAIController::oper_get_single_item(sysrepo::S_Session session, const object
     }
 
     auto xpath = info.xpath_prefix + "/state/" + meta.short_name();
-    _format_value(value, xpath, parent, meta);
 
     auto ly_ctx = session->get_context();
-    parent->new_path(ly_ctx, xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+    for ( const auto& v : _format_value(value, xpath, parent, meta) ) {
+        parent->new_path(ly_ctx, xpath.c_str(), v.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+    }
     return 0;
 }
 
