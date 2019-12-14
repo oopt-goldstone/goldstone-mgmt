@@ -11,7 +11,7 @@ from jinja2 import Environment
 
 from tai import TAIHeader, TAIAttributeFlag
 
-IGNORE_TYPE_LIST = ['tai_pointer_t', 'tai_notification_handler_t', 'tai_object_map_list_t', 'tai_attr_value_list_t']
+IGNORE_TYPE_LIST = ['tai_pointer_t', 'tai_object_map_list_t', 'tai_attr_value_list_t']
 
 class Statement(object):
     def __init__(self, key, name, c=[]):
@@ -59,8 +59,11 @@ if __name__ == '__main__':
     v = Statement('reference', '"0.1.0"')
     m.add(Statement('revision', '"2019-11-01"', [v]))
 
+    notifications = []
+
     for obj in h.objects:
-        prefix = 'tai-' + obj.name.replace('_', '-')
+        objname = obj.name.replace('_', '-')
+        prefix = 'tai-' + objname
         config  = Statement('grouping', prefix + '-config')
         state = Statement('grouping', prefix + '-state')
 
@@ -82,7 +85,7 @@ if __name__ == '__main__':
             prefix = 'TAI_{}_ATTR_'.format(objname.upper())
             shorttypename = typename[len(prefix):].lower().replace('_', '-')
 
-            if TAIAttributeFlag.READ_ONLY in attr.flags:
+            if TAIAttributeFlag.READ_ONLY in attr.flags or TAIAttributeFlag.CREATE_ONLY in attr.flags:
                 parent = state
             else:
                 parent = config
@@ -128,6 +131,17 @@ if __name__ == '__main__':
                 else:
                     type_ = Statement('type', 'decimal64')
                     type_.add(Statement('fraction-digits', 2))
+            elif attr.type == 'tai_notification_handler_t':
+                type_ = Statement('type', 'boolean')
+                n = Statement('notification', '{}-{}-event'.format(objname.replace('_','-'), shorttypename))
+                shorttypename = 'enable-' + shorttypename
+                keys = Statement('leaf-list', 'keys')
+                keys.add(Statement('type', 'string'))
+                keys.add(Statement('description', '"list of valid attribute name stored in the event"'))
+                n.add(keys)
+                n.add(Statement('uses', config.name))
+                n.add(Statement('uses', state.name))
+                notifications.append(n)
             else:
                 raise Exception('unhandled type: {}'.format(attr.type))
 
@@ -157,5 +171,8 @@ if __name__ == '__main__':
 
     m.add(top)
     m.add(Statement('uses', 'tai-component-top'))
+
+    for n in notifications:
+        m.add(n)
 
     print(m.to_str())
