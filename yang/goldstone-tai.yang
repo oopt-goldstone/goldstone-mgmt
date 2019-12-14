@@ -12,11 +12,6 @@ module goldstone-tai {
     leaf name {
       type string;
     }
-    leaf location {
-      description
-        "The location of the module";
-      type string;
-    }
     leaf admin-status {
       description
         "The admin state of the module";
@@ -26,6 +21,11 @@ module goldstone-tai {
         enum up;
       }
     }
+    leaf enable-notify {
+      description
+        "Module generic notification";
+      type boolean;
+    }
   }
 
   grouping tai-module-state {
@@ -33,6 +33,11 @@ module goldstone-tai {
       type uint64;
     }
     leaf description {
+      type string;
+    }
+    leaf location {
+      description
+        "The location of the module";
       type string;
     }
     leaf vendor-name {
@@ -94,11 +99,6 @@ module goldstone-tai {
     leaf name {
       type string;
     }
-    leaf index {
-      description
-        "The location of the host interface";
-      type uint32;
-    }
     leaf signal-rate {
       description
         "signal rate";
@@ -128,6 +128,11 @@ module goldstone-tai {
         enum deep;
       }
     }
+    leaf enable-notify {
+      description
+        "Host interface generic notification";
+      type boolean;
+    }
   }
 
   grouping tai-host-interface-state {
@@ -136,6 +141,11 @@ module goldstone-tai {
     }
     leaf description {
       type string;
+    }
+    leaf index {
+      description
+        "The location of the host interface";
+      type uint32;
     }
     leaf-list tx-align-status {
       description
@@ -204,11 +214,6 @@ module goldstone-tai {
   grouping tai-network-interface-config {
     leaf name {
       type string;
-    }
-    leaf index {
-      description
-        "The location of the network interface";
-      type uint32;
     }
     leaf tx-dis {
       description
@@ -315,6 +320,16 @@ module goldstone-tai {
         "Channel 1 frequency in Hz";
       type uint64;
     }
+    leaf enable-notify {
+      description
+        "Network interface generic notification";
+      type boolean;
+    }
+    leaf enable-alarm-notification {
+      description
+        "Network interface alarm notification";
+      type boolean;
+    }
   }
 
   grouping tai-network-interface-state {
@@ -323,6 +338,11 @@ module goldstone-tai {
     }
     leaf description {
       type string;
+    }
+    leaf index {
+      description
+        "The location of the network interface";
+      type uint32;
     }
     leaf-list tx-align-status {
       description
@@ -577,4 +597,44 @@ module goldstone-tai {
   }
 
   uses tai-component-top;
+
+  notification module-notify-event {
+    leaf-list keys {
+      type string;
+      description
+        "list of valid attribute name stored in the event";
+    }
+    uses tai-module-config;
+    uses tai-module-state;
+  }
+
+  notification host-interface-notify-event {
+    leaf-list keys {
+      type string;
+      description
+        "list of valid attribute name stored in the event";
+    }
+    uses tai-host-interface-config;
+    uses tai-host-interface-state;
+  }
+
+  notification network-interface-notify-event {
+    leaf-list keys {
+      type string;
+      description
+        "list of valid attribute name stored in the event";
+    }
+    uses tai-network-interface-config;
+    uses tai-network-interface-state;
+  }
+
+  notification network-interface-alarm-notification-event {
+    leaf-list keys {
+      type string;
+      description
+        "list of valid attribute name stored in the event";
+    }
+    uses tai-network-interface-config;
+    uses tai-network-interface-state;
+  }
 }
