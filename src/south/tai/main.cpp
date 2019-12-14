@@ -181,8 +181,8 @@ static int _oper_data_filter(const char *path, tai::TAIObjectType type) {
 }
 
 static std::vector<std::string> _format_value(std::string& value, const std::string& xpath, libyang::S_Data_Node& parent, const tai::AttributeMetadata& meta) {
-    trim(value);
 
+    auto j = json::parse(value);
     auto s = parent->schema();
     auto set = s->find_path(xpath.c_str());
     auto sc = set->schema()[0];
@@ -192,7 +192,7 @@ static std::vector<std::string> _format_value(std::string& value, const std::str
     if ( meta.usage() == "<float>" ) {
         if ( sc->nodetype() == LYS_LEAF ) {
             auto leaf = libyang::Schema_Node_Leaf(sc);
-            auto f = std::atof(value.c_str());
+            auto f = j.get<float>();
             switch ( leaf.type()->base() ) {
             case LY_TYPE_DEC64:
                 value = std::to_string(f);
@@ -204,16 +204,17 @@ static std::vector<std::string> _format_value(std::string& value, const std::str
         }
         ret.emplace_back(value);
     } else if ( meta.usage()[0] == '[' ) { // dirty hack to detect enum type. needs improvement
-        auto j = json::parse(value);
-        if (!j.is_array()) {
-            return ret;
-        }
-        for ( const auto& e : j ) {
-            ret.emplace_back(e.get<std::string>());
+        if (j.is_array()) {
+            for ( const auto& e : j ) {
+                ret.emplace_back(e.get<std::string>());
+            }
+        } else {
+            ret.emplace_back(j.get<std::string>());
         }
     } else {
-        ret.emplace_back(value);
+        ret.emplace_back(j.get<std::string>());
     }
+
     return ret;
 }
 
