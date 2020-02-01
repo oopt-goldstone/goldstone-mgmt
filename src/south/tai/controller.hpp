@@ -16,7 +16,7 @@
 
 struct object_info {
     tai_object_id_t oid;
-    tai::TAIObjectType type;
+    taish::TAIObjectType type;
     std::string xpath_prefix;
 };
 
@@ -35,7 +35,7 @@ class TAIController : public sysrepo::Callback {
         sysrepo::S_Session m_sess;
         sysrepo::S_Subscribe m_subscribe;
         TAIClient m_client;
-        std::map<std::string, tai::Module> m_modules;
+        std::map<std::string, taish::Module> m_modules;
         bool _initialized;
 };
 

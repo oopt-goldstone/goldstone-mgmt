@@ -100,18 +100,18 @@ object_info TAIController::object_info_from_xpath(const std::string& xpath) {
     auto h = _key_value(xpath, "host-interface", hostif);
     info.xpath_prefix = prefix + "/module[name='" + it->first + "']";
     if ( n < 0 && h < 0 ) {
-        info.type = tai::TAIObjectType::MODULE;
+        info.type = taish::TAIObjectType::MODULE;
         info.oid = it->second.oid();
         return info;
     }
     if ( n == 0 ) {
-        info.type = tai::TAIObjectType::NETIF;
+        info.type = taish::TAIObjectType::NETIF;
         auto v = it->second.netifs(netif);
         info.oid = v.oid();
         info.xpath_prefix += "/network-interface[name='" + std::to_string(netif) + "']";
         return info;
     }
-    info.type = tai::TAIObjectType::HOSTIF;
+    info.type = taish::TAIObjectType::HOSTIF;
     auto v = it->second.hostifs(hostif);
     info.oid = v.oid();
     info.xpath_prefix += "/host-interface[name='" + std::to_string(hostif) + "']";
@@ -161,10 +161,10 @@ int TAIController::module_change(sysrepo::S_Session session, const char *module_
     return SR_ERR_OK;
 }
 
-static int _oper_data_filter(const char *path, tai::TAIObjectType type) {
+static int _oper_data_filter(const char *path, taish::TAIObjectType type) {
     std::string v(path);
     switch (type) {
-    case tai::TAIObjectType::MODULE:
+    case taish::TAIObjectType::MODULE:
         if ( v.find("network-interface") != std::string::npos ) {
             return 1;
         }
@@ -172,15 +172,15 @@ static int _oper_data_filter(const char *path, tai::TAIObjectType type) {
             return 1;
         }
         break;
-    case tai::TAIObjectType::NETIF:
+    case taish::TAIObjectType::NETIF:
         return (v.find("network-interface") != std::string::npos) ? 0 : 1;
-    case tai::TAIObjectType::HOSTIF:
+    case taish::TAIObjectType::HOSTIF:
         return (v.find("host-interface") != std::string::npos) ? 0 : 1;
     }
     return 0;
 }
 
-static std::vector<std::string> _format_value(std::string& value, const std::string& xpath, libyang::S_Data_Node& parent, const tai::AttributeMetadata& meta) {
+static std::vector<std::string> _format_value(std::string& value, const std::string& xpath, libyang::S_Data_Node& parent, const taish::AttributeMetadata& meta) {
 
     auto j = json::parse(value);
     auto s = parent->schema();
@@ -212,7 +212,7 @@ static std::vector<std::string> _format_value(std::string& value, const std::str
             ret.emplace_back(j.get<std::string>());
         }
     } else {
-        ret.emplace_back(j.get<std::string>());
+        ret.emplace_back(j.dump());
     }
 
     return ret;
@@ -233,7 +233,7 @@ int TAIController::oper_get_single_item(sysrepo::S_Session session, const object
         return 1;
     }
 
-    tai::AttributeMetadata meta;
+    taish::AttributeMetadata meta;
     m_client.GetAttributeMetadata(info.type, std::string(v), meta);
     std::string value;
     if ( m_client.GetAttribute(info.oid, meta.attr_id(), value) ) {
@@ -261,16 +261,16 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
         return SR_ERR_OK;
     }
 
-    std::vector<tai::AttributeMetadata> list;
+    std::vector<taish::AttributeMetadata> list;
     if ( m_client.ListAttributeMetadata(info.type, list) ) {
         std::cout << "failed to get attribute metadata list" << std::endl;
         return SR_ERR_SYS;
     }
 
     int limit;
-    if ( info.type == tai::TAIObjectType::MODULE ) {
+    if ( info.type == taish::TAIObjectType::MODULE ) {
         limit = TAI_MODULE_ATTR_CUSTOM_RANGE_START;
-    } else if ( info.type == tai::TAIObjectType::NETIF ) {
+    } else if ( info.type == taish::TAIObjectType::NETIF ) {
         limit = TAI_NETWORK_INTERFACE_ATTR_CUSTOM_RANGE_START;
     } else {
         limit = TAI_HOST_INTERFACE_ATTR_CUSTOM_RANGE_START;
@@ -293,9 +293,9 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
             continue;
         }
         auto xpath = info.xpath_prefix + "/state/" + m.short_name();
-        _format_value(value, xpath, parent, m);
-        std::cout << "attr: " << m.short_name() << ": " << value << std::endl;
         try {
+            _format_value(value, xpath, parent, m);
+            std::cout << "attr: " << m.short_name() << ": " << value << std::endl;
             parent->new_path(ly_ctx, xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
         } catch (...) {
             std::cout << "failed to add path" << std::endl;
@@ -305,7 +305,7 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
 }
 
 TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscribe(new sysrepo::Subscribe(sess)), m_client(grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials())) {
-    std::vector<tai::Module> modules;
+    std::vector<taish::Module> modules;
     m_client.ListModule(modules);
 
     _initialized = false;

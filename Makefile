@@ -18,10 +18,10 @@ ifndef SYSREPO_IMAGE
 endif
 
 docker-image:
-	docker build $(DOCKER_BUILD_OPTION) -t sysrepo-builder .
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -t sysrepo-builder .
 
 docker-run-image:
-	docker build $(DOCKER_BUILD_OPTION) -f Dockerfile.run -t sysrepo .
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f Dockerfile.run -t sysrepo .
 
 yang: yang/goldstone-tai.yang
 
