@@ -203,7 +203,7 @@ static std::vector<std::string> _format_value(std::string& value, const std::str
             }
         }
         ret.emplace_back(value);
-    } else if ( meta.usage()[0] == '[' ) { // dirty hack to detect enum type. needs improvement
+    } else if ( meta.is_enum() ) {
         if (j.is_array()) {
             for ( const auto& e : j ) {
                 ret.emplace_back(e.get<std::string>());
@@ -294,9 +294,10 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
         }
         auto xpath = info.xpath_prefix + "/state/" + m.short_name();
         try {
-            _format_value(value, xpath, parent, m);
             std::cout << "attr: " << m.short_name() << ": " << value << std::endl;
-            parent->new_path(ly_ctx, xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            for ( const auto& v : _format_value(value, xpath, parent, m) ) {
+                parent->new_path(ly_ctx, xpath.c_str(), v.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            }
         } catch (...) {
             std::cout << "failed to add path" << std::endl;
         }
