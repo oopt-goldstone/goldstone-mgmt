@@ -17,16 +17,16 @@ ifndef SYSREPO_IMAGE
     SYSREPO_IMAGE := sysrepo
 endif
 
-docker-image:
+builder:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -t sysrepo-builder .
 
-docker-run-image:
+image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f Dockerfile.run -t sysrepo .
 
 yang: yang/goldstone-tai.yang
 
 yang/goldstone-tai.yang: ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h
-	docker run -it -v `pwd`:/data -w /data $(DOCKER_IMAGE) bash -c './tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h | pyang -f yang > /data/$@'
+	docker run -it -v `pwd`:/data -w /data $(DOCKER_IMAGE) bash -c 'PYTHONPATH=/usr/local/lib/python3.8/ ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h | pyang -f yang > /data/$@'
 
 bash:
 	$(MAKE) cmd
