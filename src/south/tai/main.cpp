@@ -305,7 +305,7 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
     return SR_ERR_OK;
 }
 
-TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscribe(new sysrepo::Subscribe(sess)), m_client(grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials())) {
+TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscribe(new sysrepo::Subscribe(sess)), m_client(grpc::CreateChannel("10.43.100.212:50051", grpc::InsecureChannelCredentials())) {
     std::vector<taish::Module> modules;
     m_client.ListModule(modules);
 
@@ -336,8 +336,10 @@ TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscri
 
     m_subscribe->module_change_subscribe(mod_name, callback);
 
+    sess->session_switch_ds(SR_DS_RUNNING);
+
     if ( data != nullptr ) {
-        sess->replace_config(data, SR_DS_RUNNING, mod_name);
+        sess->replace_config(data, mod_name);
     }
 
     sess->session_switch_ds(SR_DS_OPERATIONAL);

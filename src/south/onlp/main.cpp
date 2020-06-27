@@ -421,7 +421,9 @@ ONLPController::ONLPController(sysrepo::S_Session& sess) : m_sess(sess), m_subsc
 
     m_subscribe->module_change_subscribe(mod_name, callback);
 
-    sess->replace_config(data, SR_DS_RUNNING, mod_name);
+    sess->session_switch_ds(SR_DS_RUNNING);
+
+    sess->replace_config(data, mod_name);
 
     sess->session_switch_ds(SR_DS_OPERATIONAL);
 
