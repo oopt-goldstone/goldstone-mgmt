@@ -62,7 +62,11 @@ int TAIClient::SetAttribute(uint64_t oid, taish::TAIObjectType type, const std::
     option->set_json(true);
     auto attr = request.mutable_attribute();
     attr->set_attr_id(attr_id);
-    attr->set_value(value);
+    if ( metadata.is_enum() ) {
+        attr->set_value("\"" + value + "\"");
+    } else {
+        attr->set_value(value);
+    }
     ClientContext ctx;
     taish::SetAttributeResponse res;
     auto ret = stub_->SetAttribute(&ctx, request, &res);
