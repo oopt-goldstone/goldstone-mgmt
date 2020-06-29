@@ -28,4 +28,7 @@ ENV PYTHONPATH /usr/lib/python3/dist-packages
 
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 
+COPY src/south/tai/main /usr/bin/gssouthd-tai
+COPY src/south/onlp/main /usr/bin/gssouthd-onlp
+
 # vim:filetype=dockerfile
