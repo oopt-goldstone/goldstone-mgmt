@@ -12,6 +12,10 @@ ifndef DOCKER_IMAGE
     DOCKER_IMAGE := gs-mgmt
 endif
 
+ifndef DOCKER_DEBUG_IMAGE
+    DOCKER_DEBUG_IMAGE := gs-mgmt-debug
+endif
+
 ifndef ONL_REPO
     ONL_REPO := sm/OpenNetworkLinux/REPO/stretch/packages/binary-amd64
 endif
@@ -34,13 +38,16 @@ $(ONLP_DEBS):
 image: builder docker
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile -t $(DOCKER_IMAGE) .
 
+debug-image: image
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/debug.Dockerfile -t $(DOCKER_DEBUG_IMAGE) .
+
 yang: yang/goldstone-tai.yang
 
 yang/goldstone-tai.yang: ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h
 	./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h | pyang -f yang > /data/$@
 
 bash:
-	DOCKER_RUN_OPTION='-it' $(MAKE) cmd
+	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd
 
 cmd:
 	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_BUILDER_IMAGE) $(DOCKER_CMD)
