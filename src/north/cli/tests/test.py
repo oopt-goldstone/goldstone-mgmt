@@ -3,7 +3,7 @@ import os
 
 sys.path.append('..')
 
-from base import Object, InvalidInput, Completer
+from gscli.base import Object, InvalidInput, Completer
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion
 
