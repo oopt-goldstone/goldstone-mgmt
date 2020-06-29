@@ -10,5 +10,4 @@ jobs:
         - uses: actions/checkout@v2
           with:
               submodules: true
-        - run: make builder
-        - run: DOCKER_CMD='make south' make cmd
+        - run: make
