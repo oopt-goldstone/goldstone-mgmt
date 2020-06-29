@@ -24,22 +24,30 @@ ifndef ONLP_DEBS
     ONLP_DEBS := $(foreach repo,onlp onlp-dev,$(ONL_REPO)/$(repo)_1.0.0_amd64.deb)
 endif
 
+ifndef DOCKER_REPO
+    DOCKER_REPO := docker.io/library
+endif
+
+ifndef DOCKER_IMAGE_TAG
+    DOCKER_IMAGE_TAG := latest
+endif
+
 all: image
 
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g`" DOCKER_CMD='make yang south' $(MAKE) cmd
 
 builder: $(ONLP_DEBS)
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_BUILDER_IMAGE) .
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(DOCKER_BUILDER_IMAGE):$(DOCKER_IMAGE_TAG) .
 
 $(ONLP_DEBS):
 	cd sm/OpenNetworkLinux && docker/tools/onlbuilder -9 --non-interactive --isolate -c "bash -c '../../tools/build_onlp.sh'"
 
 image: builder docker
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile -t $(DOCKER_IMAGE) .
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile -t $(DOCKER_REPO)/$(DOCKER_IMAGE):$(DOCKER_IMAGE_TAG) .
 
 debug-image: image
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/debug.Dockerfile -t $(DOCKER_DEBUG_IMAGE) .
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/debug.Dockerfile -t $(DOCKER_REPO)/$(DOCKER_DEBUG_IMAGE):$(DOCKER_IMAGE_TAG) .
 
 yang: yang/goldstone-tai.yang
 
@@ -50,7 +58,7 @@ bash:
 	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd
 
 cmd:
-	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_BUILDER_IMAGE) $(DOCKER_CMD)
+	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_REPO)/$(DOCKER_BUILDER_IMAGE):$(DOCKER_IMAGE_TAG) $(DOCKER_CMD)
 
 init:
 	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2` /dev/shm/sr*
