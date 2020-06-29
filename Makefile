@@ -20,7 +20,7 @@ ifndef ONLP_DEBS
     ONLP_DEBS := $(foreach repo,onlp onlp-dev,$(ONL_REPO)/$(repo)_1.0.0_amd64.deb)
 endif
 
-all: builder docker
+all: image
 
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g`" DOCKER_CMD='make yang south' $(MAKE) cmd

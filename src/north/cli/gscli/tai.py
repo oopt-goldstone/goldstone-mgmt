@@ -2,9 +2,7 @@ import sys
 import os
 import re
 
-sys.path.append('.')
-
-from base import Object, InvalidInput, Completer
+from .base import Object, InvalidInput, Completer
 import pyang
 import json
 import yang as ly

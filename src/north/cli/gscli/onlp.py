@@ -1,9 +1,7 @@
 import sys
 import os
 
-sys.path.append('.')
-
-from base import Object, InvalidInput, Completer
+from .base import Object, InvalidInput, Completer
 import json
 import yang as ly
 import sysrepo as sr

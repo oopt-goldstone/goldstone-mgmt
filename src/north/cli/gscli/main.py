@@ -9,11 +9,9 @@ from prompt_toolkit.completion import Completer
 import sys
 import os
 
-sys.path.append('.')
-
-from base import Object, InvalidInput
-from onlp import Platform
-from tai  import Transponder
+from .base import Object, InvalidInput
+from .onlp import Platform
+from .tai  import Transponder
 
 class Root(Object):
     XPATH = '/'
@@ -119,8 +117,7 @@ def loop():
         if len(line) > 0:
             shell.exec(line)
 
-
-if __name__ == '__main__':
+def main():
     parser = OptionParser()
     parser.add_option('-v', '--verbose', action='store_true')
     (options, args) = parser.parse_args()
@@ -130,3 +127,7 @@ if __name__ == '__main__':
         log.set_stderr(sr.SR_LL_DBG)
 
     loop()
+
+if __name__ == '__main__':
+    main()
+
