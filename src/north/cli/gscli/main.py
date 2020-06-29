@@ -1,23 +1,32 @@
 #!/usr/bin/env python
 
 import sysrepo as sr
-from optparse import OptionParser
+
+import argparse
+
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.completion import Completer
 
 import sys
 import os
+import logging
+import asyncio
 
-from .base import Object, InvalidInput
+from .base import Object, InvalidInput, BreakLoop
 from .onlp import Platform
 from .tai  import Transponder
+
+logger = logging.getLogger(__name__)
+
+stdout = logging.getLogger('stdout')
 
 class Root(Object):
     XPATH = '/'
 
     def __init__(self, sess):
-        super(Root, self).__init__(sess, None)
+        self.session = sess
+        super(Root, self).__init__(None)
 
         @self.command()
         def platform(line):
@@ -44,17 +53,16 @@ class GoldstoneShellCompleter(Completer):
 
 
 class GoldstoneShell(object):
-    def __init__(self, sess=None):
+    def __init__(self, sess=None, default_prompt='> ', prefix=''):
         if sess == None:
             conn = sr.Connection()
             sess = sr.Session(conn)
         self.context = Root(sess)
 
-        #TODO dynamic command generation
-
         self.completer = GoldstoneShellCompleter(self.context)
-
         self.default_input = ''
+        self.default_prompt = default_prompt
+        self.prefix = prefix
 
         #TODO subscribe to global error message bus
 
@@ -64,13 +72,13 @@ class GoldstoneShell(object):
         while c.parent:
             l.insert(0, str(c.parent))
             c = c.parent
-        if len(l) == 1:
-            return '> '
-        return '/'.join(l)[1:] + '> '
+        return self.prefix + ('/'.join(l)[1:] if len(l) > 1 else '') + self.default_prompt
 
-    def exec(self, cmd: list):
-        self.context = self.context.exec(cmd)
-        self.completer.context = self.context
+    async def exec(self, cmd: list, no_fail=True):
+        ret = await self.context.exec_async(cmd, no_fail=no_fail)
+        if ret:
+            self.context = ret
+            self.completer.context = ret
         self.default_input = ''
 
     def bindings(self):
@@ -100,12 +108,8 @@ class GoldstoneShell(object):
 
         return b
 
-def loop():
+async def loop_async():
     session = PromptSession()
-
-    default_prompt = '> '
-    prompt = default_prompt
-
     shell = GoldstoneShell()
 
     while True:
@@ -113,21 +117,44 @@ def loop():
         p = shell.prompt()
         b = shell.bindings()
         session.app.shell = shell
-        line = session.prompt(p, completer=c, key_bindings=b, default=shell.default_input)
+        line = await session.prompt_async(p, completer=c, key_bindings=b, default=shell.default_input)
         if len(line) > 0:
-            shell.exec(line)
+            await shell.exec(line)
 
 def main():
-    parser = OptionParser()
-    parser.add_option('-v', '--verbose', action='store_true')
-    (options, args) = parser.parse_args()
 
-    if options.verbose:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-v', '--verbose', action='store_true')
+    args = parser.parse_args()
+
+    formatter = logging.Formatter('[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    if args.verbose:
+        console.setLevel(logging.DEBUG)
         log = sr.Logs()
         log.set_stderr(sr.SR_LL_DBG)
 
-    loop()
+    console.setFormatter(formatter)
+
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.DEBUG)
+    shf = logging.Formatter('%(message)s')
+    sh.setFormatter(shf)
+
+    stdout.setLevel(logging.DEBUG)
+    stdout.addHandler(sh)
+
+    async def _main():
+        tasks = [loop_async()]
+
+        try:
+            await asyncio.gather(*tasks)
+        except BreakLoop:
+            return
+
+    asyncio.run(_main())
 
 if __name__ == '__main__':
     main()
-
