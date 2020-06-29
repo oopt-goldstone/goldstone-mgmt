@@ -23,7 +23,7 @@ endif
 all: builder docker
 
 docker:
-	DOCKER_CMD='make yang south' $(MAKE) cmd
+	DOCKER_RUN_OPTION="-u `id -u`:`id -g`" DOCKER_CMD='make yang south' $(MAKE) cmd
 
 builder: $(ONLP_DEBS)
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_BUILDER_IMAGE) .
@@ -31,7 +31,7 @@ builder: $(ONLP_DEBS)
 $(ONLP_DEBS):
 	cd sm/OpenNetworkLinux && docker/tools/onlbuilder -9 --non-interactive --isolate -c "bash -c '../../tools/build_onlp.sh'"
 
-image:
+image: builder docker
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile -t $(DOCKER_IMAGE) .
 
 yang: yang/goldstone-tai.yang
@@ -43,7 +43,7 @@ bash:
 	DOCKER_RUN_OPTION='-it' $(MAKE) cmd
 
 cmd:
-	docker run -u `id -u`:`id -g` ${DOCKER_RUN_OPTION} -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_BUILDER_IMAGE) $(DOCKER_CMD)
+	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_BUILDER_IMAGE) $(DOCKER_CMD)
 
 init:
 	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2` /dev/shm/sr*
