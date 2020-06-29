@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: gs-mgmt
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: gs-mgmt
+    strategy:
+        type: Recreate
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt
+        spec:
+            containers:
+            - name: mgmt
+              image: docker.io/library/sysrepo:latest
+              imagePullPolicy: Never
+              command: ['sh', '-c', 'sleep 10000']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: host
+                mountPath: /data
+            volumes:
+            - name: shm
+              emptyDir:
+                  medium: Memory
+            - name: host
+              hostPath:
+                  path: /root

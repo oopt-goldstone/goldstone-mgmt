@@ -13,3 +13,6 @@
 [submodule "sm/oopt-tai"]
 	path = sm/oopt-tai
 	url = https://github.com/Telecominfraproject/oopt-tai.git
+[submodule "sm/OpenNetworkLinux"]
+	path = sm/OpenNetworkLinux
+	url = git@github.com:microsonic/OpenNetworkLinux.git

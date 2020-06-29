@@ -17,11 +17,18 @@ ifndef SYSREPO_IMAGE
     SYSREPO_IMAGE := sysrepo
 endif
 
-builder:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -t sysrepo-builder .
+ifndef ONL_REPO
+    ONL_REPO := sm/OpenNetworkLinux/REPO/buster/packages/binary-amd64
+endif
+
+builder: $(ONL_REPO)/onlp_1.0.0_amd64.deb $(ONL_REPO)/onlp-dev_1.0.0_amd64.deb
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t sysrepo-builder .
+
+$(ONL_REPO)/onlp_1.0.0_amd64.deb $(ONL_REPO)/onlp-dev_1.0.0_amd64.deb:
+	@cd sm/OpenNetworkLinux && docker/tools/onlbuilder --image gs-builder --isolate -c "bash -c '../../tools/build_onlp.sh'"
 
 image:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f Dockerfile.run -t sysrepo .
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile -t sysrepo .
 
 yang: yang/goldstone-tai.yang
 
@@ -58,6 +65,7 @@ tai:
 
 sonic-interface:
 	$(MAKE) -C src/south/sonic-interface
+
 
 clean:
 	$(MAKE) -C src/south/onlp clean
