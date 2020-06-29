@@ -31,4 +31,9 @@ RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 COPY src/south/tai/main /usr/bin/gssouthd-tai
 COPY src/south/onlp/main /usr/bin/gssouthd-onlp
 
+COPY yang /var/lib/goldstone/yang/gs/
+ENV GS_YANG_REPO /var/lib/goldstone/yang/gs
+COPY sm/openconfig/release/models/ /var/lib/goldstone/yang/oc/
+ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
+
 # vim:filetype=dockerfile
