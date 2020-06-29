@@ -1,3 +1,4 @@
 main
 test*
 !tests
+yang/goldstone-tai.yang
