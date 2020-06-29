@@ -1,7 +1,12 @@
 from prompt_toolkit.document import Document
-from prompt_toolkit.completion import Completion, WordCompleter
+from prompt_toolkit.completion import Completion, WordCompleter, FuzzyWordCompleter
 from prompt_toolkit.completion import Completer as PromptCompleter
-from prompt_toolkit import print_formatted_text as print
+
+import sys
+import subprocess
+import logging
+
+stdout = logging.getLogger('stdout')
 
 class InvalidInput(Exception):
     def __init__(self, msg, candidates=[]):
@@ -10,6 +15,9 @@ class InvalidInput(Exception):
 
     def __str__(self):
         return self.msg
+
+class BreakLoop(Exception):
+    pass
 
 class Completer(PromptCompleter):
     def __init__(self, attrnames, valuenames=[], hook=None):
@@ -65,21 +73,40 @@ class Completer(PromptCompleter):
 class Object(object):
     XPATH = ''
 
-    def __init__(self, session, parent):
-        self.session = session
+    def __init__(self, parent, fuzzy_completion=False):
         self.parent = parent
         self._commands = {}
+        self.fuzzy_completion = fuzzy_completion
 
         @self.command()
         def quit(line):
-            return self.parent if self.parent else self
+            self.close()
+            if self.parent:
+                return self.parent
+            raise BreakLoop()
 
-    def command(self, completer=None):
+        @self.command()
+        def exit(line):
+            self.close()
+            return sys.exit(0)
+
+        if self.parent:
+            for k, v in self.parent._commands.items():
+                if v['inherit']:
+                    self._commands[k] = v
+
+    def add_command(self, handler, completer=None, name=None):
+        self.command(completer, name)(handler)
+
+    def del_command(self, name):
+        del self._commands[name]
+
+    def close(self):
+        pass
+
+    def command(self, completer=None, name=None, async_=False, inherit=False, argparser=None):
         def f(func):
-            def _inner(line):
-                v = func(line)
-                return v if v else self
-            self._commands[func.__name__] = {'func': _inner, 'completer': completer}
+            self._commands[name if name else func.__name__] = {'func': func, 'completer': completer, 'async': async_, 'inherit': inherit, 'argparser': argparser}
         return f
 
     def help(self, text='', short=True):
@@ -104,9 +131,14 @@ class Object(object):
         t = document.text.split()
         if len(t) == 0 or (len(t) == 1 and document.text[-1] != ' '):
             # command completion
-            for cmd in self.commands():
-                if cmd.startswith(document.text):
-                    yield Completion(cmd, start_position=-len(document.text))
+            if self.fuzzy_completion and complete_event:
+                c = FuzzyWordCompleter(self.commands())
+                for v in c.get_completions(document, complete_event):
+                    yield v
+            else:
+                for cmd in self.commands():
+                    if cmd.startswith(document.text):
+                        yield Completion(cmd, start_position=-len(document.text))
         else:
             # argument completion
             # complete command(t[0]) first
@@ -162,14 +194,46 @@ class Object(object):
             line[i] = c[0].text
         return line 
 
-    def exec(self, cmd):
+    def _exec(self, cmd):
         line = cmd.split()
+        if len(line) > 0 and len(line[0]) > 0 and line[0][0] == '!':
+            line[0] = line[0][1:]
+            subprocess.run(' '.join(line), shell=True)
+            return None, None
+        cmd = self.complete_input(line[:1])
+        cmd = self._commands[cmd[0]]
+        args = line[1:]
+        if cmd['argparser']:
+            args = cmd['argparser'].parse_args(line[1:])
+        return cmd, args
+
+    async def exec_async(self, cmd, no_fail=True):
         try:
-            line = self.complete_input(line)
-            if line[0] in self._commands:
-                return self._commands[line[0]]['func'](line=line[1:])
+            cmd, args = self._exec(cmd)
+            if cmd == None:
+                return self
+
+            if cmd['async']:
+                return await cmd['func'](args)
             else:
-                raise InvalidInput('invalid command. available commands: {}'.format(self.commands()))
+                return cmd['func'](args)
         except InvalidInput as e:
-            print(str(e))
+            if not no_fail:
+                raise e
+            stdout.info(str(e))
+        return self
+
+    def exec(self, cmd, no_fail=True):
+        try:
+            cmd, args = self._exec(cmd)
+            if cmd == None:
+                return self
+
+            if cmd['async']:
+                raise InvalidInput('async command not suppoted')
+            return cmd['func'](args)
+        except InvalidInput as e:
+            if not no_fail:
+                raise e
+            stdout.info(str(e))
         return self

@@ -16,7 +16,8 @@ class Component(Object):
             raise InvalidInput('invalid component')
         self._type = type_
         self.name = name
-        super(Component, self).__init__(session, parent)
+        self.session = session
+        super(Component, self).__init__(parent)
 
         @self.command()
         def show(args):
@@ -65,7 +66,8 @@ class Platform(Object):
     XPATH = '/goldstone-onlp:components'
 
     def __init__(self, session, parent):
-        super(Platform, self).__init__(session, parent)
+        self.session = session
+        super(Platform, self).__init__(parent)
 
         self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
         tree = self.session.get_subtree(self.XPATH)

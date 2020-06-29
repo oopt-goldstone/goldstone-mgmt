@@ -52,7 +52,8 @@ class TAIObject(Object):
         self.name = name
         self._get_hook = {}
         self._set_hook = {}
-        super(TAIObject, self).__init__(session, parent)
+        self.session = session
+        super(TAIObject, self).__init__(parent)
 
         d = self.session.get_context().get_searchdirs()
         repo = pyang.FileRepository(d[0])
@@ -203,7 +204,8 @@ class Transponder(Object):
     XPATH = '/goldstone-tai:modules'
 
     def __init__(self, session, parent):
-        super(Transponder, self).__init__(session, parent)
+        self.session = session
+        super(Transponder, self).__init__(parent)
 
         tree = self.session.get_subtree(self.XPATH, TIMEOUT_MS)
         self._module_map = json.loads(tree.print_mem(ly.LYD_JSON, 0))
@@ -225,4 +227,4 @@ class Transponder(Object):
 
     def _modules(self):
         d = self._module_map
-        return [v['name'] for v in d['goldstone-tai:modules']['module']]
+        return [v['name'] for v in d.get('goldstone-tai:modules', {}).get('module', {})]
