@@ -18,7 +18,7 @@ jobs:
           shell: python
           name: get Docker image tag
         - run: docker pull ${{ secrets.DOCKER_USERNAME}}/gs-mgmt-builder:${{ env.DOCKER_IMAGE_TAG }} || true # allow failure
-        - run: make
+        - run: make all debug-image
           env:
               DOCKER_IMAGE_TAG: ${{ env.DOCKER_IMAGE_TAG }}
               DOCKER_REPO: ${{ secrets.DOCKER_USERNAME }}
