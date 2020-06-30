@@ -108,9 +108,8 @@ class GoldstoneShell(object):
 
         return b
 
-async def loop_async():
+async def loop_async(shell):
     session = PromptSession()
-    shell = GoldstoneShell()
 
     while True:
         c = shell.completer
@@ -122,9 +121,11 @@ async def loop_async():
             await shell.exec(line)
 
 def main():
-
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-c', '--command-string')
+    parser.add_argument('-k', '--keep-open', action='store_true')
+    parser.add_argument('-x', '--stdin', action='store_true')
     args = parser.parse_args()
 
     formatter = logging.Formatter('[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -146,8 +147,23 @@ def main():
     stdout.setLevel(logging.DEBUG)
     stdout.addHandler(sh)
 
+    shell = GoldstoneShell()
+
     async def _main():
-        tasks = [loop_async()]
+
+        if args.stdin or args.command_string:
+            stream = sys.stdin if args.stdin else args.command_string.split(';')
+            for line in stream:
+                try:
+                    await shell.exec(line, no_fail=False)
+                except InvalidInput as e:
+                    stdout.info('failed to execute: {}'.format(line))
+                    stdout.info(e)
+                    sys.exit(1)
+            if not args.keep_open:
+                return
+
+        tasks = [loop_async(shell)]
 
         try:
             await asyncio.gather(*tasks)
