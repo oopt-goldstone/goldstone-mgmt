@@ -2,6 +2,7 @@
 #include <csignal>
 #include <thread>
 #include <cstdlib>
+#include <getopt.h>
 
 #include "base64.hpp"
 #include "controller.hpp"
@@ -305,7 +306,7 @@ int TAIController::oper_get_items(sysrepo::S_Session session, const char *module
     return SR_ERR_OK;
 }
 
-TAIController::TAIController(sysrepo::S_Session& sess) : m_sess(sess), m_subscribe(new sysrepo::Subscribe(sess)), m_client(grpc::CreateChannel("10.43.100.212:50051", grpc::InsecureChannelCredentials())) {
+TAIController::TAIController(const std::string& taish_server_host, sysrepo::S_Session& sess) : m_sess(sess), m_subscribe(new sysrepo::Subscribe(sess)), m_client(taish_server_host) {
     std::vector<taish::Module> modules;
     m_client.ListModule(modules);
 
@@ -382,15 +383,44 @@ void log_callback(LY_LOG_LEVEL level, const char *msg, const char *path) {
     std::cout << "path: " << path << std::endl;
 }
 
-int main() {
+int main(int argc, char **argv) {
 
-    sysrepo::Logs().set_stderr(SR_LL_DBG);
+    int c;
+    int verbose = 0;
+    std::string taish_server("127.0.0.1:50051");
+    int option_index = 0;
+
+    static struct option long_options[] =
+    {
+        { "verbose", no_argument, 0, 'v' },
+        { "taish-server", required_argument, 0, 's' },
+    };
+
+    while ((c = getopt_long(argc, argv, "vh:", long_options, &option_index)) != -1 ) {
+        switch(c)
+        {
+        case 'v':
+            verbose = 1;
+            break;
+        case 's':
+            taish_server = std::string(optarg);
+            break;
+        default:
+            std::cout << "usage: " << argv[0] << " -s <taish-server>" << std::endl;
+            return -1;
+        }
+    }
+
+    if ( verbose ) {
+        sysrepo::Logs().set_stderr(SR_LL_DBG);
+    }
+
     sysrepo::S_Connection conn(new sysrepo::Connection);
     sysrepo::S_Session sess(new sysrepo::Session(conn));
 
     try {
-        auto controller = std::shared_ptr<TAIController>(new TAIController(sess));
-        controller->loop();
+        TAIController controller(taish_server, sess);
+        controller.loop();
         std::cout << "Application exit requested, exiting." << std::endl;
     } catch (...) {
         std::cout << "hello exception" << std::endl;

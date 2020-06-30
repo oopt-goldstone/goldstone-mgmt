@@ -22,7 +22,7 @@ struct object_info {
 
 class TAIController : public sysrepo::Callback {
     public:
-        TAIController(sysrepo::S_Session& sess);
+        TAIController(const std::string& taish_server_host, sysrepo::S_Session& sess);
         ~TAIController();
         void loop();
 
