@@ -3,7 +3,7 @@
 int TAIClient::ListModule(std::vector<taish::Module>& modules) {
     taish::ListModuleRequest request;
     ClientContext ctx;
-    auto reader = stub_->ListModule(&ctx, request);
+    auto reader = m_stub->ListModule(&ctx, request);
     taish::ListModuleResponse response;
     while (reader->Read(&response)) {
         modules.emplace_back(response.module());
@@ -15,7 +15,7 @@ int TAIClient::ListAttributeMetadata(taish::TAIObjectType type, std::vector<tais
     taish::ListAttributeMetadataRequest request;
     request.set_object_type(type);
     ClientContext ctx;
-    auto reader = stub_->ListAttributeMetadata(&ctx, request);
+    auto reader = m_stub->ListAttributeMetadata(&ctx, request);
     taish::ListAttributeMetadataResponse response;
     while (reader->Read(&response)) {
         list.emplace_back(response.metadata());
@@ -31,7 +31,7 @@ int TAIClient::GetAttributeMetadata(taish::TAIObjectType type, const std::string
     option->set_human(true);
     ClientContext ctx;
     taish::GetAttributeMetadataResponse res;
-    auto ret = stub_->GetAttributeMetadata(&ctx, request, &res);
+    auto ret = m_stub->GetAttributeMetadata(&ctx, request, &res);
     if ( !ret.ok() ) {
         return 1;
     }
@@ -69,7 +69,7 @@ int TAIClient::SetAttribute(uint64_t oid, taish::TAIObjectType type, const std::
     }
     ClientContext ctx;
     taish::SetAttributeResponse res;
-    auto ret = stub_->SetAttribute(&ctx, request, &res);
+    auto ret = m_stub->SetAttribute(&ctx, request, &res);
     if ( !ret.ok() ) {
         return 1;
     }
@@ -95,7 +95,7 @@ int TAIClient::GetAttribute(uint64_t oid, uint64_t attr_id, std::string& value) 
     attr->set_attr_id(attr_id);
     ClientContext ctx;
     taish::GetAttributeResponse res;
-    auto ret = stub_->GetAttribute(&ctx, request, &res);
+    auto ret = m_stub->GetAttribute(&ctx, request, &res);
     if ( !ret.ok() ) {
         return 1;
     }

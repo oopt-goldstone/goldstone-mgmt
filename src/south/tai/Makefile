@@ -15,6 +15,12 @@ OBJS := taish.grpc.pb.o taish.pb.o main.o taiclient.o
 CC := g++
 CFLAGS := -std=c++11
 
+ifeq ($(VERBOSE),1)
+
+CFLAGS += -g -O0
+
+endif
+
 .cc.o:
 	$(CC) $(CFLAGS) $(INCLUDE) -c -o $@ $<
 
