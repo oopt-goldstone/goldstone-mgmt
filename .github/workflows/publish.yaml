@@ -21,34 +21,34 @@ jobs:
         - run: make all debug-image
           env:
               DOCKER_IMAGE_TAG: ${{ env.DOCKER_IMAGE_TAG }}
-              DOCKER_REPO: ${{ secrets.DOCKER_USERNAME }}
+              DOCKER_REPO: microsonic
         - name: Publish Docker image to Docker Hub
           uses: ./.github/actions/publish-docker-image
           with:
-              name: ${{ secrets.DOCKER_USERNAME }}/gs-mgmt-builder
+              name: microsonic/gs-mgmt-builder
               username: ${{ secrets.DOCKER_USERNAME }}
               password: ${{ secrets.DOCKER_PASSWORD }}
               tags: ${{ env.DOCKER_IMAGE_TAG }}
         - name: Publish Docker image to Docker Hub
           uses: ./.github/actions/publish-docker-image
           with:
-              name: ${{ secrets.DOCKER_USERNAME }}/gs-mgmt
+              name: microsonic/gs-mgmt
               username: ${{ secrets.DOCKER_USERNAME }}
               password: ${{ secrets.DOCKER_PASSWORD }}
               tags: ${{ env.DOCKER_IMAGE_TAG }}
         - name: Publish Docker debug image to Docker Hub
           uses: ./.github/actions/publish-docker-image
           with:
-              name: ${{ secrets.DOCKER_USERNAME }}/gs-mgmt-debug
+              name: microsonic/gs-mgmt-debug
               username: ${{ secrets.DOCKER_USERNAME }}
               password: ${{ secrets.DOCKER_PASSWORD }}
               tags: ${{ env.DOCKER_IMAGE_TAG }}
 
         - run: docker login https://docker.pkg.github.com -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-        - run: docker tag ${{ secrets.DOCKER_USERNAME }}/gs-mgmt:${{ env.DOCKER_IMAGE_TAG }} docker.pkg.github.com/microsonic/goldstone-mgmt/gs-mgmt:${{ env.DOCKER_IMAGE_TAG }}
+        - run: docker tag microsonic/gs-mgmt:${{ env.DOCKER_IMAGE_TAG }} docker.pkg.github.com/microsonic/goldstone-mgmt/gs-mgmt:${{ env.DOCKER_IMAGE_TAG }}
         - name: Publish Docker image to Github Package
           run: docker push docker.pkg.github.com/microsonic/goldstone-mgmt/gs-mgmt:${{ env.DOCKER_IMAGE_TAG }}
 
-        - run: docker tag ${{ secrets.DOCKER_USERNAME }}/gs-mgmt-debug:${{ env.DOCKER_IMAGE_TAG }} docker.pkg.github.com/microsonic/goldstone-mgmt/gs-mgmt-debug:${{ env.DOCKER_IMAGE_TAG }}
+        - run: docker tag microsonic/gs-mgmt-debug:${{ env.DOCKER_IMAGE_TAG }} docker.pkg.github.com/microsonic/goldstone-mgmt/gs-mgmt-debug:${{ env.DOCKER_IMAGE_TAG }}
         - name: Publish Docker debug image to Github Package
           run: docker push docker.pkg.github.com/microsonic/goldstone-mgmt/gs-mgmt-debug:${{ env.DOCKER_IMAGE_TAG }}
