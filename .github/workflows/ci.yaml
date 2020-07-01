@@ -10,5 +10,18 @@ jobs:
         - uses: actions/checkout@v2
           with:
               submodules: true
-        - run: docker pull ${{ secrets.DOCKER_USERNAME}}/gs-mgmt-builder:latest || true # allow failure
-        - run: make
+        - run: curl -sfL https://get.k3s.io | sh -
+        - run: make all debug-image
+          env:
+              DOCKER_REPO: ${{ secrets.DOCKER_USERNAME }}
+        - run: |
+            sudo k3s kubectl create -f ./k8s
+            while [ true ]
+            do
+                sleep 10
+                sudo k3s kubectl get pods || true
+                (sudo k3s kubectl logs deploy/gs-mgmt gscli | grep "goldstone-tai:modules") && exit 0|| true
+            done
+        - if: ${{ failure() }}
+          run: |
+            journalctl -u k3s
