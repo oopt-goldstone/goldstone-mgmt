@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
 
-RUN --mount=type=bind,source=sm/OpenNetworkLinux/REPO/stretch/packages/binary-amd64,target=/src dpkg -i /src/onlp_1.0.0_amd64.deb
+RUN --mount=type=bind,from=builder,source=/usr/share/onlp,target=/src dpkg -i /src/onlp_1.0.0_amd64.deb
 
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/bin/sysrepocfg /usr/local/bin/sysrepocfg
