@@ -396,7 +396,7 @@ int main(int argc, char **argv) {
         { "taish-server", required_argument, 0, 's' },
     };
 
-    while ((c = getopt_long(argc, argv, "vh:", long_options, &option_index)) != -1 ) {
+    while ((c = getopt_long(argc, argv, "vs:", long_options, &option_index)) != -1 ) {
         switch(c)
         {
         case 'v':
