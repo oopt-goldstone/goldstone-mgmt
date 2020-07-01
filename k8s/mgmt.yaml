@@ -14,20 +14,42 @@ spec:
             labels:
                 app: gs-mgmt
         spec:
-            containers:
-            - name: mgmt
-              image: docker.io/library/sysrepo:latest
-              imagePullPolicy: Never
-              command: ['sh', '-c', 'sleep 10000']
+            initContainers:
+            - name: prep-sysrepo
+              image: docker.io/wataru/gs-mgmt-debug:latest
+              imagePullPolicy: IfNotPresent
+              command: ['sysrepoctl', '-s', '/var/lib/goldstone/yang/gs', '--install', '/var/lib/goldstone/yang/gs/goldstone-tai.yang']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
-              - name: host
-                mountPath: /data
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+            containers:
+            - name: gscli
+              image: docker.io/wataru/gs-mgmt-debug:latest
+              imagePullPolicy: IfNotPresent
+              command: ['sh', '-c', 'sleep 15 && gscli -c "transponder; show"']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+            - name: gssouthd-tai
+              image: docker.io/wataru/gs-mgmt-debug:latest
+              imagePullPolicy: IfNotPresent
+              command: ['sh', '-c', 'sleep 10 && gssouthd-tai -v']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+            - name: taish-server
+              image: docker.io/wataru/tai:latest
+              imagePullPolicy: IfNotPresent
+              command: ['taish_server']
             volumes:
             - name: shm
               emptyDir:
                   medium: Memory
-            - name: host
-              hostPath:
-                  path: /root
+            - name: sysrepo
+              emptyDir: {}

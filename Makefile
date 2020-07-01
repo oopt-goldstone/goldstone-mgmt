@@ -43,7 +43,7 @@ endif
 all: image
 
 docker:
-	DOCKER_RUN_OPTION="-u `id -u`:`id -g`" DOCKER_CMD='make yang south' $(MAKE) cmd
+	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang south' $(MAKE) cmd
 
 builder: $(ONLP_DEBS)
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
@@ -73,7 +73,7 @@ cmd:
 	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) $(DOCKER_CMD)
 
 init:
-	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2` /dev/shm/sr*
+	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2`/* /dev/shm/sr*
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-onlp.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-tai.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-sonic-interface.yang
