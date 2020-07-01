@@ -10,10 +10,12 @@ jobs:
         - uses: actions/checkout@v2
           with:
               submodules: true
+              fetch-depth: 0
         - run: curl -sfL https://get.k3s.io | sh -
-        - run: make all debug-image
-          env:
-              DOCKER_REPO: ${{ secrets.DOCKER_USERNAME }}
+        - run: git diff --compact-summary HEAD origin/master | grep 'sm/' && make builder || true
+        - run: make docker
+        - run: make image
+        - run: make debug-image
         - run: |
             sudo k3s kubectl create -f ./k8s
             while [ true ]

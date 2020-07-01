@@ -25,7 +25,7 @@ ifndef ONLP_DEBS
 endif
 
 ifndef DOCKER_REPO
-    DOCKER_REPO := docker.io/library
+    DOCKER_REPO := docker.io/microsonic
 endif
 
 ifndef GS_MGMT_IMAGE_TAG
@@ -51,12 +51,12 @@ builder: $(ONLP_DEBS)
 $(ONLP_DEBS):
 	cd sm/OpenNetworkLinux && docker/tools/onlbuilder -9 --non-interactive --isolate -c "bash -c '../../tools/build_onlp.sh'"
 
-image: builder docker
+image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
-debug-image: image
+debug-image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/debug.Dockerfile \
 							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_DEBUG_IMAGE):$(GS_MGMT_IMAGE_TAG) .

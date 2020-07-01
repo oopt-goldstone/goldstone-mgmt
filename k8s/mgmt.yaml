@@ -16,7 +16,7 @@ spec:
         spec:
             initContainers:
             - name: prep-sysrepo
-              image: docker.io/wataru/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
               command: ['sysrepoctl', '-s', '/var/lib/goldstone/yang/gs', '--install', '/var/lib/goldstone/yang/gs/goldstone-tai.yang']
               volumeMounts:
@@ -26,7 +26,7 @@ spec:
                 mountPath: /var/lib/sysrepo
             containers:
             - name: gscli
-              image: docker.io/wataru/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'sleep 15 && gscli -c "transponder; show"']
               volumeMounts:
@@ -35,7 +35,7 @@ spec:
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
             - name: gssouthd-tai
-              image: docker.io/wataru/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'sleep 10 && gssouthd-tai -v']
               volumeMounts:
@@ -44,7 +44,7 @@ spec:
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
             - name: taish-server
-              image: docker.io/wataru/tai:latest
+              image: docker.io/microsonic/tai:latest
               imagePullPolicy: IfNotPresent
               command: ['taish_server']
             volumes:
