@@ -11,8 +11,10 @@ jobs:
           with:
               submodules: true
               fetch-depth: 0
-        - run: curl -sfL https://get.k3s.io | sh -
-        - run: git diff --compact-summary HEAD origin/master | grep 'sm/' && make builder || true
+        - name: install k3s
+          run: curl -sfL https://get.k3s.io | sh -s - --docker
+        - name: build builder image if sm/ is updated
+          run: git diff --compact-summary HEAD origin/master | grep 'sm/' && make builder || true
         - run: make docker
         - run: make image
         - run: make debug-image
