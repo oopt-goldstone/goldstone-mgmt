@@ -40,7 +40,7 @@ ifndef OC_YANG_REPO
     OC_YANG_REPO := /data/sm/openconfig/release/models
 endif
 
-all: image
+all: builder docker image debug-image
 
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang south' $(MAKE) cmd
