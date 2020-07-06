@@ -8,7 +8,7 @@ ARG https_proxy
 FROM $GS_MGMT_BUILDER_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libgrpc++-dev g++ protobuf-compiler-grpc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake swig libpcre3-dev bison graphviz libcmocka-dev valgrind
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libgrpc++-dev g++ protobuf-compiler-grpc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake swig libpcre3-dev bison graphviz libcmocka-dev valgrind quilt
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
@@ -21,7 +21,7 @@ RUN dpkg -i /usr/share/onlp/*.deb
 RUN --mount=type=bind,source=sm/libyang,target=/src mkdir -p /build/libyang && cd /build/libyang && \
             cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DGEN_PYTHON_BINDINGS=ON -DGEN_PYTHON_VERSION=3 /src && cmake --build . && cmake --install . && make install && ldconfig
 
-RUN --mount=type=bind,source=sm/sysrepo,target=/src mkdir -p /build/sysrepo && cd /build/sysrepo && \
-            cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DREPO_PATH=/var/lib/sysrepo/ /src && make && make install && mkdir -p /usr/local/include/utils && cp /src/src/utils/xpath.h /usr/local/include/utils/
+RUN --mount=type=bind,source=sm/sysrepo,target=/root/sm/sysrepo,rw --mount=type=bind,source=patches,target=/root/patches cd /root && ls && quilt push -a && mkdir -p /build/sysrepo && cd /build/sysrepo && \
+            cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DREPO_PATH=/var/lib/sysrepo/ /root/sm/sysrepo && make && make install && mkdir -p /usr/local/include/utils && cp /root/sm/sysrepo/src/utils/xpath.h /usr/local/include/utils/
 
 ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.8/dist-packages/tai.py
