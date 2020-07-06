@@ -3,7 +3,7 @@ import os
 import re
 
 from .base import Object, InvalidInput, Completer
-import pyang
+from pyang import repository, context
 import json
 import yang as ly
 import sysrepo as sr
@@ -56,8 +56,8 @@ class TAIObject(Object):
         super(TAIObject, self).__init__(parent)
 
         d = self.session.get_context().get_searchdirs()
-        repo = pyang.FileRepository(d[0])
-        ctx = pyang.Context(repo)
+        repo = repository.FileRepository(d[0])
+        ctx = context.Context(repo)
 
         m = self.session.get_context().get_module('goldstone-tai')
         v = m.print_mem(ly.LYS_IN_YANG, 0)
