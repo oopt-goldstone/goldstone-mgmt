@@ -519,12 +519,12 @@ ONLPController::ONLPController(sysrepo::S_Session& sess) : m_sess(sess), m_subsc
     }
     sess->apply_changes();
 
-    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/state", callback);
-    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/fan/state", callback);
-    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/thermal/state", callback);
-    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/led/state", callback);
-    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/sys/state", callback);
-    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/psu/state", callback);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/state", callback, nullptr, SR_SUBSCR_OPER_MERGE);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/fan/state", callback, nullptr, SR_SUBSCR_OPER_MERGE);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/thermal/state", callback, nullptr, SR_SUBSCR_OPER_MERGE);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/led/state", callback, nullptr, SR_SUBSCR_OPER_MERGE);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/sys/state", callback, nullptr, SR_SUBSCR_OPER_MERGE);
+    m_subscribe->oper_get_items_subscribe(mod_name, "/goldstone-onlp:components/component/psu/state", callback, nullptr, SR_SUBSCR_OPER_MERGE);
 
     _initialized = false;
 }
@@ -537,7 +537,7 @@ void ONLPController::loop() {
     signal(SIGINT, sigint_handler);
     signal(SIGPIPE, SIG_IGN);
     while (!exit_application) {
-        std::this_thread::sleep_for(std::chrono::seconds(1000));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }
 
