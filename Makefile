@@ -20,8 +20,12 @@ ifndef ONL_REPO
     ONL_REPO := sm/OpenNetworkLinux/REPO/stretch/packages/binary-amd64
 endif
 
+ifndef ONLP_PACKAGES
+    ONLP_PACKAGES := onlp onlpdev onlp-x86-64-kvm-x86-64-r0
+endif
+
 ifndef ONLP_DEBS
-    ONLP_DEBS := $(foreach repo,onlp onlp-dev,$(ONL_REPO)/$(repo)_1.0.0_amd64.deb)
+    ONLP_DEBS := $(foreach repo,$(ONLP_PACKAGES),$(ONL_REPO)/$(repo)_1.0.0_amd64.deb)
 endif
 
 ifndef DOCKER_REPO

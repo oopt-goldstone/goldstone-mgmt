@@ -15,7 +15,7 @@ RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
 
 RUN pip install pyang clang jinja2 prompt_toolkit
 
-RUN --mount=type=bind,source=sm/OpenNetworkLinux/REPO/stretch/packages/binary-amd64,target=/src mkdir -p /usr/share/onlp && cp /src/onlp_1.0.0_amd64.deb /src/onlp-dev_1.0.0_amd64.deb /usr/share/onlp/
+RUN --mount=type=bind,source=sm/OpenNetworkLinux/REPO/stretch/packages/binary-amd64,target=/src mkdir -p /usr/share/onlp && cp /src/onlp_1.0.0_amd64.deb /src/onlp-dev_1.0.0_amd64.deb /src/onlp-x86-64-kvm-x86-64-r0_1.0.0_amd64.deb /usr/share/onlp/
 RUN dpkg -i /usr/share/onlp/*.deb
 
 RUN --mount=type=bind,source=sm/libyang,target=/src mkdir -p /build/libyang && cd /build/libyang && \
