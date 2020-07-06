@@ -1,3 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: onl-platform
+data:
+    platform: "x86-64-kvm-x86-64-r0"
+
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,14 +28,14 @@ spec:
             - name: prep-sysrepo
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sysrepoctl', '-s', '/var/lib/goldstone/yang/gs', '--install', '/var/lib/goldstone/yang/gs/goldstone-tai.yang']
+              command: ['sysrepoctl', '-s', '/var/lib/goldstone/yang/gs', '--install', '/var/lib/goldstone/yang/gs/goldstone-tai.yang,/var/lib/goldstone/yang/gs/goldstone-onlp.yang']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
             containers:
-            - name: gscli
+            - name: cli
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'sleep 15 && gscli -c "transponder; show"']
@@ -35,7 +44,7 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
-            - name: gssouthd-tai
+            - name: tai
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'sleep 10 && gssouthd-tai -v']
@@ -44,6 +53,22 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+            - name: onlp
+              image: docker.io/microsonic/gs-mgmt-debug:latest
+              imagePullPolicy: IfNotPresent
+              command: ['sh', '-c', 'ln -sf /lib/platform-config/x86-64-kvm-x86-64-r0/onl/lib/libonlp-x86-64-kvm-x86-64.so /lib/x86_64-linux-gnu/libonlp-platform.so.1 && gssouthd-onlp']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+              - name: onl-platform
+                mountPath: /etc/onl/
+              securityContext:
+                capabilities:
+                  add:
+                  - IPC_OWNER
+                  - IPC_LOCK
             - name: taish-server
               image: docker.io/microsonic/tai:latest
               imagePullPolicy: IfNotPresent
@@ -54,3 +79,6 @@ spec:
                   medium: Memory
             - name: sysrepo
               emptyDir: {}
+            - name: onl-platform
+              configMap:
+                name: onl-platform
