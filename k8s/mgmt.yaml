@@ -38,7 +38,7 @@ spec:
             - name: cli
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'sleep 15 && gscli -c "transponder; show"']
+              command: ['sh', '-c', 'while true; do gscli -c "transponder; show"; sleep 2; done']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
