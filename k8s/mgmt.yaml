@@ -7,6 +7,19 @@ data:
 
 ---
 
+apiVersion: v1
+kind: Service
+metadata:
+    name: netopeer2
+spec:
+    selector:
+        app: gs-mgmt
+    ports:
+    - protocol: TCP
+      port: 830
+
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -34,11 +47,40 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+            - image: docker.io/microsonic/gs-mgmt-netopeer2:latest
+              imagePullPolicy: IfNotPresent
+              name: prep-np
+              command: ['sh', '-c', '$NP2/setup.sh && $NP2/merge_hostkey.sh && $NP2/merge_config.sh']
+              env:
+              - name: NP2
+                value: /usr/local/share/netopeer2/scripts
+              - name: NP2_MODULE_OWNER
+                value: root
+              - name: NP2_MODULE_GROUP
+                value: root
+              - name: NP2_MODULE_PERMS
+                value: "600"
+              - name: NP2_MODULE_DIR
+                value: /usr/local/share/yang/modules/netopeer2
+              volumeMounts:
+              - mountPath: /dev/shm
+                name: shm
+              - mountPath: /var/lib/sysrepo
+                name: sysrepo
             containers:
             - name: cli
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'while true; do gscli -c "transponder; show"; sleep 2; done']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+            - name: netopeer2
+              image: docker.io/microsonic/gs-mgmt-netopeer2:latest
+              imagePullPolicy: IfNotPresent
+              command: ['sh', '-c', 'echo root:root | chpasswd && netopeer2-server -d -v 2']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
