@@ -28,6 +28,11 @@ jobs:
             done
         - run: |
             sudo k3s kubectl exec deploy/gs-mgmt -c cli -- gscli -c "platform; show" | grep sys
+        - name: check netopeer2-server is working
+          run: |
+              sudo apt update && sudo apt install -qy sshpass
+              NP2_ADDR=`sudo k3s kubectl get svc netopeer2 -o=jsonpath='{.spec.clusterIP}{"\n"}'`
+              sshpass -p root ssh -o StrictHostKeyChecking=no -p 830 root@$NP2_ADDR
         - if: ${{ failure() }}
           run: |
             journalctl -u k3s
