@@ -16,6 +16,14 @@ ifndef GS_MGMT_DEBUG_IMAGE
     GS_MGMT_DEBUG_IMAGE := gs-mgmt-debug
 endif
 
+ifndef GS_MGMT_NP2_IMAGE
+    GS_MGMT_NP2_IMAGE := gs-mgmt-netopeer2
+endif
+
+ifndef GS_MGMT_IMAGE_TAG
+    GS_MGMT_IMAGE_TAG := latest
+endif
+
 ifndef ONL_REPO
     ONL_REPO := sm/OpenNetworkLinux/REPO/stretch/packages/binary-amd64
 endif
@@ -32,8 +40,8 @@ ifndef DOCKER_REPO
     DOCKER_REPO := docker.io/microsonic
 endif
 
-ifndef GS_MGMT_IMAGE_TAG
-    GS_MGMT_IMAGE_TAG := latest
+ifndef DOCKER_IMAGE
+    DOCKER_IMAGE := $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG)
 endif
 
 ifndef GS_YANG_REPO
@@ -44,12 +52,12 @@ ifndef OC_YANG_REPO
     OC_YANG_REPO := /data/sm/openconfig/release/models
 endif
 
-all: builder docker image debug-image
+all: builder np2 docker image debug-image
 
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang south' $(MAKE) cmd
 
-builder: $(ONLP_DEBS)
+builder: $(ONLP_DEBS) patch
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 $(ONLP_DEBS):
@@ -65,6 +73,13 @@ debug-image:
 							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_DEBUG_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
+np2: patch
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/netopeer2.Dockerfile \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_NP2_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+patch:
+	quilt push -a || [ $$? -eq 2 ] && true
+
 yang: yang/goldstone-tai.yang
 
 yang/goldstone-tai.yang: ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h
@@ -74,7 +89,7 @@ bash:
 	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd
 
 cmd:
-	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) $(DOCKER_CMD)
+	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_IMAGE) $(DOCKER_CMD)
 
 init:
 	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2`/* /dev/shm/sr*

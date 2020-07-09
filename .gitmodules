@@ -16,3 +16,9 @@
 [submodule "sm/OpenNetworkLinux"]
 	path = sm/OpenNetworkLinux
 	url = git@github.com:microsonic/OpenNetworkLinux.git
+[submodule "sm/netopeer2"]
+	path = sm/netopeer2
+	url = https://github.com/CESNET/netopeer2.git
+[submodule "sm/libnetconf2"]
+	path = sm/libnetconf2
+	url = https://github.com/CESNET/libnetconf2.git

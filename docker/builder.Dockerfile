@@ -21,7 +21,7 @@ RUN dpkg -i /usr/share/onlp/*.deb
 RUN --mount=type=bind,source=sm/libyang,target=/src mkdir -p /build/libyang && cd /build/libyang && \
             cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DGEN_PYTHON_BINDINGS=ON -DGEN_PYTHON_VERSION=3 /src && cmake --build . && cmake --install . && make install && ldconfig
 
-RUN --mount=type=bind,source=sm/sysrepo,target=/root/sm/sysrepo,rw --mount=type=bind,source=patches,target=/root/patches cd /root && ls && quilt push -a && mkdir -p /build/sysrepo && cd /build/sysrepo && \
+RUN --mount=type=bind,source=sm/sysrepo,target=/root/sm/sysrepo,rw --mount=type=bind,source=patches,target=/root/patches cd /root && ls && ( quilt push -af || true ) && mkdir -p /build/sysrepo && cd /build/sysrepo && \
             cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DREPO_PATH=/var/lib/sysrepo/ /root/sm/sysrepo && make && make install && mkdir -p /usr/local/include/utils && cp /root/sm/sysrepo/src/utils/xpath.h /usr/local/include/utils/
 
 ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.8/dist-packages/tai.py
