@@ -17,7 +17,9 @@ jobs:
             print("::set-env name=DOCKER_IMAGE_TAG::{}".format('latest' if branch == 'master' else branch))
           shell: python
           name: get Docker image tag
-        - run: docker pull ${{ secrets.DOCKER_USERNAME}}/gs-mgmt-builder:${{ env.DOCKER_IMAGE_TAG }} || true # allow failure
+        - run: docker pull docker.io/microsonic/gs-mgmt-builder:${{ env.DOCKER_IMAGE_TAG }} || true # allow failure
+        - name: install quilt
+          run: sudo apt install -qy quilt
         - run: make all
           env:
               DOCKER_IMAGE_TAG: ${{ env.DOCKER_IMAGE_TAG }}
@@ -42,7 +44,13 @@ jobs:
               username: ${{ secrets.DOCKER_USERNAME }}
               password: ${{ secrets.DOCKER_PASSWORD }}
               tags: ${{ env.DOCKER_IMAGE_TAG }}
-
+        - name: Publish Docker debug image to Docker Hub
+          uses: ./.github/actions/publish-docker-image
+          with:
+              name: microsonic/gs-mgmt-netopeer2
+              username: ${{ secrets.DOCKER_USERNAME }}
+              password: ${{ secrets.DOCKER_PASSWORD }}
+              tags: ${{ env.DOCKER_IMAGE_TAG }}
         - run: docker login https://docker.pkg.github.com -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
         - run: docker tag microsonic/gs-mgmt:${{ env.DOCKER_IMAGE_TAG }} docker.pkg.github.com/microsonic/goldstone-mgmt/gs-mgmt:${{ env.DOCKER_IMAGE_TAG }}
         - name: Publish Docker image to Github Package

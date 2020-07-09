@@ -80,7 +80,7 @@ spec:
             - name: netopeer2
               image: docker.io/microsonic/gs-mgmt-netopeer2:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'echo root:root | chpasswd && netopeer2-server -d -v 2']
+              command: ['netopeer2-server', '-d', '-v', '2']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
