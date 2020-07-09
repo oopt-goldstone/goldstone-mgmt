@@ -3,3 +3,4 @@ test*
 !tests
 .python-version
 .pc
+.vscode
