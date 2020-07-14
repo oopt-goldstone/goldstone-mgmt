@@ -46,4 +46,9 @@ RUN sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yan
 RUN sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-interface.yang
 
 
+RUN sysrepoctl -s /var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/sonic-common.yang
+RUN sysrepoctl -s /var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/sonic-port.yang
+RUN sysrepoctl -s /var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/sonic-interface.yang
+
+
 # vim:filetype=dockerfile
