@@ -16,10 +16,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <curl/curl.h>
-
-#define MAX_PAYLOAD_SIZE 10000
-
-char *intfIp;
+#include <getopt.h>
 
 volatile int exit_application = 0;
 
@@ -81,8 +78,8 @@ _populate_oper_data (libyang::S_Context& ctx,
 char
 *get_index_of_yang (libyang::S_Data_Node &parent)
 {
-  struct lyd_node *lyd = parent->C_lyd_node();
-  struct lys_node *lys = lyd->schema;
+  lyd_node *lyd = parent->C_lyd_node();
+  lys_node *lys = lyd->schema;
 
   while (lys->nodetype != LYS_LEAF)
     {
@@ -110,7 +107,6 @@ json_decode (json j, libyang::S_Context& ly_ctx,
   switch (j.type())
     {
       case nlohmann::basic_json<>::value_t::object:
-
         for (auto& x : j.items())
           {
             if (x.value().is_primitive())
@@ -144,8 +140,8 @@ json_decode (json j, libyang::S_Context& ly_ctx,
               {
                 json_decode (x.value(), ly_ctx, parent, request_xpath);
               }
-            }
-        break;
+          }
+      break;
       case nlohmann::basic_json<>::value_t::array:
         for (json::iterator it = j.begin(); it != j.end(); ++it)
           {
@@ -178,7 +174,7 @@ curl_callback (void *contents, size_t size, size_t nmemb, void *userp)
       /* free buffer */
       free (p->payload);
       /* return */
-      return 1;
+      return size;
     }
 
   /* copy contents to buffer */
@@ -189,6 +185,20 @@ curl_callback (void *contents, size_t size, size_t nmemb, void *userp)
   p->payload[p->size] = 0;
   /* return size */
   return realsize;
+}
+
+/*****************************************************************************
+* Function Name : set_sonic_parameters                                       *
+* Description   : Sonic Parameters                                           *
+* Input         : std::string mgmt_ip                                        *
+*                 std::string port_no                                        *
+* Output        :                                                            *
+*****************************************************************************/
+void
+SonicController::set_sonic_parameters (std::string mgmt_ip, std::string port_no)
+{
+  mgmt_server = mgmt_ip;
+  port = port_no;
 }
 
 /*****************************************************************************
@@ -217,10 +227,9 @@ SonicController::oper_get_items (sysrepo::S_Session session,
 
   CURL *curl;
   CURLcode res;
-  struct curl_fetch_st curl_fetch;
-  struct curl_fetch_st *fetch = &curl_fetch;
+  curl_fetch_st curl_fetch;
+  curl_fetch_st *fetch = &curl_fetch;
   fetch->payload = (char *) calloc (1, sizeof(fetch->payload));
-  char *payload = (char *) calloc (1, MAX_PAYLOAD_SIZE);
 
   /* check payload */
   if (fetch->payload == NULL)
@@ -231,7 +240,7 @@ SonicController::oper_get_items (sysrepo::S_Session session,
       return 0;
     }
   fetch->size = 0;
-  url << "https://" << intfIp << "/restconf/data";
+  url << port << "://" << mgmt_server << "/restconf/data";
   curl = curl_easy_init ();
 
   if (curl)
@@ -265,7 +274,7 @@ SonicController::oper_get_items (sysrepo::S_Session session,
   json j = json::parse (fetch->payload);
   json_decode (j, ly_ctx, parent, request_xpath);
   session->apply_changes ();
-  
+
   return SR_ERR_OK;
 }
 
@@ -336,7 +345,7 @@ SonicController::module_change (sysrepo::S_Session session,
 
   headers = curl_slist_append (headers, "accept: application/yang-data+json");
   headers = curl_slist_append (headers, "Content-Type: application/yang-data+json");
-  url << "https://" << intfIp << "/restconf/data";
+  url << port << "://" << mgmt_server << "/restconf/data";
   curl = curl_easy_init ();
 
   if (curl)
@@ -367,7 +376,7 @@ SonicController::module_change (sysrepo::S_Session session,
 
   std::cout << "\n\n ========== EVENT CHANGES: ==========\n\n" << std::endl;
   print_current_config (session, module_name);
-  
+
   return SR_ERR_OK;
 }
 
@@ -438,24 +447,60 @@ SonicController::loop()
 * Output        : int                                                        *
 *****************************************************************************/
 int
-main (int argc,char *argv[])
+main (int argc,char **argv)
 {
-  if (argc != 2)
+  int c;
+  int verbose = 0;
+  std::string mgmt_ip, port_no;
+  int option_index = 0;
+
+  static struct option long_options[] =
     {
-      std::cerr << "Usages: ip_address" << std::endl;
-      exit (0);
+      { "verbose", no_argument,       0, 'v' },
+      { "mgmt_ip", required_argument, 0, 's' },
+      { "port_no", required_argument, 0, 'p' }
+    };
+
+  while ((c = getopt_long (argc, argv, "v:s:p:", long_options, &option_index)) != -1 )
+    {
+      switch (c)
+        {
+          case 'v':
+            verbose = 1;
+            break;
+          case 's':
+            mgmt_ip = std::string (optarg);
+            break;
+          case 'p':
+            port_no = std::string (optarg);
+            break;
+          default:
+            std::cout << "usage: " << argv[0]
+                      << " -s <mgmt-server-ip> -p <port:https/http>" << std::endl;
+            return -1;
+        }
     }
 
-  /* Management IP address to be passed */
-  intfIp = argv[1];
+  if (argc < 5)
+    {
+      std::cout << "mgmt_server-ip and port is mandatory" << std::endl;
+      std::cout << "usage: " << argv[0]
+                << " -s <mgmt-server-ip> -p <port:https/http>" << std::endl;
+      exit (1);
+    }
 
-  sysrepo::Logs().set_stderr (SR_LL_DBG);
+  if (verbose)
+    {
+      sysrepo::Logs().set_stderr (SR_LL_DBG);
+    }
+
   sysrepo::S_Connection conn (new sysrepo::Connection);
   sysrepo::S_Session sess (new sysrepo::Session(conn));
   sysrepo::S_Subscribe subscribe (new sysrepo::Subscribe(sess));
 
   auto controller = SonicController (sess);
 
+  controller.set_sonic_parameters(mgmt_ip, port_no);
   controller.loop ();
   std::cout << "Application exit requested, exiting." << std::endl;
   return 0;

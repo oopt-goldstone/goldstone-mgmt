@@ -52,6 +52,10 @@ ifndef OC_YANG_REPO
     OC_YANG_REPO := /data/sm/openconfig/release/models
 endif
 
+ifndef SONIC_YANG_REPO
+    SONIC_YANG_REPO := /data/sm/sonic-mgmt-common/models/yang/sonic
+endif
+
 all: builder np2 docker image debug-image
 
 docker:
@@ -96,9 +100,6 @@ init:
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-onlp.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-tai.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-sonic-interface.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/sonic-common.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/sonic-port.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/sonic-interface.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-types.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-fan.yang

@@ -37,10 +37,13 @@ COPY yang /var/lib/goldstone/yang/gs/
 ENV GS_YANG_REPO /var/lib/goldstone/yang/gs
 COPY sm/openconfig/release/models/ /var/lib/goldstone/yang/oc/
 ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
+COPY sm/sonic-mgmt-common/models/yang/sonic/  /var/lib/goldstone/yang/sonic/
+ENV SONIC_YANG_REPO /var/lib/goldstone/yang/sonic
 
-RUN sysrepoctl -s /var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/sonic-common.yang
-RUN sysrepoctl -s /var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/sonic-port.yang
-RUN sysrepoctl -s /var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/sonic-interface.yang
+
+RUN sysrepoctl -s /var/lib/goldstone/yang/sonic/common --install /var/lib/goldstone/yang/sonic/common/sonic-common.yang
+RUN sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-port.yang
+RUN sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-interface.yang
 
 
 # vim:filetype=dockerfile
