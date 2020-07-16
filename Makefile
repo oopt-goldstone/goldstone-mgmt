@@ -100,9 +100,6 @@ init:
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-onlp.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-tai.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-sonic-interface.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/sonic-common.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/sonic-port.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/sonic-interface.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-types.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-fan.yang
