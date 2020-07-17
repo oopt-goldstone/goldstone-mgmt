@@ -52,6 +52,10 @@ ifndef OC_YANG_REPO
     OC_YANG_REPO := /data/sm/openconfig/release/models
 endif
 
+ifndef SONIC_YANG_REPO
+    SONIC_YANG_REPO := /data/sm/sonic-mgmt-common/models/yang/sonic
+endif
+
 all: builder np2 docker image debug-image
 
 docker:

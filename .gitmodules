@@ -22,3 +22,6 @@
 [submodule "sm/libnetconf2"]
 	path = sm/libnetconf2
 	url = https://github.com/CESNET/libnetconf2.git
+[submodule "sm/sonic-mgmt-common"]
+	path = sm/sonic-mgmt-common
+	url = https://github.com/Azure/sonic-mgmt-common

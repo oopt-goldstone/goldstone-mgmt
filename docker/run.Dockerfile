@@ -11,7 +11,7 @@ ARG https_proxy
 FROM $GS_MGMT_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && apt install -qy python3 vim curl python3-pip libgrpc++1
+            apt update && apt install -qy python3 vim curl python3-pip libgrpc++1 libcurl4-gnutls-dev
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
@@ -26,14 +26,24 @@ RUN ldconfig
 
 ENV PYTHONPATH /usr/lib/python3/dist-packages
 
+
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 
 COPY src/south/tai/main /usr/bin/gssouthd-tai
 COPY src/south/onlp/main /usr/bin/gssouthd-onlp
+COPY src/south/sonic-interface/main /usr/bin/gssouthd-sonic
 
 COPY yang /var/lib/goldstone/yang/gs/
 ENV GS_YANG_REPO /var/lib/goldstone/yang/gs
 COPY sm/openconfig/release/models/ /var/lib/goldstone/yang/oc/
 ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
+COPY sm/sonic-mgmt-common/models/yang/sonic/  /var/lib/goldstone/yang/sonic/
+ENV SONIC_YANG_REPO /var/lib/goldstone/yang/sonic
+
+
+RUN sysrepoctl -s /var/lib/goldstone/yang/sonic/common --install /var/lib/goldstone/yang/sonic/common/sonic-common.yang
+RUN sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-port.yang
+RUN sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-interface.yang
+
 
 # vim:filetype=dockerfile
