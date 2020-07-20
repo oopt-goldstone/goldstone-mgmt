@@ -69,7 +69,7 @@ ev_to_str(sr_event_t ev)
     }
 }
 
-static int _key_value(const std::string& xpath, const std::string& key, int& out) {
+static int _key_value_string(const std::string& xpath, const std::string& key, std::string& out) {
     sysrepo::Xpath_Ctx xpath_ctx;
     char tmp[128] = {0};
     xpath.copy(tmp, 128);
@@ -77,10 +77,19 @@ static int _key_value(const std::string& xpath, const std::string& key, int& out
     if ( ptr == nullptr ) {
         return -1;
     }
-    try {
-        out = std::stoi(std::string(ptr));
-    } catch ( ... ) {
+    out = std::string(ptr);
+    return 0;
+}
+
+static int _key_value_int(const std::string& xpath, const std::string& key, int& out) {
+    std::string s;
+    if ( _key_value_string(xpath, key, s) < 0 ) {
         return -1;
+    }
+    try {
+        out = std::stoi(s);
+    } catch ( ... ) {
+        return 1;
     }
     return 0;
 }
@@ -88,17 +97,18 @@ static int _key_value(const std::string& xpath, const std::string& key, int& out
 object_info TAIController::object_info_from_xpath(const std::string& xpath) {
     object_info info = {0};
     info.oid = TAI_NULL_OBJECT_ID;
-    int module, netif, hostif;
+    std::string module;
+    int netif, hostif;
     const std::string prefix = "/goldstone-tai:modules";
-    if ( _key_value(xpath, "module", module) < 0 ) {
+    if ( _key_value_string(xpath, "module", module) < 0 ) {
         return info;
     }
-    auto it = m_modules.find(std::to_string(module));
+    auto it = m_modules.find(module);
     if ( it == m_modules.end() ) {
         return info;
     }
-    auto n = _key_value(xpath, "network-interface", netif);
-    auto h = _key_value(xpath, "host-interface", hostif);
+    auto n = _key_value_int(xpath, "network-interface", netif);
+    auto h = _key_value_int(xpath, "host-interface", hostif);
     info.xpath_prefix = prefix + "/module[name='" + it->first + "']";
     if ( n < 0 && h < 0 ) {
         info.type = taish::TAIObjectType::MODULE;
