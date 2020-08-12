@@ -1,2 +1,2 @@
-sysrepoctl-install.patch
-netopeer2-cli.patch
+sysrepo/sysrepoctl-install.patch
+np2/netopeer2-cli.patch
