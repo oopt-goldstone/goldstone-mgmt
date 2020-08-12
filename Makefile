@@ -61,7 +61,7 @@ all: builder np2 docker image debug-image
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang south' $(MAKE) cmd
 
-builder: $(ONLP_DEBS) patch
+builder: $(ONLP_DEBS)
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 $(ONLP_DEBS):
@@ -77,12 +77,9 @@ debug-image:
 							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_DEBUG_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
-np2: patch
+np2:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/netopeer2.Dockerfile \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_NP2_IMAGE):$(GS_MGMT_IMAGE_TAG) .
-
-patch:
-	quilt push -a || [ $$? -eq 2 ] && true
 
 yang: yang/goldstone-tai.yang
 
