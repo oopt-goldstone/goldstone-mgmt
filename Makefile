@@ -29,7 +29,7 @@ ifndef ONL_REPO
 endif
 
 ifndef ONLP_PACKAGES
-    ONLP_PACKAGES := onlp onlpdev onlp-x86-64-kvm-x86-64-r0
+    ONLP_PACKAGES := onlp onlp-dev onlp-x86-64-kvm-x86-64-r0
 endif
 
 ifndef ONLP_DEBS
