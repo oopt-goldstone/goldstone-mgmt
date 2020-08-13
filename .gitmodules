@@ -25,3 +25,9 @@
 [submodule "sm/sonic-mgmt-common"]
 	path = sm/sonic-mgmt-common
 	url = https://github.com/Azure/sonic-mgmt-common
+[submodule "sm/libyang-python"]
+	path = sm/libyang-python
+	url = https://github.com/CESNET/libyang-python.git
+[submodule "sm/sysrepo-python"]
+	path = sm/sysrepo-python
+	url = https://github.com/sysrepo/sysrepo-python.git
