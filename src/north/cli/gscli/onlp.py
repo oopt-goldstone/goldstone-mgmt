@@ -3,7 +3,7 @@ import os
 
 from .base import Object, InvalidInput, Completer
 import json
-import yang as ly
+import libyang as ly
 import sysrepo as sr
 
 from prompt_toolkit.completion import WordCompleter
@@ -23,11 +23,11 @@ class Component(Object):
         def show(args):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
-            self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
-            tree = self.session.get_subtree("{}[name='{}']".format(self.XPATH, self.name))
-            d = json.loads(tree.print_mem(ly.LYD_JSON, 0))
+            self.session.switch_datastore('operational')
+            tree = self.session.get_data_ly("{}[name='{}']".format(self.XPATH, self.name))
+            d = json.loads(tree.print_mem('json'))
             print(d['goldstone-onlp:component'][0][self._type])
-            self.session.session_switch_ds(sr.SR_DS_RUNNING)
+            self.session.switch_datastore('running')
 
     def __str__(self):
         return '{}({})'.format(self._type, self.name)
@@ -47,8 +47,8 @@ class Fan(Component):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
             self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
-            tree = self.session.get_subtree("{}[name='{}']".format(self.XPATH, self.name))
-            d = json.loads(tree.print_mem(ly.LYD_JSON, 0))
+            tree = self.session.get_data_ly("{}[name='{}']".format(self.XPATH, self.name))
+            d = json.loads(tree.print_mem('json'))
             d = d['goldstone-onlp:component'][0]
             fan = d[self._type]
             print(d)
@@ -69,19 +69,19 @@ class Platform(Object):
         self.session = session
         super(Platform, self).__init__(parent)
 
-        self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
-        tree = self.session.get_subtree(self.XPATH)
-        self.session.session_switch_ds(sr.SR_DS_RUNNING)
-        self._component_map = json.loads(tree.print_mem(ly.LYD_JSON, 0))
+        self.session.switch_datastore("operational")
+        tree = self.session.get_data_ly(self.XPATH)
+        self.session.switch_datastore("running")
+        self._component_map = json.loads(tree.print_mem("json"))
 
         @self.command()
         def show(args):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
-            self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
-            tree = self.session.get_subtree(self.XPATH)
-            print(tree.print_mem(ly.LYD_JSON, 0))
-            self.session.session_switch_ds(sr.SR_DS_RUNNING)
+            self.session.switch_datastore("operational")
+            tree = self.session.get_data_ly(self.XPATH)
+            print(tree.print_mem("json"))
+            self.session.switch_datastore("running")
 
         @self.command(WordCompleter(lambda : self._components('fan')))
         def fan(args):
