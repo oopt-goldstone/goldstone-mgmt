@@ -22,7 +22,7 @@ RUN --mount=type=bind,source=sm/libyang,target=/src mkdir -p /build/libyang && c
 RUN --mount=type=bind,source=sm/sysrepo,target=/root/sm/sysrepo,rw \
     --mount=type=bind,source=patches/sysrepo,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
-    cd /root && quilt push -a && mkdir -p /build/sysrepo && cd /build/sysrepo && \
+    cd /root && quilt upgrade && quilt push -a && mkdir -p /build/sysrepo && cd /build/sysrepo && \
     cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DGEN_PYTHON_BINDINGS=OFF -DREPO_PATH=/var/lib/sysrepo/ /root/sm/sysrepo && make && make install && mkdir -p /usr/local/include/utils && cp /root/sm/sysrepo/src/utils/xpath.h /usr/local/include/utils/ && ldconfig
 
 RUN pip install pyang clang jinja2 prompt_toolkit wheel
@@ -32,7 +32,7 @@ RUN mkdir -p /usr/share/wheels
 RUN --mount=type=bind,source=sm/libyang-python,target=/root/sm/libyang-python,rw \
     --mount=type=bind,source=patches/libyang-python,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
-    cd /root && ls .pc && quilt upgrade && quilt push -a && cd /root/sm/libyang-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
+    cd /root && quilt upgrade && quilt push -a && cd /root/sm/libyang-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
 
 RUN --mount=type=bind,source=sm/sysrepo-python,target=/root/sm/sysrepo-python,rw \
     cd /root/sm/sysrepo-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/

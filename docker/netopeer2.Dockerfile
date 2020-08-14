@@ -16,7 +16,8 @@ RUN --mount=type=bind,source=sm/libyang,target=/src mkdir -p /build/libyang && c
 
 RUN --mount=type=bind,source=sm/sysrepo,target=/root/sm/sysrepo,rw \
     --mount=type=bind,source=patches/sysrepo,target=/root/patches \
-    cd /root && quilt push -a && mkdir -p /build/sysrepo && cd /build/sysrepo && \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && mkdir -p /build/sysrepo && cd /build/sysrepo && \
     cmake -DREPO_PATH=/var/lib/sysrepo/ /root/sm/sysrepo && make && make install
 
 RUN --mount=type=bind,source=sm/libnetconf2,target=/root/sm/libnetconf2,rw cd /root && mkdir -p /build/libnetconf2 && cd /build/libnetconf2 && \
@@ -24,7 +25,8 @@ RUN --mount=type=bind,source=sm/libnetconf2,target=/root/sm/libnetconf2,rw cd /r
 
 RUN --mount=type=bind,source=sm/netopeer2,target=/root/sm/netopeer2,rw \
     --mount=type=bind,source=patches/np2,target=/root/patches \
-    cd /root && rm -rf .pc && quilt push -a && mkdir -p /build/netopeer2 && cd /build/netopeer2 && \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && mkdir -p /build/netopeer2 && cd /build/netopeer2 && \
     cmake /root/sm/netopeer2 && make && make install && mkdir -p /usr/local/share/netopeer2 && cp -r /root/sm/netopeer2/scripts /usr/local/share/netopeer2
 
 RUN ldconfig
