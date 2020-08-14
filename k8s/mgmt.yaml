@@ -20,24 +20,39 @@ spec:
 
 ---
 
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: ServiceAccount
 metadata:
     name: gs-mgmt
+    namespace: default
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+    name: gs-mgmt
+roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: view
+subjects:
+- kind: ServiceAccount
+  name: gs-mgmt
+  namespace: default
+
+---
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+    name: prep-gs-mgmt
 spec:
-    replicas: 1
-    selector:
-        matchLabels:
-            app: gs-mgmt
-    strategy:
-        type: Recreate
     template:
-        metadata:
-            labels:
-                app: gs-mgmt
         spec:
-            shareProcessNamespace: true
-            initContainers:
+            hostPID: true
+            restartPolicy: Never
+            containers:
             - name: prep-sysrepo
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
@@ -47,9 +62,9 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
-            - image: docker.io/microsonic/gs-mgmt-netopeer2:latest
+            - name: prep-np
+              image: docker.io/microsonic/gs-mgmt-netopeer2:latest
               imagePullPolicy: IfNotPresent
-              name: prep-np
               command: ['sh', '-c', '$NP2/setup.sh && $NP2/merge_hostkey.sh && $NP2/merge_config.sh']
               env:
               - name: NP2
@@ -67,6 +82,38 @@ spec:
                 name: shm
               - mountPath: /var/lib/sysrepo
                 name: sysrepo
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: gs-mgmt-cli
+    labels:
+        app: gs-mgmt
+spec:
+    selector:
+        matchLabels:
+            app: gs-mgmt-cli
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt-cli
+        spec:
+            hostPID: true
+            serviceAccountName: gs-mgmt
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: cli
               image: docker.io/microsonic/gs-mgmt-debug:latest
@@ -77,6 +124,39 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: gs-mgmt-np2
+    labels:
+        app: gs-mgmt
+spec:
+    selector:
+        matchLabels:
+            app: gs-mgmt-np2
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt-np2
+        spec:
+            hostPID: true
+            serviceAccountName: gs-mgmt
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            containers:
             - name: netopeer2
               image: docker.io/microsonic/gs-mgmt-netopeer2:latest
               imagePullPolicy: IfNotPresent
@@ -86,6 +166,39 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: gs-mgmt-tai
+    labels:
+        app: gs-mgmt
+spec:
+    selector:
+        matchLabels:
+            app: gs-mgmt-tai
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt-tai
+        spec:
+            hostPID: true
+            serviceAccountName: gs-mgmt
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            containers:
             - name: tai
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
@@ -95,6 +208,43 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+            - name: taish-server
+              image: docker.io/microsonic/tai:latest
+              imagePullPolicy: IfNotPresent
+              command: ['taish_server']
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: gs-mgmt-onlp
+    labels:
+        app: gs-mgmt
+spec:
+    selector:
+        matchLabels:
+            app: gs-mgmt-onlp
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt-onlp
+        spec:
+            hostPID: true
+            serviceAccountName: gs-mgmt
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            containers:
             - name: onlp
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
@@ -111,16 +261,13 @@ spec:
                   add:
                   - IPC_OWNER
                   - IPC_LOCK
-            - name: taish-server
-              image: docker.io/microsonic/tai:latest
-              imagePullPolicy: IfNotPresent
-              command: ['taish_server']
             volumes:
             - name: shm
-              emptyDir:
-                  medium: Memory
+              hostPath:
+                  path: /dev/shm
             - name: sysrepo
-              emptyDir: {}
+              hostPath:
+                  path: /var/lib/sysrepo
             - name: onl-platform
               configMap:
                 name: onl-platform
