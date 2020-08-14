@@ -28,13 +28,13 @@ jobs:
             do
                 sleep 10
                 $K get pods || true
-                ($K logs deploy/gs-mgmt cli | grep "modules") && exit 0|| true
+                ($K logs ds/gs-mgmt-cli | grep "modules") && exit 0|| true
             done
         - run: |
-            $K exec deploy/gs-mgmt -c cli -- gscli -c "platform; show" | grep sys
+            $K exec ds/gs-mgmt-cli -- gscli -c "platform; show" | grep sys
         - name: check netopeer2-server is working
           run: |
-              NP2_POD=$($K get pod -o=jsonpath='{.items[0].metadata.name}{"\n"}')
+              NP2_POD=$($K get pod -l app=gs-mgmt-np2 -o=jsonpath='{.items[0].metadata.name}{"\n"}')
               NP2_ADDR=$($K get svc netopeer2 -o=jsonpath='{.spec.clusterIP}{"\n"}')
 
               ssh-keygen -f id_rsa -N ""
