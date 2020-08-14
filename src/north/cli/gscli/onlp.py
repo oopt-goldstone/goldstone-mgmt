@@ -24,9 +24,9 @@ class Component(Object):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
             self.session.switch_datastore('operational')
-            tree = self.session.get_data_ly("{}[name='{}']".format(self.XPATH, self.name))
-            d = json.loads(tree.print_mem('json'))
-            print(d['goldstone-onlp:component'][0][self._type])
+            d = self.session.get_data("{}[name='{}']".format(self.XPATH, self.name))
+            d = d['components']['component'][self.name][self._type]
+            print(d)
             self.session.switch_datastore('running')
 
     def __str__(self):
@@ -42,22 +42,11 @@ class Fan(Component):
     def __init__(self, *args):
         super(Fan, self).__init__(*args)
 
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
-            tree = self.session.get_data_ly("{}[name='{}']".format(self.XPATH, self.name))
-            d = json.loads(tree.print_mem('json'))
-            d = d['goldstone-onlp:component'][0]
-            fan = d[self._type]
-            print(d)
-
         @self.command(FanCompleter())
         def set(args):
             if len(args) != 2:
                 raise InvalidInput('usage: set <attribute> <value>[cr]')
-            self.session.set_item_str("{}[name='{}']/fan/config/{}".format(self.XPATH, self.name, args[0]), args[1])
+            self.session.set_item("{}[name='{}']/fan/config/{}".format(self.XPATH, self.name, args[0]), args[1])
             self.session.apply_changes()
             # raise InvalidInput exception when value is invalid
             return self
