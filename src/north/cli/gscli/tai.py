@@ -217,4 +217,4 @@ class Transponder(Object):
 
     def _modules(self):
         d = self._module_map
-        return [v['name'] for v in d.get('goldstone-tai:modules', {}).get('module', {})]
+        return [v['name'] for v in d.get('modules', {}).get('module', {})]
