@@ -32,9 +32,13 @@ RUN mkdir -p /usr/share/wheels
 RUN --mount=type=bind,source=sm/libyang-python,target=/root/sm/libyang-python,rw \
     --mount=type=bind,source=patches/libyang-python,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
-    cd /root && quilt upgrade && quilt push -a && cd /root/sm/libyang-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
+    cd /root && quilt upgrade && quilt push -a && \
+    cd /root/sm/libyang-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
 
 RUN --mount=type=bind,source=sm/sysrepo-python,target=/root/sm/sysrepo-python,rw \
+    --mount=type=bind,source=patches/sysrepo-python,target=/root/patches \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && \
     cd /root/sm/sysrepo-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
 
 RUN pip install /usr/share/wheels/*.whl
