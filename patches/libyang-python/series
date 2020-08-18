@@ -1,2 +1,3 @@
-notification.patch
 get_searchdirs.patch
+notification.patch
+dup.patch

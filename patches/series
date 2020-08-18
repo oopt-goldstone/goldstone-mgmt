@@ -3,3 +3,5 @@ sysrepo-python/notification.patch
 libyang-python/get_searchdirs.patch
 sysrepo/sysrepoctl-install.patch
 np2/netopeer2-cli.patch
+libyang-python/dup.patch
+sysrepo-python/async.patch
