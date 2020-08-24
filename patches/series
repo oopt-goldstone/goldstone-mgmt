@@ -1,3 +1,4 @@
+libyang-python/fix-to-dnode.patch
 libyang-python/notification.patch
 sysrepo-python/notification.patch
 libyang-python/get_searchdirs.patch
