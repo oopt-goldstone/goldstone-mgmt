@@ -41,6 +41,11 @@ RUN --mount=type=bind,source=sm/sysrepo-python,target=/root/sm/sysrepo-python,rw
     cd /root && quilt upgrade && quilt push -a && \
     cd /root/sm/sysrepo-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
 
+RUN pip install grpcio-tools grpclib
+
+RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
+    cd /root/sm/oopt-tai/tools/taish && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
+
 RUN pip install /usr/share/wheels/*.whl
 
 ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.8/dist-packages/tai.py
