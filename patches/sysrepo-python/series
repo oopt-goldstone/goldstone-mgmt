@@ -1,2 +1,4 @@
 notification.patch
 async.patch
+add_oper_merge_subscribe_flag.patch
+add_more_info_to_oper_callback.patch
