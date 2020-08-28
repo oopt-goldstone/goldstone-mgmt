@@ -1,5 +1,6 @@
 sysrepo-python/add_oper_merge_subscribe_flag.patch
 sysrepo-python/add_more_info_to_oper_callback.patch
+libyang-python/add_get()_method_to_keyed_list.patch
 libyang-python/fix-to-dnode.patch
 libyang-python/notification.patch
 sysrepo-python/notification.patch
