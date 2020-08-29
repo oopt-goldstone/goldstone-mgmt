@@ -78,7 +78,6 @@ class TAIObject(Object):
                         print(item.value)
             except sr.errors.SysrepoCallbackFailedError as e:
                 print(e)
-            self.session.switch_datastore('running')
 
         @self.command(TAICompleter(self.config))
         def set(args):
@@ -88,7 +87,21 @@ class TAIObject(Object):
                 v = self._set_hook[args[0]](args[1])
             else:
                 v = args[1]
-            self.session.set_item('{}/config/{}'.format(self.xpath(), args[0]), v)
+            self.session.switch_datastore('running')
+
+            if type(self) != Module:
+                try:
+                    self.session.get_data(self.parent.xpath())
+                except sr.SysrepoNotFoundError:
+                    self.session.set_item(f'{self.parent.xpath()}/config/name', self.parent.name)
+
+            try:
+                self.session.get_data(self.xpath())
+            except sr.SysrepoNotFoundError:
+                self.session.set_item(f'{self.xpath()}/config/name', self.name)
+
+            self.session.set_item(f'{self.xpath()}/config/{args[0]}', v)
+
             self.session.apply_changes()
 
         @self.command()
@@ -169,16 +182,13 @@ class Module(TAIObject):
     def __init__(self, session, parent, name):
         super(Module, self).__init__(session, parent, name, 'module')
 
-        d = self.session.get_data("{}[name='{}']".format(self.XPATH, self.name))
-        self._map = d['modules']['module'][self.name]
-
-        @self.command(WordCompleter(self._components('network-interface')))
+        @self.command(WordCompleter(lambda : self._components('network-interface')))
         def netif(args):
             if len(args) != 1:
                 raise InvalidInput('usage: netif <name>')
             return NetIf(self.session, self, args[0])
 
-        @self.command(WordCompleter(self._components('host-interface')))
+        @self.command(WordCompleter(lambda : self._components('host-interface')))
         def hostif(args):
             if len(args) != 1:
                 raise InvalidInput('usage: hostif <name>')
@@ -188,8 +198,10 @@ class Module(TAIObject):
         return 'module({})'.format(self.name)
 
     def _components(self, type_):
-        d = self._map
-        return [v['name'] for v in d[type_]]
+        self.session.switch_datastore('operational')
+        d = self.session.get_data("{}[name='{}']".format(self.XPATH, self.name), no_subs=True)
+        d = d.get('modules', {}).get('module', {}).get(self.name, {})
+        return [v['name'] for v in d.get(type_, [])]
 
 class Transponder(Object):
     XPATH = '/goldstone-tai:modules'
@@ -198,13 +210,12 @@ class Transponder(Object):
         self.session = session
         super(Transponder, self).__init__(parent)
 
-        self._module_map = self.session.get_data(self.XPATH)
-
         @self.command()
         def show(args):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
-            print(self._module_map)
+            self.session.switch_datastore('operational')
+            print(self.session.get_data(self.XPATH))
 
         @self.command(WordCompleter(self._modules()))
         def module(args):
@@ -216,5 +227,6 @@ class Transponder(Object):
         return 'transponder'
 
     def _modules(self):
-        d = self._module_map
+        self.session.switch_datastore('operational')
+        d = self.session.get_data(self.XPATH, no_subs=True)
         return [v['name'] for v in d.get('modules', {}).get('module', {})]
