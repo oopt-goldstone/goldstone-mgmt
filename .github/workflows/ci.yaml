@@ -32,6 +32,8 @@ jobs:
             done
         - run: |
             $K exec ds/gs-mgmt-cli -- gscli -c "platform; show" | grep sys
+        - run: |
+            $K exec ds/gs-mgmt-cli -- gscli -c "sonic; port; show" | grep sys
         - name: check netopeer2-server is working
           run: |
               NP2_POD=$($K get pod -l app=gs-mgmt-np2 -o=jsonpath='{.items[0].metadata.name}{"\n"}')

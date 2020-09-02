@@ -9,3 +9,4 @@ sysrepo/sysrepoctl-install.patch
 np2/netopeer2-cli.patch
 libyang-python/dup.patch
 sysrepo-python/async.patch
+sonic-mgmt/sonic_vlan.patch
