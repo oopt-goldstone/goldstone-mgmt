@@ -55,8 +55,8 @@ class GoldstoneShellCompleter(Completer):
 class GoldstoneShell(object):
     def __init__(self, sess=None, default_prompt='> ', prefix=''):
         if sess == None:
-            conn = sr.Connection()
-            sess = sr.Session(conn)
+            conn = sr.SysrepoConnection()
+            sess = conn.start_session()
         self.context = Root(sess)
 
         self.completer = GoldstoneShellCompleter(self.context)

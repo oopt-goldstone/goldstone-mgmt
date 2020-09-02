@@ -26,10 +26,13 @@ RUN ldconfig
 
 ENV PYTHONPATH /usr/lib/python3/dist-packages
 
-
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 
-COPY src/south/tai/main /usr/bin/gssouthd-tai
+RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
+            pip install /usr/share/wheels/*.whl
+
+RUN --mount=type=bind,source=src/south/taipy,target=/src,rw pip install /src
+
 COPY src/south/onlp/main /usr/bin/gssouthd-onlp
 COPY src/south/sonic-interface/main /usr/bin/gssouthd-sonic
 

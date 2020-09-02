@@ -1,0 +1,16 @@
+Index: goldstone-mgmt/sm/libyang-python/libyang/keyed_list.py
+===================================================================
+--- goldstone-mgmt.orig/sm/libyang-python/libyang/keyed_list.py
++++ goldstone-mgmt/sm/libyang-python/libyang/keyed_list.py
+@@ -86,6 +86,11 @@ class KeyedList(list):
+             raise NotImplementedError("non-ordered lists cannot be accessed by index")
+         del self._map[key]
+ 
++    def get(self, key: ListKeyVal, default: Any = None) -> Any:
++        if key is None or isinstance(key, (int, slice)):
++            raise NotImplementedError("non-ordered lists cannot be accessed by index")
++        return self._map.get(key, default)
++
+     def __eq__(self, other: Any) -> bool:
+         if isinstance(other, KeyedList):
+             return other._map == self._map

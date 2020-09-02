@@ -4,16 +4,13 @@ import re
 
 from .base import Object, InvalidInput, Completer
 from pyang import repository, context
-import json
-import yang as ly
+
 import sysrepo as sr
 import base64
 import struct
 
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, FuzzyCompleter
-
-TIMEOUT_MS = 10000
 
 _FREQ_RE = re.compile(r'.+[kmgt]?hz$')
 
@@ -55,12 +52,12 @@ class TAIObject(Object):
         self.session = session
         super(TAIObject, self).__init__(parent)
 
-        d = self.session.get_context().get_searchdirs()
+        d = self.session.get_ly_ctx().get_searchdirs()
         repo = repository.FileRepository(d[0])
         ctx = context.Context(repo)
 
-        m = self.session.get_context().get_module('goldstone-tai')
-        v = m.print_mem(ly.LYS_IN_YANG, 0)
+        m = self.session.get_ly_ctx().get_module('goldstone-tai')
+        v = m.print_mem("yang")
 
         ctx.add_module(None, v)
         mod = ctx.get_module('goldstone-tai')
@@ -71,21 +68,16 @@ class TAIObject(Object):
         def get(args):
             if len(args) != 1:
                 raise InvalidInput('usage: get <name>')
-            self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
+            self.session.switch_datastore('operational')
             try:
                 items = self.session.get_items('{}/state/{}'.format(self.xpath(), args[0]))
-                for i in range(items.val_cnt()):
-                    item = items.val(i)
+                for item in items:
                     if args[0] in self._get_hook:
-                        print(self._get_hook[args[0]](item))
+                        print(self._get_hook[args[0]](item.value))
                     else:
-                        print(item.val_to_string())
-            except RuntimeError:
-                err = self.session.get_error()
-                if err.error_cnt() > 0:
-                    idx = err.error_cnt() - 1
-                    print('err: {}, xpath: {}'.format(err.message(idx), err.xpath(idx)))
-            self.session.session_switch_ds(sr.SR_DS_RUNNING)
+                        print(item.value)
+            except sr.errors.SysrepoCallbackFailedError as e:
+                print(e)
 
         @self.command(TAICompleter(self.config))
         def set(args):
@@ -95,18 +87,30 @@ class TAIObject(Object):
                 v = self._set_hook[args[0]](args[1])
             else:
                 v = args[1]
-            self.session.set_item_str('{}/config/{}'.format(self.xpath(), args[0]), v)
+            self.session.switch_datastore('running')
+
+            if type(self) != Module:
+                try:
+                    self.session.get_data(self.parent.xpath())
+                except sr.SysrepoNotFoundError:
+                    self.session.set_item(f'{self.parent.xpath()}/config/name', self.parent.name)
+
+            try:
+                self.session.get_data(self.xpath())
+            except sr.SysrepoNotFoundError:
+                self.session.set_item(f'{self.xpath()}/config/name', self.name)
+
+            self.session.set_item(f'{self.xpath()}/config/{args[0]}', v)
+
             self.session.apply_changes()
 
         @self.command()
         def show(args):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
-            self.session.session_switch_ds(sr.SR_DS_OPERATIONAL)
-            tree = self.session.get_subtree(self.xpath(), TIMEOUT_MS)
-            d = json.loads(tree.print_mem(ly.LYD_JSON, 0))
-            print(d)
-            self.session.session_switch_ds(sr.SR_DS_RUNNING)
+            self.session.switch_datastore('operational')
+            print(self.session.get_data(self.xpath()))
+            self.session.switch_datastore('running')
 
 def human_freq(item):
     if type(item) == str:
@@ -129,10 +133,10 @@ def human_freq(item):
                 v = 1e3
             return str(round(float(item[:-1]) * v))
     else:
-        return '{0:.2f}THz'.format(int(item.val_to_string()) / 1e12)
+        return '{0:.2f}THz'.format(int(item) / 1e12)
 
 def human_ber(item):
-    return '{0:.2e}'.format(struct.unpack('>f', base64.b64decode(item.val_to_string()))[0])
+    return '{0:.2e}'.format(struct.unpack('>f', base64.b64decode(item))[0])
 
 class HostIf(TAIObject):
 
@@ -178,16 +182,13 @@ class Module(TAIObject):
     def __init__(self, session, parent, name):
         super(Module, self).__init__(session, parent, name, 'module')
 
-        tree = self.session.get_subtree("{}[name='{}']".format(self.XPATH, self.name))
-        self._map = json.loads(tree.print_mem(ly.LYD_JSON, 0))['goldstone-tai:module'][0]
-
-        @self.command(WordCompleter(self._components('network-interface')))
+        @self.command(WordCompleter(lambda : self._components('network-interface')))
         def netif(args):
             if len(args) != 1:
                 raise InvalidInput('usage: netif <name>')
             return NetIf(self.session, self, args[0])
 
-        @self.command(WordCompleter(self._components('host-interface')))
+        @self.command(WordCompleter(lambda : self._components('host-interface')))
         def hostif(args):
             if len(args) != 1:
                 raise InvalidInput('usage: hostif <name>')
@@ -197,8 +198,10 @@ class Module(TAIObject):
         return 'module({})'.format(self.name)
 
     def _components(self, type_):
-        d = self._map
-        return [v['name'] for v in d[type_]]
+        self.session.switch_datastore('operational')
+        d = self.session.get_data("{}[name='{}']".format(self.XPATH, self.name), no_subs=True)
+        d = d.get('modules', {}).get('module', {}).get(self.name, {})
+        return [v['name'] for v in d.get(type_, [])]
 
 class Transponder(Object):
     XPATH = '/goldstone-tai:modules'
@@ -207,14 +210,12 @@ class Transponder(Object):
         self.session = session
         super(Transponder, self).__init__(parent)
 
-        tree = self.session.get_subtree(self.XPATH, TIMEOUT_MS)
-        self._module_map = json.loads(tree.print_mem(ly.LYD_JSON, 0))
-
         @self.command()
         def show(args):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
-            print(tree.print_mem(ly.LYD_JSON, 0))
+            self.session.switch_datastore('operational')
+            print(self.session.get_data(self.XPATH))
 
         @self.command(WordCompleter(self._modules()))
         def module(args):
@@ -226,5 +227,6 @@ class Transponder(Object):
         return 'transponder'
 
     def _modules(self):
-        d = self._module_map
-        return [v['name'] for v in d.get('goldstone-tai:modules', {}).get('module', {})]
+        self.session.switch_datastore('operational')
+        d = self.session.get_data(self.XPATH, no_subs=True)
+        return [v['name'] for v in d.get('modules', {}).get('module', {})]
