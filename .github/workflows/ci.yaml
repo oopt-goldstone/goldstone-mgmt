@@ -15,8 +15,6 @@ jobs:
               fetch-depth: 0
         - name: install k3s
           run: curl -sfL https://get.k3s.io | sh -s - --docker
-        - name: install quilt
-          run: sudo apt install -qy quilt
         - name: build builder image if sm/ is updated
           run: git diff --compact-summary HEAD origin/master | (grep 'sm/\|builder.Dockerfile' && make builder np2) || true
         - run: make docker
