@@ -44,12 +44,12 @@ class TAICompleter(Completer):
 
 class TAIObject(Object):
 
-    def __init__(self, session, parent, name, type_):
+    def __init__(self, conn, parent, name, type_):
         self.type_ = type_
         self.name = name
         self._get_hook = {}
         self._set_hook = {}
-        self.session = session
+        self.session = conn.start_session()
         super(TAIObject, self).__init__(parent)
 
         d = self.session.get_ly_ctx().get_searchdirs()
@@ -179,20 +179,20 @@ class Module(TAIObject):
     def xpath(self):
         return "{}[name='{}']".format(self.XPATH, self.name)
 
-    def __init__(self, session, parent, name):
-        super(Module, self).__init__(session, parent, name, 'module')
+    def __init__(self, conn, parent, name):
+        super(Module, self).__init__(conn, parent, name, 'module')
 
         @self.command(WordCompleter(lambda : self._components('network-interface')))
         def netif(args):
             if len(args) != 1:
                 raise InvalidInput('usage: netif <name>')
-            return NetIf(self.session, self, args[0])
+            return NetIf(conn, self, args[0])
 
         @self.command(WordCompleter(lambda : self._components('host-interface')))
         def hostif(args):
             if len(args) != 1:
                 raise InvalidInput('usage: hostif <name>')
-            return HostIf(self.session, self, args[0])
+            return HostIf(conn, self, args[0])
 
     def __str__(self):
         return 'module({})'.format(self.name)
@@ -206,8 +206,11 @@ class Module(TAIObject):
 class Transponder(Object):
     XPATH = '/goldstone-tai:modules'
 
-    def __init__(self, session, parent):
-        self.session = session
+    def close(self):
+        self.session.stop()
+
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
         super(Transponder, self).__init__(parent)
 
         @self.command()
@@ -221,7 +224,7 @@ class Transponder(Object):
         def module(args):
             if len(args) != 1:
                 raise InvalidInput('usage: module <name>')
-            return Module(self.session, self, args[0])
+            return Module(conn, self, args[0])
 
     def __str__(self):
         return 'transponder'

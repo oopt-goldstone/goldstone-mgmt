@@ -11,12 +11,12 @@ from prompt_toolkit.completion import WordCompleter
 class Component(Object):
     XPATH = '/goldstone-onlp:components/component'
 
-    def __init__(self, session, parent, type_, name):
+    def __init__(self, conn, parent, type_, name):
         if type_ not in ['fan', 'thermal', 'psu', 'led']:
             raise InvalidInput('invalid component')
         self._type = type_
         self.name = name
-        self.session = session
+        self.session = conn.start_session()
         super(Component, self).__init__(parent)
 
         @self.command()
@@ -54,8 +54,8 @@ class Fan(Component):
 class Platform(Object):
     XPATH = '/goldstone-onlp:components'
 
-    def __init__(self, session, parent):
-        self.session = session
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
         super(Platform, self).__init__(parent)
 
         self.session.switch_datastore("operational")

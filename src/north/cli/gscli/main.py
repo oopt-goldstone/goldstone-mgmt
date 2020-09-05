@@ -7,6 +7,7 @@ import argparse
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.completion import Completer
+from prompt_toolkit import patch_stdout
 
 import sys
 import os
@@ -24,21 +25,28 @@ stdout = logging.getLogger('stdout')
 class Root(Object):
     XPATH = '/'
 
-    def __init__(self, sess):
-        self.session = sess
+    def __init__(self, conn):
+        self.session = conn.start_session()
+
+        # TODO consider getting notification xpaths from each commands' classmethod
+        self.session.subscribe_notification_tree("goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb)
+
         super(Root, self).__init__(None)
 
         @self.command()
         def platform(line):
             if len(line) != 0:
                 raise InvalidInput('usage: platform[cr]')
-            return Platform(self.session, self)
+            return Platform(conn, self)
 
         @self.command()
         def transponder(line):
             if len(line) != 0:
                 raise InvalidInput('usage: transponder[cr]')
-            return Transponder(self.session, self)
+            return Transponder(conn, self)
+
+    def notification_cb(self, a, b, c, d):
+        print(b.print_dict())
 
     def __str__(self):
         return ''
@@ -57,7 +65,7 @@ class GoldstoneShell(object):
         if sess == None:
             conn = sr.SysrepoConnection()
             sess = conn.start_session()
-        self.context = Root(sess)
+        self.context = Root(conn)
 
         self.completer = GoldstoneShellCompleter(self.context)
         self.default_input = ''
@@ -111,14 +119,15 @@ class GoldstoneShell(object):
 async def loop_async(shell):
     session = PromptSession()
 
-    while True:
-        c = shell.completer
-        p = shell.prompt()
-        b = shell.bindings()
-        session.app.shell = shell
-        line = await session.prompt_async(p, completer=c, key_bindings=b, default=shell.default_input)
-        if len(line) > 0:
-            await shell.exec(line)
+    with patch_stdout.patch_stdout():
+        while True:
+            c = shell.completer
+            p = shell.prompt()
+            b = shell.bindings()
+            session.app.shell = shell
+            line = await session.prompt_async(p, completer=c, key_bindings=b, default=shell.default_input)
+            if len(line) > 0:
+                await shell.exec(line)
 
 def main():
     parser = argparse.ArgumentParser()
