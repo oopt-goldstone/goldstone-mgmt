@@ -1,5 +1,4 @@
 import sysrepo
-import libyang
 import logging
 import taish
 import asyncio
@@ -9,6 +8,7 @@ import signal
 import struct
 import base64
 import re
+import libyang
 
 class InvalidXPath(Exception):
     pass
@@ -17,6 +17,22 @@ class NoOp(Exception):
     pass
 
 logger = logging.getLogger(__name__)
+
+def attr_tai2yang(attr, meta, schema):
+    if meta.usage != '<float>':
+        return json.loads(attr)
+
+    # we need special handling for float value since YANG doesn't
+    # have float..
+    base = schema.type().basename()
+    if base == 'decimal64':
+        return json.loads(attr)
+    elif base == 'binary':
+        v = base64.b64encode(struct.pack('>f', float(attr)))
+        return v.decode()
+
+    logger.warn(f'not supported float value: {attr}')
+    raise taish.TAIException()
 
 class Server(object):
 
@@ -191,8 +207,7 @@ class Server(object):
 
 
     async def change_cb(self, event, req_id, changes, priv):
-        # TODO to support event 'change', we need to get the supported attributes of TAI library first
-        if event != 'done':
+        if event != 'change':
             return
         for change in changes:
             logger.debug(f'change_cb: {change}')
@@ -205,6 +220,8 @@ class Server(object):
                         # before doing actual setting
                         try:
                             meta = await obj.get_attribute_metadata(k)
+                            if meta.usage == '<bool>':
+                                v = 'true' if v else 'false'
                         except taish.TAIException:
                             continue
                         await obj.set(k, v)
@@ -213,22 +230,9 @@ class Server(object):
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f'oper get callback requested xpath: {req_xpath}')
 
-        async def get(obj, item):
+        async def get(obj, schema):
             attr, meta = await obj.get(item.name(), with_metadata=True, json=True)
-            if meta.usage != '<float>':
-                return json.loads(attr)
-
-            # we need special handling for float value since YANG doesn't
-            # have float..
-            base = item.type().basename()
-            if base == 'decimal64':
-                return json.loads(attr)
-            elif base == 'binary':
-                v = base64.b64encode(struct.pack('>f', float(attr)))
-                return v.decode()
-
-            logger.warn(f'not supported float value: {attr}')
-            raise taish.TAIException()
+            return attr_tai2yang(attr, meta, schema)
 
         async def get_attrs(obj, schema):
             attrs = {}
@@ -315,35 +319,89 @@ class Server(object):
 
         return r
 
+    async def tai_cb(self, obj, attr_meta, msg):
+        self.sess.switch_datastore('running')
+        ly_ctx = self.sess.get_ly_ctx()
+
+        objname = None
+        if isinstance(obj, taish.NetIf):
+            objname = 'network-interface'
+        elif isinstance(obj, taish.HostIf):
+            objname = 'host-interface'
+        elif isinstance(obj, taish.Module):
+            objname = 'module'
+
+        if not objname:
+            logger.error(f'invalid object: {obj}')
+            return
+
+        eventname = f'goldstone-tai:{objname}-{attr_meta.short_name}-event'
+
+        v = {}
+
+        for attr in msg.attrs:
+            meta = await obj.get_attribute_metadata(attr.attr_id)
+            try:
+                xpath = f'/{eventname}/goldstone-tai:{meta.short_name}'
+                schema = list(ly_ctx.find_path(xpath))[0]
+                data = attr_tai2yang(attr.value, meta, schema)
+                if type(data) == list and len(data) == 0:
+                    logger.warning(f'empty leaf-list is not supported for notification')
+                    continue
+                v[meta.short_name] = data
+            except libyang.util.LibyangError as e:
+                logger.warning(f'{xpath}: {e}')
+                continue
+
+        if len(v) == 0:
+            logger.warning(f'nothing to notify')
+            return
+
+        notif = {eventname: v}
+
+        # FIXME adding '/' at the prefix or giving wrong module causes Segmentation fault
+        # needs a fix in sysrepo
+        n = json.dumps(notif)
+        dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
+        self.sess.notification_send_ly(dnode)
+
     async def start(self):
 
         self.sess.switch_datastore('operational')
         modules = await self.taish.list()
+        notifiers = []
         for key, m in modules.items():
             xpath = f"/goldstone-tai:modules/module[name='{key}']"
             self.sess.set_item(f"{xpath}/config/name", key)
 
+            module = await self.taish.get_module(key)
+            notifiers.append(module.monitor('notify', self.tai_cb, json=True))
+
             for i in range(len(m.netifs)):
                 self.sess.set_item(f"{xpath}/network-interface[name='{i}']/config/name", i)
+                n = module.get_netif(i)
+                notifiers.append(n.monitor('alarm-notification', self.tai_cb, json=True))
 
             for i in range(len(m.hostifs)):
                 self.sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
+                h = module.get_hostif(i)
+                notifiers.append(h.monitor('alarm-notification', self.tai_cb, json=True))
+
         self.sess.apply_changes()
 
         self.sess.switch_datastore('running')
         self.sess.subscribe_module_change('goldstone-tai', None, self.change_cb, asyncio_register=True)
         self.sess.subscribe_oper_data_request('goldstone-tai', '/goldstone-tai:modules/module', self.oper_cb, oper_merge=True, asyncio_register=True)
 
+        v = await asyncio.gather(*notifiers, return_exceptions=True)
+
 def main():
     async def _main(taish_server):
         loop = asyncio.get_event_loop()
-        stop_event = asyncio.Event()
-        loop.add_signal_handler(signal.SIGINT, stop_event.set)
-        loop.add_signal_handler(signal.SIGTERM, stop_event.set)
-
         server = Server(taish_server)
+
         try:
-            await asyncio.gather(server.start(), stop_event.wait())
+            await server.start()
         finally:
             server.stop()
 
