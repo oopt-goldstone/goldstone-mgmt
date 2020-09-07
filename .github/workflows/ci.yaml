@@ -32,6 +32,17 @@ jobs:
             done
         - run: |
             $K exec ds/gs-mgmt-cli -- gscli -c "platform; show" | grep sys
+        - run: |
+            git clone https://github.com/microsonic/usonic.git
+            cd usonic
+            sudo k3s kubectl create -f ./k8s
+            while [true]
+            do
+                sleep 10
+                $K get pods || true
+                ($K exec usonic-cli -- show interface status | grep Ethernet1) && exit 0 || true
+            done
+            $K exec ds/gs-mgmt-cli -- gscli -c "sonic; port; show" | grep Ethernet1
         - name: check netopeer2-server is working
           run: |
               NP2_POD=$($K get pod -l app=gs-mgmt-np2 -o=jsonpath='{.items[0].metadata.name}{"\n"}')
