@@ -36,7 +36,7 @@ jobs:
             git clone https://github.com/microsonic/usonic.git
             sudo k3s kubectl create -f usonic/k8s
             SONIC_MGMT_ADDR=$($K get svc sonic-mgmt -o=jsonpath='{.spec.clusterIP}{"\n"}')
-            while [true]
+            while [ true ]
             do
                 sleep 10
                 (curl http://$SONIC_MGMT_ADDR/restconf/data/sonic-port:sonic-port | grep Ethernet1) && exit 0 || true
