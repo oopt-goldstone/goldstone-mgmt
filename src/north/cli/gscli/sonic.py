@@ -274,11 +274,13 @@ class Port(Object):
     def __init__(self, session, parent):
         self.session = session
         self.session.switch_datastore('operational')
-        self.tree = self.session.get_data_ly(self.XPATH)
         try:
+            self.tree = self.session.get_data_ly(self.XPATH)
             self._ifname_map = json.loads(self.tree.print_mem("json"))['sonic-port:sonic-port']['PORT']['PORT_LIST']
         except KeyError as error:
             print("Port list is not configured")
+        except sr.errors.SysrepoNotFoundError as error:
+            print("sonic-mgmt is down")
         self.session.switch_datastore('running')
         super(Port, self).__init__(parent)
 
