@@ -46,14 +46,14 @@ class Root(Object):
                 raise InvalidInput('usage: transponder[cr]')
             return Transponder(conn, self)
 
-    def notification_cb(self, a, b, c, d):
-        print(b.print_dict())
-
         @self.command()
         def sonic(line):
             if len(line) != 0:
                 raise InvalidInput('usage: sonic[cr]')
-            return Sonic(self.session, self)
+            return Sonic(conn, self)
+
+    def notification_cb(self, a, b, c, d):
+        print(b.print_dict())
 
     def __str__(self):
         return ''
