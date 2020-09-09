@@ -16,6 +16,7 @@ import asyncio
 from .base import Object, InvalidInput, BreakLoop
 from .onlp import Platform
 from .tai  import Transponder
+from .sonic  import Sonic
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,12 @@ class Root(Object):
             if len(line) != 0:
                 raise InvalidInput('usage: transponder[cr]')
             return Transponder(self.session, self)
+
+        @self.command()
+        def sonic(line):
+            if len(line) != 0:
+                raise InvalidInput('usage: sonic[cr]')
+            return Sonic(self.session, self)
 
     def __str__(self):
         return ''

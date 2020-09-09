@@ -25,6 +25,10 @@ RUN --mount=type=bind,source=sm/sysrepo,target=/root/sm/sysrepo,rw \
     cd /root && quilt upgrade && quilt push -a && mkdir -p /build/sysrepo && cd /build/sysrepo && \
     cmake -DGEN_LANGUAGE_BINDINGS=ON -DGEN_CPP_BINDINGS=ON -DGEN_PYTHON_BINDINGS=OFF -DREPO_PATH=/var/lib/sysrepo/ /root/sm/sysrepo && make && make install && mkdir -p /usr/local/include/utils && cp /root/sm/sysrepo/src/utils/xpath.h /usr/local/include/utils/ && ldconfig
 
+RUN --mount=type=bind,source=sm/sonic-mgmt-common,target=/root/sm/sonic-mgmt-common,rw \
+    --mount=type=bind,source=patches/sonic-mgmt,target=/root/patches \
+    cd /root && quilt upgrade && quilt push -a && mkdir -p /usr/local/sonic/ && cp -r /root/sm/sonic-mgmt-common/models/yang/sonic/* /usr/local/sonic/ && ls /usr/local/sonic/
+
 RUN pip install pyang clang jinja2 prompt_toolkit wheel
 
 RUN mkdir -p /usr/share/wheels

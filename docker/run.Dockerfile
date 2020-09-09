@@ -40,7 +40,7 @@ COPY yang /var/lib/goldstone/yang/gs/
 ENV GS_YANG_REPO /var/lib/goldstone/yang/gs
 COPY sm/openconfig/release/models/ /var/lib/goldstone/yang/oc/
 ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
-COPY sm/sonic-mgmt-common/models/yang/sonic/  /var/lib/goldstone/yang/sonic/
+COPY --from=builder /usr/local/sonic/  /var/lib/goldstone/yang/sonic/
 ENV SONIC_YANG_REPO /var/lib/goldstone/yang/sonic
 
 

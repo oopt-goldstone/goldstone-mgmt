@@ -21,7 +21,7 @@ using json = nlohmann::json;
 class SonicController : public sysrepo::Callback
 {
   public:
-    SonicController(sysrepo::S_Session& sess);
+    SonicController(sysrepo::S_Session& sess, std::string mgmt_server, std::string port);
     ~SonicController();
     void loop();
 
@@ -29,13 +29,14 @@ class SonicController : public sysrepo::Callback
                        sr_event_t, uint32_t, void *);
     int oper_get_items (sysrepo::S_Session, const char *, const char *, const char *,
                         uint32_t, libyang::S_Data_Node &, void *);
-    void set_sonic_parameters (std::string mgmt_server, std::string port);
-
+    json get_data_from_sonic (const char *);
+    int set_data_to_sonic (const char *, const char *, const char *);
   private:
     sysrepo::S_Session m_sess;
     sysrepo::S_Subscribe m_subscribe;
-    std::string mgmt_server;
-    std::string port;
+    std::string m_mgmt_server;
+    std::string m_port;
+    bool _initialized;
 };
 
 #endif // __CONTROLLER_HPP__
