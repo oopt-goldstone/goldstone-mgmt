@@ -31,7 +31,7 @@ def attr_tai2yang(attr, meta, schema):
         v = base64.b64encode(struct.pack('>f', float(attr)))
         return v.decode()
 
-    logger.warn(f'not supported float value: {attr}')
+    logger.warning(f'not supported float value: {attr}')
     raise taish.TAIException()
 
 class Server(object):
@@ -43,6 +43,7 @@ class Server(object):
         self.sess = self.conn.start_session()
 
     def stop(self):
+        logger.info(f'stop server')
         self.sess.stop()
         self.conn.disconnect()
         self.taish.close()
@@ -224,8 +225,11 @@ class Server(object):
                                 v = 'true' if v else 'false'
                         except taish.TAIException:
                             continue
-                        await obj.set(k, v)
 
+                        try:
+                            await obj.set(k, v)
+                        except taish.TAIException as e:
+                            raise sysrepo.SysrepoUnsupportedError(str(e))
 
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f'oper get callback requested xpath: {req_xpath}')
@@ -365,6 +369,7 @@ class Server(object):
         dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
         self.sess.notification_send_ly(dnode)
 
+
     async def start(self):
 
         self.sess.switch_datastore('operational')
@@ -393,15 +398,26 @@ class Server(object):
         self.sess.subscribe_module_change('goldstone-tai', None, self.change_cb, asyncio_register=True)
         self.sess.subscribe_oper_data_request('goldstone-tai', '/goldstone-tai:modules/module', self.oper_cb, oper_merge=True, asyncio_register=True)
 
-        v = await asyncio.gather(*notifiers, return_exceptions=True)
+        async def catch_exception(coroutine):
+            try:
+                return await coroutine
+            except BaseException as e:
+                logger.info(e)
+
+        return [catch_exception(n) for n in notifiers]
 
 def main():
     async def _main(taish_server):
         loop = asyncio.get_event_loop()
+        stop_event = asyncio.Event()
+        loop.add_signal_handler(signal.SIGINT, stop_event.set)
+        loop.add_signal_handler(signal.SIGTERM, stop_event.set)
+
         server = Server(taish_server)
 
         try:
-            await server.start()
+            tasks = await server.start()
+            await asyncio.wait({*tasks, stop_event.wait()}, return_when=asyncio.FIRST_COMPLETED)
         finally:
             server.stop()
 
@@ -413,6 +429,7 @@ def main():
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
+        # hpack debug log is too verbose. change it INFO level
         hpack = logging.getLogger('hpack')
         hpack.setLevel(logging.INFO)
     else:
