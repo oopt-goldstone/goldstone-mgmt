@@ -28,10 +28,10 @@ class vlan_list(Object):
         self._get_hook = {}
         self._set_hook = {}
         self.session.switch_datastore('operational')
-        self.vlan_tree = self.session.get_data_ly("{}".format(self.xpath_vlan_list()))
+        self.vlan_tree = self.session.get_data("{}".format(self.xpath_vlan_list()))
+        self._set_map = {"members":"string"}
         try:
-            self._map = json.loads(self.vlan_tree.print_mem("json"))['sonic-vlan:sonic-vlan']['VLAN']['VLAN_LIST'][0]
-            self._set_map = json.loads ('{"members":"string"}')
+            self._map = list(self.vlan_tree['sonic-vlan']['VLAN']['VLAN_LIST'])[0]
 
         except KeyError as error:
             print("Vlan list configurations are empty")
@@ -100,10 +100,10 @@ class Ifname(Object):
         self._get_hook = {}
         self._set_hook = {}
         self.session.switch_datastore('operational')
-        self.iftree = self.session.get_data_ly(self.xpath())
+        self.iftree = self.session.get_data(self.xpath())
+        self._set_map = {"alias":"string", "speed":"integer" , "mtu":"integer", "admin_status":"up/down" }
         try:
-            self._map = json.loads(self.iftree.print_mem("json"))['sonic-port:sonic-port']['PORT']['PORT_LIST'][0]
-            self._set_map = json.loads ('{"alias":"string", "speed":"integer" , "mtu":"integer", "admin_status":"up/down" }')
+            self._map = list((self.iftree)['sonic-port']['PORT']['PORT_LIST'])[0]
         except KeyError as error:
             print("sonic-port interfaces  are not configured")
         self.session.switch_datastore('running')
@@ -114,9 +114,7 @@ class Ifname(Object):
         def show(args):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
-            self.session.switch_datastore('operational')
-            print (self.iftree.print_mem("json"))
-            self.session.switch_datastore('running')
+            print (json.dumps(self.iftree))
 
         @self.command(WordCompleter(self._components()))
         def get(args):
@@ -174,9 +172,9 @@ class Vlan(Object):
     def __init__(self, session, parent):
         self.session = session
         self.session.switch_datastore('operational')
-        self.tree = self.session.get_data_ly("{}".format(self.XPATH), 0, TIMEOUT_MS)
+        self.tree = self.session.get_data("{}".format(self.XPATH), 0, TIMEOUT_MS)
         try:
-            self._vlan_map = json.loads(self.tree.print_mem("json"))['sonic-vlan:sonic-vlan']['VLAN']['VLAN_LIST']
+            self._vlan_map = list(self.tree['sonic-vlan']['VLAN']['VLAN_LIST'])
         except KeyError as error:
             print("No VLAN configurations created")
         self.session.switch_datastore('running')
@@ -186,9 +184,7 @@ class Vlan(Object):
         def show(args):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
-            self.session.switch_datastore('operational')
-            print (self.tree.print_mem("json"))
-            self.session.switch_datastore('running')
+            print (json.dumps(self.tree))
         
         @self.command(WordCompleter(lambda : self._vlan_components()))
         def vlan(args):
@@ -275,8 +271,8 @@ class Port(Object):
         self.session = session
         self.session.switch_datastore('operational')
         try:
-            self.tree = self.session.get_data_ly(self.XPATH)
-            self._ifname_map = json.loads(self.tree.print_mem("json"))['sonic-port:sonic-port']['PORT']['PORT_LIST']
+            self.tree = self.session.get_data(self.XPATH)
+            self._ifname_map = list(self.tree['sonic-port']['PORT']['PORT_LIST'])
         except KeyError as error:
             print("Port list is not configured")
         except sr.errors.SysrepoNotFoundError as error:
@@ -288,9 +284,7 @@ class Port(Object):
         def show(args):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
-            self.session.switch_datastore('operational')
-            print (self.tree.print_mem("json"))
-            self.session.switch_datastore('running')
+            print (json.dumps(self.tree))
         
         @self.command(WordCompleter(lambda : self._ifname_components()))
         def ifname(args):
