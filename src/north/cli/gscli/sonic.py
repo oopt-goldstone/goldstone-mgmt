@@ -4,16 +4,11 @@ import os
 from .base import Object, InvalidInput, Completer
 from pyang import repository, context
 import json
-import libyang as ly
 import sysrepo as sr
-import base64
-import struct
 
-from prompt_toolkit.document import Document
-from prompt_toolkit.completion import WordCompleter, Completion, FuzzyCompleter
+from prompt_toolkit.completion import WordCompleter
 
 TIMEOUT_MS = 10000
-
 
 
 class vlan_list(Object):
@@ -73,11 +68,11 @@ class vlan_list(Object):
                 self.session.apply_changes()
 
 
-    
+
     def _components(self):
         d = self._map
         return [v for v in d]
-    
+
     def _set_components(self):
         d = self._set_map
         return [v for v in d]
@@ -85,7 +80,7 @@ class vlan_list(Object):
     def __str__(self):
         return 'vlan({})'.format(self.vlan_name)
 
-    
+
 
 
 class Ifname(Object):
@@ -108,7 +103,7 @@ class Ifname(Object):
             print("sonic-port interfaces  are not configured")
         self.session.switch_datastore('running')
         super(Ifname, self).__init__(parent)
-        
+
 
         @self.command()
         def show(args):
@@ -165,12 +160,12 @@ class Ifname(Object):
 
 
 class Vlan(Object):
-    
-    XPATH = '/sonic-vlan:sonic-vlan/VLAN'
-    
 
-    def __init__(self, session, parent):
-        self.session = session
+    XPATH = '/sonic-vlan:sonic-vlan/VLAN'
+
+
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
         self.session.switch_datastore('operational')
         self.tree = self.session.get_data("{}".format(self.XPATH), 0, TIMEOUT_MS)
         try:
@@ -203,15 +198,15 @@ class Vlan(Object):
 
 
 class Interface(Object):
-    
+
     XPATH = '/sonic-interface:sonic-interface/INTERFACE'
-    
-    
+
+
     def xpath_iplist(self):
         return "{}/INTERFACE_IPADDR_LIST".format(self.XPATH)
 
-    def __init__(self, session, parent):
-        self.session = session
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
         super(Interface, self).__init__(parent)
 
         @self.command()
@@ -264,11 +259,11 @@ class Interface(Object):
 
 
 class Port(Object):
-    
+
     XPATH = '/sonic-port:sonic-port/PORT/PORT_LIST'
 
-    def __init__(self, session, parent):
-        self.session = session
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
         self.session.switch_datastore('operational')
         try:
             self.tree = self.session.get_data(self.XPATH)
@@ -285,13 +280,13 @@ class Port(Object):
             if len(args) != 0:
                 raise InvalidInput('usage: show[cr]')
             print (json.dumps(self.tree))
-        
+
         @self.command(WordCompleter(lambda : self._ifname_components()))
         def ifname(args):
             if len(args) != 1:
                 raise InvalidInput('usage: ifname <interface_name>')
             return Ifname(self.session, self, args[0])
-    
+
     def __str__(self):
         return 'port'
 
@@ -304,29 +299,29 @@ class Port(Object):
 class Sonic(Object):
     XPATH = '/sonic-port:sonic-port/PORT/PORT_LIST'
 
-    def __init__(self, session, parent):
-        self.session = session
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
         super(Sonic, self).__init__(parent)
 
         @self.command()
         def interface(args):
             if len(args) != 0:
                raise InvalidInput('usage: interface[cr] ')
-            return Interface(self.session, self)
+            return Interface(conn, self)
 
 
         @self.command()
         def port(args):
             if len(args) != 0:
                raise InvalidInput('usage: port[cr] ')
-            return Port(self.session, self)
-        
+            return Port(conn, self)
+
 
         @self.command()
         def vlan(args):
             if len(args) != 0:
                raise InvalidInput('usage: vlan[cr] ')
-            return Vlan(self.session, self)
+            return Vlan(conn, self)
 
     def __str__(self):
         return 'sonic'
