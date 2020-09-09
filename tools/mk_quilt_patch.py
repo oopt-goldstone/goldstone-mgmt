@@ -9,8 +9,8 @@ import gitdb
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--submodule')
-    parser.add_argument('--sha1')
+    parser.add_argument('submodule')
+    parser.add_argument('sha1')
     parser.add_argument('--list-submodules', '-l', action='store_true')
 
     args = parser.parse_args()
@@ -19,6 +19,9 @@ def main():
 
     if args.list_submodules:
         print(' '.join(m.name for m in repo.submodules))
+        return
+
+    print(repo.submodules)
 
     if 'sm/' + args.submodule not in [m.name for m in repo.submodules]:
         if not args.submodule:
