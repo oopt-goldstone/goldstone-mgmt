@@ -102,7 +102,10 @@ class TAIObject(Object):
 
             self.session.set_item(f'{self.xpath()}/config/{args[0]}', v)
 
-            self.session.apply_changes()
+            try:
+                self.session.apply_changes()
+            except sr.SysrepoError as e:
+                print(e)
 
         @self.command()
         def show(args):
@@ -220,7 +223,7 @@ class Transponder(Object):
             self.session.switch_datastore('operational')
             print(self.session.get_data(self.XPATH))
 
-        @self.command(WordCompleter(self._modules()))
+        @self.command(WordCompleter(lambda : self._modules()))
         def module(args):
             if len(args) != 1:
                 raise InvalidInput('usage: module <name>')

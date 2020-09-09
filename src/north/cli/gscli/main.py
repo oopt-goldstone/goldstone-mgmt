@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sysrepo as sr
+from sysrepo.session import DATASTORE_VALUES
 
 import argparse
 
@@ -33,6 +34,38 @@ class Root(Object):
         self.session.subscribe_notification_tree("goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb)
 
         super(Root, self).__init__(None)
+
+        @self.command()
+        def show(line):
+            dss = list(DATASTORE_VALUES.keys())
+            if len(line) < 1:
+                raise InvalidInput(f'usage: show <XPATH> [{"|".join(dss)}]')
+
+            if len(line) == 1:
+                ds = 'running'
+            else:
+                ds = line[1]
+
+            if ds not in dss:
+                raise InvalidInput(f'unsupported datastore: {ds}. candidates: {dss}')
+ 
+            self.session.switch_datastore(ds)
+
+            try:
+                print(self.session.get_data(line[0]))
+            except Exception as e:
+                print(e)
+
+        @self.command()
+        def save(line):
+            if len(line) != 1:
+                raise InvalidInput('usage: save <module name>')
+            self.session.switch_datastore('startup')
+
+            try:
+                self.session.copy_config('running', line[0])
+            except sr.SysrepoError as e:
+                print(e)
 
         @self.command()
         def platform(line):
@@ -150,8 +183,8 @@ def main():
     console.setLevel(logging.INFO)
     if args.verbose:
         console.setLevel(logging.DEBUG)
-        log = sr.Logs()
-        log.set_stderr(sr.SR_LL_DBG)
+        logging.basicConfig(level=logging.DEBUG)
+        logging.getLogger('sysrepo').setLevel(logging.DEBUG)
 
     console.setFormatter(formatter)
 
