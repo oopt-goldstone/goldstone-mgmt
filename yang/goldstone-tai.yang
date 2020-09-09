@@ -618,6 +618,16 @@ module goldstone-tai {
     uses tai-host-interface-state;
   }
 
+  notification host-interface-alarm-notification-event {
+    leaf-list keys {
+      type string;
+      description
+        "list of valid attribute name stored in the event";
+    }
+    uses tai-host-interface-config;
+    uses tai-host-interface-state;
+  }
+
   notification network-interface-notify-event {
     leaf-list keys {
       type string;
