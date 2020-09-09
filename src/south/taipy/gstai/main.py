@@ -9,6 +9,7 @@ import struct
 import base64
 import re
 import libyang
+import traceback
 
 class InvalidXPath(Exception):
     pass
@@ -235,7 +236,7 @@ class Server(object):
         logger.info(f'oper get callback requested xpath: {req_xpath}')
 
         async def get(obj, schema):
-            attr, meta = await obj.get(item.name(), with_metadata=True, json=True)
+            attr, meta = await obj.get(schema.name(), with_metadata=True, json=True)
             return attr_tai2yang(attr, meta, schema)
 
         async def get_attrs(obj, schema):
@@ -319,6 +320,7 @@ class Server(object):
 
         except Exception as e:
             logger.error(f'oper get callback failed: {str(e)}')
+            traceback.print_exc()
             return {}
 
         return r
