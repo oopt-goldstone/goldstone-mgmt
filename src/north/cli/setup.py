@@ -3,7 +3,7 @@ import setuptools
 setuptools.setup(
         name='gscli',
         version='0.1.0',
-        install_requires=['prompt_toolkit', 'pyang'],
+        install_requires=['prompt_toolkit'],
         description='Goldstone CLI',
         url='https://github.com/microsonic/goldstone-mgmt',
         python_requires='>=3.7',

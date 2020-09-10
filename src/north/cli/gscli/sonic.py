@@ -2,7 +2,6 @@ import sys
 import os
 
 from .base import Object, InvalidInput, Completer
-from pyang import repository, context
 import json
 import sysrepo as sr
 

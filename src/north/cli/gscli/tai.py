@@ -3,7 +3,6 @@ import os
 import re
 
 from .base import Object, InvalidInput, Completer
-from pyang import repository, context
 
 import sysrepo as sr
 import base64
@@ -12,7 +11,18 @@ import struct
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, FuzzyCompleter
 
+from libyang.schema import iter_children
+from _libyang import lib
+import libyang
+
 _FREQ_RE = re.compile(r'.+[kmgt]?hz$')
+
+def get_group(module, name):
+    for child in iter_children(module.context, module.cdata, types=(lib.LYS_GROUPING,), options=lib.LYS_GETNEXT_WITHGROUPING):
+        if child.name() == name:
+            return child
+    return None
+
 
 class TAICompleter(Completer):
     def __init__(self, config, state=None):
@@ -25,19 +35,19 @@ class TAICompleter(Completer):
         super(TAICompleter, self).__init__(self.attrnames, self.valuenames, hook)
 
     def attrnames(self):
-        l = [v.arg for v in self.config.substmts]
+        l = [v.name() for v in self.config]
         if self.state:
-            l += [v.arg for v in self.state.substmts]
+            l += [v.name() for v in self.state]
         return l
 
     def valuenames(self, attrname):
-        for v in self.config.substmts:
-            if attrname == v.arg:
-                t = v.search_one('type')
-                if t.arg == 'boolean':
-                    return ['true', 'false']
-                elif t.arg == 'enumeration':
-                    return [e.arg for e in t.substmts]
+        for v in self.config:
+            if attrname == v.name():
+                t = v.type().name()
+                if t == 'enumeration':
+                    return (t[0] for t in v.type().enums())
+                elif t == 'boolean':
+                    return ('true', 'false')
                 else:
                     return []
         return []
@@ -52,17 +62,9 @@ class TAIObject(Object):
         self.session = conn.start_session()
         super(TAIObject, self).__init__(parent)
 
-        d = self.session.get_ly_ctx().get_searchdirs()
-        repo = repository.FileRepository(d[0])
-        ctx = context.Context(repo)
-
         m = self.session.get_ly_ctx().get_module('goldstone-tai')
-        v = m.print_mem("yang")
-
-        ctx.add_module(None, v)
-        mod = ctx.get_module('goldstone-tai')
-        self.config = mod.search_one('grouping', 'tai-{}-config'.format(type_))
-        self.state = mod.search_one('grouping', 'tai-{}-state'.format(type_))
+        self.config = get_group(m, f'tai-{type_}-config')
+        self.state = get_group(m, f'tai-{type_}-state')
 
         @self.command(FuzzyCompleter(TAICompleter(self.config, self.state)))
         def get(args):
