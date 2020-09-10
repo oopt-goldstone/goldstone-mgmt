@@ -3,3 +3,4 @@ notification.patch
 dup.patch
 fix-to-dnode.patch
 add_get()_method_to_keyed_list.patch
+add_sgrouping.patch
