@@ -9,6 +9,7 @@ import struct
 import base64
 import re
 import libyang
+import traceback
 
 class InvalidXPath(Exception):
     pass
@@ -31,7 +32,7 @@ def attr_tai2yang(attr, meta, schema):
         v = base64.b64encode(struct.pack('>f', float(attr)))
         return v.decode()
 
-    logger.warn(f'not supported float value: {attr}')
+    logger.warning(f'not supported float value: {attr}')
     raise taish.TAIException()
 
 class Server(object):
@@ -43,6 +44,7 @@ class Server(object):
         self.sess = self.conn.start_session()
 
     def stop(self):
+        logger.info(f'stop server')
         self.sess.stop()
         self.conn.disconnect()
         self.taish.close()
@@ -224,14 +226,17 @@ class Server(object):
                                 v = 'true' if v else 'false'
                         except taish.TAIException:
                             continue
-                        await obj.set(k, v)
 
+                        try:
+                            await obj.set(k, v)
+                        except taish.TAIException as e:
+                            raise sysrepo.SysrepoUnsupportedError(str(e))
 
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f'oper get callback requested xpath: {req_xpath}')
 
         async def get(obj, schema):
-            attr, meta = await obj.get(item.name(), with_metadata=True, json=True)
+            attr, meta = await obj.get(schema.name(), with_metadata=True, json=True)
             return attr_tai2yang(attr, meta, schema)
 
         async def get_attrs(obj, schema):
@@ -315,6 +320,7 @@ class Server(object):
 
         except Exception as e:
             logger.error(f'oper get callback failed: {str(e)}')
+            traceback.print_exc()
             return {}
 
         return r
@@ -365,6 +371,7 @@ class Server(object):
         dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
         self.sess.notification_send_ly(dnode)
 
+
     async def start(self):
 
         self.sess.switch_datastore('operational')
@@ -393,15 +400,27 @@ class Server(object):
         self.sess.subscribe_module_change('goldstone-tai', None, self.change_cb, asyncio_register=True)
         self.sess.subscribe_oper_data_request('goldstone-tai', '/goldstone-tai:modules/module', self.oper_cb, oper_merge=True, asyncio_register=True)
 
-        v = await asyncio.gather(*notifiers, return_exceptions=True)
+        async def catch_exception(coroutine):
+            try:
+                return await coroutine
+            except BaseException as e:
+                logger.info(e)
+
+        return [catch_exception(n) for n in notifiers]
 
 def main():
     async def _main(taish_server):
         loop = asyncio.get_event_loop()
+        stop_event = asyncio.Event()
+        loop.add_signal_handler(signal.SIGINT, stop_event.set)
+        loop.add_signal_handler(signal.SIGTERM, stop_event.set)
+
         server = Server(taish_server)
 
         try:
-            await server.start()
+            tasks = await server.start()
+            [ asyncio.create_task(t) for t in tasks ]
+            await stop_event.wait()
         finally:
             server.stop()
 
@@ -413,6 +432,7 @@ def main():
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
+        # hpack debug log is too verbose. change it INFO level
         hpack = logging.getLogger('hpack')
         hpack.setLevel(logging.INFO)
     else:

@@ -1,3 +1,4 @@
+sysrepo-python/add_copy_config.patch
 sysrepo-python/add_oper_merge_subscribe_flag.patch
 sysrepo-python/add_more_info_to_oper_callback.patch
 libyang-python/add_get()_method_to_keyed_list.patch
@@ -10,3 +11,4 @@ np2/netopeer2-cli.patch
 libyang-python/dup.patch
 sysrepo-python/async.patch
 sonic-mgmt/sonic_vlan.patch
+libyang-python/add_sgrouping.patch
