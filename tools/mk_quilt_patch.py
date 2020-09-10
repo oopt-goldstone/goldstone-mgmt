@@ -9,8 +9,8 @@ import gitdb
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('submodule')
-    parser.add_argument('sha1')
+    parser.add_argument('--submodule')
+    parser.add_argument('--sha1')
     parser.add_argument('--list-submodules', '-l', action='store_true')
 
     args = parser.parse_args()
@@ -21,13 +21,12 @@ def main():
         print(' '.join(m.name for m in repo.submodules))
         return
 
-    print(repo.submodules)
+    if args.submodule == None or args.sha1 == None:
+        print('option --submodule and --sha1 is required')
+        sys.exit(1)
 
     if 'sm/' + args.submodule not in [m.name for m in repo.submodules]:
-        if not args.submodule:
-            print('option --submodule is required')
-        else:
-            print(f'submodule {args.submodule} not found')
+        print(f'submodule {args.submodule} not found')
         sys.exit(1)
 
     if repo.is_dirty(path='sm/' + args.submodule):
@@ -40,9 +39,6 @@ def main():
             sm = m
             break
 
-    if not args.sha1:
-        print('option --sha1 is required')
-
     try:
         commit = sm.module().commit(args.sha1)
     except gitdb.exc.BadName as e:
@@ -51,13 +47,14 @@ def main():
 
     patch = commit.message.split('\n')[0].replace(' ', '_').lower() + '.patch'
 
+    subprocess.run(['git', 'checkout', f'{args.sha1}^'], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
     subprocess.run(['quilt', 'new', args.submodule + '/' + patch])
     for filename in commit.stats.files.keys():
         subprocess.run(['quilt', 'add', f'{os.path.dirname(__file__)}/../sm/{args.submodule}/{filename}'])
 
-    subprocess.run(['git', 'cherry-pick', args.sha1], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
+    subprocess.run(['git', 'checkout', args.sha1], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
     subprocess.run(['quilt', 'refresh'])
-    subprocess.run(['git', 'reset', '--hard', 'HEAD^'], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
+    subprocess.run(['git', 'submodule', 'update', f'sm/{args.submodule}'], cwd=f'{os.path.dirname(__file__)}/../')
 
     if repo.is_dirty(path='sm/' + args.submodule):
         print("something went wrong")
