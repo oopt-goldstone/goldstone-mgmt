@@ -419,7 +419,8 @@ def main():
 
         try:
             tasks = await server.start()
-            await asyncio.wait({*tasks, stop_event.wait()}, return_when=asyncio.FIRST_COMPLETED)
+            [ asyncio.create_task(t) for t in tasks ]
+            await stop_event.wait()
         finally:
             server.stop()
 
