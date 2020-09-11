@@ -21,6 +21,7 @@ extern "C" {
 #include <onlp/thermal.h>
 #include <onlp/sys.h>
 #include <onlp/led.h>
+#include <onlp/module.h>
 
 }
 

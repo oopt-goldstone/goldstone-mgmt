@@ -489,6 +489,11 @@ ONLPController::ONLPController(sysrepo::S_Session& sess) : m_sess(sess), m_subsc
             break;
         case ONLP_OID_TYPE_MODULE:
             type = "MODULE";
+            {
+                onlp_module_info_t info;
+                onlp_module_info_get(oid, &info);
+                sess->set_item_str((xpath + "state/description").c_str(), info.hdr.description);
+            }
             break;
         case ONLP_OID_TYPE_LED:
             type = "LED";
