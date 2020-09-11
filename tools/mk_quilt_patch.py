@@ -45,7 +45,7 @@ def main():
         print(e)
         sys.exit(1)
 
-    patch = commit.message.split('\n')[0].replace(' ', '_').lower() + '.patch'
+    patch = commit.message.split('\n')[0].replace(' ', '_').replace('/', '_').lower() + '.patch'
 
     subprocess.run(['git', 'checkout', f'{args.sha1}^'], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
     subprocess.run(['quilt', 'new', args.submodule + '/' + patch])

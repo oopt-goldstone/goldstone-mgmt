@@ -1,0 +1,48 @@
+Index: goldstone-mgmt/sm/sysrepo-python/cffi/cdefs.h
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo-python/cffi/cdefs.h
++++ goldstone-mgmt/sm/sysrepo-python/cffi/cdefs.h
+@@ -172,6 +172,8 @@ int sr_copy_config(sr_session_ctx_t *, c
+ int sr_validate(sr_session_ctx_t *, const char *, uint32_t);
+ int sr_apply_changes(sr_session_ctx_t *, uint32_t, int);
+ int sr_discard_changes(sr_session_ctx_t *);
++int sr_lock(sr_session_ctx_t *, const char *);
++int sr_unlock(sr_session_ctx_t *, const char *);
+ 
+ typedef enum sr_subscr_flag_e {
+ 	SR_SUBSCR_CTX_REUSE,
+Index: goldstone-mgmt/sm/sysrepo-python/sysrepo/session.py
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo-python/sysrepo/session.py
++++ goldstone-mgmt/sm/sysrepo-python/sysrepo/session.py
+@@ -1142,6 +1142,30 @@ class SysrepoSession:
+         in_dnode = ffi.cast("struct lyd_node *", notif.cdata)
+         check_call(lib.sr_event_notif_send_tree, self.cdata, in_dnode)
+ 
++    def lock(
++        self, module_name: Optional[str]
++    ) -> "Lock":
++        return Lock(self, module_name)
++
++# -------------------------------------------------------------------------------------
++class Lock:
++    def __init__(self, sess, module_name):
++        self.sess = sess
++        self.module_name = module_name
++
++    def __enter__(self):
++        check_call(
++            lib.sr_lock,
++            self.sess.cdata,
++            str2c(self.module_name),
++        )
++
++    def __exit__(self, type, value, traceback):
++        check_call(
++            lib.sr_unlock,
++            self.sess.cdata,
++            str2c(self.module_name),
++        )
+ 
+ # -------------------------------------------------------------------------------------
+ DATASTORE_VALUES = {
