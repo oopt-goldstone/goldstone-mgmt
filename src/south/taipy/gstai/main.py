@@ -442,10 +442,10 @@ class Server(object):
         d = self.sess.get_data('/goldstone-onlp:components/component')
         modules = [{'name': c['name'], 'location': json.loads(c['state']['description'])['location']} for c in d['components']['component'] if c['state']['type'] == 'MODULE']
 
+        self.sess.switch_datastore('running')
 
         with self.sess.lock('goldstone-tai'):
 
-            self.sess.switch_datastore('running')
             config = self.sess.get_data('/goldstone-tai:*')
             config = { m['name']: m for m in config.get('modules', {}).get('module', []) }
             logger.debug(f'sysrepo running configuration: {config}')
