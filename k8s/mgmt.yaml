@@ -213,7 +213,7 @@ spec:
             - name: taish-server
               image: docker.io/microsonic/tai:latest
               imagePullPolicy: IfNotPresent
-              command: ['taish_server']
+              command: ['taish_server', '-n', '-v']
             volumes:
             - name: shm
               hostPath:
