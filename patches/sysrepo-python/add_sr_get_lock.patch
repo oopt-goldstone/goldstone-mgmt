@@ -1,0 +1,77 @@
+Index: goldstone-mgmt/sm/sysrepo-python/cffi/cdefs.h
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo-python/cffi/cdefs.h
++++ goldstone-mgmt/sm/sysrepo-python/cffi/cdefs.h
+@@ -175,6 +175,9 @@ int sr_discard_changes(sr_session_ctx_t
+ int sr_lock(sr_session_ctx_t *, const char *);
+ int sr_unlock(sr_session_ctx_t *, const char *);
+ 
++typedef int... time_t;
++int sr_get_lock(sr_conn_ctx_t *, sr_datastore_t, const char *, int *, uint32_t *, uint32_t *, time_t *);
++
+ typedef enum sr_subscr_flag_e {
+ 	SR_SUBSCR_CTX_REUSE,
+ 	SR_SUBSCR_NO_THREAD,
+@@ -191,7 +194,6 @@ typedef struct sr_subscription_ctx_s sr_
+ typedef uint32_t sr_subscr_options_t;
+ 
+ int sr_get_event_pipe(sr_subscription_ctx_t *, int *);
+-typedef int... time_t;
+ int sr_process_events(sr_subscription_ctx_t *, sr_session_ctx_t *, time_t *);
+ int sr_unsubscribe(sr_subscription_ctx_t *);
+ 
+Index: goldstone-mgmt/sm/sysrepo-python/sysrepo/session.py
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo-python/sysrepo/session.py
++++ goldstone-mgmt/sm/sysrepo-python/sysrepo/session.py
+@@ -3,7 +3,7 @@
+ 
+ import inspect
+ import logging
+-from typing import Any, Callable, Dict, Iterator, List, Optional
++from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+ 
+ import libyang
+ 
+@@ -1143,10 +1143,40 @@ class SysrepoSession:
+         check_call(lib.sr_event_notif_send_tree, self.cdata, in_dnode)
+ 
+     def lock(
+-        self, module_name: Optional[str]
++        self,
++        module_name: Optional[str] = None
+     ) -> "Lock":
+         return Lock(self, module_name)
+ 
++    def is_locked(
++        self,
++        module_name: Optional[str] = None,
++        datastore: Optional[str] = None) -> Union[bool, Tuple[int, int, int]]:
++
++        if datastore == None:
++            datastore = self.get_datastore()
++        ds = datastore_value(datastore)
++
++        _is_locked = ffi.new("int *")
++        _id = ffi.new("uint32_t *")
++        _nc_id = ffi.new("uint32_t *")
++        _timestamp = ffi.new("time_t *")
++
++        check_call(
++            lib.sr_get_lock,
++            lib.sr_session_get_connection(self.cdata),
++            ds,
++            str2c(module_name),
++            _is_locked,
++            _id,
++            _nc_id,
++            _timestamp
++        )
++
++        if _is_locked[0]:
++            return _id[0], _nc_id[0], _timestamp[0]
++        return False
++
+ # -------------------------------------------------------------------------------------
+ class Lock:
+     def __init__(self, sess, module_name):
