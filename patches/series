@@ -13,3 +13,4 @@ sysrepo-python/async.patch
 sonic-mgmt/sonic_vlan.patch
 libyang-python/add_sgrouping.patch
 sysrepo-python/add_lock_unlock.patch
+sysrepo-python/add_sr_get_lock.patch
