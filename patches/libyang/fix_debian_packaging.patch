@@ -1,0 +1,21 @@
+Index: goldstone-mgmt/sm/libyang/packages/debian.libyang.install
+===================================================================
+--- goldstone-mgmt.orig/sm/libyang/packages/debian.libyang.install
++++ goldstone-mgmt/sm/libyang/packages/debian.libyang.install
+@@ -2,4 +2,4 @@ usr/bin/yanglint
+ usr/bin/yangre
+ usr/share/man/man1
+ usr/lib/*/libyang.so.*
+-usr/lib/*/libyang1/*
++usr/local/lib/libyang1/*
+Index: goldstone-mgmt/sm/libyang/packages/debian.rules.in
+===================================================================
+--- goldstone-mgmt.orig/sm/libyang/packages/debian.rules.in
++++ goldstone-mgmt/sm/libyang/packages/debian.rules.in
+@@ -16,4 +16,5 @@ override_dh_auto_configure:
+ 	-DGEN_LANGUAGE_BINDINGS=ON -DGEN_PYTHON_BINDINGS=OFF .
+ 
+ override_dh_auto_test:
+-	ctest --output-on-failure
++
++override_dh_usrlocal:
