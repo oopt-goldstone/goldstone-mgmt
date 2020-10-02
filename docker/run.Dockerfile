@@ -16,13 +16,11 @@ RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
 
-RUN --mount=type=bind,from=builder,source=/usr/share/onlp,target=/src dpkg -i /src/onlp_1.0.0_amd64.deb
+RUN --mount=type=bind,from=builder,source=/usr/share/onlp,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
 
-COPY --from=builder /usr/local/lib /usr/local/lib
-COPY --from=builder /usr/local/bin/sysrepocfg /usr/local/bin/sysrepocfg
-COPY --from=builder /usr/local/bin/sysrepoctl /usr/local/bin/sysrepoctl
-COPY --from=builder /usr/lib/python3 /usr/lib/python3
-RUN ldconfig
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
+
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
 
 ENV PYTHONPATH /usr/lib/python3/dist-packages
 
