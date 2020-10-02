@@ -1,0 +1,9 @@
+Index: goldstone-mgmt/sm/sysrepo/packages/debian.rules.in
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo/packages/debian.rules.in
++++ goldstone-mgmt/sm/sysrepo/packages/debian.rules.in
+@@ -15,4 +15,3 @@ override_dh_auto_configure:
+ 	cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE="Package" -DGEN_LANGUAGE_BINDINGS=ON -DGEN_PYTHON_BINDINGS=OFF .
+ 
+ override_dh_auto_test:
+-	SYSREPO_REPOSITORY_PATH=$PWD ctest --output-on-failure
