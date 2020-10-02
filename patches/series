@@ -15,3 +15,4 @@ libyang-python/add_sgrouping.patch
 sysrepo-python/add_lock_unlock.patch
 sysrepo-python/add_sr_get_lock.patch
 libyang/fix_debian_packaging.patch
+sysrepo/skip_test.patch
