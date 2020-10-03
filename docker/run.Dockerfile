@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:experimental
 
 ARG GS_MGMT_BUILDER_IMAGE=gs-mgmt-builder:latest
-ARG GS_MGMT_BASE=ubuntu:20.04
+ARG GS_MGMT_BASE=debian:10
 
 FROM $GS_MGMT_BUILDER_IMAGE as builder
 
