@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 
-ARG GS_MGMT_BUILDER_BASE=ubuntu:20.04
+ARG GS_MGMT_BUILDER_BASE=debian:10
 
 ARG http_proxy
 ARG https_proxy
@@ -60,4 +60,4 @@ RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
 
 RUN pip install /usr/share/wheels/*.whl
 
-ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.8/dist-packages/tai.py
+ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.7/dist-packages/tai.py
