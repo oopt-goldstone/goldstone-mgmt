@@ -60,4 +60,7 @@ RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
 
 RUN pip install /usr/share/wheels/*.whl
 
+RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels
+
 ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.7/dist-packages/tai.py
