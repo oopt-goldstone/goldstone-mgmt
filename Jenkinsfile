@@ -1,5 +1,10 @@
 pipeline {
   agent any
+ 
+  environment {
+    DOCKER_REPO = 'gs-test'
+  }
+
   stages {
     stage('Build') {
       steps {
