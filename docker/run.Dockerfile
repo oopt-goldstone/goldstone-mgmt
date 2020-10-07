@@ -11,7 +11,7 @@ ARG https_proxy
 FROM $GS_MGMT_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && apt install -qy python3 vim curl python3-pip libgrpc++1 libcurl4-gnutls-dev
+            apt update && apt install -qy python3 vim curl python3-pip libgrpc++1 libcurl4-gnutls-dev iputils-ping traceroute
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10

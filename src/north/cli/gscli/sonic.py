@@ -2,6 +2,7 @@ import sys
 import os
 
 from .base import Object, InvalidInput, Completer
+from tabulate import tabulate
 import json
 import sysrepo as sr
 
@@ -161,30 +162,53 @@ class Ifname(Object):
 class Vlan(Object):
 
     XPATH = '/sonic-vlan:sonic-vlan/VLAN'
-
+    XPATHport = '/sonic-vlan:sonic-vlan/VLAN_MEMBER'
 
     def __init__(self, conn, parent):
         self.session = conn.start_session()
         self.session.switch_datastore('operational')
-        self.tree = self.session.get_data("{}".format(self.XPATH), 0, TIMEOUT_MS)
+        self.tree = self.session.get_data_ly("{}".format(self.XPATH), 0, TIMEOUT_MS)
+        self.treeport = self.session.get_data_ly("{}".format(self.XPATHport), 0, TIMEOUT_MS)
         try:
-            self._vlan_map = list(self.tree['sonic-vlan']['VLAN']['VLAN_LIST'])
+            self._vlan_map = json.loads(self.tree.print_mem("json"))['sonic-vlan:sonic-vlan']['VLAN']['VLAN_LIST']
         except KeyError as error:
-            print("No VLAN configurations created")
+            pass
         self.session.switch_datastore('running')
         super(Vlan, self).__init__(parent)
 
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            print (json.dumps(self.tree))
         
         @self.command(WordCompleter(lambda : self._vlan_components()))
         def vlan(args):
             if len(args) != 1:
                raise InvalidInput('usage: vlan <vlan_id>')
             return vlan_list(self.session, self, args[0])
+
+    def show(self, details = 'brief'):
+        self.session.switch_datastore('operational')
+        dl1 = self.tree.print_mem("json")
+        dl2 = self.treeport.print_mem("json")
+        dl1 = json.loads(dl1)
+        dl2 = json.loads(dl2)
+
+        if dl1 == {}:
+            print(tabulate([],["VLAN ID","Port","Port Tagging"]))
+        else:
+            dl1 = dl1["sonic-vlan:sonic-vlan"]["VLAN"]["VLAN_LIST"]
+            dl2 = dl2["sonic-vlan:sonic-vlan"]["VLAN_MEMBER"]["VLAN_MEMBER_LIST"]
+            dln = []
+            for i in range(len(dl1)):
+                if "members" in dl1[i]:
+                    for j in range(len(dl1[i]["members"])):
+                        tg=''
+                        for k in range(len(dl2)):
+                            if dl2[k]["name"]==dl1[i]["name"] and dl2[k]["ifname"]==dl1[i]["members"][j]:
+                                tg=dl2[k]["tagging_mode"]
+                                break
+                        dln.append([dl1[i]["vlanid"], dl1[i]["members"][j], tg])
+                else:
+                    dln.append([dl1[i]["vlanid"],"N/A","N/A"])
+            print(tabulate(dln,["VLAN ID","Port","Port Tagging"],  tablefmt = "pretty"))
+        self.session.switch_datastore('running')
 
     def _vlan_components(self):
         d = self._vlan_map
@@ -274,11 +298,6 @@ class Port(Object):
         self.session.switch_datastore('running')
         super(Port, self).__init__(parent)
 
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            print (json.dumps(self.tree))
 
         @self.command(WordCompleter(lambda : self._ifname_components()))
         def ifname(args):
@@ -287,7 +306,27 @@ class Port(Object):
             return Ifname(self.session, self, args[0])
 
     def __str__(self):
-        return 'port'
+        return ''
+
+    def show(self, details = 'description'):
+        self.session.switch_datastore('operational')
+        try:
+            self.tree = self.session.get_data(self.XPATH)
+            self._ifname_map = list(self.tree['sonic-port']['PORT']['PORT_LIST'])
+        except KeyError as error:
+            print("Port list is not configured")
+        except sr.errors.SysrepoNotFoundError as error:
+            print("sonic-mgmt is down")
+        if (details == 'brief'):
+            print ('TODO: brief , plz use description')
+        else:
+            headers = ["ifname", "admin_status", "alias"]
+            rows = []
+            for data in self._ifname_map :
+                rows.append([data["ifname"], data["admin_status"] if "admin_status" in data.keys() else "N/A", data["alias"]])
+            print(tabulate(rows, headers, tablefmt = "pretty"))
+
+        self.session.switch_datastore('running')
 
     def _ifname_components(self):
         d = self._ifname_map

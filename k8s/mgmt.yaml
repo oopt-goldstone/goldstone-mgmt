@@ -126,6 +126,8 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+              securityContext:
+                privileged: true
             volumes:
             - name: shm
               hostPath:

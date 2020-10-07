@@ -1,6 +1,7 @@
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import Completion, WordCompleter, FuzzyWordCompleter
 from prompt_toolkit.completion import Completer as PromptCompleter
+from enum import Enum
 
 import sys
 import subprocess
