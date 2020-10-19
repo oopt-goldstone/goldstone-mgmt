@@ -13,6 +13,7 @@ pipeline {
                   env.DOCKER_REPO = 'gs-test'
                   env.BUILD_BUILDER = sh returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep -v 'sm/\\|patches/\\|builder.Dockerfile'"
               } else {
+                  env.BUILD_BUILDER = 0
                   currentBuild.result = 'SUCCESS'
                   echo "no need to build ${env.BRANCH_NAME}"
                   sh "exit 0"
