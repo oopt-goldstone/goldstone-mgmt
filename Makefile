@@ -53,7 +53,7 @@ ifndef OC_YANG_REPO
 endif
 
 ifndef SONIC_YANG_REPO
-    SONIC_YANG_REPO := /data/sm/sonic-mgmt-common/models/yang/sonic
+    SONIC_YANG_REPO := /usr/local/sonic
 endif
 
 all: builder np2 docker image debug-image
@@ -102,6 +102,8 @@ init:
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-fan.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-psu.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/system/openconfig-alarm-types.yang
+	sysrepoctl -s $(SONIC_YANG_REPO)/common --install $(SONIC_YANG_REPO)/common/sonic-common.yang
+	sysrepoctl -s $(SONIC_YANG_REPO) --install $(SONIC_YANG_REPO)/sonic-port.yang,$(SONIC_YANG_REPO)/sonic-vlan.yang,$(SONIC_YANG_REPO)/sonic-interface.yang
 
 south: onlp openconfig-converter tai sonic-interface
 
