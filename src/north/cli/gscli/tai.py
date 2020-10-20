@@ -1,8 +1,8 @@
 import sys
 import os
 import re
+from tabulate import tabulate
 
-from .base import Object, InvalidInput, Completer
 
 import sysrepo as sr
 import base64
@@ -10,114 +10,168 @@ import struct
 
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, FuzzyCompleter
+from .common import sysrepo_wrap, print_tabular
 
 from libyang.schema import iter_children
 from _libyang import lib
 import libyang
 
-_FREQ_RE = re.compile(r'.+[kmgt]?hz$')
-
-def get_group(module, name):
-    for child in iter_children(module.context, module.cdata, types=(lib.LYS_GROUPING,), options=lib.LYS_GETNEXT_WITHGROUPING):
-        if child.name() == name:
-            return child
-    return None
 
 
-class TAICompleter(Completer):
-    def __init__(self, config, state=None):
-        self.config = config
-        self.state = state
+class HostIf (object):
 
-        # when self.state != None, this completer is used for get() command
-        # which doesn't take value. so we don't need to do any completion 
-        hook = lambda : self.state != None
-        super(TAICompleter, self).__init__(self.attrnames, self.valuenames, hook)
+    def xpath (self, transponder_name, hostif_id):
+        return "/goldstone-tai:modules/module[name='{}']/host-interface[name='{}']".format (transponder_name, hostif_id)
 
-    def attrnames(self):
-        l = [v.name() for v in self.config]
-        if self.state:
-            l += [v.name() for v in self.state]
-        return l
+    def __init__ (self, conn) :
+        self.session = conn.start_session ()
+        self.sr_op = sysrepo_wrap()
 
-    def valuenames(self, attrname):
-        for v in self.config:
-            if attrname == v.name():
-                t = v.type().name()
-                if t == 'enumeration':
-                    return (t[0] for t in v.type().enums())
-                elif t == 'boolean':
-                    return ('true', 'false')
-                else:
-                    return []
-        return []
+    def set_fec_type (self, transponder_name, hostif_id, value):
+        xpath = self.xpath (transponder_name, hostif_id)
+        self.sr_op.set_data ('{}/{}'.format(xpath, "config/fec-type"), value)
 
-class TAIObject(Object):
+    def no (self, transponder_name, hostif_id, attr):
+        xpath = self.xpath (transponder_name, hostif_id)
+        self.sr_op.delete_data ('{}/{}'.format(xpath,"config/{attr}"))
 
-    def __init__(self, conn, parent, name, type_):
-        self.type_ = type_
-        self.name = name
-        self._get_hook = {}
-        self._set_hook = {}
+    def show (self, transponder_name, hostif_id):
+        xpath = self.xpath (transponder_name, hostif_id)
+        try:
+            b = self.sr_op.get_data (xpath, 'operational')
+        except sr.SysrepoNotFoundError as e:
+            print (e)
+        try:
+            h = b['modules']['module'][transponder_name]['host-interface'][hostif_id]['state']
+            print_tabular (h,'')
+        except Exception as e:
+            print (e)
+         
+
+
+class NetIf (object):
+
+    def xpath (self, transponder_name, netif_id):
+        return "/goldstone-tai:modules/module[name='{}']/network-interface[name='{}']".format (transponder_name, netif_id)
+
+    def __init__ (self, conn):
+        self.session = conn.start_session ()
+        self.sr_op   = sysrepo_wrap ()
+    
+    def set_output_power (self, transponder_name, netif_id, value):
+        xpath = self.xpath (transponder_name, netif_id)
+        self.sr_op.set_data ('{}/{}'.format(xpath,"config/output-power"), value)
+
+    def set_modulation_format (self, transponder_name, netif_id, value):
+        xpath = self.xpath (transponder_name, netif_id)
+        self.sr_op.set_data ('{}/{}'.format(xpath, "config/modulation-format"), value)
+
+    def set_tx_laser_freq (self, transponder_name, netif_id, value):
+        xpath = self.xpath (transponder_name, netif_id)
+        freq_hz = human_freq (value) 
+        self.sr_op.set_data ('{}/{}'.format(xpath, "config/tx-laser-freq"), freq_hz)
+
+    def set_tx_dis (self, transponder_name, netif_id, value):
+        xpath = self.xpath (transponder_name, netif_id)
+        self.sr_op.set_data ('{}/{}'.format(xpath, "config/tx-dis"), value)
+
+    def set_differential_encoding (self, transponder_name, netif_id, value):
+        xpath = self.xpath (transponder_name, netif_id)
+        self.sr_op.set_data ('{}/{}'.format(xpath, "config/differential-encoding"), value)
+
+    def set_voa_rx (self, transponder_name, netif_id, value):
+        xpath = self.xpath (transponder_name, netif_id)
+        self.sr_op.set_data ('{}/{}'.format(xpath, "config/voa-rx"), value)
+
+    #no command will delete the configuration data from the running database
+    def set_no_command (self, transponder_name, netif_id, attr):
+        xpath = self.xpath (transponder_name, netif_id)
+        self.sr_op.delete_data('{}/{}'.format(xpath, f'config/{attr}'), attr)
+
+    def show (self, transponder_name, netif_id):
+        xpath = self.xpath (transponder_name, netif_id)
+        try:
+            a = self.sr_op.get_data (xpath, 'operational')
+        except sr.SysrepoNotFoundError as e:
+            print(e)
+        try:
+            n = a['modules']['module'][transponder_name]['network-interface'][netif_id]['state']
+            print_tabular(n,'')
+        except Exception as e:
+            print(e)
+  
+
+class Transponder (object):
+    XPATH = '/goldstone-tai:modules/module'
+
+    def xpath (self, transponder_name):
+        return "{}[name='{}']".format(self.XPATH, transponder_name)
+
+    def __init__(self, conn):
         self.session = conn.start_session()
-        super(TAIObject, self).__init__(parent)
+        self.sr_op = sysrepo_wrap()
+        self.hostif = HostIf (conn)
+        self.netif = NetIf (conn)
+       
+    def set_admin_status (self, transponder_name, value):
+        xpath = self.xpath (transponder_name)
+        self.sr_op.set_data (f'{xpath}/config/admin-status', value)
+        
+    def show_transponder (self, transponder_name):
+        self.xpath = "{}[name='{}']".format(self.XPATH, transponder_name)
+        try:
+            v = self.sr_op.get_data(self.xpath, 'operational')
+        except sr.SysrepoNotFoundError as e:
+            print(e)
+        try:
+            mod = v['modules']['module'][transponder_name]['state']
+            print_tabular(mod, "")
+            get_netif_num = v['modules']['module'][transponder_name]['state']['num-network-interfaces']
+            get_hostif_num = v['modules']['module'][transponder_name]['state']['num-host-interfaces']
+            for netif in range (get_netif_num):
+                net_interface = v['modules']['module'][transponder_name]['network-interface'][f'{netif}']['state']
+                print_tabular(net_interface, f'Network Interface {netif}')
+            for hostif in range (get_hostif_num):
+                host_interface = v['modules']['module'][transponder_name]['host-interface'][f'{hostif}']['state']
+                print_tabular(host_interface, f'Host Interface {hostif}')
+        except Exception as e:
+            print(e)
+        
 
-        m = self.session.get_ly_ctx().get_module('goldstone-tai')
-        self.config = get_group(m, f'tai-{type_}-config')
-        self.state = get_group(m, f'tai-{type_}-state')
+    def show_transponder_summary (self):
+        path = '/goldstone-tai:modules'
+        d = self.sr_op.get_data(path, 'operational',  no_subs=True)
+        modules = []
+        for v in d.get('modules', {}).get('module', {}):
+            modules.append(v['name'])
+        state_data = []
+        try:
+            for module in modules:
+                data_path = "{}[name='{}']".format(self.XPATH, module)
+                mod_data  = self.sr_op.get_data(f'{data_path}/state', 'operational')
+                state_data.append(mod_data['modules']['module'][module]['state'])
+            headers = ["transponder","vendor-name","vendor-part-name","vendor-serial-number","admin-status","oper-status"]
+            rows = []
+            for data in state_data:
+                rows.append([data["location"] if "location" in data.keys() else "N/A" ,data["vendor-name"]if "vendor-name" in data.keys() else "N/A" ,data["vendor-part-name"] if "vendor-part-name" in data.keys() else "N/A",data["vendor-serial-number"]if "vendor-serial-number" in data.keys() else "N/A",data["admin-status"] if "admin-status" in data.keys() else "N/A",data["oper-status"]if "oper-status" in data.keys() else "N/A" ])
+            print(tabulate(rows, headers, tablefmt = "pretty", colalign = "left"))
+        except Exception as e:
+            print(e)
+     
 
-        @self.command(FuzzyCompleter(TAICompleter(self.config, self.state)))
-        def get(args):
-            if len(args) != 1:
-                raise InvalidInput('usage: get <name>')
-            self.session.switch_datastore('operational')
-            try:
-                items = self.session.get_items('{}/state/{}'.format(self.xpath(), args[0]))
-                for item in items:
-                    if args[0] in self._get_hook:
-                        print(self._get_hook[args[0]](item.value))
-                    else:
-                        print(item.value)
-            except sr.errors.SysrepoCallbackFailedError as e:
-                print(e)
+    def _components(self, transponder_name, type_):
 
-        @self.command(TAICompleter(self.config))
-        def set(args):
-            if len(args) != 2:
-                raise InvalidInput('usage: set <name> <value>')
-            if args[0] in self._set_hook:
-                v = self._set_hook[args[0]](args[1])
-            else:
-                v = args[1]
-            self.session.switch_datastore('running')
+        d = self.sr_op.get_data("{}[name='{}']".format(self.XPATH, transponder_name), 'operational',  no_subs=True)
+        d = d.get('modules', {}).get('module', {}).get(transponder_name, {})
+        return [v['name'] for v in d.get(type_, [])]
 
-            if type(self) != Module:
-                try:
-                    self.session.get_data(self.parent.xpath())
-                except sr.SysrepoNotFoundError:
-                    self.session.set_item(f'{self.parent.xpath()}/config/name', self.parent.name)
+    def get_modules(self):
+        path = '/goldstone-tai:modules'
+        d = self.sr_op.get_data(path, 'operational', no_subs=True)
+        return [v['name'] for v in d.get('modules', {}).get('module', {})]
 
-            try:
-                self.session.get_data(self.xpath())
-            except sr.SysrepoNotFoundError:
-                self.session.set_item(f'{self.xpath()}/config/name', self.name)
-
-            self.session.set_item(f'{self.xpath()}/config/{args[0]}', v)
-
-            try:
-                self.session.apply_changes()
-            except sr.SysrepoError as e:
-                print(e)
-
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            self.session.switch_datastore('operational')
-            print(self.session.get_data(self.xpath()))
-            self.session.switch_datastore('running')
-
-def human_freq(item):
+    
+def human_freq (item):
     if type(item) == str:
         try:
             int(item)
@@ -140,101 +194,6 @@ def human_freq(item):
     else:
         return '{0:.2f}THz'.format(int(item) / 1e12)
 
+
 def human_ber(item):
     return '{0:.2e}'.format(struct.unpack('>f', base64.b64decode(item))[0])
-
-class HostIf(TAIObject):
-
-    def xpath(self):
-        return "{}/host-interface[name='{}']".format(self.parent.xpath(), self.name)
-
-    def __init__(self, session, parent, name):
-        super(HostIf, self).__init__(session, parent, name, 'host-interface')
-
-    def __str__(self):
-        return 'hostif({})'.format(self.name)
-
-class NetIf(TAIObject):
-
-    def xpath(self):
-        return "{}/network-interface[name='{}']".format(self.parent.xpath(), self.name)
-
-    def __init__(self, session, parent, name):
-        super(NetIf, self).__init__(session, parent, name, 'network-interface')
-        self._get_hook = {
-            'tx-laser-freq': human_freq,
-            'ch1-freq': human_freq,
-            'min-laser-freq': human_freq,
-            'max-laser-freq': human_freq,
-            'current-tx-laser-freq': human_freq,
-            'current-pre-fec-ber': human_ber,
-            'current-post-fec-ber': human_ber,
-            'current-prbs-ber': human_ber,
-        }
-        self._set_hook = {
-            'tx-laser-freq': human_freq,
-        }
-
-    def __str__(self):
-        return 'netif({})'.format(self.name)
-
-class Module(TAIObject):
-    XPATH = '/goldstone-tai:modules/module'
-
-    def xpath(self):
-        return "{}[name='{}']".format(self.XPATH, self.name)
-
-    def __init__(self, conn, parent, name):
-        super(Module, self).__init__(conn, parent, name, 'module')
-
-        @self.command(WordCompleter(lambda : self._components('network-interface')))
-        def netif(args):
-            if len(args) != 1:
-                raise InvalidInput('usage: netif <name>')
-            return NetIf(conn, self, args[0])
-
-        @self.command(WordCompleter(lambda : self._components('host-interface')))
-        def hostif(args):
-            if len(args) != 1:
-                raise InvalidInput('usage: hostif <name>')
-            return HostIf(conn, self, args[0])
-
-    def __str__(self):
-        return 'module({})'.format(self.name)
-
-    def _components(self, type_):
-        self.session.switch_datastore('operational')
-        d = self.session.get_data("{}[name='{}']".format(self.XPATH, self.name), no_subs=True)
-        d = d.get('modules', {}).get('module', {}).get(self.name, {})
-        return [v['name'] for v in d.get(type_, [])]
-
-class Transponder(Object):
-    XPATH = '/goldstone-tai:modules'
-
-    def close(self):
-        self.session.stop()
-
-    def __init__(self, conn, parent):
-        self.session = conn.start_session()
-        super(Transponder, self).__init__(parent)
-
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            self.session.switch_datastore('operational')
-            print(self.session.get_data(self.XPATH))
-
-        @self.command(WordCompleter(lambda : self._modules()))
-        def module(args):
-            if len(args) != 1:
-                raise InvalidInput('usage: module <name>')
-            return Module(conn, self, args[0])
-
-    def __str__(self):
-        return 'transponder'
-
-    def _modules(self):
-        self.session.switch_datastore('operational')
-        d = self.session.get_data(self.XPATH, no_subs=True)
-        return [v['name'] for v in d.get('modules', {}).get('module', {})]

@@ -1,7 +1,8 @@
 from prompt_toolkit.document import Document
-from prompt_toolkit.completion import Completion, WordCompleter, FuzzyWordCompleter
+from prompt_toolkit.completion import Completion, WordCompleter, FuzzyWordCompleter, NestedCompleter, DummyCompleter
 from prompt_toolkit.completion import Completer as PromptCompleter
 from enum import Enum
+from .cli import show_wrap
 
 import sys
 import subprocess
@@ -78,7 +79,32 @@ class Object(object):
         self.parent = parent
         self._commands = {}
         self.fuzzy_completion = fuzzy_completion
-
+        self.cli_op = show_wrap()
+        self.mod_dict = self.cli_op.module_dict()
+        self.show_dict = {
+                    'interface' : {
+                        'brief' : None,
+                        'description' : None
+                        },
+                    'vlan' : {'details' : None},
+                    'datastore' : None,
+                    'tech-support': None,
+                    'logging': None,
+		    'version': None,
+                    'transponder' : self.mod_dict,
+                    'running-config' : { 
+                                        'transponder' : None,
+                                        'onlp'  : None,
+                                        'vlan'  : None,
+                                        'interface' : None,
+                                        'aaa'   :None
+                                     }
+                }
+        
+        @self.command(NestedCompleter.from_nested_dict(self.show_dict))
+        def show(line):
+            self.do_show (line)
+        
         @self.command()
         def quit(line):
             self.close()
@@ -95,12 +121,15 @@ class Object(object):
             for k, v in self.parent._commands.items():
                 if v['inherit']:
                     self._commands[k] = v
-
+    
     def add_command(self, handler, completer=None, name=None):
         self.command(completer, name)(handler)
 
     def del_command(self, name):
         del self._commands[name]
+
+    def get_completer(self, name):
+        return self._commands.get(name, {}).get('completer', DummyCompleter())
 
     def close(self):
         pass
@@ -238,3 +267,39 @@ class Object(object):
                 raise e
             stdout.info(str(e))
         return self
+
+    def do_show (self, line) :
+        if len(line) == 0:
+           raise InvalidInput(self.usage())
+
+        if (line[0] == 'datastore'):
+            self.cli_op.datastore(line)
+        
+        elif (line[0] == 'running-config'):
+            self.cli_op.display_run_conf(line)
+        
+        elif (line[0] == 'tech-support'):
+            self.cli_op.tech_support(line)
+        
+        elif (line[0] == 'logging'):
+            self.cli_op.display_log(line)
+        
+        elif (line[0] == 'version'):
+            self.cli_op.get_version(line)
+
+        elif (line[0] == 'transponder' or line[0] == 'interface' or line[0] == 'vlan'):
+            self.cli_op.display(line)
+
+        else:
+            raise InvalidInput(self.usage())
+ 
+    def usage(self):
+        return ('usage:\n'
+                ' show interface (brief|description) \n'
+                ' show vlan details \n'
+                ' show transponder (<transponder_name>|summary)\n'
+                ' show logging \n'
+                ' show version \n'
+                ' show datastore <XPATH> [running|startup|candidate|operational|] [json|]\n'
+                ' show running-config [transponder|onlp|vlan|interface|aaa|]\n'
+                ' show tech-support')

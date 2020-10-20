@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import sysrepo as sr
-from sysrepo.session import DATASTORE_VALUES
 
 import argparse
 
@@ -19,10 +18,8 @@ import json
 
 from .base import Object, InvalidInput, BreakLoop
 from .onlp import Platform
-from .tai  import Transponder
-from .sonic  import Sonic
-from .config import Interface
-from .common import sonic_wrap
+from .tai_cli  import  Transponder_CLI
+from .sonic_cli import Interface_CLI
 
 logger = logging.getLogger(__name__)
 
@@ -38,18 +35,7 @@ class Root(Object):
         self.session.subscribe_notification_tree("goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb)
 
         super(Root, self).__init__(None)
-
-        self.cli_op = sonic_wrap(conn, self)
         #TODO:add timer for inactive user
-        self.show_dict = {
-                    'interface' : {
-                        'brief' : None,
-                        'description' : None
-                        },
-                    'vlan' : {'description'},
-                    'date' : None,
-                    'datastore' : None
-                }
 
         @self.command()
         def save(line):
@@ -75,19 +61,18 @@ class Root(Object):
         @self.command()
         def traceroute(line) :
             try:
-                png=' '.join(['traceroute'] + line)
-                subprocess.call(png,shell=True)
+                trct=' '.join(['traceroute'] + line)
+                subprocess.call(trct, shell=True)
             except :
                 print("Unexpected error:",sys.exc_info()[0])
 
         @self.command()
         def hostname(line) :
             try:
-                png=' '.join(['hostname'] + line)
-                subprocess.call(png,shell=True)
+                hst_name =' '.join(['hostname'] + line)
+                subprocess.call(hst_name, shell=True)
             except :
                 print("Unexpected error:",sys.exc_info()[0])
-
 
         @self.command()
         def platform(line):
@@ -95,70 +80,39 @@ class Root(Object):
                 raise InvalidInput('usage: platform[cr]')
             return Platform(conn, self)
 
-        @self.command()
+        @self.command(WordCompleter(lambda : self.get_modules()))
         def transponder(line):
-            if len(line) != 0:
-                raise InvalidInput('usage: transponder[cr]')
-            return Transponder(conn, self)
+            if len(line) != 1:
+                raise InvalidInput('usage: transponder <transponder name>')
+            return Transponder_CLI(conn, self, line[0])
 
         @self.command(WordCompleter(lambda : self.get_ifnames()))
         def interface(line):
             if len(line) != 1:
                raise InvalidInput('usage: interface <ifname>')
-            return Interface(conn, self, line[0])
+            return Interface_CLI(conn, self, line[0])
 
+         
+        @self.command()
+        def date(line):
+            self.date(line)
 
-
-        @self.command(NestedCompleter.from_nested_dict(self.show_dict))
-        def show(args):
-            if len(args) == 0:
-               raise InvalidInput('usage:\n'
-                                  ' show interface (brief| description) \n'
-                                  ' show vlan (brief) \n'
-                                  ' show date \n'
-                                  ' show datastore <XPATH> [running|startup|candidate|operational])')
-
-            #datastore command
-            if (args[0] == 'datastore') :
-                self.datastore(args)
-
-            #date command
-            if (args[0] == 'date') :
-                self.date(args)
-
-            else:
-               self.cli_op.display(args)
 
     def get_ifnames(self):
         self.path = '/sonic-port:sonic-port/PORT/PORT_LIST'
         self.data_tree = self.session.get_data_ly(self.path)
         self.map = json.loads(self.data_tree.print_mem("json"))['sonic-port:sonic-port']['PORT']['PORT_LIST']
         return [v['ifname'] for v in self.map]
+    
+    def get_modules(self):
+        path = '/goldstone-tai:modules'
+        self.session.switch_datastore('operational')
+        d = self.session.get_data(path, no_subs = True)
+        return [v['name'] for v in d.get('modules', {}).get('module', {})]
 
     def date(self, line) :
-        subprocess.call("date",shell=True)
-
-    def datastore(self, line):
-        dss = list(DATASTORE_VALUES.keys())
-        print (line)
-        if len(line) < 1:
-            raise InvalidInput(f'usage: show datastore <XPATH> [{"|".join(dss)}]')
-
-        if len(line) == 2:
-            ds = 'running'
-        else:
-            ds = line[2]
-
-        if ds not in dss:
-            raise InvalidInput(f'unsupported datastore: {ds}. candidates: {dss}')
-
-        self.session.switch_datastore(ds)
-
-        try:
-            print(self.session.get_data(line[1]))
-        except Exception as e:
-            print(e)
-
+        date =' '.join(['date'] + line)
+        subprocess.call(date, shell=True)
 
 
     def notification_cb(self, a, b, c, d):
