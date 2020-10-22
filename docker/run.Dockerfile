@@ -30,8 +30,8 @@ RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wh
             pip install /usr/share/wheels/*.whl
 
 RUN --mount=type=bind,source=src/south/taipy,target=/src,rw pip install /src
+RUN --mount=type=bind,source=src/south/onlppy,target=/src,rw pip install /src
 
-COPY src/south/onlp/main /usr/bin/gssouthd-onlp
 COPY src/south/sonic-interface/main /usr/bin/gssouthd-sonic
 
 COPY yang /var/lib/goldstone/yang/gs/
