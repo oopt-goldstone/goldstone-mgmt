@@ -27,30 +27,32 @@ class Vlan(object):
             pass
 
     def show_vlan(self, details = 'details'):
-        #self.session.switch_datastore('operational')
         dl1 = self.tree.print_mem("json")
         dl2 = self.treeport.print_mem("json")
         dl1 = json.loads(dl1)
         dl2 = json.loads(dl2)
         
         if dl1 == {}:
-            print(tabulate([],["VLAN ID","Port","Port Tagging"], tablefmt = "pretty"))
+            print(tabulate([], ["VLAN ID", "Port", "Port Tagging"], tablefmt = "pretty"))
         else:
-            dl1 = dl1["sonic-vlan:sonic-vlan"]["VLAN"]["VLAN_LIST"]
-            dl2 = dl2["sonic-vlan:sonic-vlan"]["VLAN_MEMBER"]["VLAN_MEMBER_LIST"]
+            try:
+                dl1 = dl1["sonic-vlan:sonic-vlan"]["VLAN"]["VLAN_LIST"]
+                dl2 = dl2["sonic-vlan:sonic-vlan"]["VLAN_MEMBER"]["VLAN_MEMBER_LIST"]
+            except KeyError as error:
+                pass
             dln = []
             for i in range(len(dl1)):
                 if "members" in dl1[i]:
                     for j in range(len(dl1[i]["members"])):
                         tg=''
                         for k in range(len(dl2)):
-                            if dl2[k]["name"]==dl1[i]["name"] and dl2[k]["ifname"]==dl1[i]["members"][j]:
-                                tg=dl2[k]["tagging_mode"]
+                            if dl2[k]["name"] == dl1[i]["name"] and dl2[k]["ifname"] == dl1[i]["members"][j]:
+                                tg = dl2[k]["tagging_mode"]
                                 break
                         dln.append([dl1[i]["vlanid"], dl1[i]["members"][j], tg])
                 else:
-                    dln.append([dl1[i]["vlanid"],"N/A","N/A"])
-            print(tabulate(dln,["VLAN ID","Port","Port Tagging"],  tablefmt = "pretty"))
+                    dln.append([dl1[i]["vlanid"], "-", "-"])
+            print(tabulate(dln, ["VLAN ID", "Port", "Port Tagging"],  tablefmt = "pretty"))
         self.session.switch_datastore('running')
 
     def _vlan_components(self):
@@ -87,13 +89,20 @@ class Port(object):
             print("Port list is not configured")
         except sr.errors.SysrepoNotFoundError as error:
             print("sonic-mgmt is down")
+        rows = []
         if (details == 'brief'):
-            print ('TODO: brief , Please use "show interface description"')
-        else:
-            headers = ["ifname", "admin_status", "alias"]
-            rows = []
+            headers = ["ifname", "oper_status", "admin_status", "alias"]
             for data in self._ifname_map :
-                rows.append([data["ifname"], data["admin_status"] if "admin_status" in data.keys() else "N/A", data["alias"]])
+                rows.append([data["ifname"], data["oper_status"] if "oper_status" in data.keys() else "-",
+                             data["admin_status"] if "admin_status" in data.keys() else "-", data["alias"]])
+            print(tabulate(rows, headers, tablefmt = "pretty"))
+        elif (details == 'description'):
+            headers = ["ifname", "oper_status", "admin_status", "alias", "speed", "mtu"]
+            for data in self._ifname_map :
+                rows.append([data["ifname"], data["oper_status"] if "oper_status" in data.keys() else "-",
+                             data["admin_status"] if "admin_status" in data.keys() else "-", data["alias"], 
+                             data["speed"] if "speed" in data.keys() else "-",
+                             data["mtu"] if "mtu" in data.keys() else "-"])
             print(tabulate(rows, headers, tablefmt = "pretty"))
 
 
@@ -136,15 +145,15 @@ class Port(object):
         return [v['ifname'] for v in d]
 
     def set_admin_status(self, ifname, value):
-        xpath = self.xpath (ifname) 
+        xpath = self.xpath(ifname) 
         self.sr_op.set_data('{}/{}'.format(xpath, 'admin_status'), value)
     
     def set_mtu(self, ifname, value):
-        xpath = self.xpath (ifname) 
+        xpath = self.xpath(ifname) 
         self.sr_op.set_data('{}/{}'.format(xpath, 'mtu'), value)
     
     def set_speed(self, ifname, value):
-        xpath = self.xpath (ifname) 
+        xpath = self.xpath(ifname) 
         self.sr_op.set_data('{}/{}'.format(xpath, 'speed'), value)
 
     def show(self, ifname):
@@ -173,7 +182,7 @@ class Sonic(object):
         self.port_run_conf()
     
     def tech_support(self):
-        print('\nshow vlan brief:\n')
-        self.vlan.show()
+        print('\nshow vlan details:\n')
+        self.vlan.show_vlan()
         print('\nshow interface description:\n')
-        self.port.show()
+        self.port.show_interface()
