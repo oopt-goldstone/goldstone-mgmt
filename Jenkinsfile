@@ -1,6 +1,10 @@
 pipeline {
   agent any
- 
+
+  parameters {
+    string(name: 'DEVICE', defaultValue: '10.10.10.114', description: 'IP address of the test device')
+  }
+
   stages {
     stage('Setup') {
       steps {
@@ -25,17 +29,30 @@ pipeline {
           """
       }
     }
+
     stage('Build') {
       steps {
-          sh """
-              apk add --update docker make
-              git submodule update --init
-              ( [ $BUILD_BUILDER -eq 1 ] && make builder np2 ) || true
-              make docker
-              make image
-              make debug-image
-          """
+          sh 'apk add --update docker make'
+          sh 'git submodule update --init'
+          sh '( [ $BUILD_BUILDER -eq 1 ] && make builder np2 ) || true'
+          sh 'make docker'
+          sh 'make image'
+          sh 'make debug-image'
+      }
+    }
+
+    stage('Load') {
+      when {
+        branch pattern: "^PR.*", comparator: "REGEXP"
+      }
+      steps {
+        sh 'docker build -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
+
+        timeout(time: 15, unit: 'MINUTES') {
+            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 ./ci/tools/load.py ${params.DEVICE}"
+        }
       }
     }
   }
+
 }
