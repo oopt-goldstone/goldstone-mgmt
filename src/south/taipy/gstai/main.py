@@ -334,7 +334,12 @@ class Server(object):
                 keys = modules.keys()
 
             for location in keys:
-                module = await self.taish.get_module(location)
+                try:
+                    module = await self.taish.get_module(location)
+                except Exception as e:
+                    logger.warning(f'failed to get module location: {location}. err: {e}')
+                    continue
+
                 v = {'name': location, 'config': {'name': location}}
 
                 if intf:
@@ -506,7 +511,12 @@ class Server(object):
                 xpath = f"/goldstone-tai:modules/module[name='{key}']"
                 self.sess.set_item(f"{xpath}/config/name", key)
 
-                module = await self.taish.get_module(key)
+                try:
+                    module = await self.taish.get_module(key)
+                except Exception as e:
+                    logger.warning(f'failed to get module location: {key}. err: {e}')
+                    continue
+
                 notifiers.append(module.monitor('notify', self.tai_cb, json=True))
 
                 for i in range(len(m.netifs)):
