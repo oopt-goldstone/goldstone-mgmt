@@ -8,6 +8,8 @@ import libyang as ly
 import sysrepo as sr
 from sysrepo.session import DATASTORE_VALUES
 
+VER_FILE = '/etc/goldstone/loader/versions.json'
+
 class show_wrap(object):
     XPATH = '/'
     def __init__(self):
@@ -16,27 +18,27 @@ class show_wrap(object):
         self.sonic = Sonic(conn)
         self.vlan = self.sonic.vlan
         self.port = self.sonic.port
-        self.transponder = Transponder (conn)
+        self.transponder = Transponder(conn)
     
     def display (self, line):
-        if (len(line) < 2):
+        if len(line) < 2:
             print(self.disp_usage())
             return 
         module = line[0]
         detail_level = line[1]
 
-        if (module == 'transponder'):
-            if (detail_level == "summary"):
+        if module == 'transponder':
+            if detail_level == "summary":
                 return (self.transponder.show_transponder_summary())
             else:
                 return (self.transponder.show_transponder(line[1]))
  
-        elif (module == 'vlan' and detail_level == 'details'):
+        elif module == 'vlan' and detail_level == 'details':
             return (self.vlan.show_vlan(detail_level))
-        elif (module == 'interface' and (detail_level == 'brief' or detail_level == 'description')):
+        elif module == 'interface' and (detail_level == 'brief' or detail_level == 'description'):
             return (self.port.show_interface(detail_level))
         else:
-            if (module == 'interface'):
+            if module == 'interface':
                 print('usage: show interface (brief|description)')
             elif (module == 'vlan'):
                 print('usage: show vlan details')
@@ -60,13 +62,13 @@ class show_wrap(object):
         else:
             ds = line[2]
 
-        if (len(line) == 4):
+        if len(line) == 4:
             fmt = line[3]
-        elif (len(line) == 3 and line[2] == 'json'):
+        elif len(line) == 3 and line[2] == 'json':
             ds = 'running'
             fmt = line[2]
         
-        if (fmt == 'default' or fmt == 'json'):
+        if fmt == 'default' or fmt == 'json':
             pass
         else:
             print(f'unsupported format: {fmt}. supported: {json}')
@@ -79,7 +81,7 @@ class show_wrap(object):
         self.session.switch_datastore(ds)
 
         try:
-            if (fmt == 'json'):
+            if fmt == 'json':
                 print(json.dumps(self.session.get_data(line[1]), indent = 4))
             else:
                 print(self.session.get_data(line[1]))
@@ -95,30 +97,37 @@ class show_wrap(object):
 
     
     def display_run_conf(self, line):
-        if (len(line) > 1):
+        if len(line) > 1:
             module = line[1]
         else:
             module = 'all'
 
-        if (module == 'all'):
+        if module == 'all':
             self.sonic.run_conf()
         
-        elif (module == 'interface'):
+        elif module == 'interface':
             self.sonic.port_run_conf()
         
-        elif (module == 'vlan'):
+        elif module == 'vlan':
             self.sonic.vlan_run_conf()
     
     
     
     def get_version(self, line):
-        print('To Be Done')
+        if os.path.isfile(VER_FILE):
+            with open(VER_FILE, "r") as version_file:
+                ver_data = json.loads(version_file.read())
+                if "PRODUCT_ID_VERSION" in ver_data:
+                    print(ver_data["PRODUCT_ID_VERSION"])
+                else:
+                    print("Error : Version details not found")
+        else:
+           print("Error : Version details not found")
    
 
     def display_log(self, line):
         print('To Be Done')
 
-    
     
     def tech_support(self, line):
         datastore_list = ['operational', 'running', 'candidate', 'startup']
