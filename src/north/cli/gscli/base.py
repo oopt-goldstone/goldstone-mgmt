@@ -1,5 +1,11 @@
 from prompt_toolkit.document import Document
-from prompt_toolkit.completion import Completion, WordCompleter, FuzzyWordCompleter, NestedCompleter, DummyCompleter
+from prompt_toolkit.completion import (
+    Completion,
+    WordCompleter,
+    FuzzyWordCompleter,
+    NestedCompleter,
+    DummyCompleter,
+)
 from prompt_toolkit.completion import Completer as PromptCompleter
 from enum import Enum
 from .cli import show_wrap
@@ -8,7 +14,8 @@ import sys
 import subprocess
 import logging
 
-stdout = logging.getLogger('stdout')
+stdout = logging.getLogger("stdout")
+
 
 class InvalidInput(Exception):
     def __init__(self, msg, candidates=[]):
@@ -18,18 +25,20 @@ class InvalidInput(Exception):
     def __str__(self):
         return self.msg
 
+
 class BreakLoop(Exception):
     pass
+
 
 class Completer(PromptCompleter):
     def __init__(self, attrnames, valuenames=[], hook=None):
         if type(attrnames) == list:
-            self._attrnames = lambda : attrnames
+            self._attrnames = lambda: attrnames
         else:
             self._attrnames = attrnames
 
         if type(valuenames) == list:
-            self._valuenames = lambda _ : valuenames
+            self._valuenames = lambda _: valuenames
         else:
             self._valuenames = valuenames
 
@@ -37,12 +46,12 @@ class Completer(PromptCompleter):
 
     def get_completions(self, document, complete_event=None):
         t = document.text.split()
-        if len(t) == 0 or (len(t) == 1 and document.text[-1] != ' '):
+        if len(t) == 0 or (len(t) == 1 and document.text[-1] != " "):
             # attribute name completion
             for c in self._attrnames():
                 if c.startswith(document.text):
                     yield Completion(c, start_position=-len(document.text))
-        elif len(t) > 2 or (len(t) == 2 and document.text[-1] == ' '):
+        elif len(t) > 2 or (len(t) == 2 and document.text[-1] == " "):
             # invalid input for both get() and set(). no completion possible
             return
         else:
@@ -65,7 +74,7 @@ class Completer(PromptCompleter):
             else:
                 attrname = c[0].text
 
-            text = t[1] if len(t) > 1 else ''
+            text = t[1] if len(t) > 1 else ""
 
             for c in self._valuenames(attrname):
                 if c.startswith(text):
@@ -73,7 +82,7 @@ class Completer(PromptCompleter):
 
 
 class Object(object):
-    XPATH = ''
+    XPATH = ""
 
     def __init__(self, parent, fuzzy_completion=False):
         self.parent = parent
@@ -82,29 +91,26 @@ class Object(object):
         self.cli_op = show_wrap()
         self.mod_dict = self.cli_op.module_dict()
         self.show_dict = {
-                    'interface' : {
-                        'brief' : None,
-                        'description' : None
-                        },
-                    'vlan' : {'details' : None},
-                    'datastore' : None,
-                    'tech-support': None,
-                    'logging': None,
-		    'version': None,
-                    'transponder' : self.mod_dict,
-                    'running-config' : { 
-                                        'transponder' : None,
-                                        'onlp'  : None,
-                                        'vlan'  : None,
-                                        'interface' : None,
-                                        'aaa'   :None
-                                     }
-                }
-        
+            "interface": {"brief": None, "description": None},
+            "vlan": {"details": None},
+            "datastore": None,
+            "tech-support": None,
+            "logging": None,
+            "version": None,
+            "transponder": self.mod_dict,
+            "running-config": {
+                "transponder": None,
+                "onlp": None,
+                "vlan": None,
+                "interface": None,
+                "aaa": None,
+            },
+        }
+
         @self.command(NestedCompleter.from_nested_dict(self.show_dict))
         def show(line):
-            self.do_show (line)
-        
+            self.do_show(line)
+
         @self.command()
         def quit(line):
             self.close()
@@ -119,9 +125,9 @@ class Object(object):
 
         if self.parent:
             for k, v in self.parent._commands.items():
-                if v['inherit']:
+                if v["inherit"]:
                     self._commands[k] = v
-    
+
     def add_command(self, handler, completer=None, name=None):
         self.command(completer, name)(handler)
 
@@ -129,26 +135,35 @@ class Object(object):
         del self._commands[name]
 
     def get_completer(self, name):
-        return self._commands.get(name, {}).get('completer', DummyCompleter())
+        return self._commands.get(name, {}).get("completer", DummyCompleter())
 
     def close(self):
         pass
 
-    def command(self, completer=None, name=None, async_=False, inherit=False, argparser=None):
+    def command(
+        self, completer=None, name=None, async_=False, inherit=False, argparser=None
+    ):
         def f(func):
-            self._commands[name if name else func.__name__] = {'func': func, 'completer': completer, 'async': async_, 'inherit': inherit, 'argparser': argparser}
+            self._commands[name if name else func.__name__] = {
+                "func": func,
+                "completer": completer,
+                "async": async_,
+                "inherit": inherit,
+                "argparser": argparser,
+            }
+
         return f
 
-    def help(self, text='', short=True):
+    def help(self, text="", short=True):
         text = text.lstrip()
         try:
             v = text.split()
-            if len(text) > 0 and text[-1] == ' ':
+            if len(text) > 0 and text[-1] == " ":
                 # needs to show all candidates for the next argument
-                v.append(' ')
+                v.append(" ")
             line = self.complete_input(v)
         except InvalidInput as e:
-            return ', '.join(e.candidates)
+            return ", ".join(e.candidates)
         return line[-1].strip()
 
     def commands(self):
@@ -159,7 +174,7 @@ class Object(object):
         if complete_event == None and len(document.text) == 0:
             return
         t = document.text.split()
-        if len(t) == 0 or (len(t) == 1 and document.text[-1] != ' '):
+        if len(t) == 0 or (len(t) == 1 and document.text[-1] != " "):
             # command completion
             if self.fuzzy_completion and complete_event:
                 c = FuzzyWordCompleter(self.commands())
@@ -179,38 +194,49 @@ class Object(object):
             v = self._commands.get(cmd)
             if not v:
                 return
-            c = v['completer']
+            c = v["completer"]
             if c:
                 # do argument completion with text after the command (t[0])
-                new_document = Document(document.text[len(t[0]):].lstrip())
+                new_document = Document(document.text[len(t[0]) :].lstrip())
                 for v in c.get_completions(new_document, complete_event):
                     yield v
 
     def complete_input(self, line):
 
         if len(line) == 0:
-            raise InvalidInput('invalid command. available commands: {}'.format(self.commands()), self.commands())
+            raise InvalidInput(
+                "invalid command. available commands: {}".format(self.commands()),
+                self.commands(),
+            )
 
         for i in range(len(line)):
-            doc = Document(' '.join(line[:i+1]))
+            doc = Document(" ".join(line[: i + 1]))
             c = list(self.completion(doc))
             if len(c) == 0:
                 if i == 0:
-                    raise InvalidInput('invalid command. available commands: {}'.format(self.commands()), self.commands())
+                    raise InvalidInput(
+                        "invalid command. available commands: {}".format(
+                            self.commands()
+                        ),
+                        self.commands(),
+                    )
                 else:
                     # t[0] must be already completed
                     v = self._commands.get(line[0])
-                    assert(v)
-                    cmpl = v['completer']
+                    assert v
+                    cmpl = v["completer"]
                     if cmpl:
-                        doc = Document(' '.join(line[:i] + [' ']))
+                        doc = Document(" ".join(line[:i] + [" "]))
                         candidates = list(v.text for v in self.completion(doc))
                         # if we don't have any candidates with empty input, it means the value needs
                         # to be passed as an opaque value
                         if len(candidates) == 0:
                             continue
 
-                        raise InvalidInput('invalid argument. candidates: {}'.format(candidates), candidates)
+                        raise InvalidInput(
+                            "invalid argument. candidates: {}".format(candidates),
+                            candidates,
+                        )
                     else:
                         # no command completer, the command doesn't take any argument
                         continue
@@ -219,22 +245,27 @@ class Object(object):
                 t = [v for v in c if v.text == line[i]]
                 if len(t) == 0:
                     candidates = [v.text for v in c]
-                    raise InvalidInput('ambiguous {}. candidates: {}'.format('command' if i == 0 else 'argument', candidates), candidates)
+                    raise InvalidInput(
+                        "ambiguous {}. candidates: {}".format(
+                            "command" if i == 0 else "argument", candidates
+                        ),
+                        candidates,
+                    )
                 c[0] = t[0]
             line[i] = c[0].text
-        return line 
+        return line
 
     def _exec(self, cmd):
         line = cmd.split()
-        if len(line) > 0 and len(line[0]) > 0 and line[0][0] == '!':
+        if len(line) > 0 and len(line[0]) > 0 and line[0][0] == "!":
             line[0] = line[0][1:]
-            subprocess.run(' '.join(line), shell=True)
+            subprocess.run(" ".join(line), shell=True)
             return None, None
         cmd = self.complete_input(line[:1])
         cmd = self._commands[cmd[0]]
         args = line[1:]
-        if cmd['argparser']:
-            args = cmd['argparser'].parse_args(line[1:])
+        if cmd["argparser"]:
+            args = cmd["argparser"].parse_args(line[1:])
         return cmd, args
 
     async def exec_async(self, cmd, no_fail=True):
@@ -243,10 +274,10 @@ class Object(object):
             if cmd == None:
                 return self
 
-            if cmd['async']:
-                return await cmd['func'](args)
+            if cmd["async"]:
+                return await cmd["func"](args)
             else:
-                return cmd['func'](args)
+                return cmd["func"](args)
         except InvalidInput as e:
             if not no_fail:
                 raise e
@@ -259,47 +290,49 @@ class Object(object):
             if cmd == None:
                 return self
 
-            if cmd['async']:
-                raise InvalidInput('async command not suppoted')
-            return cmd['func'](args)
+            if cmd["async"]:
+                raise InvalidInput("async command not suppoted")
+            return cmd["func"](args)
         except InvalidInput as e:
             if not no_fail:
                 raise e
             stdout.info(str(e))
         return self
 
-    def do_show (self, line) :
+    def do_show(self, line):
         if len(line) == 0:
-           raise InvalidInput(self.usage())
+            raise InvalidInput(self.usage())
 
-        if (line[0] == 'datastore'):
+        if line[0] == "datastore":
             self.cli_op.datastore(line)
-        
-        elif (line[0] == 'running-config'):
+
+        elif line[0] == "running-config":
             self.cli_op.display_run_conf(line)
-        
-        elif (line[0] == 'tech-support'):
+
+        elif line[0] == "tech-support":
             self.cli_op.tech_support(line)
-        
-        elif (line[0] == 'logging'):
+
+        elif line[0] == "logging":
             self.cli_op.display_log(line)
-        
-        elif (line[0] == 'version'):
+
+        elif line[0] == "version":
             self.cli_op.get_version(line)
 
-        elif (line[0] == 'transponder' or line[0] == 'interface' or line[0] == 'vlan'):
+        elif line[0] == "transponder" or line[0] == "interface" or line[0] == "vlan":
             self.cli_op.display(line)
 
         else:
             raise InvalidInput(self.usage())
- 
+
     def usage(self):
-        return ('usage:\n'
-                ' show interface (brief|description) \n'
-                ' show vlan details \n'
-                ' show transponder (<transponder_name>|summary)\n'
-                ' show logging \n'
-                ' show version \n'
-                ' show datastore <XPATH> [running|startup|candidate|operational|] [json|]\n'
-                ' show running-config [transponder|onlp|vlan|interface|aaa|]\n'
-                ' show tech-support')
+        return (
+            "usage:\n"
+            " show interface (brief|description) \n"
+            " show vlan details \n"
+            " show transponder (<transponder_name>|summary)\n"
+            " show logging \n"
+            " show version \n"
+            " show datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
+            " show running-config [transponder|onlp|vlan|interface|aaa|]\n"
+            " show tech-support"
+        )
