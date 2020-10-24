@@ -18,108 +18,110 @@ import json
 
 from .base import Object, InvalidInput, BreakLoop
 from .onlp import Platform
-from .tai_cli  import  Transponder_CLI
+from .tai_cli import Transponder_CLI
 from .sonic_cli import Interface_CLI
 
 logger = logging.getLogger(__name__)
 
-stdout = logging.getLogger('stdout')
+stdout = logging.getLogger("stdout")
+
 
 class Root(Object):
-    XPATH = '/'
+    XPATH = "/"
 
     def __init__(self, conn):
         self.session = conn.start_session()
 
         # TODO consider getting notification xpaths from each commands' classmethod
-        self.session.subscribe_notification_tree("goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb)
+        self.session.subscribe_notification_tree(
+            "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
+        )
 
         super(Root, self).__init__(None)
-        #TODO:add timer for inactive user
+        # TODO:add timer for inactive user
 
         @self.command()
         def save(line):
             if len(line) != 1:
-                raise InvalidInput('usage: save <module name>')
-            self.session.switch_datastore('startup')
+                raise InvalidInput("usage: save <module name>")
+            self.session.switch_datastore("startup")
 
             try:
-                self.session.copy_config('running', line[0])
+                self.session.copy_config("running", line[0])
             except sr.SysrepoError as e:
                 print(e)
 
         @self.command()
         def ping(line):
             try:
-                png=' '.join(['ping'] + line)
-                subprocess.call(png,shell=True)
+                png = " ".join(["ping"] + line)
+                subprocess.call(png, shell=True)
             except KeyboardInterrupt:
                 print("")
-            except :
-                print("Unexpected error:",sys.exc_info()[0])
+            except:
+                print("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
-        def traceroute(line) :
+        def traceroute(line):
             try:
-                trct=' '.join(['traceroute'] + line)
+                trct = " ".join(["traceroute"] + line)
                 subprocess.call(trct, shell=True)
-            except :
-                print("Unexpected error:",sys.exc_info()[0])
+            except:
+                print("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
-        def hostname(line) :
+        def hostname(line):
             try:
-                hst_name =' '.join(['hostname'] + line)
+                hst_name = " ".join(["hostname"] + line)
                 subprocess.call(hst_name, shell=True)
-            except :
-                print("Unexpected error:",sys.exc_info()[0])
+            except:
+                print("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
         def platform(line):
             if len(line) != 0:
-                raise InvalidInput('usage: platform[cr]')
+                raise InvalidInput("usage: platform[cr]")
             return Platform(conn, self)
 
-        @self.command(WordCompleter(lambda : self.get_modules()))
+        @self.command(WordCompleter(lambda: self.get_modules()))
         def transponder(line):
             if len(line) != 1:
-                raise InvalidInput('usage: transponder <transponder name>')
+                raise InvalidInput("usage: transponder <transponder name>")
             return Transponder_CLI(conn, self, line[0])
 
-        @self.command(WordCompleter(lambda : self.get_ifnames()))
+        @self.command(WordCompleter(lambda: self.get_ifnames()))
         def interface(line):
             if len(line) != 1:
-               raise InvalidInput('usage: interface <ifname>')
+                raise InvalidInput("usage: interface <ifname>")
             return Interface_CLI(conn, self, line[0])
 
-         
         @self.command()
         def date(line):
             self.date(line)
 
-
     def get_ifnames(self):
-        self.path = '/sonic-port:sonic-port/PORT/PORT_LIST'
+        self.path = "/sonic-port:sonic-port/PORT/PORT_LIST"
         self.data_tree = self.session.get_data_ly(self.path)
-        self.map = json.loads(self.data_tree.print_mem("json"))['sonic-port:sonic-port']['PORT']['PORT_LIST']
-        return [v['ifname'] for v in self.map]
-    
+        self.map = json.loads(self.data_tree.print_mem("json"))[
+            "sonic-port:sonic-port"
+        ]["PORT"]["PORT_LIST"]
+        return [v["ifname"] for v in self.map]
+
     def get_modules(self):
-        path = '/goldstone-tai:modules'
-        self.session.switch_datastore('operational')
-        d = self.session.get_data(path, no_subs = True)
-        return [v['name'] for v in d.get('modules', {}).get('module', {})]
+        path = "/goldstone-tai:modules"
+        self.session.switch_datastore("operational")
+        d = self.session.get_data(path, no_subs=True)
+        return [v["name"] for v in d.get("modules", {}).get("module", {})]
 
-    def date(self, line) :
-        date =' '.join(['date'] + line)
+    def date(self, line):
+        date = " ".join(["date"] + line)
         subprocess.call(date, shell=True)
-
 
     def notification_cb(self, a, b, c, d):
         print(b.print_dict())
 
     def __str__(self):
-        return ''
+        return ""
 
 
 class GoldstoneShellCompleter(Completer):
@@ -131,18 +133,18 @@ class GoldstoneShellCompleter(Completer):
 
 
 class GoldstoneShell(object):
-    def __init__(self, sess=None, default_prompt='> ', prefix=''):
+    def __init__(self, sess=None, default_prompt="> ", prefix=""):
         if sess == None:
             conn = sr.SysrepoConnection()
             sess = conn.start_session()
         self.context = Root(conn)
 
         self.completer = GoldstoneShellCompleter(self.context)
-        self.default_input = ''
+        self.default_input = ""
         self.default_prompt = default_prompt
         self.prefix = prefix
 
-        #TODO subscribe to global error message bus
+        # TODO subscribe to global error message bus
 
     def prompt(self):
         c = self.context
@@ -150,41 +152,44 @@ class GoldstoneShell(object):
         while c.parent:
             l.insert(0, str(c.parent))
             c = c.parent
-        return self.prefix + ('/'.join(l)[1:] if len(l) > 1 else '') + self.default_prompt
+        return (
+            self.prefix + ("/".join(l)[1:] if len(l) > 1 else "") + self.default_prompt
+        )
 
     async def exec(self, cmd: list, no_fail=True):
         ret = await self.context.exec_async(cmd, no_fail=no_fail)
         if ret:
             self.context = ret
             self.completer.context = ret
-        self.default_input = ''
+        self.default_input = ""
 
     def bindings(self):
         b = KeyBindings()
 
-        @b.add('?')
+        @b.add("?")
         def _(event):
             buf = event.current_buffer
             original_text = buf.text
             help_msg = event.app.shell.context.help(buf.text)
-            buf.insert_text('?')
+            buf.insert_text("?")
             buf.insert_line_below(copy_margin=False)
             buf.insert_text(help_msg)
-            event.app.exit('')
+            event.app.exit("")
             event.app.shell.default_input = original_text
 
-#        @b.add(' ')
-#        def _(event):
-#            buf = event.current_buffer
-#            if len(buf.text.strip()) > 0 and len(buf.text) == buf.cursor_position:
-#                candidates = list(event.app.shell.context.completion(buf.document))
-#                if len(candidates) == 1:
-#                    c = candidates[0]
-#                    buf.insert_text(c.text[-c.start_position:])
-#                buf.cancel_completion()
-#            buf.insert_text(' ')
+        #        @b.add(' ')
+        #        def _(event):
+        #            buf = event.current_buffer
+        #            if len(buf.text.strip()) > 0 and len(buf.text) == buf.cursor_position:
+        #                candidates = list(event.app.shell.context.completion(buf.document))
+        #                if len(candidates) == 1:
+        #                    c = candidates[0]
+        #                    buf.insert_text(c.text[-c.start_position:])
+        #                buf.cancel_completion()
+        #            buf.insert_text(' ')
 
         return b
+
 
 async def loop_async(shell):
     session = PromptSession()
@@ -195,32 +200,38 @@ async def loop_async(shell):
             p = shell.prompt()
             b = shell.bindings()
             session.app.shell = shell
-            line = await session.prompt_async(p, completer=c, key_bindings=b, default=shell.default_input)
+            line = await session.prompt_async(
+                p, completer=c, key_bindings=b, default=shell.default_input
+            )
             if len(line) > 0:
                 await shell.exec(line)
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-v', '--verbose', action='store_true')
-    parser.add_argument('-c', '--command-string')
-    parser.add_argument('-k', '--keep-open', action='store_true')
-    parser.add_argument('-x', '--stdin', action='store_true')
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-c", "--command-string")
+    parser.add_argument("-k", "--keep-open", action="store_true")
+    parser.add_argument("-x", "--stdin", action="store_true")
     args = parser.parse_args()
 
-    formatter = logging.Formatter('[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    formatter = logging.Formatter(
+        "[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     if args.verbose:
         console.setLevel(logging.DEBUG)
         logging.basicConfig(level=logging.DEBUG)
-        logging.getLogger('sysrepo').setLevel(logging.DEBUG)
+        logging.getLogger("sysrepo").setLevel(logging.DEBUG)
 
     console.setFormatter(formatter)
 
     sh = logging.StreamHandler()
     sh.setLevel(logging.DEBUG)
-    shf = logging.Formatter('%(message)s')
+    shf = logging.Formatter("%(message)s")
     sh.setFormatter(shf)
 
     stdout.setLevel(logging.DEBUG)
@@ -231,12 +242,12 @@ def main():
     async def _main():
 
         if args.stdin or args.command_string:
-            stream = sys.stdin if args.stdin else args.command_string.split(';')
+            stream = sys.stdin if args.stdin else args.command_string.split(";")
             for line in stream:
                 try:
                     await shell.exec(line, no_fail=False)
                 except InvalidInput as e:
-                    stdout.info('failed to execute: {}'.format(line))
+                    stdout.info("failed to execute: {}".format(line))
                     stdout.info(e)
                     sys.exit(1)
             if not args.keep_open:
@@ -251,5 +262,6 @@ def main():
 
     asyncio.run(_main())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
