@@ -1,5 +1,6 @@
 from .tai import Transponder
-from .base import Object, InvalidInput, Completer
+from .base import InvalidInput, Completer
+from .cli import GSObject as Object
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
 
@@ -30,7 +31,7 @@ class HostIf_CLI(Object):
         @self.command(transponder.parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
-                return transponder.parent.do_show(args)
+                return transponder.show(args)
             self.tai_hostif.show(self.transponder_name, self.hostif_id)
 
     def __str__(self):
@@ -131,7 +132,7 @@ class NetIf_CLI(Object):
         def show(args):
             if len(args) != 0:
                 # raise InvalidInput ('usage: show')
-                return transponder.parent.do_show(args)
+                return transponder.show(args)
             self.tai_netif.show(self.transponder_name, self.netif_id)
 
     def no_usage(self):
@@ -188,8 +189,7 @@ class Transponder_CLI(Object):
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
-                # raise InvalidInput ('usage: show')
-                return parent.do_show(args)
+                return parent.show(args)
             self.tai_transponder.show_transponder(self.transponder_name)
 
     def __str__(self):

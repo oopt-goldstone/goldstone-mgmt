@@ -76,6 +76,7 @@ class Port(object):
     def __init__(self, conn, parent):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap()
+        self._ifname_map = []
         try:
             self.tree = self.sr_op.get_data(self.XPATH, "operational")
             self._ifname_map = list(self.tree["sonic-port"]["PORT"]["PORT_LIST"])
