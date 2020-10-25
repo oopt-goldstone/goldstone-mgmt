@@ -42,6 +42,13 @@ def main(host, username, password):
 
         scp.put('./ci/k8s', recursive=True, remote_path='/var/lib/rancher/k3s/server/manifests/mgmt')
 
+        run('make docker')
+        scp.put('./src/north/cli/dist/gscli-0.1.0-py3-none-any.whl', remote_path='/tmp/')
+        ssh(cli, 'pip3 uninstall -y gscli')
+        ssh(cli, 'pip3 install /tmp/*.whl')
+
+        ssh(cli, 'gscli -c "show version"')
+
         ssh(cli, 'rm -rf /dev/shm/sr_*')
         ssh(cli, 'rm -rf /var/lib/sysrepo/*')
         ssh(cli, 'kubectl create -f /var/lib/rancher/k3s/server/manifests/mgmt')
