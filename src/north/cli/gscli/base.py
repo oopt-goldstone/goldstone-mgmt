@@ -9,13 +9,10 @@ from prompt_toolkit.completion import (
 )
 from prompt_toolkit.completion import Completer as PromptCompleter
 from enum import Enum
-from .cli import show_wrap
 
 import sys
 import subprocess
 import logging
-
-from abc import ABC, abstractmethod
 
 stdout = logging.getLogger("stdout")
 
@@ -55,7 +52,7 @@ class Completer(PromptCompleter):
                     yield v
 
 
-class Command(ABC):
+class Command(object):
 
     SUBCOMMAND_DICT = {}
 
@@ -64,36 +61,64 @@ class Command(ABC):
         self.context = context
         self.parent = parent
         self.name = name
+        self.options = set()
 
     @property
     def completer(self):
         return self._completer
 
-    @abstractmethod
     def get(self, arg):
         candidates = [v for v in self.list() if v.startswith(arg)]
         if len(candidates) == 0:
             return None
         elif len(candidates) == 1:
-            cmd = candidates[0]
+            elected = candidates[0]
         else:
             for c in candidates:
                 # find a perfect match
                 if arg == c:
-                    cmd = arg
+                    elected = arg
                     break
             else:
                 return None  # no match
 
-        return self.SUBCOMMAND_DICT[cmd](self.context, self, cmd)
+        cmd = self.SUBCOMMAND_DICT.get(elected, Command)(self.context, self, elected)
 
-    @abstractmethod
+        if isinstance(cmd, Option):
+            self.options.add(elected)
+
+        if isinstance(cmd, NoArgOption):
+            return self
+        else:
+            return cmd
+
     def list(self):
-        return self.SUBCOMMAND_DICT.keys()
+        return [v for v in self.SUBCOMMAND_DICT.keys() if v not in self.options]
 
-    @abstractmethod
+    def exec(self, line):
+        if self.parent:
+            line.insert(0, self.name)
+            self.parent.exec(line)
+
     def __call__(self, line):
-        pass
+        if len(line) == 0:
+            return self.exec(line)
+
+        cmd = self.SUBCOMMAND_DICT.get(line[0], Command)
+        if cmd:
+            return cmd(self.context, self, line[0])(line[1:])
+        else:
+            return self.exec(cmd)
+
+
+class Option(Command):
+    pass
+
+
+class NoArgOption(Option):
+    def __call__(self, line):
+        self.parent.options.add(self)
+        self.parent(line)
 
 
 class Object(object):
@@ -103,28 +128,6 @@ class Object(object):
         self.parent = parent
         self._commands = {}
         self.fuzzy_completion = fuzzy_completion
-        self.cli_op = show_wrap()
-        self.mod_dict = self.cli_op.module_dict()
-        self.show_dict = {
-            "interface": {"brief": None, "description": None},
-            "vlan": {"details": None},
-            "datastore": None,
-            "tech-support": None,
-            "logging": None,
-            "version": None,
-            "transponder": self.mod_dict,
-            "running-config": {
-                "transponder": None,
-                "onlp": None,
-                "vlan": None,
-                "interface": None,
-                "aaa": None,
-            },
-        }
-
-        @self.command(NestedCompleter.from_nested_dict(self.show_dict))
-        def show(line):
-            self.do_show(line)
 
         @self.command()
         def quit(line):
@@ -332,40 +335,7 @@ class Object(object):
             stdout.info(str(e))
         return self
 
-    def do_show(self, line):
-        if len(line) == 0:
-            raise InvalidInput(self.usage())
-
-        if line[0] == "datastore":
-            self.cli_op.datastore(line)
-
-        elif line[0] == "running-config":
-            self.cli_op.display_run_conf(line)
-
-        elif line[0] == "tech-support":
-            self.cli_op.tech_support(line)
-
-        elif line[0] == "logging":
-            self.cli_op.display_log(line)
-
-        elif line[0] == "version":
-            self.cli_op.get_version(line)
-
-        elif line[0] == "transponder" or line[0] == "interface" or line[0] == "vlan":
-            self.cli_op.display(line)
-
-        else:
-            raise InvalidInput(self.usage())
-
-    def usage(self):
-        return (
-            "usage:\n"
-            " show interface (brief|description) \n"
-            " show vlan details \n"
-            " show transponder (<transponder_name>|summary)\n"
-            " show logging \n"
-            " show version \n"
-            " show datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
-            " show running-config [transponder|onlp|vlan|interface|aaa|]\n"
-            " show tech-support"
-        )
+    def __getattr__(self, name):
+        if name in self._commands:
+            return self._commands[name]["func"]
+        raise AttributeError(f"no attribute '{name}'")

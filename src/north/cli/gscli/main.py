@@ -16,7 +16,8 @@ import logging
 import asyncio
 import json
 
-from .base import Object, InvalidInput, BreakLoop
+from .base import InvalidInput, BreakLoop, Command
+from .cli import GSObject as Object
 from .onlp import Platform
 from .tai_cli import Transponder_CLI
 from .sonic_cli import Interface_CLI
@@ -30,6 +31,7 @@ class Root(Object):
     XPATH = "/"
 
     def __init__(self, conn):
+        self.conn = conn
         self.session = conn.start_session()
 
         # TODO consider getting notification xpaths from each commands' classmethod
@@ -37,7 +39,7 @@ class Root(Object):
             "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
         )
 
-        super(Root, self).__init__(None)
+        super().__init__(None)
         # TODO:add timer for inactive user
 
         @self.command()
@@ -83,7 +85,7 @@ class Root(Object):
                 raise InvalidInput("usage: platform[cr]")
             return Platform(conn, self)
 
-        @self.command(WordCompleter(lambda: self.get_modules()))
+        @self.command(WordCompleter(lambda: self.get_modules(), sentence=True))
         def transponder(line):
             if len(line) != 1:
                 raise InvalidInput("usage: transponder <transponder name>")

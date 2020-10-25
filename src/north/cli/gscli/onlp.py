@@ -1,7 +1,8 @@
 import sys
 import os
 
-from .base import Object, InvalidInput, Completer
+from .base import InvalidInput, Completer
+from .cli import GSObject as Object
 import json
 import libyang as ly
 import sysrepo as sr

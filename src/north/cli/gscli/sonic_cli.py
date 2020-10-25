@@ -1,7 +1,8 @@
 import sys
 import os
 
-from .base import Object, InvalidInput, Completer
+from .base import InvalidInput, Completer
+from .cli import GSObject as Object
 import libyang as ly
 import sysrepo as sr
 
@@ -65,7 +66,7 @@ class Interface_CLI(Object):
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
-                return parent.do_show(args)
+                return parent.show(args)
             # raise InvalidInput ('usage: show')
             self.sonic.port.show(self.ifname)
 
