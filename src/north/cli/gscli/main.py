@@ -34,10 +34,13 @@ class Root(Object):
         self.conn = conn
         self.session = conn.start_session()
 
-        # TODO consider getting notification xpaths from each commands' classmethod
-        self.session.subscribe_notification_tree(
-            "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
-        )
+        try:
+            # TODO consider getting notification xpaths from each commands' classmethod
+            self.session.subscribe_notification_tree(
+                "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
+            )
+        except sr.SysrepoNotFoundError as e:
+            logger.warning(f"mgmt daemons not running?: {e}")
 
         super().__init__(None)
         # TODO:add timer for inactive user
