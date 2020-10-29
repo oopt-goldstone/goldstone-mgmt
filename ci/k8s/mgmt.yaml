@@ -43,7 +43,7 @@ spec:
         spec:
             hostPID: true
             restartPolicy: Never
-            containers:
+            initContainers: # run prep-sysrepo and prep-np sequentially
             - name: prep-sysrepo
               image: docker.io/gs-test/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
@@ -70,6 +70,16 @@ spec:
                 value: "600"
               - name: NP2_MODULE_DIR
                 value: /usr/local/share/yang/modules/netopeer2
+              volumeMounts:
+              - mountPath: /dev/shm
+                name: shm
+              - mountPath: /var/lib/sysrepo
+                name: sysrepo
+            containers:
+            - name: job-done
+              image: docker.io/gs-test/gs-mgmt-debug:latest
+              imagePullPolicy: IfNotPresent
+              command: ["sysrepoctl", "-l"]
               volumeMounts:
               - mountPath: /dev/shm
                 name: shm
