@@ -126,6 +126,8 @@ class GlobalShowCommand(Command):
             raise InvalidInput(self.usage())
 
     def datastore(self, line):
+        self.conn = self.context.conn
+        self.session = self.conn.start_session()
         dss = list(DATASTORE_VALUES.keys())
         fmt = "default"
         if len(line) < 2:

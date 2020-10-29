@@ -55,5 +55,11 @@ class sysrepo_wrap(object):
 
     def delete_data(self, xpath, ds="running"):
         self.session.switch_datastore(ds)
-        self.session.delete_item(xpath)
+        try:
+            self.session.delete_item(xpath)
+            self.session.apply_changes()
+        except sr.errors.SysrepoValidationFailedError as e:
+            msg = str(e)
+            msg = msg.split(".,")[0]
+            print(msg)
         self.session.switch_datastore("running")

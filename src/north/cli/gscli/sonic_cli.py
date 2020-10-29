@@ -12,13 +12,9 @@ from .sonic import Sonic
 
 
 class Interface_CLI(Object):
-    def close(self):
-        self.session.stop()
-
     def __init__(self, conn, parent, ifname):
-        self.session = conn.start_session()
         self.ifname = ifname
-        super(Interface_CLI, self).__init__(parent)
+        super().__init__(parent)
         self.sonic = Sonic(conn)
         self.no_dict = {"shutdown": None, "speed": None, "mtu": None}
 
@@ -67,7 +63,6 @@ class Interface_CLI(Object):
         def show(args):
             if len(args) != 0:
                 return parent.show(args)
-            # raise InvalidInput ('usage: show')
             self.sonic.port.show(self.ifname)
 
     def no_usage(self):
@@ -76,3 +71,27 @@ class Interface_CLI(Object):
 
     def __str__(self):
         return "interface({})".format(self.ifname)
+
+
+class Vlan_CLI(Object):
+    def __init__(self, conn, parent, vid):
+        self.vid = vid
+        super().__init__(parent)
+        self.sonic = Sonic(conn)
+        self.sonic.vlan.create_vlan(self.vid)
+
+        @self.command()
+        def name(args):
+            if len(args) != 1:
+                raise InvalidInput("usage: name <vlan_name>")
+            vlan_name = args[0]
+            self.sonic.vlan.set_name(vlan_name)
+
+        @self.command(parent.get_completer("show"))
+        def show(args):
+            if len(args) != 0:
+                return parent.show(args)
+            self.sonic.vlan.show(self.vid)
+
+    def __str__(self):
+        return "vlan({})".format(self.vid)

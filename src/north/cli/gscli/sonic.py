@@ -14,6 +14,9 @@ class Vlan(object):
     XPATH = "/sonic-vlan:sonic-vlan/VLAN"
     XPATHport = "/sonic-vlan:sonic-vlan/VLAN_MEMBER"
 
+    def xpath_vlan(self, vid):
+        return "{}/VLAN_LIST[name='{}']".format(self.XPATH, "Vlan" + vid)
+
     def __init__(self, conn, parent):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap()
@@ -29,10 +32,15 @@ class Vlan(object):
             pass
 
     def show_vlan(self, details="details"):
+        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "running")
+        self.treeport = self.sr_op.get_data_ly("{}".format(self.XPATHport), "running")
         dl1 = self.tree.print_mem("json")
         dl2 = self.treeport.print_mem("json")
-        dl1 = json.loads(dl1)
-        dl2 = json.loads(dl2)
+        try:
+            dl1 = json.loads(dl1)
+            dl2 = json.loads(dl2)
+        except KeyError as error:
+            pass
 
         if dl1 == {}:
             print(tabulate([], ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
@@ -63,6 +71,49 @@ class Vlan(object):
     def _vlan_components(self):
         d = self._vlan_map
         return [str(v["vlanid"]) for v in d]
+
+    def set_name(self, vlan_name):
+        vid = vlan_name[4:]
+        try:
+            self.sr_op.set_data("{}/name".format(self.xpath_vlan(vid)), vlan_name)
+        except sr.errors.SysrepoValidationFailedError as error:
+            msg = str(error)
+            print(msg)
+
+    def create_vlan(self, vid):
+        try:
+            data_tree = self.session.get_data_ly(self.XPATH)
+            vlan_map = json.loads(data_tree.print_mem("json"))["sonic-vlan:sonic-vlan"][
+                "VLAN"
+            ]["VLAN_LIST"]
+        except sr.errors.SysrepoNotFoundError as error:
+            msg = str(error)
+            print(msg.split("(")[0])
+            return
+        except KeyError as error:
+            print("key missing :{}".format(str(error)))
+            return
+        vlan_name = "Vlan" + vid
+        if vlan_name in vlan_map:
+            pass
+        else:
+            self.sr_op.set_data("{}/vlanid".format(self.xpath_vlan(vid)), vid)
+
+    def delete_vlan(self, vid):
+        vlan_name = "Vlan" + vid
+        self.sr_op.delete_data(self.xpath_vlan(vid))
+
+    def show(self, vid):
+        xpath = self.xpath_vlan(vid)
+        tree = self.sr_op.get_data(xpath)
+        data = [v for v in list((tree)["sonic-vlan"]["VLAN"]["VLAN_LIST"])][0]
+        if "members" in data:
+            mem_delim = ","
+            mem_delim = mem_delim.join(data["members"])
+            data["members"] = mem_delim
+        else:
+            data["members"] = "-"
+        print_tabular(data, "")
 
 
 class Port(object):

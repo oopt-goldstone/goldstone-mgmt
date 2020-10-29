@@ -20,7 +20,8 @@ from .base import InvalidInput, BreakLoop, Command
 from .cli import GSObject as Object
 from .onlp import Platform
 from .tai_cli import Transponder_CLI
-from .sonic_cli import Interface_CLI
+from .sonic_cli import Interface_CLI, Vlan_CLI
+from .sonic import Sonic
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,8 @@ class Root(Object):
             logger.warning(f"mgmt daemons not running?: {e}")
 
         super().__init__(None)
+        self.sonic = Sonic(conn)
+        self.no_dict = {"vlan": WordCompleter(lambda: self.get_vid())}
         # TODO:add timer for inactive user
 
         @self.command()
@@ -104,13 +107,54 @@ class Root(Object):
         def date(line):
             self.date(line)
 
+        @self.command(WordCompleter(lambda: self.get_vid()))
+        def vlan(line):
+            if len(line) != 1:
+                raise InvalidInput("usage: vlan <vlan-id>")
+            if line[0].isdigit():
+                return Vlan_CLI(conn, self, line[0])
+            else:
+                print("The vlan-id entered must be numbers and not letters")
+
+        @self.command(NestedCompleter.from_nested_dict(self.no_dict))
+        def no(line):
+            if len(line) != 2:
+                raise InvalidInput(self.no_usage())
+            if line[0] == "vlan":
+                vlan_list = self.get_vid()
+                if line[1].isdigit():
+                    if line[1] in vlan_list:
+                        self.sonic.vlan.delete_vlan(line[1])
+                    else:
+                        print("The vlan-id provided doesn't exist")
+                else:
+                    print("The vlan-id entered must be numbers and not letters")
+            else:
+                raise InvalidInput(self.no_usage())
+
     def get_ifnames(self):
-        self.path = "/sonic-port:sonic-port/PORT/PORT_LIST"
-        self.data_tree = self.session.get_data_ly(self.path)
-        self.map = json.loads(self.data_tree.print_mem("json"))[
-            "sonic-port:sonic-port"
-        ]["PORT"]["PORT_LIST"]
-        return [v["ifname"] for v in self.map]
+        path = "/sonic-port:sonic-port/PORT/PORT_LIST"
+        data_tree = self.session.get_data_ly(path)
+        port_map = json.loads(data_tree.print_mem("json"))["sonic-port:sonic-port"][
+            "PORT"
+        ]["PORT_LIST"]
+        return [v["ifname"] for v in port_map]
+
+    def get_vid(self):
+        path = "/sonic-vlan:sonic-vlan/VLAN/VLAN_LIST"
+        try:
+            data_tree = self.session.get_data_ly(path)
+            vlan_map = json.loads(data_tree.print_mem("json"))["sonic-vlan:sonic-vlan"][
+                "VLAN"
+            ]["VLAN_LIST"]
+        except sr.errors.SysrepoNotFoundError as error:
+            msg = str(error)
+            print(msg.split("(")[0])
+            return None
+        except KeyError as error:
+            print("key missing :{}".format(str(error)))
+            return None
+        return [str(v["vlanid"]) for v in vlan_map]
 
     def get_modules(self):
         path = "/goldstone-tai:modules"
@@ -121,6 +165,9 @@ class Root(Object):
     def date(self, line):
         date = " ".join(["date"] + line)
         subprocess.call(date, shell=True)
+
+    def no_usage(self):
+        return "usage: no vlan <vid>"
 
     def notification_cb(self, a, b, c, d):
         print(b.print_dict())
