@@ -15,7 +15,9 @@ pipeline {
                   env.BUILD_BUILDER = 1
               } else if ( env.BRANCH_NAME.startsWith('PR') ) {
                   env.DOCKER_REPO = 'gs-test'
-                  env.BUILD_BUILDER = sh returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep -v 'sm/\\|patches/\\|builder.Dockerfile'"
+                  // if sm/, patches/, builder.Dockerfile, build_onlp.sh is updated
+                  // build the builder
+                  env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile\\|build_onlp.sh'") ? 0 : 1
               } else {
                   env.BUILD_BUILDER = 0
                   currentBuild.result = 'SUCCESS'
@@ -39,7 +41,7 @@ pipeline {
 
     stage('Build') {
       steps {
-          sh 'apk add --update docker make'
+          sh 'apk add --update docker make python2'
           sh 'git submodule update --init'
           sh '( [ $BUILD_BUILDER -eq 1 ] && make builder np2 ) || true'
           sh 'make docker'

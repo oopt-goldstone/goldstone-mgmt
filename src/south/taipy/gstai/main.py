@@ -508,14 +508,14 @@ class Server(object):
             modules = await self.taish.list()
             notifiers = []
             for key, m in modules.items():
-                xpath = f"/goldstone-tai:modules/module[name='{key}']"
-                self.sess.set_item(f"{xpath}/config/name", key)
-
                 try:
                     module = await self.taish.get_module(key)
                 except Exception as e:
                     logger.warning(f'failed to get module location: {key}. err: {e}')
                     continue
+
+                xpath = f"/goldstone-tai:modules/module[name='{key}']"
+                self.sess.set_item(f"{xpath}/config/name", key)
 
                 notifiers.append(module.monitor('notify', self.tai_cb, json=True))
 

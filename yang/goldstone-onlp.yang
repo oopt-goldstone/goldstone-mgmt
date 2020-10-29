@@ -330,6 +330,45 @@ module goldstone-onlp {
     }
   }
 
+  grouping platform-piu-top-config {
+  }
+
+  grouping platform-piu-top-state {
+
+    leaf-list status {
+      type enumeration {
+        enum PRESENT;
+        enum FAILED;
+        enum UNPLUGGED;
+      }
+    }
+
+    leaf model {
+      type string;
+    }
+
+    leaf serial {
+      type string;
+    }
+
+  }
+
+  grouping platform-piu-top {
+
+    container piu {
+      container config {
+        uses platform-piu-top-config;
+      }
+  
+      container state {
+        config false;
+  
+        uses platform-piu-top-config;
+        uses platform-piu-top-state;
+      }
+    }
+  }
+
   grouping platform-component-config {
     description
       "Configuration data for components";
@@ -357,6 +396,7 @@ module goldstone-onlp {
           enum LED;
           enum MODULE;
           enum RTC;
+          enum PIU;
       }
       description
         "Type of component as identified by the system";
@@ -440,6 +480,7 @@ module goldstone-onlp {
         uses platform-led-top;
         uses platform-sys-top;
         uses platform-psu-top;
+        uses platform-piu-top;
       }
     }
   }
