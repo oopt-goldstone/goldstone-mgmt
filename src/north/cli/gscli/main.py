@@ -95,7 +95,11 @@ class Root(Object):
         def transponder(line):
             if len(line) != 1:
                 raise InvalidInput("usage: transponder <transponder name>")
-            return Transponder_CLI(conn, self, line[0])
+            elif line[0] in self.get_modules():
+                return Transponder_CLI(conn, self, line[0])
+            else:
+                print(f"There is no device of name {line[0]}")
+                return
 
         @self.command(WordCompleter(lambda: self.get_ifnames()))
         def interface(line):

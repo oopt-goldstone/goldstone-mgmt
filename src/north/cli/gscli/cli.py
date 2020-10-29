@@ -76,13 +76,13 @@ class TransponderGroupCommand(Command):
         return module_names + super().list()
 
     def exec(self, line):
-        if len(line) < 1:
-            raise InvalidInput(self.usage())
-
-        if line[0] == "summary":
-            return self.transponder.show_transponder_summary()
+        if len(line) == 1:
+            if line[0] == "summary":
+                return self.transponder.show_transponder_summary()
+            else:
+                return self.transponder.show_transponder(line[0])
         else:
-            return self.transponder.show_transponder(line[0])
+            print(self.usage())
 
     def usage(self):
         return (
@@ -172,15 +172,20 @@ class GlobalShowCommand(Command):
             module = "all"
 
         sonic = Sonic(self.context.conn)
+        transponder = Transponder(self.context.conn)
 
         if module == "all":
             sonic.run_conf()
+            transponder.run_conf()
 
         elif module == "interface":
             sonic.port_run_conf()
 
         elif module == "vlan":
             sonic.vlan_run_conf()
+
+        elif module == "transponder":
+            transponder.run_conf()
 
     def get_version(self, line):
         if os.path.isfile(VER_FILE):
@@ -201,10 +206,13 @@ class GlobalShowCommand(Command):
         xpath_list = [
             "/sonic-vlan:sonic-vlan/VLAN/VLAN_LIST",
             "/sonic-port:sonic-port/PORT/PORT_LIST",
+            "/goldstone-tai:modules",
         ]
 
         sonic = Sonic(self.context.conn)
+        transponder = Transponder(self.context.conn)
         sonic.tech_support()
+        transponder.tech_support()
         print("\nshow datastore:\n")
 
         with self.context.conn.start_session() as session:

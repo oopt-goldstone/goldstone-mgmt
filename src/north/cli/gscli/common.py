@@ -47,6 +47,8 @@ class sysrepo_wrap(object):
             self.session.apply_changes()
         except sr.errors.SysrepoCallbackFailedError as e:
             print(e)
+        except sr.errors.SysrepoValidationFailedError as e:
+            print(e)
         except sr.errors.SysrepoInvalArgError as e:
             msg = str(e)
             msg = msg.split("(")[0]

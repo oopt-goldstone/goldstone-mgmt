@@ -1,8 +1,7 @@
 from .tai import Transponder
 from .base import InvalidInput, Completer
 from .cli import GSObject as Object
-from prompt_toolkit.document import Document
-from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
+from prompt_toolkit.completion import WordCompleter, NestedCompleter
 
 
 class HostIf_CLI(Object):
@@ -25,6 +24,8 @@ class HostIf_CLI(Object):
         @self.command(WordCompleter(self.command_list))
         def no(args):
             if len(args) != 1:
+                raise InvalidInput("usage: no fec-type")
+            if args[0] != "fec-type":
                 raise InvalidInput("usage: no fec-type")
             self.tai_hostif.no(self.transponder_name, self.hostif_id, args[0])
 
@@ -89,10 +90,6 @@ class NetIf_CLI(Object):
         def tx_laser_freq(args):
             if len(args) != 1:
                 raise InvalidInput("usage: tx-laser-freq <Hz>")
-            if len(args[0]) < 14:
-                raise InvalidInput(
-                    "usage: Enter value between 191150000000000 Hz and 196100000000000 Hz"
-                )
             self.tai_netif.set_tx_laser_freq(
                 self.transponder_name, self.netif_id, args[0]
             )
@@ -101,14 +98,14 @@ class NetIf_CLI(Object):
         def tx_dis(args):
             if len(args) != 0:
                 raise InvalidInput("usage: tx-dis")
-            self.tai_netif.set_tx_dis(self.transponder_name, self.netif_id, args[0])
+            self.tai_netif.set_tx_dis(self.transponder_name, self.netif_id, "true")
 
         @self.command(name="differential-encoding")
         def differential_encoding(args):
             if len(args) != 0:
                 raise InvalidInput("usage: differential-encoding")
             self.tai_netif.set_differential_encoding(
-                self.transponder_name, self.netif_id, args[0]
+                self.transponder_name, self.netif_id, "true"
             )
 
         @self.command(name="voa-rx")
@@ -154,6 +151,8 @@ class Transponder_CLI(Object):
         def no(args):
             if len(args) != 1:
                 raise InvalidInput("usage: shutdown")
+            if args[0] != "shutdown":
+                raise InvalidInput("usage: no shutdown")
             self.tai_transponder.set_admin_status(self.transponder_name, "up")
 
         @self.command(
@@ -166,7 +165,13 @@ class Transponder_CLI(Object):
         def netif(args):
             if len(args) != 1:
                 raise InvalidInput("usage: netif <name>")
-            return NetIf_CLI(self, conn, args[0])
+            elif args[0] in self.tai_transponder._components(
+                self.transponder_name, "network-interface"
+            ):
+                return NetIf_CLI(self, conn, args[0])
+            else:
+                print(f"There is no network interface with id {args[0]}")
+                return
 
         @self.command(
             WordCompleter(
@@ -178,7 +183,13 @@ class Transponder_CLI(Object):
         def hostif(args):
             if len(args) != 1:
                 raise InvalidInput("usage: hostif <name>")
-            return HostIf_CLI(self, conn, args[0])
+            elif args[0] in self.tai_transponder._components(
+                self.transponder_name, "host-interface"
+            ):
+                return HostIf_CLI(self, conn, args[0])
+            else:
+                print(f"There is no host interface with id {args[0]}")
+                return
 
         @self.command()
         def shutdown(args):
