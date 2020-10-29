@@ -26,6 +26,18 @@ def run(cmd):
     print(f'run: "{cmd}"')
     subprocess.run(cmd, shell=True, stdout=sys.stdout, stderr=sys.stderr, check=True)
 
+def test_vlan(cli):
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "vlan 1000"')
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "vlan 2000"')
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "no vlan 2000"')
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "no vlan 1000"')
+    ssh(cli, 'gscli -c "show vlan details"')
+
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -70,6 +82,8 @@ def main(host, username, password):
         check_pod('gs-mgmt-onlp')
         check_pod('gs-mgmt-sonic')
         check_pod('gs-mgmt-tai')
+
+        test_vlan(cli)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Goldstone CI tool')

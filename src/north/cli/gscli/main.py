@@ -151,13 +151,8 @@ class Root(Object):
             vlan_map = json.loads(data_tree.print_mem("json"))["sonic-vlan:sonic-vlan"][
                 "VLAN"
             ]["VLAN_LIST"]
-        except sr.errors.SysrepoNotFoundError as error:
-            msg = str(error)
-            print(msg.split("(")[0])
-            return None
-        except KeyError as error:
-            print("key missing :{}".format(str(error)))
-            return None
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return []
         return [str(v["vlanid"]) for v in vlan_map]
 
     def get_modules(self):

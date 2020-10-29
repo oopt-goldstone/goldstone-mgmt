@@ -8,6 +8,10 @@ from .common import sysrepo_wrap, print_tabular
 
 from prompt_toolkit.completion import WordCompleter
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class Vlan(object):
 
@@ -86,18 +90,13 @@ class Vlan(object):
             vlan_map = json.loads(data_tree.print_mem("json"))["sonic-vlan:sonic-vlan"][
                 "VLAN"
             ]["VLAN_LIST"]
-        except sr.errors.SysrepoNotFoundError as error:
-            msg = str(error)
-            print(msg.split("(")[0])
-            return
-        except KeyError as error:
-            print("key missing :{}".format(str(error)))
-            return
-        vlan_name = "Vlan" + vid
-        if vlan_name in vlan_map:
-            pass
+        except (sr.errors.SysrepoNotFoundError, KeyError) as error:
+            logger.warning(error)
         else:
-            self.sr_op.set_data("{}/vlanid".format(self.xpath_vlan(vid)), vid)
+            vlan_name = "Vlan" + vid
+            if vlan_name in vlan_map:
+                return
+        self.sr_op.set_data("{}/vlanid".format(self.xpath_vlan(vid)), vid)
 
     def delete_vlan(self, vid):
         vlan_name = "Vlan" + vid
