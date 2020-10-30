@@ -63,7 +63,7 @@ def main(host, username, password):
 
         ssh(cli, 'rm -rf /dev/shm/sr_*')
         ssh(cli, 'rm -rf /var/lib/sysrepo/*')
-        ssh(cli, 'kubectl create -f /var/lib/rancher/k3s/server/manifests/mgmt')
+        ssh(cli, 'kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt')
 
         def check_pod(name):
             max_iteration = 4
