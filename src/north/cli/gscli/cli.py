@@ -103,7 +103,6 @@ class GlobalShowCommand(Command):
     }
 
     def exec(self, line):
-        print(f"global show: {line}")
         if len(line) == 0:
             raise InvalidInput(self.usage())
 
@@ -179,9 +178,11 @@ class GlobalShowCommand(Command):
             transponder.run_conf()
 
         elif module == "interface":
+            print("!")
             sonic.port_run_conf()
 
         elif module == "vlan":
+            print("!")
             sonic.vlan_run_conf()
 
         elif module == "transponder":
@@ -204,8 +205,9 @@ class GlobalShowCommand(Command):
     def tech_support(self, line):
         datastore_list = ["operational", "running", "candidate", "startup"]
         xpath_list = [
-            "/sonic-vlan:sonic-vlan/VLAN/VLAN_LIST",
-            "/sonic-port:sonic-port/PORT/PORT_LIST",
+            "/goldstone-vlan:vlan/VLAN/VLAN_LIST",
+            "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST",
+            "/goldstone-interfaces:interfaces/interface",
             "/goldstone-tai:modules",
         ]
 
@@ -221,6 +223,7 @@ class GlobalShowCommand(Command):
                 print("{} DB:\n".format(ds))
                 for index in range(len(xpath_list)):
                     try:
+                        print(f"{xpath_list[index]} : \n")
                         print(session.get_data(xpath_list[index]))
                         print("\n")
                     except Exception as e:

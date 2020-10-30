@@ -1,0 +1,92 @@
+module goldstone-arp {
+  yang-version 1.1;
+  namespace "http://goldstone.net/yang/goldstone-arp";
+  prefix gs-arp;
+
+  import ietf-yang-types {
+    prefix yang;
+    reference "RFC 6991: Common YANG Data Types";
+  }
+  import goldstone-interfaces {
+    prefix gs-if;
+    reference "RFC 8343: A Yang Data Model for Interface Management";
+  }
+  import goldstone-ip {
+    prefix gs-ip;
+    reference "RFC 8344: A Yang Data Model for IP Management";
+  }
+
+  organization
+    "Goldstone";
+
+
+  description
+    "Address Resolution Protocol (ARP) management, which includes
+     static ARP configuration, dynamic ARP learning, ARP entry query,
+     and packet statistics collection.";
+
+  revision 2020-10-13 {
+    description
+      "Init revision";
+    reference "0.1.0";
+  }
+
+  container arp {
+    description
+      "Address Resolution Protocol (ARP)";
+    leaf dynamic-learning {
+      type boolean;
+      default "true";
+      description
+        "Controls the default ARP learning behavior on all
+         interfaces on the device, unless explicit overridden by
+         the per-interface dynamic-learning leaf:
+           true -  dynamic learning is enabled on all interfaces by
+                   default,
+           false - dynamic learning is disabled on all interfaces by
+                   default";
+      reference "RFC826: An Ethernet Address Resolution Protocol";
+    }
+  }
+  augment "/gs-if:interfaces/gs-if:interface/gs-ip:ipv4" {
+    description
+      "Augment interfaces with ARP configuration and state.";
+    container arp {
+      description
+        "Address Resolution Protocol (ARP) related configuration
+         and state";
+      leaf expiry-time {
+        type uint32 {
+          range "30..86400";
+        }
+        units "seconds";
+        description
+          "Aging time of a received dynamic ARP entry before it is
+           removed from the cache.";
+      }
+      leaf dynamic-learning {
+        type boolean;
+        description
+          "Controls whether dynamic ARP learning is enabled on the
+           interface.  If not configured, it defaults to the behavior
+           specified in the per-device /arp/dynamic-learning leaf.
+
+             true -  dynamic learning is enabled
+             false - dynamic learning is disabled";
+      }
+    }
+  }
+
+  augment "/gs-if:interfaces/gs-if:interface/gs-ip:ipv4/gs-ip:neighbor" {
+    description
+      "Augment IPv4 neighbor list with ARP expiry time.";
+    leaf remaining-expiry-time {
+      type uint32;
+      units "seconds";
+      config false;
+      description
+        "The number of seconds until the dynamic ARP entry expires
+         and is removed from the ARP cache.";
+    }
+  }
+}

@@ -16,18 +16,39 @@ class Interface_CLI(Object):
         self.ifname = ifname
         super().__init__(parent)
         self.sonic = Sonic(conn)
-        self.no_dict = {"shutdown": None, "speed": None, "mtu": None}
+        self.switchprt_dict = {
+            "mode": {
+                "trunk": {"vlan": WordCompleter(lambda: parent.get_vid())},
+                "access": {"vlan": WordCompleter(lambda: parent.get_vid())},
+            }
+        }
+        self.no_dict = {
+            "shutdown": None,
+            "speed": None,
+            "mtu": None,
+            "switchport": self.switchprt_dict,
+        }
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
         def no(args):
             if len(args) < 1:
-                raise InvalidInput("usage: no shutdown")
+                raise InvalidInput("usage: {}".format(self.no_usage))
             if args[0] == "shutdown":
                 self.sonic.port.set_admin_status(self.ifname, "up")
             elif args[0] == "speed":
                 self.sonic.port.set_speed(self.ifname, "100000")
             elif args[0] == "mtu":
                 self.sonic.port.set_mtu(self.ifname, 9100)
+            elif args[0] == "switchport" and len(args) == 5:
+                if args[4].isdigit():
+                    if args[4] in parent.get_vid():
+                        self.sonic.port.set_vlan_mem(
+                            self.ifname, args[1], args[4], no=True
+                        )
+                    else:
+                        print("Entered vid does not exist")
+                else:
+                    print("argument vid must be numbers and not letters")
             else:
                 self.no_usage()
 
@@ -58,6 +79,18 @@ class Interface_CLI(Object):
                 self.sonic.port.set_mtu(self.ifname, mtu)
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
+
+        @self.command(NestedCompleter.from_nested_dict(self.switchprt_dict))
+        def switchport(args):
+            if len(args) != 4:
+                raise InvalidInput("usage: switchport mode (trunk|access) vlan <vid>")
+            if args[3].isdigit():
+                if args[3] in parent.get_vid():
+                    self.sonic.port.set_vlan_mem(self.ifname, args[1], args[3])
+                else:
+                    print("Entered vid does not exist")
+            else:
+                print("argument vid must be numbers and not letters")
 
         @self.command(parent.get_completer("show"))
         def show(args):

@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 class Vlan(object):
 
-    XPATH = "/sonic-vlan:sonic-vlan/VLAN"
-    XPATHport = "/sonic-vlan:sonic-vlan/VLAN_MEMBER"
+    XPATH = "/goldstone-vlan:vlan/VLAN"
+    XPATHport = "/goldstone-vlan:vlan/VLAN_MEMBER"
 
     def xpath_vlan(self, vid):
         return "{}/VLAN_LIST[name='{}']".format(self.XPATH, "Vlan" + vid)
@@ -30,14 +30,16 @@ class Vlan(object):
         )
         try:
             self._vlan_map = json.loads(self.tree.print_mem("json"))[
-                "sonic-vlan:sonic-vlan"
+                "goldstone-vlan:vlan"
             ]["VLAN"]["VLAN_LIST"]
         except KeyError as error:
             pass
 
     def show_vlan(self, details="details"):
-        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "running")
-        self.treeport = self.sr_op.get_data_ly("{}".format(self.XPATHport), "running")
+        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
+        self.treeport = self.sr_op.get_data_ly(
+            "{}".format(self.XPATHport), "operational"
+        )
         dl1 = self.tree.print_mem("json")
         dl2 = self.treeport.print_mem("json")
         try:
@@ -50,8 +52,8 @@ class Vlan(object):
             print(tabulate([], ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
         else:
             try:
-                dl1 = dl1["sonic-vlan:sonic-vlan"]["VLAN"]["VLAN_LIST"]
-                dl2 = dl2["sonic-vlan:sonic-vlan"]["VLAN_MEMBER"]["VLAN_MEMBER_LIST"]
+                dl1 = dl1["goldstone-vlan:vlan"]["VLAN"]["VLAN_LIST"]
+                dl2 = dl2["goldstone-vlan:vlan"]["VLAN_MEMBER"]["VLAN_MEMBER_LIST"]
             except KeyError as error:
                 pass
             dln = []
@@ -87,7 +89,7 @@ class Vlan(object):
     def create_vlan(self, vid):
         try:
             data_tree = self.session.get_data_ly(self.XPATH)
-            vlan_map = json.loads(data_tree.print_mem("json"))["sonic-vlan:sonic-vlan"][
+            vlan_map = json.loads(data_tree.print_mem("json"))["goldstone-vlan:vlan"][
                 "VLAN"
             ]["VLAN_LIST"]
         except (sr.errors.SysrepoNotFoundError, KeyError) as error:
@@ -104,8 +106,8 @@ class Vlan(object):
 
     def show(self, vid):
         xpath = self.xpath_vlan(vid)
-        tree = self.sr_op.get_data(xpath)
-        data = [v for v in list((tree)["sonic-vlan"]["VLAN"]["VLAN_LIST"])][0]
+        tree = self.sr_op.get_data(xpath, "operational")
+        data = [v for v in list((tree)["vlan"]["VLAN"]["VLAN_LIST"])][0]
         if "members" in data:
             mem_delim = ","
             mem_delim = mem_delim.join(data["members"])
@@ -114,14 +116,27 @@ class Vlan(object):
             data["members"] = "-"
         print_tabular(data, "")
 
+    def run_conf(self):
+        try:
+            self.tree = self.sr_op.get_data(
+                "{}/VLAN_LIST".format(self.XPATH), "running"
+            )
+            d_list = self.tree["vlan"]["VLAN"]["VLAN_LIST"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return
+        for data in d_list:
+            print("vlan {}".format(data["vlanid"]))
+            print("  quit")
+        print("!")
+
 
 class Port(object):
 
-    XPATH = "/sonic-port:sonic-port/PORT/PORT_LIST"
+    XPATH = "/goldstone-interfaces:interfaces/interface"
 
     def xpath(self, ifname):
         self.path = self.XPATH
-        return "{}[ifname='{}']".format(self.path, ifname)
+        return "{}[name='{}']".format(self.path, ifname)
 
     def __init__(self, conn, parent):
         self.session = conn.start_session()
@@ -129,63 +144,77 @@ class Port(object):
         self._ifname_map = []
         try:
             self.tree = self.sr_op.get_data(self.XPATH, "operational")
-            self._ifname_map = list(self.tree["sonic-port"]["PORT"]["PORT_LIST"])
+            self._ifname_map = list(self.tree["interfaces"]["interface"])
         except KeyError as error:
-            print("Port list is not configured")
+            print("interface list is not configured")
         except sr.errors.SysrepoNotFoundError as error:
-            print("sonic-mgmt is down")
+            print("Database is empty")
 
     def show_interface(self, details="description"):
         # TODO:switch to operational when sonic_south is fixed
         try:
-            self.tree = self.sr_op.get_data(self.XPATH)
-            self._ifname_map = list(self.tree["sonic-port"]["PORT"]["PORT_LIST"])
+            self.tree = self.sr_op.get_data(self.XPATH, "operational")
+            self._ifname_map = list(self.tree["interfaces"]["interface"])
         except KeyError as error:
-            print("Port list is not configured")
+            print("interface list is not configured")
         except sr.errors.SysrepoNotFoundError as error:
             print("sonic-mgmt is down")
         rows = []
         if details == "brief":
-            headers = ["ifname", "oper_status", "admin_status", "alias"]
+            headers = ["name", "oper-status", "admin-status", "alias"]
             for data in self._ifname_map:
                 rows.append(
                     [
-                        data["ifname"],
-                        data["oper_status"] if "oper_status" in data.keys() else "-",
-                        data["admin_status"] if "admin_status" in data.keys() else "-",
-                        data["alias"],
+                        data["name"],
+                        data["oper-status"] if "oper-status" in data.keys() else "-",
+                        data["admin-status"] if "admin-status" in data.keys() else "-",
+                        data["alias"] if "alias" in data.keys() else "-",
                     ]
                 )
             print(tabulate(rows, headers, tablefmt="pretty"))
         elif details == "description":
-            headers = ["ifname", "oper_status", "admin_status", "alias", "speed", "mtu"]
+            headers = ["name", "oper-status", "admin-status", "alias", "speed", "mtu"]
             for data in self._ifname_map:
                 rows.append(
                     [
-                        data["ifname"],
-                        data["oper_status"] if "oper_status" in data.keys() else "-",
-                        data["admin_status"] if "admin_status" in data.keys() else "-",
-                        data["alias"],
+                        data["name"],
+                        data["oper-status"] if "oper-status" in data.keys() else "-",
+                        data["admin-status"] if "admin-status" in data.keys() else "-",
+                        data["alias"] if "alias" in data.keys() else "-",
                         data["speed"] if "speed" in data.keys() else "-",
-                        data["mtu"] if "mtu" in data.keys() else "-",
+                        data["ipv4"]["mtu"] if "ipv4" in data.keys() else "-",
                     ]
                 )
             print(tabulate(rows, headers, tablefmt="pretty"))
 
     def run_conf(self):
-        runn_conf_list = ["admin_status", "mtu", "speed"]
-        tree = self.sr_op.get_data("{}".format(self.XPATH))
+        xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
+
+        runn_conf_list = ["admin-status", "mtu", "speed", "name"]
         v_dict = {}
-        d_list = list((tree)["sonic-port"]["PORT"]["PORT_LIST"])
-        print("!")
+        try:
+            tree = self.sr_op.get_data("{}".format(self.XPATH))
+            d_list = list((tree)["interfaces"]["interface"])
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return
+        try:
+            vlan_tree = self.sr_op.get_data_ly("{}".format(xpath_vlan), "running")
+            vlan_memlist = json.loads(vlan_tree.print_mem("json"))
+            vlan_memlist = vlan_memlist["goldstone-vlan:vlan"]["VLAN_MEMBER"][
+                "VLAN_MEMBER_LIST"
+            ]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            # No vlan configrations is a valid case
+            pass
+
         for data in d_list:
-            print("interface {}".format(data.get("ifname")))
+            print("interface {}".format(data.get("name")))
             for v in runn_conf_list:
                 v_dict = {v: data.get(v, None) for v in runn_conf_list}
-                if v == "admin_status":
-                    if v_dict["admin_status"] == "down":
+                if v == "admin-status":
+                    if v_dict["admin-status"] == "down":
                         print("  shutdown ")
-                    elif v_dict["admin_status"] == None:
+                    elif v_dict["admin-status"] == None:
                         pass
 
                 elif v == "mtu":
@@ -200,29 +229,98 @@ class Port(object):
                     else:
                         print("  {} {}".format(v, v_dict[v]))
 
+                elif v == "name":
+                    for vlan in range(len(vlan_memlist)):
+                        if vlan_memlist[vlan]["ifname"] == v_dict["name"]:
+                            vlanId = (vlan_memlist[vlan]["name"]).split("Vlan", 1)[1]
+                            if vlan_memlist[vlan]["tagging_mode"] == "tagged":
+                                print(
+                                    "  switchport mode trunk vlan {}".format(
+                                        str(vlanId)
+                                    )
+                                )
+                            else:
+                                print(
+                                    "  switchport mode access vlan {}".format(
+                                        str(vlanId)
+                                    )
+                                )
+
             print("  quit")
         print("!")
 
     def _ifname_components(self):
         d = self._ifname_map
-        return [v["ifname"] for v in d]
+        return [v["name"] for v in d]
 
     def set_admin_status(self, ifname, value):
         xpath = self.xpath(ifname)
-        self.sr_op.set_data("{}/{}".format(xpath, "admin_status"), value)
+        set_attribute(self.sr_op, xpath, "interface", ifname, "admin-status", value)
 
     def set_mtu(self, ifname, value):
         xpath = self.xpath(ifname)
-        self.sr_op.set_data("{}/{}".format(xpath, "mtu"), value)
+        set_attribute(self.sr_op, xpath, "interface", ifname, "mtu", value)
 
     def set_speed(self, ifname, value):
         xpath = self.xpath(ifname)
-        self.sr_op.set_data("{}/{}".format(xpath, "speed"), value)
+        set_attribute(self.sr_op, xpath, "interface", ifname, "speed", value)
+
+    def set_vlan_mem(self, ifname, mode, vid, no=False):
+        xpath_mem_list = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
+        xpath_mem_mode = "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST"
+
+        xpath_mem_list = xpath_mem_list + "[name='{}']".format("Vlan" + vid)
+        xpath_mem_mode = xpath_mem_mode + "[name='{}'][ifname='{}']".format(
+            "Vlan" + vid, ifname
+        )
+        vlan_name = "Vlan" + vid
+        if no == False:
+            set_attribute(
+                self.sr_op, xpath_mem_list, "vlan", vlan_name, "members", ifname
+            )
+        else:
+            mem_list = self.sr_op.get_leaf_data(xpath_mem_list, "members")
+            if ifname in mem_list:
+                self.sr_op.delete_data("{}/{}".format(xpath_mem_list, "members"))
+                self.sr_op.delete_data("{}".format(xpath_mem_mode))
+                mem_list.remove(ifname)
+                # Since we dont have utiity function in sysrepo to delete one node in
+                # leaf-list , we are deleting 'members' with old data and creating again
+                # with new data.
+                if len(mem_list) > 1:
+                    set_attribute(
+                        self.sr_op,
+                        xpath_mem_list,
+                        "vlan",
+                        vlan_name,
+                        "members",
+                        mem_list,
+                    )
+
+        if mode == "trunk":
+            set_attribute(
+                self.sr_op, xpath_mem_mode, "vlan", vlan_name, "tagging_mode", "tagged"
+            )
+        elif mode == "access":
+            set_attribute(
+                self.sr_op,
+                xpath_mem_mode,
+                "vlan",
+                vlan_name,
+                "tagging_mode",
+                "untagged",
+            )
 
     def show(self, ifname):
         xpath = self.xpath(ifname)
-        tree = self.sr_op.get_data(xpath)
-        data = [v for v in list((tree)["sonic-port"]["PORT"]["PORT_LIST"])][0]
+        tree = self.sr_op.get_data(xpath, "operational")
+        data = [v for v in list((tree)["interfaces"]["interface"])][0]
+        if "ipv4" in data:
+            mtu_dict = data["ipv4"]
+            data["mtu"] = mtu_dict["mtu"]
+            del data["ipv4"]
+        if "statistics" in data:
+            del data["statistics"]
         print_tabular(data, "")
 
 
@@ -236,10 +334,11 @@ class Sonic(object):
         self.port.run_conf()
 
     def vlan_run_conf(self):
-        print("To Be Implemented")
-        pass
+        self.vlan.run_conf()
 
     def run_conf(self):
+        print("!")
+        self.vlan_run_conf()
         self.port_run_conf()
 
     def tech_support(self):
@@ -247,3 +346,18 @@ class Sonic(object):
         self.vlan.show_vlan()
         print("\nshow interface description:\n")
         self.port.show_interface()
+
+
+def set_attribute(sr_op, path, module, name, attr, value):
+    try:
+        sr_op.get_data(path, "running")
+    except sr.SysrepoNotFoundError as e:
+        if module == "interface":
+            sr_op.set_data(f"{path}/admin-status", "up")
+        if attr != "tagging_mode":
+            sr_op.set_data(f"{path}/name", name)
+
+    if module == "interface" and attr == "mtu":
+        sr_op.set_data("{}/goldstone-ip:ipv4/{}".format(path, attr), value)
+    else:
+        sr_op.set_data(f"{path}/{attr}", value)

@@ -49,7 +49,8 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ["/bin/sh","-c", "sysrepoctl -s/var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/goldstone-tai.yang,/var/lib/goldstone/yang/gs/goldstone-onlp.yang && \
                  sysrepoctl -s /var/lib/goldstone/yang/sonic/common --install /var/lib/goldstone/yang/sonic/common/sonic-common.yang && \
-                 sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-interface.yang,/var/lib/goldstone/yang/sonic/sonic-port.yang,/var/lib/goldstone/yang/sonic/sonic-portchannel.yang,/var/lib/goldstone/yang/sonic/sonic-vlan.yang "]
+                 sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-interface.yang,/var/lib/goldstone/yang/sonic/sonic-port.yang,/var/lib/goldstone/yang/sonic/sonic-portchannel.yang,/var/lib/goldstone/yang/sonic/sonic-vlan.yang  && \
+                 sysrepoctl -s/var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/goldstone-interface.yang,/var/lib/goldstone/yang/gs/goldstone-mgmt-interface.yang,/var/lib/goldstone/yang/gs/goldstone-ip.yang,/var/lib/goldstone/yang/gs/goldstone-arp.yang,/var/lib/goldstone/yang/gs/goldstone-portchannel.yang,/var/lib/goldstone/yang/gs/goldstone-vlan.yang,/var/lib/goldstone/yang/gs/goldstone-aaa.yang "]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -267,12 +268,14 @@ spec:
             - name: sonic
               image: docker.io/gs-test/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'sleep 10 && /usr/bin/gssouthd-sonic -s $SONIC_MGMT_PORT_80_TCP_ADDR -p http']
+              command: ['sh', '-c', 'sleep 10 && /usr/local/bin/gssouthd-sonic -v']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+              - name: sonic-db-config
+                mountPath: /var/run/redis/sonic-db/
             volumes:
             - name: shm
               hostPath:
@@ -280,3 +283,6 @@ spec:
             - name: sysrepo
               hostPath:
                   path: /var/lib/sysrepo
+            - name: sonic-db-config
+              configMap:
+                  name: sonic-db-config

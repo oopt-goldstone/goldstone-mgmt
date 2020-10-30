@@ -29,10 +29,13 @@ RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
             pip install /usr/share/wheels/*.whl
 
+RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
+
 RUN --mount=type=bind,source=src/south/taipy,target=/src,rw pip install /src
+
 RUN --mount=type=bind,source=src/south/onlppy,target=/src,rw pip install /src
 
-COPY src/south/sonic-interface/main /usr/bin/gssouthd-sonic
+RUN --mount=type=bind,source=src/south/sonicpy,target=/src,rw pip install /src
 
 COPY yang /var/lib/goldstone/yang/gs/
 ENV GS_YANG_REPO /var/lib/goldstone/yang/gs

@@ -36,6 +36,12 @@ def test_vlan(cli):
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "no vlan 1000"')
     ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "show interface brief"')
+    ssh(cli, 'gscli -c "show interface description"')
+    ssh(cli, 'gscli -c "show tech-support"')
+    ssh(cli, 'gscli -c "show running-config"')
+    ssh(cli, 'gscli -c "show running-config interface"')
+    ssh(cli, 'gscli -c "show running-config vlan"')
 
 
 def main(host, username, password):
@@ -59,7 +65,7 @@ def main(host, username, password):
         ssh(cli, 'pip3 uninstall -y gscli')
         ssh(cli, 'pip3 install /tmp/*.whl')
 
-        ssh(cli, 'gscli -c "show version"')
+        #ssh(cli, 'gscli -c "show version"')
 
         ssh(cli, 'rm -rf /dev/shm/sr_*')
         ssh(cli, 'rm -rf /var/lib/sysrepo/*')

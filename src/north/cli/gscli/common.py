@@ -65,3 +65,15 @@ class sysrepo_wrap(object):
             msg = msg.split(".,")[0]
             print(msg)
         self.session.switch_datastore("running")
+
+    def get_leaf_data(self, xpath, attr, ds="running"):
+        self.session.switch_datastore("operational")
+        val_list = []
+        try:
+            items = self.session.get_items("{}/{}".format(xpath, attr))
+            for item in items:
+                val_list.append(item.value)
+        except sr.errors.SysrepoCallbackFailedError as e:
+            print(str(e))
+        self.session.switch_datastore("running")
+        return val_list

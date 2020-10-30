@@ -1,0 +1,80 @@
+module goldstone-portchannel {
+	namespace "http://goldstone.net/yang/goldstone-portchannel";
+	prefix gs-pc;
+
+	import goldstone-interfaces {
+		prefix gs-if;
+	}
+
+	organization
+		"Goldstone";
+
+	contact
+		"Goldstone";
+
+	description
+		"GOLDSTONE PORTCHANNEL";
+
+	revision 2020-10-13 {
+		description
+			"Initial revision.";
+	}
+
+	typedef admin-status {
+		type enumeration {
+			enum up;
+			enum down;
+		}
+	}
+
+	container portchannel {
+
+		container PORTCHANNEL {
+
+			list PORTCHANNEL_LIST {
+				key "name";
+
+				max-elements 3;
+
+				leaf name {
+					type string;
+				}
+
+				leaf admin_status {
+					type admin-status;
+				}
+
+				leaf mtu {
+					type uint16;
+				}
+
+				leaf min_links {
+					type uint8;
+				}
+
+				leaf fallback {
+					type boolean;
+				}
+			}
+		}
+
+		container PORTCHANNEL_MEMBER { 
+
+			list PORTCHANNEL_MEMBER_LIST { 
+				key "name ifname";
+
+				leaf name {
+					type leafref {
+						path "../../../PORTCHANNEL/PORTCHANNEL_LIST/name";
+					}
+				}
+
+				leaf ifname {
+					type leafref {
+						path "/gs-if:interfaces/gs-if:interface/gs-if:name";
+					}
+				}
+			}
+		}
+	}
+}

@@ -137,22 +137,27 @@ class Root(Object):
                 raise InvalidInput(self.no_usage())
 
     def get_ifnames(self):
-        path = "/sonic-port:sonic-port/PORT/PORT_LIST"
+        path = "/goldstone-interfaces:interfaces/interface"
+        self.session.switch_datastore("operational")
         data_tree = self.session.get_data_ly(path)
-        port_map = json.loads(data_tree.print_mem("json"))["sonic-port:sonic-port"][
-            "PORT"
-        ]["PORT_LIST"]
-        return [v["ifname"] for v in port_map]
+        port_map = json.loads(data_tree.print_mem("json"))[
+            "goldstone-interfaces:interfaces"
+        ]["interface"]
+        self.session.switch_datastore("running")
+        return [v["name"] for v in port_map]
 
     def get_vid(self):
-        path = "/sonic-vlan:sonic-vlan/VLAN/VLAN_LIST"
+        path = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
+        self.session.switch_datastore("operational")
         try:
             data_tree = self.session.get_data_ly(path)
-            vlan_map = json.loads(data_tree.print_mem("json"))["sonic-vlan:sonic-vlan"][
+            vlan_map = json.loads(data_tree.print_mem("json"))["goldstone-vlan:vlan"][
                 "VLAN"
             ]["VLAN_LIST"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
             return []
+
+        self.session.switch_datastore("running")
         return [str(v["vlanid"]) for v in vlan_map]
 
     def get_modules(self):
