@@ -44,10 +44,7 @@ ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
 COPY --from=builder /usr/local/sonic/  /var/lib/goldstone/yang/sonic/
 ENV SONIC_YANG_REPO /var/lib/goldstone/yang/sonic
 
-
-RUN sysrepoctl -s /var/lib/goldstone/yang/sonic/common --install /var/lib/goldstone/yang/sonic/common/sonic-common.yang
-RUN sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-port.yang
-RUN sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-interface.yang
-
+RUN --mount=type=bind,source=scripts,target=/src,rw \
+    cd /src && cp /src/reload.sh /usr/local/bin/
 
 # vim:filetype=dockerfile

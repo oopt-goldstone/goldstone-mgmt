@@ -56,10 +56,7 @@ spec:
             - name: prep-sysrepo
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ["/bin/sh","-c", "sysrepoctl -s/var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/goldstone-tai.yang,/var/lib/goldstone/yang/gs/goldstone-onlp.yang && \
-                 sysrepoctl -s /var/lib/goldstone/yang/sonic/common --install /var/lib/goldstone/yang/sonic/common/sonic-common.yang && \
-                 sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-interface.yang,/var/lib/goldstone/yang/sonic/sonic-port.yang,/var/lib/goldstone/yang/sonic/sonic-portchannel.yang,/var/lib/goldstone/yang/sonic/sonic-vlan.yang  && \
-                 sysrepoctl -s/var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/goldstone-interface.yang,/var/lib/goldstone/yang/gs/goldstone-mgmt-interface.yang,/var/lib/goldstone/yang/gs/goldstone-ip.yang,/var/lib/goldstone/yang/gs/goldstone-arp.yang,/var/lib/goldstone/yang/gs/goldstone-portchannel.yang,/var/lib/goldstone/yang/gs/goldstone-vlan.yang,/var/lib/goldstone/yang/gs/goldstone-aaa.yang "]
+              command: ["reload.sh"]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm

@@ -52,6 +52,8 @@ def main(host, username, password):
         ssh(cli, 'kubectl delete -f /var/lib/rancher/k3s/server/manifests/mgmt || true') # can fail
         ssh(cli, 'rm -rf /var/lib/rancher/k3s/server/manifests/mgmt')
 
+        ssh(cli, 'systemctl restart usonic')
+
         run('docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt-debug:latest')
 
         scp = SCPClient(cli.get_transport())
