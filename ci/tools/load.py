@@ -7,18 +7,28 @@ import sys
 from scp import SCPClient
 import time
 
+class SSHException(Exception):
+    def __init__(self, msg, ret, stdout, stderr):
+        super().__init__(msg)
+        self.ret = ret
+        self.stdout = stdout
+        self.stderr = stderr
+
+
 def ssh(cli, cmd):
     print(f'ssh: "{cmd}"')
     _, stdout, stderr = cli.exec_command(cmd)
     output = []
+    err = []
     for line in stdout:
         output.append(line)
         print(f'stdout: {line}', end='')
     for line in stderr:
+        err.append(line)
         print(f'stderr: {line}', end='')
     ret = stdout.channel.recv_exit_status()
     if ret != 0:
-        raise Exception(f'{cmd} failed: ret: {ret}')
+        raise SSHException(f'{cmd} failed: ret: {ret}', ret, ''.join(output), ''.join(err))
 
     return ''.join(output)
 
@@ -43,6 +53,17 @@ def test_vlan(cli):
     ssh(cli, 'gscli -c "show running-config interface"')
     ssh(cli, 'gscli -c "show running-config vlan"')
 
+def test_tai(cli):
+    ssh(cli, 'gscli -c "transponder /dev/piu4; netif 0; show"')
+    ssh(cli, 'gscli -c "transponder /dev/piu4; netif 0; tx-laser-freq 194.5thz"')
+    ssh(cli, 'gscli -c "transponder /dev/piu4; netif 0; show"')
+
+    try:
+        ssh(cli, 'gscli -c "transponder /dev/piu4; netif 0; tx-laser-freq aaa"')
+    except SSHException as e:
+        assert 'invalid frequency input' in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: tx-laser-freq aaa")
 
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
@@ -92,6 +113,8 @@ def main(host, username, password):
         check_pod('gs-mgmt-tai')
 
         test_vlan(cli)
+
+        test_tai(cli)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Goldstone CI tool')

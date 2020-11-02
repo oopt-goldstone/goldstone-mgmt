@@ -4,6 +4,7 @@ import struct
 import sysrepo as sr
 from tabulate import tabulate
 from .common import sysrepo_wrap, print_tabular
+from .base import InvalidInput
 
 
 class HostIf(object):
