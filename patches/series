@@ -1,18 +1,25 @@
-sysrepo-python/add_copy_config.patch
+# sysrepo patches
+sysrepo/sysrepoctl-install.patch
+sysrepo/skip_test.patch
+
+# libyang-python patches
+libyang-python/get_searchdirs.patch
+libyang-python/notification.patch
+libyang-python/dup.patch
+libyang-python/add_get()_method_to_keyed_list.patch
+libyang-python/add_sgrouping.patch
+
+# sysrepo-python patches
+sysrepo-python/notification.patch
+sysrepo-python/async.patch
 sysrepo-python/add_oper_merge_subscribe_flag.patch
 sysrepo-python/add_more_info_to_oper_callback.patch
-libyang-python/add_get()_method_to_keyed_list.patch
-libyang-python/fix-to-dnode.patch
-libyang-python/notification.patch
-sysrepo-python/notification.patch
-libyang-python/get_searchdirs.patch
-sysrepo/sysrepoctl-install.patch
-np2/netopeer2-cli.patch
-libyang-python/dup.patch
-sysrepo-python/async.patch
-sonic-mgmt/sonic_vlan.patch
-libyang-python/add_sgrouping.patch
+sysrepo-python/add_copy_config.patch
 sysrepo-python/add_lock_unlock.patch
 sysrepo-python/add_sr_get_lock.patch
-libyang/fix_debian_packaging.patch
-sysrepo/skip_test.patch
+
+# netopeer2 patches
+np2/netopeer2-cli.patch
+
+# sonic-mgmt patches
+sonic-mgmt/sonic_vlan.patch
