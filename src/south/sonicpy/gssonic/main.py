@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 def _decode(string):
+    if type(string) != type(b""):
+        return string
     return string.decode("ascii")
 
 
@@ -84,7 +86,10 @@ class Server(object):
                         )
                     elif key == "admin-status":
                         self.sonic_db.set(
-                            self.sonic_db.APPL_DB, hash_appl, "admin_status", change.value
+                            self.sonic_db.APPL_DB,
+                            hash_appl,
+                            "admin_status",
+                            change.value,
                         )
                     elif key == "members@":
                         try:
@@ -128,10 +133,11 @@ class Server(object):
                     mem = _decode(
                         self.sonic_db.get(self.sonic_db.CONFIG_DB, _hash, key)
                     )
-                    mem = mem.split(",")
-                    mem.remove(member)
-                    value = ",".join(mem)
-                    self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
+                    if mem != None:
+                        mem = mem.split(",")
+                        mem.remove(member)
+                        value = ",".join(mem)
+                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
                 elif _hash.find("VLAN|") == 0 and key == "":
                     self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
 
@@ -422,7 +428,7 @@ class Server(object):
         # be fetched from Redis and complete data will be returned.
         #
         # WARNING: If we enable below line, sysrepo gets locked and it will not be released
-        #self.sess.switch_datastore("operational")
+        # self.sess.switch_datastore("operational")
         r = {}
         path_list = req_xpath.split("/")
         statistic_leaves = [
@@ -441,9 +447,9 @@ class Server(object):
             "out-errors",
         ]
 
-        try :
+        try:
             _data = self.sess.get_data(req_xpath)
-        except :
+        except:
             logger.info("Unable for fetch data in oper_cb")
             return r
 
@@ -628,7 +634,7 @@ class Server(object):
                         intf_data = self.sonic_db.get_all(self.sonic_db.APPL_DB, _hash)
                         intf_keys = [v.decode("ascii") for v in list(intf_data.keys())]
 
-                        if "admin_status" not in intf_keys :
+                        if "admin_status" not in intf_keys:
                             self.sonic_db.set(
                                 self.sonic_db.APPL_DB,
                                 "PORT_TABLE:" + ifname,
@@ -679,13 +685,10 @@ class Server(object):
                         for key in intf_data:
                             value = _decode(intf_data[key])
                             key = _decode(key)
-                            if (
-                                key == "alias"
-                                or key == "description"
-                            ):
+                            if key == "alias" or key == "description":
                                 self.sess.set_item(f"{xpath}/{key}", value)
-                            elif key == "admin_status" :
-                                if value == None :
+                            elif key == "admin_status":
+                                if value == None:
                                     value = "down"
                                 self.sess.set_item(f"{xpath}/admin-status", value)
 

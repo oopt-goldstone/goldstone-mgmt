@@ -411,7 +411,7 @@ module goldstone-interfaces {
         }
 
         leaf in-discards {
-          type yang:counter32;
+          type yang:counter64;
           description
             "The number of inbound packets that were chosen to be
              discarded even though no errors had been detected to
@@ -428,7 +428,7 @@ module goldstone-interfaces {
         }
 
         leaf in-errors {
-          type yang:counter32;
+          type yang:counter64;
           description
             "For packet-oriented interfaces, the number of inbound
              packets that contained errors preventing them from being
@@ -447,7 +447,7 @@ module goldstone-interfaces {
         }
 
         leaf in-unknown-protos {
-          type yang:counter32;
+          type yang:counter64;
 
           description
             "For packet-oriented interfaces, the number of packets
@@ -535,7 +535,7 @@ module goldstone-interfaces {
         }
 
         leaf out-discards {
-          type yang:counter32;
+          type yang:counter64;
           description
             "The number of outbound packets that were chosen to be
              discarded even though no errors had been detected to
@@ -552,7 +552,7 @@ module goldstone-interfaces {
         }
 
         leaf out-errors {
-          type yang:counter32;
+          type yang:counter64;
           description
             "For packet-oriented interfaces, the number of outbound
              packets that could not be transmitted because of errors.

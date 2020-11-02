@@ -24,6 +24,9 @@ class Vlan(object):
     def xpath_vlan(self, vid):
         return "{}/VLAN_LIST[name='{}']".format(self.XPATH, "Vlan" + vid)
 
+    def xpath_mem(self, vid):
+        return "{}/VLAN_MEMBER_LIST[name='{}']".format(self.XPATHport, "Vlan" + vid)
+
     def __init__(self, conn, parent):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
@@ -90,6 +93,7 @@ class Vlan(object):
             print(msg)
 
     def create_vlan(self, vid):
+        vlan_name = "Vlan" + vid
         try:
             data_tree = self.session.get_data_ly(self.XPATH)
             vlan_map = json.loads(data_tree.print_mem("json"))["goldstone-vlan:vlan"][
@@ -98,13 +102,25 @@ class Vlan(object):
         except (sr.errors.SysrepoNotFoundError, KeyError) as error:
             logger.warning(error)
         else:
-            vlan_name = "Vlan" + vid
             if vlan_name in vlan_map:
                 return
         self.sr_op.set_data("{}/vlanid".format(self.xpath_vlan(vid)), vid)
 
     def delete_vlan(self, vid):
         vlan_name = "Vlan" + vid
+        try:
+            mem_dict = self.sr_op.get_data("{}/members".format(self.xpath_vlan(vid)))
+            mem_dict = list(mem_dict["vlan"]["VLAN"]["VLAN_LIST"])[0]
+            mem_list = mem_dict["members"]
+        except sr.errors.SysrepoNotFoundError as error:
+            self.sr_op.delete_data(self.xpath_vlan(vid))
+            return
+        for member in mem_list:
+            self.sr_op.delete_data(
+                "{}[ifname='{}']".format(self.xpath_mem(vid), member)
+            )
+
+        self.sr_op.delete_data("{}/{}".format(self.xpath_vlan(vid), "members"))
         self.sr_op.delete_data(self.xpath_vlan(vid))
 
     def show(self, vid):
@@ -188,16 +204,6 @@ class Port(object):
         if not interface_list:
             return
 
-        try:
-            vlan_tree = self.sr_op.get_data_ly("{}".format(xpath_vlan), "running")
-            vlan_memlist = json.loads(vlan_tree.print_mem("json"))
-            vlan_memlist = vlan_memlist["goldstone-vlan:vlan"]["VLAN_MEMBER"][
-                "VLAN_MEMBER_LIST"
-            ]
-        except (sr.errors.SysrepoNotFoundError, KeyError):
-            # No vlan configrations is a valid case
-            pass
-
         for data in interface_list:
             print("interface {}".format(data.get("name")))
             for v in runn_conf_list:
@@ -221,6 +227,18 @@ class Port(object):
                         print("  {} {}".format(v, v_dict[v]))
 
                 elif v == "name":
+                    try:
+                        vlan_tree = self.sr_op.get_data_ly(
+                            "{}".format(xpath_vlan), "running"
+                        )
+                        vlan_memlist = json.loads(vlan_tree.print_mem("json"))
+                        vlan_memlist = vlan_memlist["goldstone-vlan:vlan"][
+                            "VLAN_MEMBER"
+                        ]["VLAN_MEMBER_LIST"]
+                    except (sr.errors.SysrepoNotFoundError, KeyError):
+                        # No vlan configrations is a valid case
+                        continue
+
                     for vlan in range(len(vlan_memlist)):
                         if vlan_memlist[vlan]["ifname"] == v_dict["name"]:
                             vlanId = (vlan_memlist[vlan]["name"]).split("Vlan", 1)[1]
@@ -265,6 +283,14 @@ class Port(object):
             "Vlan" + vid, ifname
         )
         vlan_name = "Vlan" + vid
+
+        # in order to create the interface node if it doesn't exist in running DS
+        try:
+            self.sr_op.get_data(self.xpath(ifname), "running")
+
+        except sr.SysrepoNotFoundError as e:
+            self.sr_op.set_data("{}/admin-status".format(self.xpath(ifname)), "up")
+
         if no == False:
             set_attribute(
                 self.sr_op, xpath_mem_list, "vlan", vlan_name, "members", ifname
