@@ -22,9 +22,8 @@ def print_tabular(h, table_title):
 
 
 class sysrepo_wrap(object):
-    def __init__(self):
-        conn = sr.SysrepoConnection()
-        self.session = conn.start_session()
+    def __init__(self, session):
+        self.session = session
 
     def get_data(self, xpath, ds="running", no_subs=False):
         self.session.switch_datastore(ds)

@@ -23,7 +23,7 @@ class Vlan(object):
 
     def __init__(self, conn, parent):
         self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap()
+        self.sr_op = sysrepo_wrap(self.session)
         self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
         self.treeport = self.sr_op.get_data_ly(
             "{}".format(self.XPATHport), "operational"
@@ -140,7 +140,7 @@ class Port(object):
 
     def __init__(self, conn, parent):
         self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap()
+        self.sr_op = sysrepo_wrap(self.session)
         self._ifname_map = []
         try:
             self.tree = self.sr_op.get_data(self.XPATH, "operational")

@@ -17,7 +17,7 @@ class HostIf(object):
 
     def __init__(self, conn):
         self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap()
+        self.sr_op = sysrepo_wrap(self.session)
         self.type = "host-interface"
 
     def set_fec_type(self, transponder_name, hostif_id, value):
@@ -54,7 +54,7 @@ class NetIf(object):
 
     def __init__(self, conn):
         self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap()
+        self.sr_op = sysrepo_wrap(self.session)
         self.type = "network-interface"
 
     def set_output_power(self, transponder_name, netif_id, value):
@@ -128,7 +128,7 @@ class Transponder(object):
 
     def __init__(self, conn):
         self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap()
+        self.sr_op = sysrepo_wrap(self.session)
         self.hostif = HostIf(conn)
         self.netif = NetIf(conn)
         self.type = "module"
