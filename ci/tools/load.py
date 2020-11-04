@@ -97,7 +97,7 @@ def main(host, username, password):
 
         ssh(cli, "systemctl restart usonic")
 
-        run("docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt-debug:latest")
+        run("docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt-debug:latest gs-test/gs-mgmt-netopeer2")
 
         scp = SCPClient(cli.get_transport())
         scp.put("/tmp/gs-mgmt.tar", "/tmp")

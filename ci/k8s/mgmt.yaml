@@ -54,7 +54,7 @@ spec:
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
             - name: prep-np
-              image: docker.io/nlpldev/gs-mgmt-netopeer2:latest
+              image: docker.io/gs-test/gs-mgmt-netopeer2:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', '$NP2/setup.sh && $NP2/merge_hostkey.sh && $NP2/merge_config.sh']
               env:
@@ -117,7 +117,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: netopeer2
-              image: docker.io/nlpldev/gs-mgmt-netopeer2:latest
+              image: docker.io/gs-test/gs-mgmt-netopeer2:latest
               imagePullPolicy: IfNotPresent
               command: ['netopeer2-server', '-d', '-v', '2']
               volumeMounts:
