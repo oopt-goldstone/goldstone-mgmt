@@ -3,7 +3,7 @@ import setuptools
 setuptools.setup(
         name='gssonic',
         version='0.1.0',
-        install_requires=['sysrepo','libyang'],
+        install_requires=['sysrepo','libyang', 'kubernetes'],
         description='Goldstone Python sonic south daemon',
         url='https://github.com/microsonic/goldstone-mgmt',
         python_requires='>=3.7',

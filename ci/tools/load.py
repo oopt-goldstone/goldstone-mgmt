@@ -78,11 +78,38 @@ def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(
         cli,
-        'gscli -c "interface Ethernet1; no shutdown; switchport mode trunk vlan 1000; show"',
+        'gscli -c "interface Ethernet1/1; no shutdown; switchport mode trunk vlan 1000; show"',
     )
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "no vlan 1000"')
     ssh(cli, 'gscli -c "show vlan details"')
+
+def test_port_breakout(cli):
+    try :
+        ssh(cli, 'gscli -c "interface Ethernet5/1; breakout 4X10GB"')
+    except:
+        print("This was 'Negative Testcase' for Breakout configuration")
+
+    ssh(cli, 'gscli -c "interface Ethernet5/1; breakout 4X10G"')
+    # Wait for usonic to come up
+    print("Waiting asychronosly for 'usonic' to come up ")
+    time.sleep(60)
+    ssh(cli, 'gscli -c "interface Ethernet5/1; show"')
+    ssh(cli, 'gscli -c "show interface description"')
+    ssh(cli, 'gscli -c "show running-config"')
+    ssh(cli, 'gscli -c "show running-config interface"')
+    ssh(cli, 'gscli -c "show tech-support"')
+
+    # Unconfigure
+    ssh(cli, 'gscli -c "interface Ethernet5/1; no breakout"')
+    # Wait for usonic to come up
+    print("Waiting asychronosly for 'usonic' to come up ")
+    time.sleep(60)
+    ssh(cli, 'gscli -c "interface Ethernet5/1; show"')
+    ssh(cli, 'gscli -c "show interface description"')
+    ssh(cli, 'gscli -c "show running-config"')
+    ssh(cli, 'gscli -c "show running-config interface"')
+    ssh(cli, 'gscli -c "show tech-support"')
 
 
 def test_logging(cli):
@@ -142,6 +169,10 @@ def main(host, username, password):
         ssh(cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt")
 
         def check_pod(name):
+            # FIXME: Wait for additional 30 seconds for usonic to come
+            # up in case if its restarted
+            if name.endswith("sonic"):
+                time.sleep(60)
             max_iteration = 4
             for i in range(max_iteration):
                 time.sleep(5)
@@ -182,6 +213,13 @@ def main(host, username, password):
                 f"FIXME: allowing to fail the vlan_member_add_delete test temporarily"
             )
 
+        try:
+            test_port_breakout(cli)
+        except SSHException as e:
+            print(f"test_port_breakout() failed: {e}")
+            ssh(cli, "kubectl get pods -A")
+            ssh(cli, "kubectl logs -l app=gs-mgmt-sonic")
+            ssh(cli, "kubectl describe pods -l app=gs-mgmt-sonic")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Goldstone CI tool")

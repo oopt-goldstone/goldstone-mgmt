@@ -66,6 +66,10 @@ module goldstone-interfaces {
     description "40 Gbps Ethernet";
   }
 
+  identity SPEED_50GB {
+    base ETHERNET_SPEED;
+    description "50 Gbps Ethernet";
+  }
 
   identity SPEED_100GB {
     base ETHERNET_SPEED;
@@ -106,28 +110,37 @@ module goldstone-interfaces {
     description
       "Configuration data for the port breakout mode";
 
-    leaf num-channels {
-      type uint8;
-      description
-        "Sets the number of channels to 'breakout' on a port
-        capable of channelization";
-    }
-
-    leaf channel-speed {
-      type identityref {
-        base ETHERNET_SPEED;
+    container breakout {
+      leaf num-channels {
+        type uint8;
+        description
+          "Sets the number of channels to 'breakout' on a port
+          capable of channelization";
       }
-      description
-        "Sets the channel speed on each channel -- the
-        supported values are defined by the
-        ETHERNET_SPEED identity";
+
+      leaf channel-speed {
+        type identityref {
+          base ETHERNET_SPEED;
+        }
+        description
+          "Sets the channel speed on each channel -- the
+          supported values are defined by the
+          ETHERNET_SPEED identity";
+      }
+
+      leaf parent {
+        must "not(../num-channels) and not(../channel-speed)" {
+          error-message "Sub-interface should not have num-channels and channel-speed configured";
+        }
+        type leafref {
+          path "/gs-if:interfaces/gs-if:interface/gs-if:name";
+        }
+      }
     }
   }
-
   container interfaces {
     description
       "Interface parameters.";
-
     list interface {
       key "name";
 

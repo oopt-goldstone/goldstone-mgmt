@@ -137,7 +137,7 @@ class Root(Object):
                 raise InvalidInput(self.no_usage())
 
     def get_ifnames(self):
-        return [v["name"] for v in self.sonic.port.get_interface_list()]
+        return [v["name"] for v in self.sonic.port.get_interface_list("operational")]
 
     def get_vid(self):
         path = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"

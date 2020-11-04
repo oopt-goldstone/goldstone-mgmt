@@ -8,7 +8,7 @@ import sysrepo as sr
 
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
-from .sonic import Sonic
+from .sonic import Sonic, sonic_defaults
 
 
 class Interface_CLI(Object):
@@ -27,7 +27,9 @@ class Interface_CLI(Object):
             "speed": None,
             "mtu": None,
             "switchport": self.switchprt_dict,
+            "breakout": None,
         }
+        self.breakout_list = ["2X50G", "4X25G", "4X10G"]
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
         def no(args):
@@ -36,9 +38,11 @@ class Interface_CLI(Object):
             if args[0] == "shutdown":
                 self.sonic.port.set_admin_status(self.ifname, "up")
             elif args[0] == "speed":
-                self.sonic.port.set_speed(self.ifname, "100000")
+                self.sonic.port.set_speed(
+                    self.ifname, sonic_defaults.SPEED, config=False
+                )
             elif args[0] == "mtu":
-                self.sonic.port.set_mtu(self.ifname, 9100)
+                self.sonic.port.set_mtu(self.ifname, sonic_defaults.MTU, config=False)
             elif args[0] == "switchport" and len(args) == 5:
                 if args[4].isdigit():
                     if args[4] in parent.get_vid():
@@ -49,6 +53,8 @@ class Interface_CLI(Object):
                         print("Entered vid does not exist")
                 else:
                     print("argument vid must be numbers and not letters")
+            elif args[0] == "breakout":
+                self.sonic.port.set_breakout(self.ifname, None, None, False)
             else:
                 self.no_usage()
 
@@ -91,6 +97,28 @@ class Interface_CLI(Object):
                     print("Entered vid does not exist")
             else:
                 print("argument vid must be numbers and not letters")
+
+        @self.command(WordCompleter(self.breakout_list))
+        def breakout(args):
+            valid_speed = ["50G", "10G", "25G"]
+            invalid_input_str = f'usage: breakout [{"|".join(self.breakout_list)}]'
+            if len(args) != 1:
+                raise InvalidInput(invalid_input_str)
+            try:
+                # Split values '2X50G', '4X25G', '4X10G' and validate
+                input_values = args[0].split("X")
+                if len(input_values) != 2 and (
+                    input_values[0] != "2" or input_values[0] != "4"
+                ):
+                    raise InvalidInput(invalid_input_str)
+                if input_values[1] not in valid_speed:
+                    raise InvalidInput(invalid_input_str)
+            except:
+                raise InvalidInput(invalid_input_str)
+
+            self.sonic.port.set_breakout(
+                self.ifname, input_values[0], input_values[1], True
+            )
 
         @self.command(parent.get_completer("show"))
         def show(args):

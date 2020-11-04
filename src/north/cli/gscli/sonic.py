@@ -16,6 +16,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class sonic_defaults:
+    SPEED = "100000"
+    MTU = 9100
+
+
 class Vlan(object):
 
     XPATH = "/goldstone-vlan:vlan/VLAN"
@@ -161,9 +166,9 @@ class Port(object):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
 
-    def get_interface_list(self):
+    def get_interface_list(self, datastore):
         try:
-            tree = self.sr_op.get_data(self.XPATH, "operational")
+            tree = self.sr_op.get_data(self.XPATH, datastore)
             return natsorted(tree["interfaces"]["interface"], key=lambda x: x["name"])
         except KeyError as error:
             logger.warning("interface list is not configured")
@@ -173,7 +178,7 @@ class Port(object):
 
     def show_interface(self, details="description"):
         rows = []
-        for intf in self.get_interface_list():
+        for intf in self.get_interface_list("operational"):
             row = [
                 intf["name"],
                 intf.get("oper-status", "-"),
@@ -197,10 +202,10 @@ class Port(object):
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
 
-        runn_conf_list = ["admin-status", "mtu", "speed", "name"]
+        runn_conf_list = ["admin-status", "ipv4", "speed", "name", "breakout"]
         v_dict = {}
 
-        interface_list = self.get_interface_list()
+        interface_list = self.get_interface_list("running")
         if not interface_list:
             return
 
@@ -214,17 +219,34 @@ class Port(object):
                     elif v_dict["admin-status"] == None:
                         pass
 
-                elif v == "mtu":
-                    if (v_dict["mtu"] == 9100) or (v_dict["mtu"] == None):
+                elif v == "ipv4":
+                    try:
+                        mtu = v_dict["ipv4"]["mtu"]
+                    except:
+                        mtu = None
+
+                    if (mtu == sonic_defaults.MTU) or (mtu == None):
+                        pass
+                    else:
+                        print("  {} {}".format("mtu", mtu))
+
+                elif v == "speed":
+                    if (v_dict["speed"] == sonic_defaults.SPEED) or (
+                        v_dict["speed"] == None
+                    ):
                         pass
                     else:
                         print("  {} {}".format(v, v_dict[v]))
 
-                elif v == "speed":
-                    if (v_dict["speed"] == 100000) or (v_dict["speed"] == None):
+                elif v == "breakout":
+                    if v_dict["breakout"] == None:
                         pass
                     else:
-                        print("  {} {}".format(v, v_dict[v]))
+                        num_of_channels = v_dict["breakout"]["num-channels"]
+                        channel_speed = v_dict["breakout"]["channel-speed"]
+                        channel_speed = channel_speed.split("_")
+                        channel_speed = channel_speed[1].split("B")
+                        print("  {} {}X{}".format(v, num_of_channels, channel_speed[0]))
 
                 elif v == "name":
                     try:
@@ -266,23 +288,28 @@ class Port(object):
         xpath = self.xpath(ifname)
         set_attribute(self.sr_op, xpath, "interface", ifname, "admin-status", value)
 
-    def set_mtu(self, ifname, value):
+    def set_mtu(self, ifname, value, config=True):
         xpath = self.xpath(ifname)
         set_attribute(self.sr_op, xpath, "interface", ifname, "mtu", value)
+        if config == False:
+            self.sr_op.delete_data("{}/goldstone-ip:ipv4/mtu".format(xpath))
+            self.sr_op.delete_data("{}/goldstone-ip:ipv4".format(xpath))
 
-    def set_speed(self, ifname, value):
+    def set_speed(self, ifname, value, config=True):
         xpath = self.xpath(ifname)
         set_attribute(self.sr_op, xpath, "interface", ifname, "speed", value)
+        if config == False:
+            self.sr_op.delete_data("{}/speed".format(xpath))
 
     def set_vlan_mem(self, ifname, mode, vid, no=False):
         xpath_mem_list = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
         xpath_mem_mode = "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST"
 
-        xpath_mem_list = xpath_mem_list + "[name='{}']".format("Vlan" + vid)
-        xpath_mem_mode = xpath_mem_mode + "[name='{}'][ifname='{}']".format(
-            "Vlan" + vid, ifname
-        )
         vlan_name = "Vlan" + vid
+        xpath_mem_list = xpath_mem_list + "[name='{}']".format(vlan_name)
+        xpath_mem_mode = xpath_mem_mode + "[name='{}'][ifname='{}']".format(
+            vlan_name, ifname
+        )
 
         # in order to create the interface node if it doesn't exist in running DS
         try:
@@ -313,6 +340,8 @@ class Port(object):
                         "members",
                         mem_list,
                     )
+            # Unconfig done
+            return
 
         if mode == "trunk":
             set_attribute(
@@ -328,6 +357,137 @@ class Port(object):
                 "untagged",
             )
 
+    def speed_to_yang_val(self, speed):
+        # Considering only speeds supported in CLI
+        if speed == "25G":
+            return "SPEED_25GB"
+        if speed == "50G":
+            return "SPEED_50GB"
+        if speed == "10G":
+            return "SPEED_10GB"
+
+    def flush_intf_config(self, ifname, config):
+        xpath = self.xpath(ifname)
+        xpath_vlan = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
+
+        print("Existing configurations on parent interfaces will be flushed")
+        if_list = []
+        if config == False:
+            print("Sub Interfaces will be deleted")
+            try:
+                breakout_tree = self.sr_op.get_data(f"{xpath}/breakout", "running")
+                breakout_data = list(breakout_tree["interfaces"]["interface"])[0]
+                breakout_data = breakout_data["breakout"]
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                # If no configuration exists, no need to return error as netconf
+                # doesnt expect errors for no operations
+                return
+
+            try:
+                num_of_channels = breakout_data["num-channels"]
+                channel_speed = breakout_data["channel-speed"]
+                common_ifname = ifname.split("/")
+                if_list = [
+                    common_ifname[0] + "/" + str(i)
+                    for i in range(1, num_of_channels + 1)
+                ]
+            except:
+                parent_if = breakout_data["parent"]
+        else:
+            if_list.append(ifname)
+
+        for _if_name in if_list:
+            # flushing speed, mtu and vlan configs
+            try:
+                tree = self.sr_op.get_data("{}".format(self.xpath(_if_name)), "running")
+                if_data = [v for v in list((tree)["interfaces"]["interface"])][0]
+            except:
+                logger.debug(
+                    f"Breakout Flush configs: {_if_name} doesnt exist in running db"
+                )
+                continue
+
+            for key in if_data.keys():
+                # Configurable parameters for now are speed and mtu(part of ipv4)
+                # admin_status cannot be deleted as it is mandatory parameter
+                if key == "speed":
+                    self.set_speed(_if_name, sonic_defaults.SPEED, False)
+                if key == "ipv4":
+                    try:
+                        mtu = if_data["ipv4"]["mtu"]
+                    except:
+                        continue
+                    self.set_mtu(_if_name, sonic_defaults.MTU, False)
+
+            try:
+                tree = self.sr_op.get_data(xpath_vlan, "running")
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                # If no VLAN exist, no need to flush data
+                return
+
+            try:
+                vlan_list = list(tree["vlan"]["VLAN"]["VLAN_LIST"])
+                for vlan in vlan_list:
+                    try:
+                        mem_list = list(vlan["members"])
+                    except:
+                        pass
+                    if len(mem_list) >= 1:
+                        for intf in mem_list:
+                            if intf == _if_name:
+                                self.set_vlan_mem(
+                                    _if_name, None, str(vlan["vlanid"]), True
+                                )
+            except:
+                pass
+
+            if config == False and _if_name != ifname:
+                self.sr_op.delete_data("{}".format(self.xpath(_if_name)))
+
+    def set_breakout(self, ifname, number_of_channels, speed, config):
+        xpath = self.xpath(ifname)
+
+        sub_intf = ifname.split("/")[1]
+        if sub_intf != "1":
+            print("Breakout cannot be configured/removed on a sub-interface")
+            return
+
+        # We need to flush interface configurations before breakout config/unconfig
+        try:
+            self.flush_intf_config(ifname, config)
+        except:
+            logger.warning(f"Interface:{ifname} configuration flush failed!")
+
+        if config == True:
+            # Set breakout configuration
+            try:
+                set_attribute(
+                    self.sr_op,
+                    xpath,
+                    "interface",
+                    ifname,
+                    "num-channels",
+                    number_of_channels,
+                )
+            except sr.errors.SysrepoValidationFailedError as error:
+                print(str(error))
+                return
+            try:
+                set_attribute(
+                    self.sr_op,
+                    xpath,
+                    "interface",
+                    ifname,
+                    "channel-speed",
+                    self.speed_to_yang_val(speed),
+                )
+            except sr.errors.SysrepoValidationFailedError as error:
+                print(str(error))
+                return
+
+        else:
+            self.sr_op.delete_data("{}/{}".format(xpath, "breakout"))
+
     def show(self, ifname):
         xpath = self.xpath(ifname)
         tree = self.sr_op.get_data(xpath, "operational")
@@ -338,6 +498,13 @@ class Port(object):
             del data["ipv4"]
         if "statistics" in data:
             del data["statistics"]
+        if "breakout" in data:
+            try:
+                data["breakout:num-channels"] = data["breakout"]["num-channels"]
+                data["breakout:channel-speed"] = data["breakout"]["channel-speed"]
+            except:
+                data["breakout:parent"] = data["breakout"]["parent"]
+            del data["breakout"]
         print_tabular(data, "")
 
 
@@ -375,5 +542,7 @@ def set_attribute(sr_op, path, module, name, attr, value):
 
     if module == "interface" and attr == "mtu":
         sr_op.set_data("{}/goldstone-ip:ipv4/{}".format(path, attr), value)
+    elif module == "interface" and (attr == "num-channels" or attr == "channel-speed"):
+        sr_op.set_data("{}/breakout/{}".format(path, attr), value)
     else:
         sr_op.set_data(f"{path}/{attr}", value)

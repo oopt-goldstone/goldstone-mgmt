@@ -42,6 +42,46 @@ subjects:
   namespace: default
 
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: gs-mgmt-sonic-svc
+    namespace: default
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+    name: gs-mgmt-sonic-svc
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: usonic-manage
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+ - kind: ServiceAccount
+   name: gs-mgmt-sonic-svc
+   namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    name: usonic-manage
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get","update","patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get","list","watch"]
+- apiGroups: ["extensions", "apps"]
+  resources: ["deployments"]
+  verbs: ["*"]
+- apiGroups: ["batch", "extensions"]
+  resources: ["jobs"]
+  verbs: ["*"]
+
+---
 
 apiVersion: batch/v1
 kind: Job
@@ -301,7 +341,7 @@ spec:
                 app: gs-mgmt-sonic
         spec:
             hostPID: true
-            serviceAccountName: gs-mgmt
+            serviceAccountName: gs-mgmt-sonic-svc
             initContainers:
             - name: wait-prep
               image: docker.io/bitnami/kubectl:latest
