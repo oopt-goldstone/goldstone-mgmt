@@ -11,6 +11,7 @@ pipeline {
       steps {
           sh 'env'
           script {
+              env.SKIP = 0
               if (env.BRANCH_NAME == 'master' ) {
                   env.DOCKER_REPO = 'nlpldev'
                   env.BUILD_BUILDER = 1
@@ -20,19 +21,16 @@ pipeline {
                   // build the builder
                   env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile\\|build_onlp.sh'") ? 0 : 1
               } else {
+                  env.SKIP = 1
                   env.BUILD_BUILDER = 0
                   currentBuild.result = 'SUCCESS'
                   echo "no need to build ${env.BRANCH_NAME}"
-                  sh "exit 0"
               }
               if ( params.FORCE_BUILD_BUILDER ) {
                   env.BUILD_BUILDER = 1
               }
           }
-          sh """
-              echo $env.BUILD_BUILDER
-              echo $BUILD_BUILDER
-          """
+          sh 'env'
       }
     }
 
@@ -44,6 +42,9 @@ pipeline {
     }
 
     stage('Build') {
+      when {
+        environment name: 'SKIP', value: '0'
+      }
       steps {
           sh 'apk add --update docker make python2'
           sh 'git submodule update --init'
@@ -57,12 +58,23 @@ pipeline {
     stage('Load') {
       when {
         branch pattern: "^PR.*", comparator: "REGEXP"
+        environment name: 'SKIP', value: '0'
       }
       steps {
         sh 'docker build -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
 
         timeout(time: 15, unit: 'MINUTES') {
             sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 ./ci/tools/load.py ${params.DEVICE}"
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        if ( env.BRANCH_NAME != 'master' ) {
+          deleteDir() /* clean up our workspace */
         }
       }
     }
