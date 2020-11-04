@@ -17,10 +17,9 @@ RUN --mount=type=bind,source=sm/OpenNetworkLinux/REPO/stretch/packages/binary-am
 RUN dpkg -i /usr/share/onlp/*.deb
 
 RUN --mount=type=bind,source=sm/libyang,target=/root/sm/libyang,rw \
-# no patch required for now.
-#    --mount=type=bind,source=patches/libyang,target=/root/patches \
-#    --mount=type=tmpfs,target=/root/.pc,rw \
-#    cd /root && quilt upgrade && quilt push -a && \
+    --mount=type=bind,source=patches/libyang,target=/root/patches \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && \
     mkdir -p /root/sm/libyang/build && cd /root/sm/libyang/build && \
     cmake .. && make build-deb && mkdir -p /usr/share/debs/libyang && cp debs/* /usr/share/debs/libyang/
 

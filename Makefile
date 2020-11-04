@@ -59,7 +59,7 @@ endif
 all: builder np2 docker image debug-image
 
 docker:
-	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang south cli' $(MAKE) cmd
+	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang cli' $(MAKE) cmd
 
 builder: $(ONLP_DEBS)
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
@@ -97,6 +97,8 @@ init:
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-onlp.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-tai.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-sonic-interface.yang
+	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-interface.yang
+	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-vlan.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-types.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-fan.yang
