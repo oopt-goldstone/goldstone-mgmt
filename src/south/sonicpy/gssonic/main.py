@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 def _decode(string):
-    if type(string) != type(b""):
-        return string
-    return string.decode("ascii")
+    if hasattr(string, "decode"):
+        return string.decode("utf-8")
+    return string
 
 
 class Server(object):

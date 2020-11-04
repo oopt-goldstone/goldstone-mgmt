@@ -289,7 +289,7 @@ class Port(object):
             self.sr_op.get_data(self.xpath(ifname), "running")
 
         except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data("{}/admin-status".format(self.xpath(ifname)), "up")
+            self.sr_op.set_data("{}/admin-status".format(self.xpath(ifname)), "down")
 
         if no == False:
             set_attribute(
