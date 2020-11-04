@@ -7,6 +7,9 @@ import sysrepo as sr
 from .common import sysrepo_wrap, print_tabular
 
 from prompt_toolkit.completion import WordCompleter
+from .base import InvalidInput
+
+from natsort import natsorted
 
 import logging
 
@@ -141,62 +144,50 @@ class Port(object):
     def __init__(self, conn, parent):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
-        self._ifname_map = []
+
+    def get_interface_list(self):
         try:
-            self.tree = self.sr_op.get_data(self.XPATH, "operational")
-            self._ifname_map = list(self.tree["interfaces"]["interface"])
+            tree = self.sr_op.get_data(self.XPATH, "operational")
+            return natsorted(tree["interfaces"]["interface"], key=lambda x: x["name"])
         except KeyError as error:
-            print("interface list is not configured")
+            logger.warning("interface list is not configured")
         except sr.errors.SysrepoNotFoundError as error:
-            print("Database is empty")
+            logger.warning("sonic-mgmt is down")
+        return []
 
     def show_interface(self, details="description"):
-        # TODO:switch to operational when sonic_south is fixed
-        try:
-            self.tree = self.sr_op.get_data(self.XPATH, "operational")
-            self._ifname_map = list(self.tree["interfaces"]["interface"])
-        except KeyError as error:
-            print("interface list is not configured")
-        except sr.errors.SysrepoNotFoundError as error:
-            print("sonic-mgmt is down")
         rows = []
+        for intf in self.get_interface_list():
+            row = [
+                intf["name"],
+                intf.get("oper-status", "-"),
+                intf.get("admin-status", "-"),
+                intf.get("alias", "-"),
+            ]
+            if details == "description":
+                row += [intf.get("speed", "-"), intf.get("ipv4", {}).get("mtu", "-")]
+
+            rows.append(row)
+
         if details == "brief":
             headers = ["name", "oper-status", "admin-status", "alias"]
-            for data in self._ifname_map:
-                rows.append(
-                    [
-                        data["name"],
-                        data["oper-status"] if "oper-status" in data.keys() else "-",
-                        data["admin-status"] if "admin-status" in data.keys() else "-",
-                        data["alias"] if "alias" in data.keys() else "-",
-                    ]
-                )
-            print(tabulate(rows, headers, tablefmt="pretty"))
         elif details == "description":
             headers = ["name", "oper-status", "admin-status", "alias", "speed", "mtu"]
-            for data in self._ifname_map:
-                rows.append(
-                    [
-                        data["name"],
-                        data["oper-status"] if "oper-status" in data.keys() else "-",
-                        data["admin-status"] if "admin-status" in data.keys() else "-",
-                        data["alias"] if "alias" in data.keys() else "-",
-                        data["speed"] if "speed" in data.keys() else "-",
-                        data["ipv4"]["mtu"] if "ipv4" in data.keys() else "-",
-                    ]
-                )
-            print(tabulate(rows, headers, tablefmt="pretty"))
+        else:
+            raise InvalidInput(f"unsupported format: {details}")
+
+        print(tabulate(rows, headers, tablefmt="pretty"))
 
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
 
         runn_conf_list = ["admin-status", "mtu", "speed", "name"]
         v_dict = {}
-        try:
-            tree = self.sr_op.get_data("{}".format(self.XPATH))
-            d_list = list((tree)["interfaces"]["interface"])
-        except (sr.errors.SysrepoNotFoundError, KeyError):
+
+        interface_list = self.get_interface_list()
+        if not interface_list:
             return
+
         try:
             vlan_tree = self.sr_op.get_data_ly("{}".format(xpath_vlan), "running")
             vlan_memlist = json.loads(vlan_tree.print_mem("json"))
@@ -207,7 +198,7 @@ class Port(object):
             # No vlan configrations is a valid case
             pass
 
-        for data in d_list:
+        for data in interface_list:
             print("interface {}".format(data.get("name")))
             for v in runn_conf_list:
                 v_dict = {v: data.get(v, None) for v in runn_conf_list}
@@ -326,7 +317,6 @@ class Port(object):
 
 class Sonic(object):
     def __init__(self, conn):
-        self.session = conn.start_session()
         self.port = Port(conn, self)
         self.vlan = Vlan(conn, self)
 
