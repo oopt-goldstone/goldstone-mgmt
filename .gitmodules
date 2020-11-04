@@ -12,7 +12,7 @@
 	url = https://github.com/Telecominfraproject/oopt-tai.git
 [submodule "sm/OpenNetworkLinux"]
 	path = sm/OpenNetworkLinux
-	url = https://github.com/nlpldev/ONL.git
+	url = https://github.com/galileowistron/ONL.git
 [submodule "sm/netopeer2"]
 	path = sm/netopeer2
 	url = https://github.com/CESNET/netopeer2.git
