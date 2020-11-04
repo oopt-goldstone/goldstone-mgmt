@@ -3,6 +3,7 @@ pipeline {
 
   parameters {
     string(name: 'DEVICE', defaultValue: '10.10.10.115', description: 'IP address of the test device')
+    booleanParam(name: 'FORCE_BUILD_BUILDER', defaultValue: false, description: 'build builder image forcibly')
   }
 
   stages {
@@ -23,6 +24,9 @@ pipeline {
                   currentBuild.result = 'SUCCESS'
                   echo "no need to build ${env.BRANCH_NAME}"
                   sh "exit 0"
+              }
+              if ( params.FORCE_BUILD_BUILDER ) {
+                  env.BUILD_BUILDER = 1
               }
           }
           sh """
