@@ -59,6 +59,8 @@ class sysrepo_wrap(object):
         try:
             self.session.delete_item(xpath)
             self.session.apply_changes()
+        except sr.errors.SysrepoInvalArgError as e:
+            print(e)
         except sr.errors.SysrepoValidationFailedError as e:
             msg = str(e)
             msg = msg.split(".,")[0]

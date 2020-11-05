@@ -114,7 +114,8 @@ class NetIf(object):
             n = a["modules"]["module"][transponder_name]["network-interface"][netif_id][
                 "state"
             ]
-            print_tabular(n, "")
+            upd_netif = ber_decode(n)
+            print_tabular(upd_netif, "")
         except KeyError as e:
             print(f"Error while fetching values from operational database")
             return
@@ -166,7 +167,8 @@ class Transponder(object):
                 net_interface = v["modules"]["module"][transponder_name][
                     "network-interface"
                 ][f"{netif}"]["state"]
-                print_tabular(net_interface, f"Network Interface {netif}")
+                upd_net_interface = ber_decode(net_interface)
+                print_tabular(upd_net_interface, f"Network Interface {netif}")
             for hostif in range(get_hostif_num):
                 host_interface = v["modules"]["module"][transponder_name][
                     "host-interface"
@@ -349,6 +351,14 @@ def human_freq(item):
             return str(round(float(item[:-1]) * multiplier))
     else:
         return "{0:.2f}THz".format(int(item) / 1e12)
+
+
+def ber_decode(netif_dict):
+    upd_dict = netif_dict
+    for key in upd_dict:
+        if key[-3:] == "ber":
+            upd_dict[key] = human_ber(upd_dict[key])
+    return upd_dict
 
 
 def human_ber(item):
