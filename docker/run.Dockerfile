@@ -34,6 +34,7 @@ RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
 RUN --mount=type=bind,source=src/south/taipy,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/south/onlppy,target=/src,rw pip install /src
+RUN --mount=type=bind,source=src/south/system,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/south/sonicpy,target=/src,rw pip install /src
 
