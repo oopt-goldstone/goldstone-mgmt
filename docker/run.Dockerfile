@@ -26,6 +26,8 @@ ENV PYTHONPATH /usr/lib/python3/dist-packages
 
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 
+RUN --mount=type=bind,source=src/south/system,target=/src,rw pip install /src
+
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
             pip install /usr/share/wheels/*.whl
 
@@ -34,7 +36,6 @@ RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
 RUN --mount=type=bind,source=src/south/taipy,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/south/onlppy,target=/src,rw pip install /src
-RUN --mount=type=bind,source=src/south/system,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/south/sonicpy,target=/src,rw pip install /src
 

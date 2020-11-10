@@ -64,6 +64,9 @@ RUN pip install /usr/share/wheels/*.whl
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
     cd /src && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels
 
+RUN --mount=type=bind,source=src/south/system,target=/src/south/system,rw \
+    cd /src/south/system && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels
+
 RUN --mount=type=bind,source=scripts,target=/src,rw \
     cd /src && cp /src/reload.sh /usr/local/bin/
 
