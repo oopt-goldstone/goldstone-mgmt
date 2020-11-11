@@ -325,7 +325,12 @@ module goldstone-interfaces {
       }
 
       leaf speed {
-        type yang:gauge64;
+        type yang:gauge64 {
+               range "1000|10000|25000|40000|50000|100000|400000" {
+                       error-message "Invalid Ethernet interface speed";
+                       error-app-tag port-speed-invalid;
+               }
+        }
         units "bits/second";
         description
             "An estimate of the interface's current bandwidth in bits
@@ -337,6 +342,7 @@ module goldstone-interfaces {
         reference
           "RFC 2863: The Interfaces Group MIB -
                      ifSpeed, ifHighSpeed";
+
       }
 
       leaf lanes {

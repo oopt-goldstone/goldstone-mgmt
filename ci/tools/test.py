@@ -206,6 +206,29 @@ def test_mtu(cli):
     assert "3500" in output
 
 
+def test_speed(cli):
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 100"')
+    except SSHException as e:
+        assert "does not satisfy the constraint" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: speed 100")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 1000000000000000000000000000"')
+    except SSHException as e:
+        assert "Invalid value" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: speed 1000000000000000000000000000")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 410000"')
+    except SSHException as e:
+        assert "does not satisfy the constraint" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: speed 410000")
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000; show"')
+    assert "25000" in output
+
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -218,6 +241,8 @@ def main(host, username, password):
         test_logging(cli)
 
         test_mtu(cli)
+
+        test_speed(cli)
 
         try:
             test_vlan_member_add_delete(cli)
