@@ -1,9 +1,12 @@
 import setuptools
 
+with open('requirements.txt') as f:
+    install_requires = f.read().split()
+
 setuptools.setup(
         name='gscli',
         version='0.1.0',
-        install_requires=['prompt_toolkit', 'tabulate', 'natsort'],
+        install_requires=install_requires,
         description='Goldstone CLI',
         url='https://github.com/microsonic/goldstone-mgmt',
         python_requires='>=3.7',

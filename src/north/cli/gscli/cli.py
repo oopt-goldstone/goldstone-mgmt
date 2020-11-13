@@ -7,10 +7,14 @@ import json
 import libyang as ly
 import sysrepo as sr
 from sysrepo.session import DATASTORE_VALUES
+from kubernetes.client.rest import ApiException
+from kubernetes import client, config
+import pydoc
 
 from .base import Command, Object, InvalidInput
 
 VER_FILE = "/etc/goldstone/loader/versions.json"
+KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 
 
 class InterfaceGroupCommand(Command):
@@ -200,7 +204,67 @@ class GlobalShowCommand(Command):
             print("Error : Version details not found")
 
     def display_log(self, line):
-        print("To Be Done")
+        log_filter = ["sonic", "tai", "onlp"]
+        module_name = "gs-mgmt-"
+        line_count = 0
+        if len(line) >= 2:
+            if line[1].isdigit() and len(line) == 2:
+                line_count = int(line[1])
+            elif line[1] in log_filter:
+                module_name = module_name + line[1]
+                if len(line) == 3 and line[2].isdigit():
+                    line_count = int(line[2])
+                elif len(line) == 2:
+                    line_count = 0
+                else:
+                    raise InvalidInput("The argument <num_lines> must be a number")
+            else:
+                raise InvalidInput(
+                    f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]"
+                )
+        else:
+            line_count = 0
+            module_name = "gs-mgmt-"
+
+        try:
+            config.load_kube_config(KUBECONFIG)
+        except config.config_exception.ConfigException as error:
+            config.load_incluster_config()
+
+        try:
+            api_instance = client.CoreV1Api()
+            pod_info = api_instance.list_pod_for_all_namespaces(watch=False)
+            log = ""
+            for pod_name in pod_info.items:
+                if pod_name.metadata.name.startswith(module_name):
+                    log = log + ("----------------------------------\n")
+                    log = log + (f"{pod_name.metadata.name}\n")
+                    log = log + ("----------------------------------\n")
+                    try:
+                        if line_count > 0:
+                            api_response = api_instance.read_namespaced_pod_log(
+                                name=pod_name.metadata.name,
+                                namespace="default",
+                                tail_lines=line_count,
+                            )
+                        else:
+                            api_response = api_instance.read_namespaced_pod_log(
+                                name=pod_name.metadata.name, namespace="default"
+                            )
+
+                        log = log + api_response
+                    except ApiException as e:
+                        log = (
+                            log
+                            + f"Exception occured while fetching log for {pod_name.metadata.name}\n"
+                        )
+                        continue
+
+            log = log + ("\n")
+            pydoc.pager(log)
+
+        except ApiException as e:
+            print("Found exception in reading the logs : {}".format(str(e)))
 
     def tech_support(self, line):
         datastore_list = ["operational", "running", "candidate", "startup"]
@@ -239,7 +303,7 @@ class GlobalShowCommand(Command):
             f" {self.name} interface (brief|description) \n"
             f" {self.name} vlan details \n"
             f" {self.name} transponder (<transponder_name>|summary)\n"
-            f" {self.name} logging \n"
+            f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"
             f" {self.name} version \n"
             f" {self.name} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
             f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|]\n"

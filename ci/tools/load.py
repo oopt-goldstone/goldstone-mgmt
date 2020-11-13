@@ -85,6 +85,25 @@ def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "show vlan details"')
 
 
+def test_logging(cli):
+    ssh(cli, 'gscli -c "show logging"')
+    time.sleep(5)
+    ssh(cli, 'gscli -c "show logging 50"')
+    time.sleep(5)
+    ssh(cli, 'gscli -c "show logging sonic 50"')
+    time.sleep(5)
+    ssh(cli, 'gscli -c "show logging sonic"')
+    time.sleep(5)
+    ssh(cli, 'gscli -c "show logging onlp 100"')
+    time.sleep(5)
+    try:
+        ssh(cli, 'gscli -c "show logging h01"')
+    except SSHException as e:
+        assert "show logging [sonic|tai|onlp|] [<num_lines>|]" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: show logging h01")
+
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -97,7 +116,9 @@ def main(host, username, password):
 
         ssh(cli, "systemctl restart usonic")
 
-        run("docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt-debug:latest gs-test/gs-mgmt-netopeer2")
+        run(
+            "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt-debug:latest gs-test/gs-mgmt-netopeer2"
+        )
 
         scp = SCPClient(cli.get_transport())
         scp.put("/tmp/gs-mgmt.tar", "/tmp")
@@ -110,11 +131,9 @@ def main(host, username, password):
         )
 
         run("make docker")
-        scp.put(
-            "./src/north/cli/dist/gscli-0.1.0-py3-none-any.whl", remote_path="/tmp/"
-        )
+        scp.put("./src/north/cli/dist", recursive=True, remote_path="/tmp/dist")
         ssh(cli, "pip3 uninstall -y gscli")
-        ssh(cli, "pip3 install /tmp/*.whl")
+        ssh(cli, "pip3 install /tmp/dist/*.whl")
 
         # ssh(cli, 'gscli -c "show version"')
 
@@ -149,6 +168,8 @@ def main(host, username, password):
 
         test_tai(cli)
 
+        test_logging(cli)
+
         try:
             test_vlan_member_add_delete(cli)
         except SSHException as e:
@@ -156,8 +177,10 @@ def main(host, username, password):
             ssh(cli, "kubectl get pods -A")
             ssh(cli, "kubectl logs -l app=gs-mgmt-sonic")
             ssh(cli, "kubectl describe pods -l app=gs-mgmt-sonic")
-#            sys.exit(1)
-            print(f"FIXME: allowing to fail the vlan_member_add_delete test temporarily")
+            #            sys.exit(1)
+            print(
+                f"FIXME: allowing to fail the vlan_member_add_delete test temporarily"
+            )
 
 
 if __name__ == "__main__":

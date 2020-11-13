@@ -124,7 +124,7 @@ sonic-interface:
 	$(MAKE) -C src/south/sonic-interface
 
 cli:
-	cd src/north/cli && python setup.py bdist_wheel
+	cd src/north/cli && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
 
 
 
