@@ -67,6 +67,7 @@ def main(host, username, password):
         )
 
         run("make docker")
+        ssh(cli, "rm -rf /tmp/dist")
         scp.put("./src/north/cli/dist", recursive=True, remote_path="/tmp/dist")
         ssh(cli, "pip3 uninstall -y gscli")
         ssh(cli, "pip3 install /tmp/dist/*.whl")
