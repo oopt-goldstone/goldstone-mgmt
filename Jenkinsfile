@@ -66,6 +66,10 @@ pipeline {
         timeout(time: 15, unit: 'MINUTES') {
             sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 ./ci/tools/load.py ${params.DEVICE}"
         }
+
+        timeout(time: 15, unit: 'MINUTES') {
+            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 ./ci/tools/test.py ${params.DEVICE}"
+        }
       }
     }
   }
