@@ -23,3 +23,19 @@ np2/netopeer2-cli.patch
 
 # sonic-mgmt patches
 sonic-mgmt/sonic_vlan.patch
+
+#pam patches
+pam/0001-Don-t-init-declarations-in-a-for-loop.patch
+pam/0002-Fix-libtac2-bin-install-directory-error.patch
+pam/0003-Obfuscate-key-before-printing-to-syslog.patch
+pam/0004-management-vrf-support.patch
+pam/0005-pam-Modify-parsing-of-IP-address-and-port-number-to-.patch
+
+#nss patches
+nss/0001-Modify-user-map-profile.patch
+nss/0002-Enable-modifying-local-user-permission.patch
+nss/0003-management-vrf-support.patch
+nss/0004-Skip-accessing-tacacs-servers-for-local-non-tacacs-u.patch
+nss/0005-libnss-Modify-parsing-of-IP-addr-and-port-number-str.patch
+nss/0006-fix-compiling-warning-about-token-dereference.patch
+
