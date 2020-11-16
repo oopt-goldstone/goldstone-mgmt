@@ -402,13 +402,17 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_OCTETS"
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_OCTETS"
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("in-unicast-pkts"):
@@ -423,13 +427,17 @@ class Server(object):
                 )
             )
 
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_UCAST_PKTS"
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_UCAST_PKTS"
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("in-broadcast-pkts"):
@@ -444,15 +452,19 @@ class Server(object):
                 )
             )
 
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB,
-                    key,
-                    "SAI_PORT_STAT_IF_IN_BROADCAST_PKTS",
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB,
+                        key,
+                        "SAI_PORT_STAT_IF_IN_BROADCAST_PKTS",
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("in-multicast-pkts"):
@@ -466,15 +478,18 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB,
-                    key,
-                    "SAI_PORT_STAT_IF_IN_MULTICAST_PKTS",
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB,
+                        key,
+                        "SAI_PORT_STAT_IF_IN_MULTICAST_PKTS",
+                    )
                 )
-            )
+            except:
+                return 0
 
             return data
 
@@ -489,13 +504,17 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_DISCARDS"
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_DISCARDS"
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("in-errors"):
@@ -509,13 +528,17 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_ERRORS"
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_ERRORS"
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("in-unknown-protos"):
@@ -529,15 +552,19 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB,
-                    key,
-                    "SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS",
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB,
+                        key,
+                        "SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS",
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("out-octets"):
@@ -551,13 +578,17 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_OCTETS"
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_OCTETS"
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("out-unicast-pkts"):
@@ -571,15 +602,19 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB,
-                    key,
-                    "SAI_PORT_STAT_IF_OUT_UCAST_PKTS",
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB,
+                        key,
+                        "SAI_PORT_STAT_IF_OUT_UCAST_PKTS",
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("out-broadcast-pkts"):
@@ -593,15 +628,19 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB,
-                    key,
-                    "SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS",
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB,
+                        key,
+                        "SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS",
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("out-multicast-pkts"):
@@ -615,15 +654,19 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB,
-                    key,
-                    "SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS",
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB,
+                        key,
+                        "SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS",
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("out-discards"):
@@ -637,13 +680,17 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_DISCARDS"
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_DISCARDS"
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
         elif req_xpath.endswith("out-errors"):
@@ -657,13 +704,17 @@ class Server(object):
                     self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
                 )
             )
-            key = "COUNTERS:" + key
+            try:
+                key = "COUNTERS:" + key
 
-            data = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_ERRORS"
+                data = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_ERRORS"
+                    )
                 )
-            )
+            except:
+                return 0
+
             return data
 
     def interface_oper_cb(self, req_xpath):
