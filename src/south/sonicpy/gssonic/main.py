@@ -77,9 +77,9 @@ class Server(object):
                     xpath = "/goldstone-interfaces:interfaces/interface[name='{}']"
                     self.sess.switch_datastore("operational")
                     # Deleting breakout config case. Need to delete all children interfaces
-                    common_ifname = ifname.split("/")
+                    common_ifname = ifname.split("_")
                     ifname_list = [
-                        common_ifname[0] + "/" + str(i)
+                        common_ifname[0] + "_" + str(i)
                         for i in range(1, num_of_channels + 1)
                     ]
                     for tmp_ifname in ifname_list:
@@ -168,8 +168,6 @@ class Server(object):
             for i in range(len(xpath)):
                 node = xpath[i]
                 if node.find("interface") == 0:
-                    node = xpath[i] + "/" + xpath[i + 1]
-                    i = i + 1
                     ifname = node[16:-2]
                     _hash = _hash + "PORT|" + ifname
                     hash_appl = hash_appl + "PORT_TABLE:" + ifname
@@ -187,7 +185,6 @@ class Server(object):
                             xpath[i + 1].find("members") == 0
                             and xpath[i + 1] != "members"
                         ):
-                            xpath[i + 1] = xpath[i + 1] + "/" + xpath[i + 2]
                             key = "members@"
                             member = xpath[i + 1][11:-2]
                         elif xpath[i + 1] == "members":
@@ -196,8 +193,6 @@ class Server(object):
                             key = xpath[i + 1]
                     break
                 if node.find("VLAN_MEMBER_LIST") == 0:
-                    node = xpath[i] + "/" + xpath[i + 1]
-                    i = i + 1
                     _hash = _hash + "VLAN_MEMBER|" + node[23:-2]
                     _hash = _hash.replace("'][ifname='", "|")
                     if i + 1 < len(xpath):
@@ -208,12 +203,12 @@ class Server(object):
                 if type(change.value) != type({}) and key != "name" and key != "ifname":
                     if key == "description" or key == "alias":
                         self.sonic_db.set(
-                            self.sonic_db.APPL_DB, hash_appl, key, change.value
+                            self.sonic_db.CONFIG_DB, _hash, key, change.value
                         )
                     elif key == "admin-status":
                         self.sonic_db.set(
-                            self.sonic_db.APPL_DB,
-                            hash_appl,
+                            self.sonic_db.CONFIG_DB,
+                            _hash,
                             "admin_status",
                             change.value,
                         )
@@ -305,12 +300,12 @@ class Server(object):
                 logger.debug("......change modified......")
                 if key == "description" or key == "alias":
                     self.sonic_db.set(
-                        self.sonic_db.APPL_DB, hash_appl, key, str(change.value)
+                        self.sonic_db.CONFIG_DB, _hash, key, str(change.value)
                     )
                 elif key == "admin-status":
                     self.sonic_db.set(
-                        self.sonic_db.APPL_DB,
-                        hash_appl,
+                        self.sonic_db.CONFIG_DB,
+                        _hash,
                         "admin_status",
                         str(change.value),
                     )
@@ -386,7 +381,6 @@ class Server(object):
             ifname = req_xpath.replace("']/oper-status", "")
             key = ifname.replace("Ethernet", "PORT_TABLE:Ethernet")
 
-            self.sonic_db.connect(self.sonic_db.APPL_DB)
             data = _decode(self.sonic_db.get(self.sonic_db.APPL_DB, key, "oper_status"))
 
             return data
@@ -835,22 +829,22 @@ class Server(object):
                             )
                     elif key == "description":
                         self.sonic_db.set(
-                            self.sonic_db.APPL_DB,
-                            "PORT_TABLE:" + name,
+                            self.sonic_db.CONFIG_DB,
+                            "PORT|" + name,
                             "description",
                             str(intf[key]),
                         )
                     elif key == "alias":
                         self.sonic_db.set(
-                            self.sonic_db.APPL_DB,
-                            "PORT_TABLE:" + name,
+                            self.sonic_db.CONFIG_DB,
+                            "PORT|" + name,
                             "alias",
                             str(intf[key]),
                         )
                     elif key == "admin-status":
                         self.sonic_db.set(
-                            self.sonic_db.APPL_DB,
-                            "PORT_TABLE:" + name,
+                            self.sonic_db.CONFIG_DB,
+                            "PORT|" + name,
                             "admin_status",
                             str(intf[key]),
                         )
@@ -905,20 +899,20 @@ class Server(object):
                     )
 
         hash_keys = self.sonic_db.keys(
-            self.sonic_db.APPL_DB, pattern="PORT_TABLE:Ethernet*"
+            self.sonic_db.CONFIG_DB, pattern="PORT|Ethernet*"
         )
         if hash_keys != None:
             hash_keys = map(_decode, hash_keys)
 
             for _hash in hash_keys:
-                ifname = _hash.split(":")[1]
-                intf_data = self.sonic_db.get_all(self.sonic_db.APPL_DB, _hash)
+                ifname = _hash.split("|")[1]
+                intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
                 intf_keys = [v.decode("ascii") for v in list(intf_data.keys())]
 
                 if "admin_status" not in intf_keys:
                     self.sonic_db.set(
-                        self.sonic_db.APPL_DB,
-                        "PORT_TABLE:" + ifname,
+                        self.sonic_db.CONFIG_DB,
+                        "PORT|" + ifname,
                         "admin_status",
                         "down",
                     )
@@ -938,9 +932,9 @@ class Server(object):
                 xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
                 xpath_subif_breakout = f"{xpath}/breakout"
 
-                if not ifname.endswith("/1") and ifname.find("/") != -1:
-                    _ifname = ifname.split("/")
-                    tmp_ifname = _ifname[0] + "/1"
+                if not ifname.endswith("_1") and ifname.find("_") != -1:
+                    _ifname = ifname.split("_")
+                    tmp_ifname = _ifname[0] + "_1"
                     if tmp_ifname in breakout_parent_dict.keys():
                         breakout_parent_dict[tmp_ifname] = (
                             breakout_parent_dict[tmp_ifname] + 1
@@ -959,7 +953,7 @@ class Server(object):
                     elif (
                         key != "index"
                         and key != "phys-address"
-                        and key != "admin-status"
+                        and key != "admin_status"
                         and key != "alias"
                         and key != "description"
                         and key != "breakout"

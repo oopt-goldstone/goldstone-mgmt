@@ -447,7 +447,7 @@ class Port(object):
     def set_breakout(self, ifname, number_of_channels, speed, config):
         xpath = self.xpath(ifname)
 
-        sub_intf = ifname.split("/")[1]
+        sub_intf = ifname.split("_")[1]
         if sub_intf != "1":
             print("Breakout cannot be configured/removed on a sub-interface")
             return

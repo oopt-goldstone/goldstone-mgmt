@@ -147,8 +147,8 @@ class incluster_apis(object):
             else:
                 # Interface with num-channels and channel-speed
                 if breakout_config[1] != None and breakout_config[2] != None:
-                    common_ifname = interface.split("/")
-                    common_alias = alias.split("/")
+                    common_ifname = interface.split("_")
+                    common_alias = alias.split("_")
 
                     # Channel speed
                     speed = str(int(breakout_config[2]) * 1000)
@@ -164,9 +164,9 @@ class incluster_apis(object):
                         index = index + 2
                         lanes = str(lane_num + 2) + "," + str(lane_num + 3)
                         line = line + pattern.format(
-                            common_ifname[0] + "/2",
+                            common_ifname[0] + "_2",
                             lanes,
-                            common_alias[0] + "/2",
+                            common_alias[0] + "_2",
                             str(index),
                             speed,
                         )
@@ -180,8 +180,8 @@ class incluster_apis(object):
                         for i in range(1, 3 + 1):
                             tmp_index = index + i
                             lanes = str(lane_num + i)
-                            tmp_ifname = common_ifname[0] + "/" + str(i + 1)
-                            tmp_alias = common_alias[0] + "/" + str(i + 1)
+                            tmp_ifname = common_ifname[0] + "_" + str(i + 1)
+                            tmp_alias = common_alias[0] + "_" + str(i + 1)
                             line = line + pattern.format(
                                 tmp_ifname, lanes, tmp_alias, str(tmp_index), speed
                             )

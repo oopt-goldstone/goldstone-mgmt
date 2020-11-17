@@ -79,7 +79,7 @@ def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(
         cli,
-        'gscli -c "interface Ethernet1/1; no shutdown; switchport mode trunk vlan 1000; show"',
+        'gscli -c "interface Ethernet1_1; no shutdown; switchport mode trunk vlan 1000; show"',
     )
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "no vlan 1000"')
@@ -87,26 +87,43 @@ def test_vlan_member_add_delete(cli):
 
 def test_port_breakout(cli):
     try :
-        ssh(cli, 'gscli -c "interface Ethernet5/1; breakout 4X10GB"')
+        ssh(cli, 'gscli -c "interface Ethernet5_1; breakout 4X10GB"')
     except:
         print("This was 'Negative Testcase' for Breakout configuration")
 
-    ssh(cli, 'gscli -c "interface Ethernet5/1; breakout 4X10G"')
+    ssh(cli, 'gscli -c "interface Ethernet5_1; breakout 4X10G"')
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
     time.sleep(60)
-    ssh(cli, 'gscli -c "interface Ethernet5/1; show"')
+    #Validating if 'syncd' has come up properly
+    validate_str = 'sending switch_shutdown_request notification to OA'
+    output = ssh(cli, 'kubectl logs deploy/usonic syncd')
+    if output.find(validate_str) == -1:
+        print("Syncd in usonic has come up properly")
+    else:
+        print("Syncd in usonic has ERRORS")
+        sys.exit(1)
+
+    ssh(cli, 'gscli -c "interface Ethernet5_1; show"')
     ssh(cli, 'gscli -c "show interface description"')
     ssh(cli, 'gscli -c "show running-config"')
     ssh(cli, 'gscli -c "show running-config interface"')
     ssh(cli, 'gscli -c "show tech-support"')
 
     # Unconfigure
-    ssh(cli, 'gscli -c "interface Ethernet5/1; no breakout"')
+    ssh(cli, 'gscli -c "interface Ethernet5_1; no breakout"')
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
     time.sleep(60)
-    ssh(cli, 'gscli -c "interface Ethernet5/1; show"')
+    #Validating if 'syncd' has come up properly
+    output = ssh(cli, 'kubectl logs deploy/usonic syncd')
+    if output.find(validate_str) == -1:
+        print("Syncd in usonic has come up properly")
+    else:
+        print("Syncd in usonic has ERRORS")
+        sys.exit(1)
+
+    ssh(cli, 'gscli -c "interface Ethernet5_1; show"')
     ssh(cli, 'gscli -c "show interface description"')
     ssh(cli, 'gscli -c "show running-config"')
     ssh(cli, 'gscli -c "show running-config interface"')
