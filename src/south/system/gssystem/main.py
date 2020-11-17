@@ -5,11 +5,18 @@ import asyncio
 import argparse
 import signal
 import re
+import os
 
 logger = logging.getLogger(__name__)
 DEFAULT_TACACS_PORT = 49
 DEFAULT_TACACS_TIMEOUT = 300
 MAX_TACACS_SERVERS = 3
+
+
+# FILE
+PAM_AUTH_CONF = "/etc/pam.d/common-auth-gs"
+NSS_TACPLUS_CONF = "/etc/tacplus_nss.conf"
+NSS_CONF = "/etc/nsswitch.conf"
 
 
 class InvalidXPath(Exception):
@@ -20,11 +27,26 @@ class Server:
     def __init__(self):
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
+
+        self.auth_default = {
+            "login": "local",
+        }
+
+        self.auth = {}
         self.data = {}
 
     def stop(self):
         self.sess.stop()
         self.conn.disconnect()
+
+    def modify_single_file(self, filename, operations=None):
+        if operations:
+            cmd = (
+                "sed -e {0} {1} > {1}.new; mv -f {1} {1}.old; mv -f {1}.new {1}".format(
+                    " -e ".join(operations), filename
+                )
+            )
+            os.system(cmd)
 
     def store_data(self, xpath):
         xpath = "/goldstone-aaa:aaa/server-groups/server-group[name='TACACS+']/servers/server"
@@ -40,16 +62,18 @@ class Server:
                 if item["config"]["address"]:
                     self.data[item["config"]["address"]] = {}
                     if item["config"]["timeout"]:
-                        self.data[item["config"]["address"]]["timeout"] = item["config"][
-                            "timeout"
-                        ]
+                        self.data[item["config"]["address"]]["timeout"] = item[
+                            "config"
+                        ]["timeout"]
                     else:
-                        self.data[item["config"]["address"]]["timeout"] = DEFAULT_TACACS_TIMEOUT
+                        self.data[item["config"]["address"]][
+                            "timeout"
+                        ] = DEFAULT_TACACS_TIMEOUT
 
                     if item["tacacs"]["config"]["secret-key"]:
-                        self.data[item["config"]["address"]]["secret-key"] = item["tacacs"][
-                            "config"
-                        ]["secret-key"]
+                        self.data[item["config"]["address"]]["secret-key"] = item[
+                            "tacacs"
+                        ]["config"]["secret-key"]
                     else:
                         self.data[item["config"]["address"]]["secret-key"] = ""
 
@@ -58,7 +82,9 @@ class Server:
                             "config"
                         ]["port"]
                     else:
-                        self.data[item["config"]["address"]]["port"] = DEFAULT_TACACS_PORT
+                        self.data[item["config"]["address"]][
+                            "port"
+                        ] = DEFAULT_TACACS_PORT
 
             logger.debug(f"configured data: {self.data}")
 
@@ -74,16 +100,12 @@ class Server:
             logger.debug("Not able to fetch data from database")
             return
 
+        print(auth_method)
         if auth_method == "tacacs":
-            print("PAMD To Be Integrated")
-            """
-            fileLocation = open("/etc/pam.d/common-auth", "a+")
-            data_key = list(self.data.keys())
-            for address in data_key:
-                content = '\n'+"auth"+'\t'+pam_tacplus_so_path+'\t'+"server="+ip+'\t'+"secret=test123"+'\n'+'auth'+'\t'+"[success=1 default=ignore]"+"\t"+"pam_unix.so"+"\t"+"nullok_secure"+"\t"+"try_first_pass"+'\n'+'account'+'\t'+pam_tacplus_so_path+'\t'+'server='+ip+'\t'+"secret=test123"+'\t'+"service=shell"+"\t"+"profile=ssh"+'\n'+"session"+'\t'+pam_tacplus_so_path+'\t'+'server='+ip+'\t'+"secret=test123"+'\t'+"server="+ip+'\t'+"secret=test123"+'\t'+"service=shell"+'\t'+'protocol=ssh'+"\n"
-            fileLocation.write(content)
-            fileLocation.close()
-            """
+            self.auth["login"] = auth_method
+            self.auth["failthrough"] = True
+
+            self.modify_conf_file()
 
     def config_tacacs(self, xpath, value, delete):
         prefix = (
@@ -170,18 +192,111 @@ class Server:
 
     def config_aaa_auth(self, xpath, value):
         prefix = "/goldstone-aaa:aaa/authentication/config/authentication-method"
-        if not xpath == prefix:
-            raise InvalidXPath()
-        if value == "tacacs":
-            print("PAMD To Be Integrated")
-            """
-            fileLocation = open("/etc/pam.d/common-auth", "a+")
-            data_key = list(self.data.keys())
-            for address in data_key:
-                content = '\n'+"auth"+'\t'+pam_tacplus_so_path+'\t'+"server="+ip+'\t'+"secret=test123"+'\n'+'auth'+'\t'+"[success=1 default=ignore]"+"\t"+"pam_unix.so"+"\t"+"nullok_secure"+"\t"+"try_first_pass"+'\n'+'account'+'\t'+pam_tacplus_so_path+'\t'+'server='+ip+'\t'+"secret=test123"+'\t'+"service=shell"+"\t"+"profile=ssh"+'\n'+"session"+'\t'+pam_tacplus_so_path+'\t'+'server='+ip+'\t'+"secret=test123"+'\t'+"server="+ip+'\t'+"secret=test123"+'\t'+"service=shell"+'\t'+'protocol=ssh'+"\n"
-            fileLocation.write(content)
-            fileLocation.close()
-            """
+        if xpath.startswith(prefix):
+            print("value = ", value)
+
+            self.auth["login"] = value
+            self.auth["failthrough"] = True
+
+            self.modify_conf_file()
+
+    def modify_conf_file(self):
+        auth = self.auth_default.copy()
+        auth.update(self.auth)
+
+        data_key = list(self.data.keys())
+
+        with open(PAM_AUTH_CONF, "w") as f:
+            content = ""
+            if "tacacs" in auth["login"]:
+                for ip in data_key:
+                    content += (
+                        "\n"
+                        + "auth"
+                        + "\t"
+                        + "[success=done new_authtok_reqd=done default=ignore]"
+                        + "\t"
+                        + "pam_tacplus.so server="
+                        + ip
+                        + ":"
+                        + str(self.data[ip]["port"])
+                        + "\t"
+                        + "secret="
+                        + self.data[ip]["secret-key"]
+                        + "\t"
+                        + "timeout="
+                        + str(self.data[ip]["timeout"])
+                        + "\t"
+                        + "try_first_pass"
+                    )
+                content += (
+                    "\n"
+                    + "auth"
+                    + "\t"
+                    + "[success=1 default=ignore]"
+                    + "\t"
+                    + "pam_unix.so nullok try_first_pass"
+                )
+
+            else:
+                content = (
+                    "\n"
+                    + "auth"
+                    + "\t"
+                    + "[success=1 default=ignore]"
+                    + "\t"
+                    + "pam_unix.so nullok try_first_pass"
+                )
+
+            content += (
+                "\n"
+                + "auth    requisite                       pam_deny.so"
+                + "\n"
+                + "auth    required                        pam_permit.so"
+            )
+
+            f.write(content)
+
+        # Modify common-auth include file in /etc/pam.d/login and sshd
+        if os.path.isfile(PAM_AUTH_CONF):
+            self.modify_single_file(
+                "/etc/pam.d/sshd", ["'/^@include/s/common-auth$/common-auth-gs/'"]
+            )
+        else:
+            self.modify_single_file(
+                "/etc/pam.d/sshd", ["'/^@include/s/common-auth-gs$/common-auth/'"]
+            )
+
+        # Add tacplus in nsswitch.conf if TACACS+ enable
+        if "tacacs+" in auth["login"]:
+            if os.path.isfile(NSS_CONF):
+                self.modify_single_file(
+                    NSS_CONF,
+                    [
+                        "'/tacplus/b'",
+                        "'/^passwd/s/compat/tacplus &/'",
+                        "'/^passwd/s/files/tacplus &/'",
+                    ],
+                )
+        else:
+            if os.path.isfile(NSS_CONF):
+                self.modify_single_file(NSS_CONF, ["'/^passwd/s/tacplus //g'"])
+
+        # Set tacacs+ server in nss-tacplus conf
+        content = ""
+        with open(NSS_TACPLUS_CONF, "w") as f:
+            for ip in data_key:
+                content += (
+                    "server="
+                    + ip
+                    + ":"
+                    + str(self.data[ip]["port"])
+                    + ",secret="
+                    + self.data[ip]["secret-key"]
+                    + ",timeout="
+                    + str(self.data[ip]["timeout"])
+                )
+            f.write(content)
 
     async def parse_change_req(self, xpath, value, delete):
         tacacs_xpath = "/goldstone-aaa:aaa/server-groups/server-group[name='TACACS+']/servers/server"
@@ -194,7 +309,7 @@ class Server:
                 logger.error(f"invalid xpath: {xpath}")
                 return
         elif xpath.startswith(aaa_auth_xpath):
-            config_aaa_auth(xpath)
+            self.config_aaa_auth(xpath, value)
 
     async def change_cb(self, event, req_id, changes, priv):
         if event != "change":
