@@ -68,7 +68,7 @@ RUN --mount=type=bind,source=sm/libnss-tacplus,target=/root/sm/libnss-tacplus,rw
     --mount=type=tmpfs,target=/root/.pc,rw \
     cd /root && quilt upgrade && quilt push -a && \
     cd /root/sm/libnss-tacplus && dpkg-buildpackage -rfakeroot -b -us -uc && \
-    cd /root/sm && mkdir -p /usr/share/debs/tacacs && cp *.debs /usr/share/debs/tacacs/
+    cd /root/sm && mkdir -p /usr/share/debs/tacacs && cp *.deb /usr/share/debs/tacacs/
 
 RUN pip install grpcio-tools grpclib
 
