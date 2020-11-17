@@ -1,0 +1,16 @@
+Index: goldstone-mgmt/sm/pam_tacplus/support.c
+===================================================================
+--- goldstone-mgmt.orig/sm/pam_tacplus/support.c
++++ goldstone-mgmt/sm/pam_tacplus/support.c
+@@ -282,7 +282,7 @@ int _pam_parse (int argc, const char **argv) {
+         _pam_log(LOG_DEBUG, "%d servers defined", tac_srv_no);
+ 
+         for(n = 0; n < tac_srv_no; n++) {
+-            _pam_log(LOG_DEBUG, "server[%d] { addr=%s, key='%s' }", n, tac_ntop(tac_srv[n].addr->ai_addr), tac_srv[n].key);
++            _pam_log(LOG_DEBUG, "server[%d] { addr=%s, key='%c*****' }", n, tac_ntop(tac_srv[n].addr->ai_addr), tac_srv[n].key[0]);
+         }
+ 
+         _pam_log(LOG_DEBUG, "tac_service='%s'", tac_service);
+-- 
+2.9.3
+

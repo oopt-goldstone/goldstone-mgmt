@@ -8,7 +8,7 @@ ARG https_proxy
 FROM $GS_MGMT_BUILDER_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libgrpc++-dev g++ protobuf-compiler-grpc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libgrpc++-dev g++ protobuf-compiler-grpc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
@@ -53,6 +53,15 @@ RUN --mount=type=bind,source=sm/sysrepo-python,target=/root/sm/sysrepo-python,rw
     --mount=type=tmpfs,target=/root/.pc,rw \
     cd /root && quilt upgrade && quilt push -a && \
     cd /root/sm/sysrepo-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
+
+RUN --mount=type=bind,source=sm/pam_tacplus,target=/root/sm/pam_tacplus,rw \
+    --mount=type=bind,source=patches/pam,target=/root/patches \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && \
+    cd /root/sm/pam_tacplus && dpkg-buildpackage -rfakeroot -b -us -uc
+
+RUN dpkg -i /root/sm/libtac2_1.4.1-1_amd64.deb
+RUN dpkg -i /root/sm/libtac-dev_1.4.1-1_amd64.deb
 
 RUN pip install grpcio-tools grpclib
 

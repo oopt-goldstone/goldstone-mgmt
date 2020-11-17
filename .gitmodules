@@ -31,3 +31,6 @@
 [submodule "sm/sonic-py-swsssdk"]
 	path = sm/sonic-py-swsssdk
 	url = https://github.com/Azure/sonic-py-swsssdk.git
+[submodule "sm/pam_tacplus"]
+	path = sm/pam_tacplus
+	url = https://github.com/jeroennijhof/pam_tacplus.git
