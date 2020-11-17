@@ -48,7 +48,7 @@ pipeline {
       steps {
           sh 'apk add --update docker make python2'
           sh 'git submodule update --init'
-          sh '( [ $BUILD_BUILDER -eq 1 ] && make builder np2 ) || true'
+          sh 'if [ $BUILD_BUILDER -eq 1 ] ; then make builder np2; fi'
           sh 'make docker'
           sh 'make image'
           sh 'make debug-image'
