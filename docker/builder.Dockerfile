@@ -63,6 +63,12 @@ RUN --mount=type=bind,source=sm/pam_tacplus,target=/root/sm/pam_tacplus,rw \
 RUN dpkg -i /root/sm/libtac2_1.4.1-1_amd64.deb
 RUN dpkg -i /root/sm/libtac-dev_1.4.1-1_amd64.deb
 
+RUN --mount=type=bind,source=sm/libnss-tacplus,target=/root/sm/libnss-tacplus,rw \
+    --mount=type=bind,source=patches/nss,target=/root/patches \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && \
+    cd /root/sm/libnss-tacplus && dpkg-buildpackage -rfakeroot -b -us -uc
+
 RUN pip install grpcio-tools grpclib
 
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \

@@ -34,3 +34,6 @@
 [submodule "sm/pam_tacplus"]
 	path = sm/pam_tacplus
 	url = https://github.com/jeroennijhof/pam_tacplus.git
+[submodule "sm/libnss-tacplus"]
+	path = sm/libnss-tacplus
+	url = https://github.com/daveolson53/libnss-tacplus.git
