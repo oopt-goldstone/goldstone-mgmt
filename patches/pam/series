@@ -1,5 +1,0 @@
-0001-Don-t-init-declarations-in-a-for-loop.patch
-0002-Fix-libtac2-bin-install-directory-error.patch
-0003-Obfuscate-key-before-printing-to-syslog.patch
-0004-management-vrf-support.patch
-0005-pam-Modify-parsing-of-IP-address-and-port-number-to-.patch
