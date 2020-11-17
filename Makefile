@@ -56,6 +56,10 @@ ifndef SONIC_YANG_REPO
     SONIC_YANG_REPO := /usr/local/sonic
 endif
 
+ifndef TAI_META_CUSTOM_FILES
+    TAI_META_CUSTOM_FILES := $(abspath $(wildcard scripts/tai/*))
+endif
+
 all: builder np2 docker image debug-image
 
 docker:
@@ -85,8 +89,8 @@ np2:
 
 yang: yang/goldstone-tai.yang
 
-yang/goldstone-tai.yang: ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h
-	./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h | pyang -f yang > /data/$@
+yang/goldstone-tai.yang: ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h $(TAI_META_CUSTOM_FILES)
+	./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h $(TAI_META_CUSTOM_FILES) | pyang -f yang > /data/$@
 
 bash:
 	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd

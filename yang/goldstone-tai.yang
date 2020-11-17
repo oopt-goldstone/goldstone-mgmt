@@ -93,6 +93,36 @@ module goldstone-tai {
         "The number of network interfaces on the module";
       type uint32;
     }
+    leaf cfp2aco-vendor-name {
+      description
+        "The CFP2ACO module vendor name";
+      type string;
+    }
+    leaf cfp2aco-vendor-oui {
+      description
+        "The CFP2ACO module vendor OUI";
+      type uint32;
+    }
+    leaf cfp2aco-vendor-part-number {
+      description
+        "The CFP2ACO module vendor's part number";
+      type string;
+    }
+    leaf cfp2aco-vendor-serial-number {
+      description
+        "The CFP2ACO module vendor's serial number";
+      type string;
+    }
+    leaf cfp2aco-firmware-version {
+      description
+        "The CFP2ACO module firmware version";
+      type string;
+    }
+    leaf libtai-version {
+      description
+        "The version string of libtai";
+      type string;
+    }
   }
 
   grouping tai-host-interface-config {
@@ -131,6 +161,11 @@ module goldstone-tai {
     leaf enable-notify {
       description
         "Host interface generic notification";
+      type boolean;
+    }
+    leaf enable-alarm-notification {
+      description
+        "Host interface alarm notification";
       type boolean;
     }
   }
@@ -329,6 +364,40 @@ module goldstone-tai {
       description
         "Network interface alarm notification";
       type boolean;
+    }
+    leaf losi {
+      description
+        "loss of signal detection setting";
+      type boolean;
+    }
+    leaf ber-period {
+      type uint32;
+    }
+    leaf hd-fec-type {
+      description
+        "HD-FEC type";
+      type enumeration {
+        enum none;
+        enum gfec;
+        enum hgfec;
+      }
+    }
+    leaf sd-fec-type {
+      description
+        "SD-FEC type";
+      type enumeration {
+        enum none;
+        enum on;
+      }
+    }
+    leaf mld {
+      description
+        "MLD setting";
+      type enumeration {
+        enum unknown;
+        enum 4-lanes;
+        enum 20-lanes;
+      }
     }
   }
 
@@ -540,6 +609,60 @@ module goldstone-tai {
       type decimal64 {
         fraction-digits 2;
       }
+    }
+    leaf sync-error {
+      type boolean;
+    }
+    leaf dsp-oper-status {
+      type enumeration {
+        enum unknown;
+        enum no-module;
+        enum waiting-configuration;
+        enum booting-first-half;
+        enum waiting-aco-module;
+        enum booting-aco-module;
+        enum waiting-rx-signal;
+        enum booting-second-half;
+        enum ready;
+        enum misc-config;
+      }
+    }
+    leaf disable-constellation {
+      type boolean;
+    }
+    leaf prbs-in-sync {
+      description
+        "PRBS in-sync";
+      type boolean;
+    }
+    leaf loaded-libaco {
+      description
+        "The loaded libaco library name";
+      type string;
+    }
+    leaf rx-los {
+      description
+        "RX LOS alarm";
+      type boolean;
+    }
+    leaf custom-trb100-rx-power-low-warning-threshold {
+      description
+        "The RX power low warning threshold in dBm";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf custom-trb100-rx-power-low-alarm-threshold {
+      description
+        "The RX power low alarm threshold in dBm";
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+    leaf custom-trb100-rx-los {
+      description
+        "RX Loss of Signal";
+      type boolean;
     }
   }
 
