@@ -61,12 +61,25 @@ def test_vlan(cli):
 
 
 def test_tai(cli):
-    ssh(cli, 'gscli -c "transponder /dev/piu4; netif 0; show"')
-    ssh(cli, 'gscli -c "transponder /dev/piu4; netif 0; tx-laser-freq 194.5thz"')
-    ssh(cli, 'gscli -c "transponder /dev/piu4; netif 0; show"')
+    output = ssh(cli, 'gscli -c "show transponder summary"')
+    lines = [ line for line in output.split() if '/dev' in line ]
+
+    if len(lines) == 0:
+        print("no transponder found on this device")
+        return
+
+    elems = [ elem for elem in lines[0].split('|') if '/dev' in elem ]
+    if len(elems) == 0:
+        raise Exception(f"invalid output: {output}")
+
+    device = elems[0].strip()
+
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 194.5thz"')
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
 
     try:
-        ssh(cli, 'gscli -c "transponder /dev/piu4; netif 0; tx-laser-freq aaa"')
+        ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq aaa"')
     except SSHException as e:
         assert "invalid frequency input" in e.stderr
     else:
