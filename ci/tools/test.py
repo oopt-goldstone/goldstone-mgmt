@@ -107,6 +107,12 @@ def test_port_breakout(cli):
     ssh(cli, 'gscli -c "interface Ethernet5_1; breakout 4X10G"')
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
+
+    # show interface brief should work during the usonic reboot
+    output = ssh(cli, 'gscli -c "show interface brief"')
+    assert 'Ethernet5_1' in output
+    assert 'Ethernet5_2' not in output
+
     time.sleep(60)
     #Validating if 'syncd' has come up properly
     validate_str = 'sending switch_shutdown_request notification to OA'
@@ -125,9 +131,17 @@ def test_port_breakout(cli):
 
     # Unconfigure
     ssh(cli, 'gscli -c "interface Ethernet5_1; no breakout"')
+
+    # show interface brief should work during the usonic reboot
+    output = ssh(cli, 'gscli -c "show interface brief"')
+    assert 'Ethernet5_1' in output
+    assert 'Ethernet5_2' in output
+
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
     time.sleep(60)
+
+
     #Validating if 'syncd' has come up properly
     output = ssh(cli, 'kubectl logs deploy/usonic syncd')
     if output.find(validate_str) == -1:

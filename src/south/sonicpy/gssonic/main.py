@@ -41,10 +41,20 @@ class Server(object):
         self.loop = asyncio.get_event_loop()
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
+        self.is_usonic_rebooting = False
+        self.k8s = incluster_apis()
 
     def stop(self):
         self.sess.stop()
         self.conn.disconnect()
+
+    def restart_usonic(self):
+        self.is_usonic_rebooting = True
+        self.k8s.restart_usonic()
+
+    async def watch_pods(self):
+        await self.k8s.watch_pods()
+        self.is_usonic_rebooting = False
 
     async def wait_for_sr_unlock(self):
         # Since is_locked() is returning False always,
@@ -62,7 +72,7 @@ class Server(object):
         # Release lock and return
         return
 
-    async def breakout_callback(self, ifname, num_of_channels, watchPod):
+    async def breakout_callback(self, ifname, num_of_channels):
         self.sess.switch_datastore("running")
 
         await self.wait_for_sr_unlock()
@@ -70,7 +80,7 @@ class Server(object):
         with self.sess.lock("goldstone-interfaces"):
             with self.sess.lock("goldstone-vlan"):
 
-                await watchPod
+                await self.watch_pods()
 
                 # Delete breakout subinterfaces from operational DB
                 if ifname != None and num_of_channels != None:
@@ -138,13 +148,11 @@ class Server(object):
                     else:
                         interface_list.append([ifname, None, None])
 
-        k8s_api = incluster_apis()
-
-        is_updated = k8s_api.update_usonic_config(interface_list)
+        is_updated = self.k8s.update_usonic_config(interface_list)
 
         # Restart deployment if configmap update is successful
         if is_updated:
-            k8s_api.restart_usonic()
+            self.restart_usonic()
 
         return is_updated
 
@@ -263,7 +271,7 @@ class Server(object):
                         #
                         # Once configuration is done, we will update the configmap and
                         # deployment in breakout_update_usonic() function.
-                        # After the update, we will watch asynchronosly in k8s_api.watch_pods()
+                        # After the update, we will watch asynchronosly in watch_pods()
                         # for the `usonic` deployment to be UP.
                         #
                         # Once `usonic` deployment is UP, another asynchronous call breakout_callback()
@@ -283,12 +291,9 @@ class Server(object):
                             ifname: {key: change.value, paired_key: paired_value}
                         }
                         resp = self.breakout_update_usonic(breakout_dict)
-
-                        if resp == True:
-                            k8s_api = incluster_apis()
-                            watchPod = asyncio.ensure_future(k8s_api.watch_pods())
-                            callback = asyncio.ensure_future(
-                                self.breakout_callback(None, None, watchPod)
+                        if resp:
+                            asyncio.create_task(
+                                self.breakout_callback(None, None)
                             )
 
                     else:
@@ -359,11 +364,9 @@ class Server(object):
                         ifname: {"num-channels": None, "channel-speed": None}
                     }
                     resp = self.breakout_update_usonic(breakout_dict)
-                    if resp == True:
-                        k8s_api = incluster_apis()
-                        watchPod = asyncio.ensure_future(k8s_api.watch_pods())
-                        callback = asyncio.ensure_future(
-                            self.breakout_callback(ifname, num_of_channels, watchPod)
+                    if resp:
+                        asyncio.create_task(
+                            self.breakout_callback(ifname, num_of_channels)
                         )
 
                 elif _hash.find("VLAN|") == 0 and key == "":
@@ -809,6 +812,10 @@ class Server(object):
         logger.debug(
             "****************************inside oper-callback******************************"
         )
+        if self.is_usonic_rebooting:
+            logger.debug('usonic is rebooting. no handling done in oper-callback')
+            return
+
         if req_xpath.find("/goldstone-interfaces:interfaces") == 0:
             return self.interface_oper_cb(req_xpath)
 
@@ -1058,10 +1065,9 @@ class Server(object):
                 # process, as gssouth-sonic will replace the interface names properly during
                 # init if they have been modified.
                 breakout_dict = {}
-                resp = self.breakout_update_usonic(breakout_dict)
-                if resp == True:
-                    k8s_api = incluster_apis()
-                    await k8s_api.watch_pods()
+                is_updated = self.breakout_update_usonic(breakout_dict)
+                if is_updated:
+                    await self.watch_pods()
 
                 self.reconcile()
                 self.update_oper_db()
