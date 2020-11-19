@@ -40,6 +40,7 @@ def run(cmd):
     print(f'run: "{cmd}"')
     subprocess.run(cmd, shell=True, stdout=sys.stdout, stderr=sys.stderr, check=True)
 
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())

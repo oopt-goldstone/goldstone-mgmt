@@ -39,7 +39,14 @@ def ssh(cli, cmd):
 
 def run(cmd):
     print(f'run: "{cmd}"')
-    subprocess.run(cmd, shell=True, stdout=sys.stdout, stderr=sys.stderr, check=True, env=os.environ)
+    subprocess.run(
+        cmd,
+        shell=True,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+        check=True,
+        env=os.environ,
+    )
 
 
 def test_vlan(cli):
@@ -62,13 +69,13 @@ def test_vlan(cli):
 
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
-    lines = [ line for line in output.split() if '/dev' in line ]
+    lines = [line for line in output.split() if "/dev" in line]
 
     if len(lines) == 0:
         print("no transponder found on this device")
         return
 
-    elems = [ elem for elem in lines[0].split('|') if '/dev' in elem ]
+    elems = [elem for elem in lines[0].split("|") if "/dev" in elem]
     if len(elems) == 0:
         raise Exception(f"invalid output: {output}")
 
@@ -98,8 +105,9 @@ def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "no vlan 1000"')
     ssh(cli, 'gscli -c "show vlan details"')
 
+
 def test_port_breakout(cli):
-    try :
+    try:
         ssh(cli, 'gscli -c "interface Ethernet5_1; breakout 4X10GB"')
     except:
         print("This was 'Negative Testcase' for Breakout configuration")
@@ -110,13 +118,13 @@ def test_port_breakout(cli):
 
     # show interface brief should work during the usonic reboot
     output = ssh(cli, 'gscli -c "show interface brief"')
-    assert 'Ethernet5_1' in output
-    assert 'Ethernet5_2' not in output
+    assert "Ethernet5_1" in output
+    assert "Ethernet5_2" not in output
 
     time.sleep(60)
-    #Validating if 'syncd' has come up properly
-    validate_str = 'sending switch_shutdown_request notification to OA'
-    output = ssh(cli, 'kubectl logs deploy/usonic syncd')
+    # Validating if 'syncd' has come up properly
+    validate_str = "sending switch_shutdown_request notification to OA"
+    output = ssh(cli, "kubectl logs deploy/usonic syncd")
     if output.find(validate_str) == -1:
         print("Syncd in usonic has come up properly")
     else:
@@ -134,16 +142,15 @@ def test_port_breakout(cli):
 
     # show interface brief should work during the usonic reboot
     output = ssh(cli, 'gscli -c "show interface brief"')
-    assert 'Ethernet5_1' in output
-    assert 'Ethernet5_2' in output
+    assert "Ethernet5_1" in output
+    assert "Ethernet5_2" in output
 
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
     time.sleep(60)
 
-
-    #Validating if 'syncd' has come up properly
-    output = ssh(cli, 'kubectl logs deploy/usonic syncd')
+    # Validating if 'syncd' has come up properly
+    output = ssh(cli, "kubectl logs deploy/usonic syncd")
     if output.find(validate_str) == -1:
         print("Syncd in usonic has come up properly")
     else:
@@ -176,6 +183,29 @@ def test_logging(cli):
         raise Exception("failed to fail with an invalid command: show logging h01")
 
 
+def test_mtu(cli):
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 56"')
+    except SSHException as e:
+        assert "does not satisfy the constraint" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: mtu 56")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 110000"')
+    except SSHException as e:
+        assert "Invalid value" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: mtu 110000")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 10000"')
+    except SSHException as e:
+        assert "does not satisfy the constraint" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: mtu 10000")
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 3500; show"')
+    assert "3500" in output
+
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -186,6 +216,8 @@ def main(host, username, password):
         test_tai(cli)
 
         test_logging(cli)
+
+        test_mtu(cli)
 
         try:
             test_vlan_member_add_delete(cli)
@@ -204,6 +236,7 @@ def main(host, username, password):
             ssh(cli, "kubectl logs -l app=gs-mgmt-sonic")
             ssh(cli, "kubectl describe pods -l app=gs-mgmt-sonic")
             sys.exit(1)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Goldstone CI tool")

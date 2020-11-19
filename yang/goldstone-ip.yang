@@ -147,7 +147,11 @@
 
         leaf mtu {
           type uint16 {
-            range "68..max";
+            range "1312..9216" {
+              error-message "Invalid MTU value";
+              error-app-tag mtu-invalid;
+            }
+
           }
           units "octets";
           description
