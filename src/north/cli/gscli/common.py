@@ -5,6 +5,7 @@ import libyang as ly
 import sysrepo as sr
 from sysrepo.session import DATASTORE_VALUES
 from tabulate import tabulate
+from .base import InvalidInput
 
 
 TIMEOUT_MS = 10000
@@ -44,14 +45,15 @@ class sysrepo_wrap(object):
         try:
             self.session.set_item(xpath, value)
             self.session.apply_changes()
-        except sr.errors.SysrepoCallbackFailedError as e:
-            print(e)
-        except sr.errors.SysrepoValidationFailedError as e:
-            print(e)
-        except sr.errors.SysrepoInvalArgError as e:
-            msg = str(e)
+        except (
+            sr.errors.SysrepoCallbackFailedError,
+            sr.errors.SysrepoValidationFailedError,
+        ) as error:
+            raise InvalidInput(str(error))
+        except sr.errors.SysrepoInvalArgError as error:
+            msg = str(error)
             msg = msg.split("(")[0]
-            print(msg)
+            raise InvalidInput(msg)
         self.session.switch_datastore("running")
 
     def delete_data(self, xpath, ds="running"):
@@ -59,12 +61,15 @@ class sysrepo_wrap(object):
         try:
             self.session.delete_item(xpath)
             self.session.apply_changes()
-        except sr.errors.SysrepoInvalArgError as e:
-            print(e)
-        except sr.errors.SysrepoValidationFailedError as e:
-            msg = str(e)
-            msg = msg.split(".,")[0]
-            print(msg)
+        except (
+            sr.errors.SysrepoCallbackFailedError,
+            sr.errors.SysrepoValidationFailedError,
+        ) as error:
+            raise InvalidInput(str(error))
+        except sr.errors.SysrepoInvalArgError as error:
+            msg = str(error)
+            msg = msg.split("(")[0]
+            raise InvalidInput(msg)
         self.session.switch_datastore("running")
 
     def get_leaf_data(self, xpath, attr, ds="running"):
@@ -74,7 +79,14 @@ class sysrepo_wrap(object):
             items = self.session.get_items("{}/{}".format(xpath, attr))
             for item in items:
                 val_list.append(item.value)
-        except sr.errors.SysrepoCallbackFailedError as e:
-            print(str(e))
+        except (
+            sr.errors.SysrepoCallbackFailedError,
+            sr.errors.SysrepoValidationFailedError,
+        ) as error:
+            raise InvalidInput(str(error))
+        except sr.errors.SysrepoInvalArgError as error:
+            msg = str(error)
+            msg = msg.split("(")[0]
+            raise InvalidInput(msg)
         self.session.switch_datastore("running")
         return val_list
