@@ -155,7 +155,7 @@ if __name__ == "__main__":
                     type_.add(Statement("length", '"4"'))
                 else:
                     type_ = Statement("type", "decimal64")
-                    type_.add(Statement("fraction-digits", 2))
+                    type_.add(Statement("fraction-digits", 16))
             elif attr.type == "tai_notification_handler_t":
                 type_ = Statement("type", "boolean")
                 n = Statement(

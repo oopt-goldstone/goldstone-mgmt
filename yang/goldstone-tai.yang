@@ -73,14 +73,14 @@ module goldstone-tai {
       description
         "The internal temperature of the module";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf power {
       description
         "The power supply voltage";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf num-host-interfaces {
@@ -259,7 +259,7 @@ module goldstone-tai {
       description
         "The TX output power in dBm";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf tx-laser-freq {
@@ -310,21 +310,21 @@ module goldstone-tai {
       description
         "Pulse shaping beta on TX";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf pulse-shaping-rx-beta {
       description
         "Pulse shaping beta on RX";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf voa-rx {
       description
         "RX VOA attenuation in dB";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf loopback-type {
@@ -452,7 +452,7 @@ module goldstone-tai {
       description
         "The current measured TX output power in dBm";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf current-pre-fec-ber {
@@ -511,21 +511,21 @@ module goldstone-tai {
       description
         "The total current RX input power in dBm";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf current-post-voa-total-power {
       description
         "The total current post-VOA RX input power in dBm";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf current-provisioned-channel-power {
       description
         "The current RX input power in the provisioned channel in dBm";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf current-tx-laser-freq {
@@ -586,7 +586,7 @@ module goldstone-tai {
       description
         "Current Signal-to-Noise Ratio (SNR) in dB";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf current-post-fec-ber {
@@ -607,7 +607,7 @@ module goldstone-tai {
       description
         "The current post-VOA RX input power in the provisioned channel in dBm";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf sync-error {
@@ -649,14 +649,14 @@ module goldstone-tai {
       description
         "The RX power low warning threshold in dBm";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf custom-trb100-rx-power-low-alarm-threshold {
       description
         "The RX power low alarm threshold in dBm";
       type decimal64 {
-        fraction-digits 2;
+        fraction-digits 16;
       }
     }
     leaf custom-trb100-rx-los {
