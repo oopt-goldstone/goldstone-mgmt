@@ -7,7 +7,7 @@ import asyncio
 from .constants import INTERFACE_MAP
 from .constants import CONFIG_BCM_CONTSTANTS1, CONFIG_BCM_CONTSTANTS2
 
-from kubernetes import config, client, watch
+from kubernetes_asyncio import config, client, watch
 
 DEPLOYMENT_NAME = "usonic"
 USONIC_CONFIGMAP_NAME = "usonic-config"
@@ -189,7 +189,7 @@ class incluster_apis(object):
 
         return port_config
 
-    def update_usonic_config(self, interface_list):
+    async def update_usonic_config(self, interface_list):
         cm_name = USONIC_CONFIGMAP_NAME
 
         logger.debug("configmap update: {} {} ".format(cm_name, interface_list))
@@ -206,7 +206,7 @@ class incluster_apis(object):
         logger.debug(f"config.bcm file after creating :\n {config_bcm}")
 
         # 2. get the config_map using k8s API if it already exists
-        resp = self.v1_api.read_namespaced_config_map(name=cm_name, namespace="default")
+        resp = await self.v1_api.read_namespaced_config_map(name=cm_name, namespace="default")
 
         configMap = resp
         running_port_config = ""
@@ -236,7 +236,7 @@ class incluster_apis(object):
 
         configMap.data["config.bcm"] = config_bcm
 
-        resp = self.v1_api.patch_namespaced_config_map(
+        await self.v1_api.patch_namespaced_config_map(
             name=cm_name, namespace="default", body=configMap
         )
 
@@ -244,10 +244,10 @@ class incluster_apis(object):
         logger.info("ConfigMap {} updated".format(cm_name))
         return True
 
-    def restart_usonic(self):
+    async def restart_usonic(self):
         deployment_name = DEPLOYMENT_NAME
 
-        deployment = self.deploy_api.read_namespaced_deployment(
+        deployment = await self.deploy_api.read_namespaced_deployment(
             name=deployment_name, namespace="default"
         )
         # Update annotation, to restart the deployment
@@ -256,36 +256,37 @@ class incluster_apis(object):
         ] = str(datetime.datetime.now())
 
         # Update the deployment
-        api_response = self.deploy_api.patch_namespaced_deployment(
+        await self.deploy_api.patch_namespaced_deployment(
             name=deployment_name, namespace="default", body=deployment
         )
         logger.info("Deployment updated")
 
     async def watch_pods(self):
         w = watch.Watch()
-        for event in w.stream(self.v1_api.list_pod_for_all_namespaces):
-            if (event["object"].metadata.name).find("usonic") != -1 and event[
-                "object"
-            ].metadata.name != "usonic-cli":
+        async with w.stream(self.v1_api.list_pod_for_all_namespaces) as stream:
+            async for event in stream:
+                name = event["object"].metadata.name
+                phase = event["object"].status.phase
+
+                if ("usonic" not in name) or name == "usonic-cli":
+                    continue
+
                 logger.debug(
                     "Event: %s %s %s %s"
                     % (
                         event["type"],
                         event["object"].kind,
-                        event["object"].metadata.name,
-                        event["object"].status.phase,
+                        name,
+                        phase,
                     )
                 )
+
                 # Events sequence will be MODIFIED, DELETED, ADDED, MODIFIED
                 # We will first wait for the deployment to be DELETED and then
                 # will watch for the deployment to be Running
-                if (
-                    self.usonic_deleted == 1
-                    and event["object"].status.phase == "Running"
-                ):
-                    logger.debug("Usonic reached running state, exiting")
+                if self.usonic_deleted == 1 and phase == "Running":
+                    logger.debug("uSONiC reached running state, exiting")
                     self.usonic_deleted = 0
                     return
                 if self.usonic_deleted != 1 and event["type"] == "DELETED":
                     self.usonic_deleted = 1
-            await asyncio.sleep(0)

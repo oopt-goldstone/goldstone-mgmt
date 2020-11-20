@@ -48,9 +48,9 @@ class Server(object):
         self.sess.stop()
         self.conn.disconnect()
 
-    def restart_usonic(self):
+    async def restart_usonic(self):
         self.is_usonic_rebooting = True
-        self.k8s.restart_usonic()
+        await self.k8s.restart_usonic()
 
     async def watch_pods(self):
         await self.k8s.watch_pods()
@@ -109,7 +109,7 @@ class Server(object):
 
                 self.sess.switch_datastore("running")
 
-    def breakout_update_usonic(self, breakout_dict):
+    async def breakout_update_usonic(self, breakout_dict):
 
         logger.debug("Starting to Update usonic's configMap and deployment")
 
@@ -148,11 +148,11 @@ class Server(object):
                     else:
                         interface_list.append([ifname, None, None])
 
-        is_updated = self.k8s.update_usonic_config(interface_list)
+        is_updated = await self.k8s.update_usonic_config(interface_list)
 
         # Restart deployment if configmap update is successful
         if is_updated:
-            self.restart_usonic()
+            await self.restart_usonic()
 
         return is_updated
 
@@ -290,7 +290,7 @@ class Server(object):
                         breakout_dict = {
                             ifname: {key: change.value, paired_key: paired_value}
                         }
-                        resp = self.breakout_update_usonic(breakout_dict)
+                        resp = await self.breakout_update_usonic(breakout_dict)
                         if resp:
                             asyncio.create_task(
                                 self.breakout_callback(None, None)
@@ -363,7 +363,7 @@ class Server(object):
                     breakout_dict = {
                         ifname: {"num-channels": None, "channel-speed": None}
                     }
-                    resp = self.breakout_update_usonic(breakout_dict)
+                    resp = await self.breakout_update_usonic(breakout_dict)
                     if resp:
                         asyncio.create_task(
                             self.breakout_callback(ifname, num_of_channels)
@@ -1047,6 +1047,7 @@ class Server(object):
         self.sess.apply_changes()
 
     async def start(self):
+
         logger.debug(
             "****************************inside start******************************"
         )
@@ -1065,7 +1066,7 @@ class Server(object):
                 # process, as gssouth-sonic will replace the interface names properly during
                 # init if they have been modified.
                 breakout_dict = {}
-                is_updated = self.breakout_update_usonic(breakout_dict)
+                is_updated = await self.breakout_update_usonic(breakout_dict)
                 if is_updated:
                     await self.watch_pods()
 
