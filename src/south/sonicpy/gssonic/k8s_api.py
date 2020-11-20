@@ -284,6 +284,7 @@ class incluster_apis(object):
                     and event["object"].status.phase == "Running"
                 ):
                     logger.debug("Usonic reached running state, exiting")
+                    self.usonic_deleted = 0
                     return
                 if self.usonic_deleted != 1 and event["type"] == "DELETED":
                     self.usonic_deleted = 1
