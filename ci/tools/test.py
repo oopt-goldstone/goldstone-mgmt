@@ -225,8 +225,12 @@ def test_speed(cli):
         assert "does not satisfy the constraint" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: speed 410000")
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000; show"')
-    assert "25000" in output
+
+    # TODO this should fail
+    # output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000; show"')
+
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 40000; show"')
+    assert "40000" in output
 
 
 def main(host, username, password):
