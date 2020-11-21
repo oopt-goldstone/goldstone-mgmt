@@ -7,7 +7,7 @@
 
     prefix gs-ip;
 
-    import goldstone-interface {
+    import goldstone-interfaces {
       prefix gs-if;
     }
     import ietf-inet-types {
