@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 class sonic_defaults:
     SPEED = "100000"
-    MTU = 9100
 
 
 class Vlan(object):
@@ -222,9 +221,7 @@ class Port(object):
                     except:
                         mtu = None
 
-                    if (mtu == sonic_defaults.MTU) or (mtu == None):
-                        pass
-                    else:
+                    if mtu:
                         print("  {} {}".format("mtu", mtu))
 
                 elif v == "speed":
@@ -285,12 +282,24 @@ class Port(object):
         xpath = self.xpath(ifname)
         set_attribute(self.sr_op, xpath, "interface", ifname, "admin-status", value)
 
-    def set_mtu(self, ifname, value, config=True):
+    def set_mtu(self, ifname, value):
         xpath = self.xpath(ifname)
-        set_attribute(self.sr_op, xpath, "interface", ifname, "mtu", value)
-        if config == False:
-            self.sr_op.delete_data("{}/goldstone-ip:ipv4/mtu".format(xpath))
-            self.sr_op.delete_data("{}/goldstone-ip:ipv4".format(xpath))
+        if value:
+            set_attribute(self.sr_op, xpath, "interface", ifname, "mtu", value)
+        else:
+            self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4/mtu")
+
+            # if the mtu leaf was the only node under the ipv4 container
+            # remove the container
+            try:
+                data = self.sr_op.get_data(f"{xpath}/goldstone-ip:ipv4")
+            except sr.errors.SysrepoNotFoundError:
+                return
+
+            data = data.get("interfaces", {}).get("interface", {})
+            data = data.get(ifname, {}).get("ipv4", None) if len(data) else None
+            if not data:
+                self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4")
 
     def mtu_range(self):
         ctx = self.session.get_ly_ctx()
@@ -423,7 +432,7 @@ class Port(object):
                         mtu = if_data["ipv4"]["mtu"]
                     except:
                         continue
-                    self.set_mtu(_if_name, sonic_defaults.MTU, False)
+                    self.set_mtu(_if_name, None)
 
             try:
                 tree = self.sr_op.get_data(xpath_vlan, "running")
@@ -500,7 +509,7 @@ class Port(object):
         data = [v for v in list((tree)["interfaces"]["interface"])][0]
         if "ipv4" in data:
             mtu_dict = data["ipv4"]
-            data["mtu"] = mtu_dict["mtu"]
+            data["mtu"] = mtu_dict.get("mtu", "-")
             del data["ipv4"]
         if "statistics" in data:
             del data["statistics"]

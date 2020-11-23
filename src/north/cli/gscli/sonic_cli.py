@@ -42,7 +42,7 @@ class Interface_CLI(Object):
                     self.ifname, sonic_defaults.SPEED, config=False
                 )
             elif args[0] == "mtu":
-                self.sonic.port.set_mtu(self.ifname, sonic_defaults.MTU, config=False)
+                self.sonic.port.set_mtu(self.ifname, None)
             elif args[0] == "switchport" and len(args) == 5:
                 if args[4].isdigit():
                     if args[4] in parent.get_vid():
