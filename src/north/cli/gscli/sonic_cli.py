@@ -79,7 +79,9 @@ class Interface_CLI(Object):
         @self.command()
         def mtu(args):
             if len(args) != 1:
-                raise InvalidInput("usage: mtu <range 1312..9216>")
+                range_ = self.sonic.port.mtu_range()
+                range_ = f" <range {range_}>" if range_ else ""
+                raise InvalidInput(f"usage: mtu{range_}")
             if args[0].isdigit():
                 mtu = int(args[0])
                 self.sonic.port.set_mtu(self.ifname, mtu)

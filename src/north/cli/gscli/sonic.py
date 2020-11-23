@@ -292,6 +292,15 @@ class Port(object):
             self.sr_op.delete_data("{}/goldstone-ip:ipv4/mtu".format(xpath))
             self.sr_op.delete_data("{}/goldstone-ip:ipv4".format(xpath))
 
+    def mtu_range(self):
+        ctx = self.session.get_ly_ctx()
+        xpath = "/goldstone-interfaces:interfaces"
+        xpath += "/goldstone-interfaces:interface"
+        xpath += "/goldstone-ip:ipv4"
+        xpath += "/goldstone-ip:mtu"
+        for node in ctx.find_path(xpath):
+            return node.type().range()
+
     def set_speed(self, ifname, value, config=True):
         xpath = self.xpath(ifname)
         set_attribute(self.sr_op, xpath, "interface", ifname, "speed", value)
