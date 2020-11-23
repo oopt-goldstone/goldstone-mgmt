@@ -101,7 +101,7 @@ class Root(Object):
                 print(f"There is no device of name {line[0]}")
                 return
 
-        @self.command(WordCompleter(lambda: self.get_ifnames()))
+        @self.command(WordCompleter(lambda: self.get_ifnames(), sentence=True))
         def interface(line):
             if len(line) != 1:
                 raise InvalidInput("usage: interface <ifname>")
