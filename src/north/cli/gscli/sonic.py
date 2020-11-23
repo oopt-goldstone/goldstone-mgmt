@@ -170,11 +170,8 @@ class Port(object):
         try:
             tree = self.sr_op.get_data(self.XPATH, datastore)
             return natsorted(tree["interfaces"]["interface"], key=lambda x: x["name"])
-        except KeyError as error:
-            logger.warning("interface list is not configured")
-        except sr.errors.SysrepoNotFoundError as error:
-            logger.warning("sonic-mgmt is down")
-        return []
+        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
+            return []
 
     def show_interface(self, details="description"):
         rows = []
