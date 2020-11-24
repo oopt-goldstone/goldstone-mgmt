@@ -49,6 +49,7 @@ class sysrepo_wrap(object):
             sr.errors.SysrepoCallbackFailedError,
             sr.errors.SysrepoValidationFailedError,
         ) as error:
+            self.session.discard_changes()
             raise InvalidInput(str(error))
         except sr.errors.SysrepoInvalArgError as error:
             msg = str(error)

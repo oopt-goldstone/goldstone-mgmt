@@ -91,7 +91,30 @@ def test_tai(cli):
         assert "invalid frequency input" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: tx-laser-freq aaa")
+    
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -1; show"')
+    assert "-1" in output
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no output-power; show"')
+    assert "1" in output
 
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 2; show"')
+    assert "2" in output
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no voa-rx; show"')
+    assert "0" in output
+
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; show"')
+    assert "193700000000000" in output
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; show"')
+    assert "193500000000000" in output
+
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
+    time.sleep(10)
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
+    assert "dp-qpsk" in output
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no modulation-format"')
+    time.sleep(10)
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
+    assert "dp-16-qam" in output
 
 def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "show vlan details"')

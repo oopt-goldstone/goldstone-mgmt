@@ -38,6 +38,15 @@ def attr_tai2yang(attr, meta, schema):
     logger.warning(f'not supported float value: {attr}')
     raise taish.TAIException()
 
+NETIF_DEFAULT_VALUES = {"modulation-format": "dp-16-qam",
+                        "output-power": 1,
+                        "voa-rx": 0,
+                        "tx-laser-freq": 193500000000000,
+                        "tx-dis": False,
+                        "differential-encoding": False
+                        }
+HOSTIF_DEFAULT_VALUES = {"fec-type": "none"}
+
 class Server(object):
     """
     The TAI south server implementation.
@@ -107,9 +116,19 @@ class Server(object):
         self.conn.disconnect()
         self.taish.close()
 
-    async def parse_change_req(self, xpath, value):
+    def get_default_value(self, intf, attr):
+        try:
+            if intf == "network-interface":
+                return NETIF_DEFAULT_VALUES[attr]
+            elif intf == "host-interface":
+                return HOSTIF_DEFAULT_VALUES[attr]
+        except KeyError:
+            raise sysrepo.SysrepoInvalArgError(f"no default value for {intf} {attr}")
+        raise sysrepo.SysrepoInvalArgError(f"no default value for {intf} {attr}")
+
+    async def parse_change_req(self, xpath, value, is_change_deleted):
         """
-        Helper method to parse sysrepo ChangeCreated and ChangeModified.
+        Helper method to parse sysrepo ChangeCreated, ChangeModified and ChangeDeleted.
         This returns a TAI object and a dict of attributes to be set
 
         :arg xpath:
@@ -164,6 +183,9 @@ class Server(object):
             xpath = xpath[m.end():]
             if xpath.startswith('/config/'):
                 xpath = xpath[len('/config/'):]
+
+                if is_change_deleted:
+                    value = self.get_default_value(intf, xpath)
                 return obj, {xpath: value}
 
         return None, None
@@ -265,14 +287,16 @@ class Server(object):
 
         raise InvalidXPath()
 
-
     async def change_cb(self, event, req_id, changes, priv):
         if event != 'change':
             return
         for change in changes:
             logger.debug(f'change_cb: {change}')
-            if any(isinstance(change, cls) for cls in [sysrepo.ChangeCreated, sysrepo.ChangeModified]):
-                obj, items = await self.parse_change_req(change.xpath, change.value)
+
+            if any(isinstance(change, cls) for cls in [sysrepo.ChangeCreated, sysrepo.ChangeModified, sysrepo.ChangeDeleted]):
+                is_deleted = isinstance(change, sysrepo.ChangeDeleted)
+                value = "" if is_deleted else change.value
+                obj, items = await self.parse_change_req(change.xpath, value, is_deleted)
 
                 if obj and items:
                     for k, v in items.items():
@@ -582,3 +606,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
