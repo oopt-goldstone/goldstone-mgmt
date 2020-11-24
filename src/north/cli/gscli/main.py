@@ -6,7 +6,11 @@ import argparse
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.completion import Completer, WordCompleter, NestedCompleter
+from prompt_toolkit.completion import (
+    Completer,
+    NestedCompleter,
+    FuzzyWordCompleter,
+)
 from prompt_toolkit import patch_stdout
 
 import sys
@@ -45,7 +49,7 @@ class Root(Object):
 
         super().__init__(None)
         self.sonic = Sonic(conn)
-        self.no_dict = {"vlan": WordCompleter(lambda: self.get_vid())}
+        self.no_dict = {"vlan": FuzzyWordCompleter(lambda: self.get_vid(), WORD=True)}
         # TODO:add timer for inactive user
 
         @self.command()
@@ -91,7 +95,7 @@ class Root(Object):
                 raise InvalidInput("usage: platform[cr]")
             return Platform(conn, self)
 
-        @self.command(WordCompleter(lambda: self.get_modules(), sentence=True))
+        @self.command(FuzzyWordCompleter(lambda: self.get_modules(), WORD=True))
         def transponder(line):
             if len(line) != 1:
                 raise InvalidInput("usage: transponder <transponder name>")
@@ -101,7 +105,7 @@ class Root(Object):
                 print(f"There is no device of name {line[0]}")
                 return
 
-        @self.command(WordCompleter(lambda: self.get_ifnames(), sentence=True))
+        @self.command(FuzzyWordCompleter(lambda: self.get_ifnames(), WORD=True))
         def interface(line):
             if len(line) != 1:
                 raise InvalidInput("usage: interface <ifname>")
@@ -111,7 +115,7 @@ class Root(Object):
         def date(line):
             self.date(line)
 
-        @self.command(WordCompleter(lambda: self.get_vid()))
+        @self.command(FuzzyWordCompleter(lambda: self.get_vid(), WORD=True))
         def vlan(line):
             if len(line) != 1:
                 raise InvalidInput("usage: vlan <vlan-id>")
