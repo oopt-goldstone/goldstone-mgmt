@@ -13,7 +13,6 @@ import pydoc
 
 from .base import Command, Object, InvalidInput
 
-VER_FILE = "/etc/goldstone/loader/versions.json"
 KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 
 
@@ -129,44 +128,44 @@ class GlobalShowCommand(Command):
             raise InvalidInput(self.usage())
 
     def datastore(self, line):
-        self.conn = self.context.conn
-        self.session = self.conn.start_session()
-        dss = list(DATASTORE_VALUES.keys())
-        fmt = "default"
-        if len(line) < 2:
-            print(f'usage: show datastore <XPATH> [{"|".join(dss)}] [json|]')
-            return
+        conn = self.context.conn
+        with conn.start_session() as sess:
+            dss = list(DATASTORE_VALUES.keys())
+            fmt = "default"
+            if len(line) < 2:
+                print(f'usage: show datastore <XPATH> [{"|".join(dss)}] [json|]')
+                return
 
-        if len(line) == 2:
-            ds = "running"
-        else:
-            ds = line[2]
-
-        if len(line) == 4:
-            fmt = line[3]
-        elif len(line) == 3 and line[2] == "json":
-            ds = "running"
-            fmt = line[2]
-
-        if fmt == "default" or fmt == "json":
-            pass
-        else:
-            print(f"unsupported format: {fmt}. supported: {json}")
-            return
-
-        if ds not in dss:
-            print(f"unsupported datastore: {ds}. candidates: {dss}")
-            return
-
-        self.session.switch_datastore(ds)
-
-        try:
-            if fmt == "json":
-                print(json.dumps(self.session.get_data(line[1]), indent=4))
+            if len(line) == 2:
+                ds = "running"
             else:
-                print(self.session.get_data(line[1]))
-        except Exception as e:
-            print(e)
+                ds = line[2]
+
+            if len(line) == 4:
+                fmt = line[3]
+            elif len(line) == 3 and line[2] == "json":
+                ds = "running"
+                fmt = line[2]
+
+            if fmt == "default" or fmt == "json":
+                pass
+            else:
+                print(f"unsupported format: {fmt}. supported: {json}")
+                return
+
+            if ds not in dss:
+                print(f"unsupported datastore: {ds}. candidates: {dss}")
+                return
+
+            sess.switch_datastore(ds)
+
+            try:
+                if fmt == "json":
+                    print(json.dumps(sess.get_data(line[1]), indent=4))
+                else:
+                    print(sess.get_data(line[1]))
+            except Exception as e:
+                print(e)
 
     def display_run_conf(self, line):
         if len(line) > 1:
@@ -193,15 +192,12 @@ class GlobalShowCommand(Command):
             transponder.run_conf()
 
     def get_version(self, line):
-        if os.path.isfile(VER_FILE):
-            with open(VER_FILE, "r") as version_file:
-                ver_data = json.loads(version_file.read())
-                if "PRODUCT_ID_VERSION" in ver_data:
-                    print(ver_data["PRODUCT_ID_VERSION"])
-                else:
-                    print("Error : Version details not found")
-        else:
-            print("Error : Version details not found")
+        conn = self.context.conn
+        with conn.start_session() as sess:
+            xpath = "/goldstone-system:system/state/software-version"
+            sess.switch_datastore("operational")
+            data = sess.get_data(xpath)
+            print(data["system"]["state"]["software-version"])
 
     def display_log(self, line):
         log_filter = ["sonic", "tai", "onlp"]

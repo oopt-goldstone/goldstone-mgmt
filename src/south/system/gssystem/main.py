@@ -6,18 +6,22 @@ import argparse
 import signal
 import re
 import os
+import logging
+import json
 
 logger = logging.getLogger(__name__)
 DEFAULT_TACACS_PORT = 49
 DEFAULT_TACACS_TIMEOUT = 300
 MAX_TACACS_SERVERS = 3
 
+logger = logging.getLogger(__name__)
 
 # FILE
 PAM_AUTH_CONF = "/etc/pam.d/common-auth-gs"
 NSS_TACPLUS_CONF = "/etc/tacplus_nss.conf"
 NSS_CONF = "/etc/nsswitch.conf"
 
+VERSION_FILE = "/etc/goldstone/loader/versions.json"
 
 class InvalidXPath(Exception):
     pass
@@ -331,6 +335,15 @@ class Server:
         print(req_xpath)
         # await self.get_change_req(req_xpath)
 
+    async def system_oper_cb(self, sess, xpath, req_xpath, parent, priv):
+        try:
+            with open(VERSION_FILE, "r") as f:
+                d = json.loads(f.read())
+                return {"goldstone-system:system": {"state": {"software-version": d["PRODUCT_ID_VERSION"]}}}
+        except (FileNotFoundError, KeyError) as e:
+            logger.error(f"failed to get version info: {e}")
+            raise sysrepo.SysrepoInternalError("version details not found")
+
     async def start(self):
         try:
             self.sess.switch_datastore("running")
@@ -348,6 +361,15 @@ class Server:
                 oper_merge=True,
                 asyncio_register=True,
             )
+
+            self.sess.subscribe_oper_data_request(
+                "goldstone-system",
+                "/goldstone-system:system",
+                self.system_oper_cb,
+                oper_merge=True,
+                asyncio_register=True,
+            )
+
         except Exception as e:
             logger.error(f"error:{str(e)}")
             return {}

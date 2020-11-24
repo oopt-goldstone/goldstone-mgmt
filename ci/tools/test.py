@@ -48,6 +48,8 @@ def run(cmd):
         env=os.environ,
     )
 
+def test_system(cli):
+    ssh(cli, 'gscli -c "show version"')
 
 def test_vlan(cli):
     ssh(cli, 'gscli -c "show vlan details"')
@@ -359,6 +361,8 @@ def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         cli.connect(host, username=username, password=password)
+
+        test_system(cli)
 
         test_vlan(cli)
 
