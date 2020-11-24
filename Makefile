@@ -63,7 +63,7 @@ endif
 all: builder np2 docker image debug-image
 
 docker:
-	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang cli' $(MAKE) cmd
+	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang cli system' $(MAKE) cmd
 
 builder: $(ONLP_DEBS)
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
@@ -130,7 +130,8 @@ sonic-interface:
 cli:
 	cd src/north/cli && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
 
-
+system:
+	cd src/south/system && python setup.py bdist_wheel
 
 clean:
 	$(MAKE) -C src/south/onlp clean

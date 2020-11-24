@@ -70,7 +70,9 @@ def main(host, username, password):
         run("make docker")
         ssh(cli, "rm -rf /tmp/dist")
         scp.put("./src/north/cli/dist", recursive=True, remote_path="/tmp/dist")
+        scp.put("./src/south/system/dist/gssystem-0.1.0-py3-none-any.whl", remote_path="/tmp/dist")
         ssh(cli, "pip3 uninstall -y gscli")
+        ssh(cli, "pip3 uninstall -y gssystem")
         ssh(cli, "pip3 install /tmp/dist/*.whl")
 
         # ssh(cli, 'gscli -c "show version"')
@@ -105,6 +107,27 @@ def main(host, username, password):
         check_pod("gs-mgmt-onlp")
         check_pod("gs-mgmt-sonic")
         check_pod("gs-mgmt-tai")
+
+        def check_gssouth_system():
+            max_iteration = 3
+            running = 0
+            for i in range(max_iteration):
+                time.sleep(10)
+                output = ssh(cli, 'systemctl status gssouth_system')
+                if "running" in output:
+                    print("Goldstone South System daemon is RUNNING")
+                    running = 1
+                    break
+            if running == 0:
+                print("Goldstone South System daemon is NOT RUNNING")
+                ssh(cli, "journalctl -u gssouth_system")
+                sys.exit(1)
+
+        # Restart South system service
+        ssh(cli, "systemctl restart gssouth_system")
+
+        check_gssouth_system()
+
 
 
 if __name__ == "__main__":
