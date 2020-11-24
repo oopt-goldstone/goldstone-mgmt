@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 
 from .base import InvalidInput, Completer
 from .cli import GSObject as Object
@@ -13,9 +14,25 @@ from .sonic import Sonic, sonic_defaults
 
 class Interface_CLI(Object):
     def __init__(self, conn, parent, ifname):
-        self.ifname = ifname
         super().__init__(parent)
+        self.name = ifname
+        ptn = re.compile(ifname)
         self.sonic = Sonic(conn)
+        iflist = [v["name"] for v in self.sonic.port.get_interface_list("operational")]
+
+        self.ifnames = [i for i in iflist if ptn.match(i)]
+
+        if len(self.ifnames) == 0:
+            raise InvalidInput(f"no interface found: {ifname}")
+        elif len(self.ifnames) > 1:
+            print(f"Selected interfaces: {self.ifnames}")
+
+            @self.command()
+            def selected(args):
+                if len(args) != 0:
+                    raise InvalidInput("usage: selected[cr]")
+                print(", ".join(self.ifnames))
+
         self.switchprt_dict = {
             "mode": {
                 "trunk": {"vlan": WordCompleter(lambda: parent.get_vid())},
@@ -36,25 +53,30 @@ class Interface_CLI(Object):
             if len(args) < 1:
                 raise InvalidInput("usage: {}".format(self.no_usage))
             if args[0] == "shutdown":
-                self.sonic.port.set_admin_status(self.ifname, "up")
+                for ifname in self.ifnames:
+                    self.sonic.port.set_admin_status(ifname, "up")
             elif args[0] == "speed":
-                self.sonic.port.set_speed(
-                    self.ifname, sonic_defaults.SPEED, config=False
-                )
+                for ifname in self.ifnames:
+                    self.sonic.port.set_speed(
+                        ifname, sonic_defaults.SPEED, config=False
+                    )
             elif args[0] == "mtu":
-                self.sonic.port.set_mtu(self.ifname, None)
+                for ifname in self.ifnames:
+                    self.sonic.port.set_mtu(ifname, None)
             elif args[0] == "switchport" and len(args) == 5:
                 if args[4].isdigit():
                     if args[4] in parent.get_vid():
-                        self.sonic.port.set_vlan_mem(
-                            self.ifname, args[1], args[4], no=True
-                        )
+                        for ifname in self.ifnames:
+                            self.sonic.port.set_vlan_mem(
+                                ifname, args[1], args[4], no=True
+                            )
                     else:
                         print("Entered vid does not exist")
                 else:
                     print("argument vid must be numbers and not letters")
             elif args[0] == "breakout":
-                self.sonic.port.set_breakout(self.ifname, None, None, False)
+                for ifname in self.ifnames:
+                    self.sonic.port.set_breakout(ifname, None, None, False)
             else:
                 self.no_usage()
 
@@ -62,7 +84,8 @@ class Interface_CLI(Object):
         def shutdown(args):
             if len(args) != 0:
                 raise InvalidInput("usage: shutdown")
-            self.sonic.port.set_admin_status(self.ifname, "down")
+            for ifname in self.ifnames:
+                self.sonic.port.set_admin_status(ifname, "down")
 
         @self.command()
         def speed(args):
@@ -72,7 +95,8 @@ class Interface_CLI(Object):
                 )
             speed = args[0]
             if speed.isdigit():
-                self.sonic.port.set_speed(self.ifname, speed)
+                for ifname in self.ifnames:
+                    self.sonic.port.set_speed(ifname, speed)
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
 
@@ -84,7 +108,8 @@ class Interface_CLI(Object):
                 raise InvalidInput(f"usage: mtu{range_}")
             if args[0].isdigit():
                 mtu = int(args[0])
-                self.sonic.port.set_mtu(self.ifname, mtu)
+                for ifname in self.ifnames:
+                    self.sonic.port.set_mtu(ifname, mtu)
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
 
@@ -92,13 +117,15 @@ class Interface_CLI(Object):
         def switchport(args):
             if len(args) != 4:
                 raise InvalidInput("usage: switchport mode (trunk|access) vlan <vid>")
-            if args[3].isdigit():
-                if args[3] in parent.get_vid():
-                    self.sonic.port.set_vlan_mem(self.ifname, args[1], args[3])
-                else:
-                    print("Entered vid does not exist")
-            else:
-                print("argument vid must be numbers and not letters")
+
+            if not args[3].isdigit():
+                raise InvalidInput("argument vid must be numbers and not letters")
+
+            if args[3] not in parent.get_vid():
+                raise InvalidInput("Entered vid does not exist")
+
+            for ifname in self.ifnames:
+                self.sonic.port.set_vlan_mem(ifname, args[1], args[3])
 
         @self.command(WordCompleter(self.breakout_list))
         def breakout(args):
@@ -118,22 +145,26 @@ class Interface_CLI(Object):
             except:
                 raise InvalidInput(invalid_input_str)
 
-            self.sonic.port.set_breakout(
-                self.ifname, input_values[0], input_values[1], True
-            )
+            for ifname in self.ifnames:
+                self.sonic.port.set_breakout(
+                    ifname, input_values[0], input_values[1], True
+                )
 
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
                 return parent.show(args)
-            self.sonic.port.show(self.ifname)
+            for ifname in self.ifnames:
+                if len(self.ifnames) > 1:
+                    print(f"Interface {ifname}:")
+                self.sonic.port.show(ifname)
 
     def no_usage(self):
         no_keys = list(self.no_dict.keys())
         print(f'usage: no [{"|".join(no_keys)}]')
 
     def __str__(self):
-        return "interface({})".format(self.ifname)
+        return "interface({})".format(self.name)
 
 
 class Vlan_CLI(Object):

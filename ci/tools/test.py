@@ -272,9 +272,9 @@ def test_speed(cli):
 def test_invalid_intf(cli):
     ssh(cli, 'gscli -c "show interface description"')
     try:
-        ssh(cli, 'gscli -c "interface eth1; mtu 3000"')
+        ssh(cli, 'gscli -c "interface eth1"')
     except SSHException as e:
-        assert "Invalid argument" in e.stderr
+        assert "no interface found" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: interface eth1")
 
@@ -283,15 +283,15 @@ def test_invalid_intf(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet79; mtu 4000"')
     except SSHException as e:
-        assert "Invalid argument" in e.stderr
+        assert "no interface found" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: interface Ethernet79")
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "Ethernet79" not in output
     try:
-        ssh(cli, 'gscli -c "interface Ethernet111_1; mtu 4000"')
+        ssh(cli, 'gscli -c "interface Ethernet111_1"')
     except SSHException as e:
-        assert "Invalid argument" in e.stderr
+        assert "no interface found" in e.stderr
     else:
         raise Exception(
             "failed to fail with an invalid command: interface Ethernet111_1"
@@ -299,6 +299,10 @@ def test_invalid_intf(cli):
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "Ethernet111_1" not in output
 
+def test_select_intf(cli):
+    output = ssh(cli, 'gscli -c "interface .*; selected"')
+    line = output.strip().split('\n')[-1] # get the last line
+    assert len(line.split(',')) == 20 # all interfaces should be selected
 
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
@@ -316,6 +320,8 @@ def main(host, username, password):
         test_speed(cli)
 
         test_invalid_intf(cli)
+
+        test_select_intf(cli)
 
         try:
             test_vlan_member_add_delete(cli)

@@ -67,11 +67,11 @@ def main(host, username, password):
             remote_path="/var/lib/rancher/k3s/server/manifests/mgmt",
         )
 
-        run("rm -rf /tmp/deb && mkdir -p /tmp/deb")
-        run('docker run -v /tmp/deb:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"')
+        run("rm -rf deb && mkdir -p deb")
+        run('docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"')
 
         ssh(cli, "rm -rf /tmp/deb")
-        scp.put("/tmp/deb", recursive=True, remote_path="/tmp/deb")
+        scp.put("deb", recursive=True, remote_path="/tmp/deb")
         ssh(cli, "dpkg -i /tmp/deb/*.deb")
 
         run("make docker")
