@@ -70,7 +70,10 @@ def main(host, username, password):
         run("make docker")
         ssh(cli, "rm -rf /tmp/dist")
         scp.put("./src/north/cli/dist", recursive=True, remote_path="/tmp/dist")
-        scp.put("./src/south/system/dist/gssystem-0.1.0-py3-none-any.whl", remote_path="/tmp/dist")
+        scp.put(
+            "./src/south/system/dist/gssystem-0.1.0-py3-none-any.whl",
+            remote_path="/tmp/dist",
+        )
         ssh(cli, "pip3 uninstall -y gscli")
         ssh(cli, "pip3 uninstall -y gssystem")
         ssh(cli, "pip3 install /tmp/dist/*.whl")
@@ -113,7 +116,7 @@ def main(host, username, password):
             running = 0
             for i in range(max_iteration):
                 time.sleep(10)
-                output = ssh(cli, 'systemctl status gssouth_system')
+                output = ssh(cli, "systemctl status gssouth_system")
                 if "running" in output:
                     print("Goldstone South System daemon is RUNNING")
                     running = 1
@@ -127,7 +130,6 @@ def main(host, username, password):
         ssh(cli, "systemctl restart gssouth_system")
 
         check_gssouth_system()
-
 
 
 if __name__ == "__main__":

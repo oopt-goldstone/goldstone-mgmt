@@ -177,6 +177,14 @@ class Server(object):
                 node = xpath[i]
                 if node.find("interface") == 0:
                     ifname = node[16:-2]
+                    intf_names = self.sonic_db.keys(
+                        self.sonic_db.CONFIG_DB, pattern="PORT|" + ifname
+                    )
+                    if intf_names == None:
+                        logger.debug(
+                            "*************** Invalid Interface name ****************"
+                        )
+                        raise sysrepo.SysrepoInvalArgError("Invalid Interface name")
                     _hash = _hash + "PORT|" + ifname
                     hash_appl = hash_appl + "PORT_TABLE:" + ifname
                     if i + 1 < len(xpath):
@@ -292,9 +300,7 @@ class Server(object):
                         }
                         resp = await self.breakout_update_usonic(breakout_dict)
                         if resp:
-                            asyncio.create_task(
-                                self.breakout_callback(None, None)
-                            )
+                            asyncio.create_task(self.breakout_callback(None, None))
 
                     else:
                         self.sonic_db.set(
@@ -813,7 +819,7 @@ class Server(object):
             "****************************inside oper-callback******************************"
         )
         if self.is_usonic_rebooting:
-            logger.debug('usonic is rebooting. no handling done in oper-callback')
+            logger.debug("usonic is rebooting. no handling done in oper-callback")
             return
 
         if req_xpath.find("/goldstone-interfaces:interfaces") == 0:

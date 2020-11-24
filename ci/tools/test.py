@@ -252,7 +252,9 @@ def test_speed(cli):
     except SSHException as e:
         assert "Invalid value" in e.stderr
     else:
-        raise Exception("failed to fail with an invalid command: speed 1000000000000000000000000000")
+        raise Exception(
+            "failed to fail with an invalid command: speed 1000000000000000000000000000"
+        )
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; speed 410000"')
     except SSHException as e:
@@ -265,6 +267,37 @@ def test_speed(cli):
 
     output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 40000; show"')
     assert "40000" in output
+
+
+def test_invalid_intf(cli):
+    ssh(cli, 'gscli -c "show interface description"')
+    try:
+        ssh(cli, 'gscli -c "interface eth1; mtu 3000"')
+    except SSHException as e:
+        assert "Invalid argument" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: interface eth1")
+
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "eth1" not in output
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet79; mtu 4000"')
+    except SSHException as e:
+        assert "Invalid argument" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: interface Ethernet79")
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "Ethernet79" not in output
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet111_1; mtu 4000"')
+    except SSHException as e:
+        assert "Invalid argument" in e.stderr
+    else:
+        raise Exception(
+            "failed to fail with an invalid command: interface Ethernet111_1"
+        )
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "Ethernet111_1" not in output
 
 
 def main(host, username, password):
@@ -281,6 +314,8 @@ def main(host, username, password):
         test_mtu(cli)
 
         test_speed(cli)
+
+        test_invalid_intf(cli)
 
         try:
             test_vlan_member_add_delete(cli)

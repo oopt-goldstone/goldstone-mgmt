@@ -206,7 +206,9 @@ class incluster_apis(object):
         logger.debug(f"config.bcm file after creating :\n {config_bcm}")
 
         # 2. get the config_map using k8s API if it already exists
-        resp = await self.v1_api.read_namespaced_config_map(name=cm_name, namespace="default")
+        resp = await self.v1_api.read_namespaced_config_map(
+            name=cm_name, namespace="default"
+        )
 
         configMap = resp
         running_port_config = ""
