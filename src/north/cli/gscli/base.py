@@ -289,7 +289,10 @@ class Object(object):
         line = cmd.split()
         if len(line) > 0 and len(line[0]) > 0 and line[0][0] == "!":
             line[0] = line[0][1:]
-            subprocess.run(" ".join(line), shell=True)
+            try:
+                subprocess.run(" ".join(line), shell=True)
+            except KeyboardInterrupt:
+                print()
             return None, None
         cmd = self.complete_input(line[:1])
         cmd = self._commands[cmd[0]]
