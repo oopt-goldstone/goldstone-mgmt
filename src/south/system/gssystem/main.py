@@ -268,7 +268,7 @@ class Server:
             )
 
         # Add tacplus in nsswitch.conf if TACACS+ enable
-        if "tacacs+" in auth["login"]:
+        if "tacacs" in auth["login"]:
             if os.path.isfile(NSS_CONF):
                 self.modify_single_file(
                     NSS_CONF,
