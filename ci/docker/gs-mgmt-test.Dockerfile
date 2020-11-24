@@ -1,3 +1,3 @@
 FROM gs-builder
 
-RUN pip3 install paramiko scp black
+RUN pip3 install paramiko scp black pyang

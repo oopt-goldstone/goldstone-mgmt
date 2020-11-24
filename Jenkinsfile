@@ -38,6 +38,7 @@ pipeline {
       steps {
           sh 'docker build -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
           sh "docker run -t -v `pwd`:`pwd` -w `pwd`/src/north/cli/gscli gs-mgmt-test bash -c 'exit \$(black -q --diff *.py | wc -l)'"
+          sh "docker run -t -v `pwd`:`pwd` -w `pwd`/yang gs-mgmt-test bash -c 'pyang *.yang'"
       }
     }
 
