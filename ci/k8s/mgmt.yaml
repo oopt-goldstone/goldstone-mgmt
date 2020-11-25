@@ -81,7 +81,6 @@ metadata:
 spec:
     template:
         spec:
-            hostPID: true
             restartPolicy: Never
             initContainers: # run prep-sysrepo and prep-np sequentially
             - name: prep-sysrepo
@@ -148,7 +147,6 @@ spec:
             labels:
                 app: gs-mgmt-np2
         spec:
-            hostPID: true
             serviceAccountName: gs-mgmt
             initContainers:
             - name: wait-prep
@@ -190,7 +188,6 @@ spec:
             labels:
                 app: gs-mgmt-tai
         spec:
-            hostPID: true
             serviceAccountName: gs-mgmt
             initContainers:
             - name: wait-prep
@@ -232,7 +229,6 @@ spec:
             labels:
                 app: gs-mgmt-onlp
         spec:
-            hostPID: true
             serviceAccountName: gs-mgmt
             initContainers:
             - name: wait-prep
@@ -294,7 +290,6 @@ spec:
             labels:
                 app: gs-mgmt-sonic
         spec:
-            hostPID: true
             serviceAccountName: gs-mgmt-sonic-svc
             initContainers:
             - name: wait-prep
