@@ -68,7 +68,9 @@ def main(host, username, password):
         )
 
         run("rm -rf deb && mkdir -p deb")
-        run('docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"')
+        run(
+            'docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"'
+        )
 
         ssh(cli, "rm -rf /tmp/deb")
         scp.put("deb", recursive=True, remote_path="/tmp/deb")

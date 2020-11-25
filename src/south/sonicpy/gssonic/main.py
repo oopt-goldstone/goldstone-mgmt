@@ -163,6 +163,7 @@ class Server(object):
                 "***********************Inside Change cb event not done************************"
             )
             return "Hello"
+        valid_speeds = ["40000", "100000"]
         for change in changes:
             logger.debug(
                 "****************************inside change cb************************************************"
@@ -228,6 +229,17 @@ class Server(object):
                             "admin_status",
                             change.value,
                         )
+                    elif key == "speed":
+                        if str(change.value) in valid_speeds:
+                            self.sonic_db.set(
+                                self.sonic_db.CONFIG_DB,
+                                _hash,
+                                "speed",
+                                str(change.value),
+                            )
+                        else:
+                            logger.debug("****** Invalid speed value *********")
+                            raise sysrepo.SysrepoInvalArgError("Invalid speed")
                     elif key == "members@":
                         try:
                             mem = _decode(
@@ -323,6 +335,17 @@ class Server(object):
                 elif key == "forwarding" or key == "enabled":
                     logger.debug("This key:{} should not be set in redis ".format(key))
 
+                elif key == "speed":
+                    if str(change.value) in valid_speeds:
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB,
+                            _hash,
+                            "speed",
+                            str(change.value),
+                        )
+                    else:
+                        logger.debug("****** Invalid speed value *********")
+                        raise sysrepo.SysrepoInvalArgError("Invalid speed")
                 elif key == "num-channels" or key == "channel-speed":
                     logger.debug("This key:{} should not be set in redis ".format(key))
                     raise Exception("Breakout config modification not supported")

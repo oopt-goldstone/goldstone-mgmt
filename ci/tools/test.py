@@ -91,10 +91,14 @@ def test_tai(cli):
         assert "invalid frequency input" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: tx-laser-freq aaa")
-    
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -1; show"')
+
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; output-power -1; show"'
+    )
     assert "-1" in output
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no output-power; show"')
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; no output-power; show"'
+    )
     assert "1" in output
 
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 2; show"')
@@ -102,17 +106,24 @@ def test_tai(cli):
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no voa-rx; show"')
     assert "0" in output
 
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; show"')
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; show"'
+    )
     assert "193700000000000" in output
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; show"')
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; show"'
+    )
     assert "193500000000000" in output
 
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"'
+    )
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
     assert "dp-qpsk" in output
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no modulation-format"')
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
     assert "dp-16-qam" in output
+
 
 def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "show vlan details"')
@@ -148,7 +159,7 @@ def test_port_breakout(cli):
         except SSHException as e:
             time.sleep(1)
         else:
-            print(f'uSONiC took {i}sec to restart')
+            print(f"uSONiC took {i}sec to restart")
             break
     else:
         raise Exception("Ethernet5_2 didn't appear")
@@ -182,7 +193,7 @@ def test_port_breakout(cli):
         try:
             ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
         except SSHException as e:
-            print(f'uSONiC took {i}sec to restart')
+            print(f"uSONiC took {i}sec to restart")
             break
         else:
             time.sleep(1)
@@ -273,6 +284,18 @@ def test_speed(cli):
         assert "does not satisfy the constraint" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: speed 410000")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 400000"')
+    except SSHException as e:
+        assert "Invalid argument" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: speed 400000")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000"')
+    except SSHException as e:
+        assert "Invalid argument" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: speed 25000")
 
     # TODO this should fail
     # output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000; show"')
@@ -311,10 +334,12 @@ def test_invalid_intf(cli):
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "Ethernet111_1" not in output
 
+
 def test_select_intf(cli):
     output = ssh(cli, 'gscli -c "interface .*; selected"')
-    line = output.strip().split('\n')[-1] # get the last line
-    assert len(line.split(',')) == 20 # all interfaces should be selected
+    line = output.strip().split("\n")[-1]  # get the last line
+    assert len(line.split(",")) == 20  # all interfaces should be selected
+
 
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
