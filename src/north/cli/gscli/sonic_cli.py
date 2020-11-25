@@ -16,7 +16,10 @@ class Interface_CLI(Object):
     def __init__(self, conn, parent, ifname):
         super().__init__(parent)
         self.name = ifname
-        ptn = re.compile(ifname)
+        try:
+            ptn = re.compile(ifname)
+        except re.error:
+            raise InvalidInput(f"failed to compile {ifname} as a regular expression")
         self.sonic = Sonic(conn)
         iflist = [v["name"] for v in self.sonic.port.get_interface_list("operational")]
 

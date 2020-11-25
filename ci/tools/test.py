@@ -340,6 +340,20 @@ def test_select_intf(cli):
     line = output.strip().split("\n")[-1]  # get the last line
     assert len(line.split(",")) == 20  # all interfaces should be selected
 
+    output = ssh(cli, 'gscli -c "interface Ethernet[1-4]_1; selected"')
+    line = output.strip().split("\n")[-1]  # get the last line
+    assert len(line.split(",")) == 4  # 4 interfaces should be selected
+
+    # invalid regex
+    try:
+        output = ssh(cli, 'gscli -c "interface Ethernet[1-4_1; selected"')
+    except SSHException as e:
+        assert "failed to compile" in e.stderr
+    else:
+        raise Exception(
+            "failed to fail with an invalid command: interface Ethernet[1-4_1"
+        )
+
 
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
