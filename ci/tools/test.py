@@ -108,11 +108,9 @@ def test_tai(cli):
     assert "193500000000000" in output
 
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
-    time.sleep(10)
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
     assert "dp-qpsk" in output
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no modulation-format"')
-    time.sleep(10)
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
     assert "dp-16-qam" in output
 
@@ -144,7 +142,17 @@ def test_port_breakout(cli):
     assert "Ethernet5_1" in output
     assert "Ethernet5_2" not in output
 
-    time.sleep(60)
+    for i in range(60):
+        try:
+            ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
+        except SSHException as e:
+            time.sleep(1)
+        else:
+            print(f'uSONiC took {i}sec to restart')
+            break
+    else:
+        raise Exception("Ethernet5_2 didn't appear")
+
     # Validating if 'syncd' has come up properly
     validate_str = "sending switch_shutdown_request notification to OA"
     output = ssh(cli, "kubectl logs deploy/usonic syncd")
@@ -170,7 +178,16 @@ def test_port_breakout(cli):
 
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
-    time.sleep(60)
+    for i in range(60):
+        try:
+            ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
+        except SSHException as e:
+            print(f'uSONiC took {i}sec to restart')
+            break
+        else:
+            time.sleep(1)
+    else:
+        raise Exception("Ethernet5_2 didn't disappear")
 
     # Validating if 'syncd' has come up properly
     output = ssh(cli, "kubectl logs deploy/usonic syncd")
@@ -189,15 +206,10 @@ def test_port_breakout(cli):
 
 def test_logging(cli):
     ssh(cli, 'gscli -c "show logging"')
-    time.sleep(5)
     ssh(cli, 'gscli -c "show logging 50"')
-    time.sleep(5)
     ssh(cli, 'gscli -c "show logging sonic 50"')
-    time.sleep(5)
     ssh(cli, 'gscli -c "show logging sonic"')
-    time.sleep(5)
     ssh(cli, 'gscli -c "show logging onlp 100"')
-    time.sleep(5)
     try:
         ssh(cli, 'gscli -c "show logging h01"')
     except SSHException as e:
