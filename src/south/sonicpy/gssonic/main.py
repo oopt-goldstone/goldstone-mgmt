@@ -13,6 +13,9 @@ from .k8s_api import incluster_apis
 
 logger = logging.getLogger(__name__)
 
+COUNTER_PORT_MAP = "COUNTERS_PORT_NAME_MAP"
+COUNTER_TABLE_PREFIX = "COUNTERS:"
+
 
 def _decode(string):
     if hasattr(string, "decode"):
@@ -38,11 +41,30 @@ def speed_to_yang_val(speed):
 class Server(object):
     def __init__(self):
         self.sonic_db = swsssdk.SonicV2Connector()
+        # HMSET is not available in above connector, so creating new one
+        self.sonic_configdb = swsssdk.ConfigDBConnector()
+        self.sonic_configdb.connect()
         self.loop = asyncio.get_event_loop()
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
         self.is_usonic_rebooting = False
         self.k8s = incluster_apis()
+        self.counter_dict = {
+            "SAI_PORT_STAT_IF_IN_UCAST_PKTS": 0,
+            "SAI_PORT_STAT_IF_IN_ERRORS": 0,
+            "SAI_PORT_STAT_IF_IN_DISCARDS": 0,
+            "SAI_PORT_STAT_IF_IN_BROADCAST_PKTS": 0,
+            "SAI_PORT_STAT_IF_IN_MULTICAST_PKTS": 0,
+            "SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS": 0,
+            "SAI_PORT_STAT_IF_OUT_UCAST_PKTS": 0,
+            "SAI_PORT_STAT_IF_OUT_ERRORS": 0,
+            "SAI_PORT_STAT_IF_OUT_DISCARDS": 0,
+            "SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS": 0,
+            "SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS": 0,
+            "SAI_PORT_STAT_IF_OUT_UNKNOWN_PROTOS": 0,
+            "SAI_PORT_STAT_IF_IN_OCTETS": 0,
+            "SAI_PORT_STAT_IF_OUT_OCTETS": 0,
+        }
 
     def stop(self):
         self.sess.stop()
@@ -54,6 +76,16 @@ class Server(object):
 
     async def watch_pods(self):
         await self.k8s.watch_pods()
+
+        # Enable counters in SONiC
+        self.enable_counters()
+
+        # After usonic is UP , its taking approximately
+        # 15 seconds to populate counter data
+        await asyncio.sleep(15)
+        # Caching base values of counters
+        self.cache_counters()
+
         self.is_usonic_rebooting = False
 
     async def wait_for_sr_unlock(self):
@@ -139,7 +171,6 @@ class Server(object):
                     if "breakout" in intf:
                         breakout_data = intf["breakout"]
                         speed = None
-                        print(breakout_data)
                         if breakout_data["channel-speed"] != None:
                             speed = yang_val_to_speed(breakout_data["channel-speed"])
                         interface_list.append(
@@ -155,6 +186,10 @@ class Server(object):
             await self.restart_usonic()
 
         return is_updated
+
+    def get_running_data(self, xpath):
+        self.sess.switch_datastore("running")
+        return self.sess.get_data(xpath)
 
     async def change_cb(self, event, req_id, changes, priv):
         logger.debug("Entering change callback")
@@ -271,7 +306,7 @@ class Server(object):
                         tmp_xpath = change.xpath.replace(key, paired_key)
 
                         try:
-                            _data = self.sess.get_data(tmp_xpath)
+                            _data = self.get_running_data(tmp_xpath)
                         except:
                             logger.debug("Both Arguments are not present yet")
                             break
@@ -370,7 +405,7 @@ class Server(object):
                     pass
                 elif key == "num-channels":
                     try:
-                        _data = self.sess.get_data(change.xpath)
+                        _data = self.get_running_data(change.xpath)
                     except:
                         logging.error(
                             "Failed fetching {} from get_data".format(change.xpath)
@@ -405,6 +440,9 @@ class Server(object):
                     self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
 
     def get_oper_data(self, req_xpath):
+        def delta_counter_value(base, present):
+            return str(int(present) - int(base))
+
         path_prefix = "/goldstone-interfaces:interfaces/interface[name='"
 
         if req_xpath.endswith("oper-status"):
@@ -418,15 +456,13 @@ class Server(object):
             return data
 
         elif req_xpath.endswith("in-octets"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-octets", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -439,18 +475,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_IN_OCTETS"], data
+            )
 
         elif req_xpath.endswith("in-unicast-pkts"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-unicast-pkts", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
 
             try:
@@ -464,18 +500,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_IN_UCAST_PKTS"], data
+            )
 
         elif req_xpath.endswith("in-broadcast-pkts"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-broadcast-pkts", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
 
             try:
@@ -490,19 +526,18 @@ class Server(object):
                 )
             except:
                 return 0
-
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_IN_BROADCAST_PKTS"], data
+            )
 
         elif req_xpath.endswith("in-multicast-pkts"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-multicast-pkts", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -517,18 +552,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_IN_MULTICAST_PKTS"], data
+            )
 
         elif req_xpath.endswith("in-discards"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-discards", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -541,18 +576,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_IN_DISCARDS"], data
+            )
 
         elif req_xpath.endswith("in-errors"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-errors", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -565,18 +600,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_IN_ERRORS"], data
+            )
 
         elif req_xpath.endswith("in-unknown-protos"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-unknown-protos", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -591,18 +626,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS"], data
+            )
 
         elif req_xpath.endswith("out-octets"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-octets", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -615,18 +650,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_OUT_OCTETS"], data
+            )
 
         elif req_xpath.endswith("out-unicast-pkts"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-unicast-pkts", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -641,18 +676,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_OUT_UCAST_PKTS"], data
+            )
 
         elif req_xpath.endswith("out-broadcast-pkts"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-broadcast-pkts", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -667,18 +702,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS"], data
+            )
 
         elif req_xpath.endswith("out-multicast-pkts"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-multicast-pkts", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -693,18 +728,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS"], data
+            )
 
         elif req_xpath.endswith("out-discards"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-discards", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -717,18 +752,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_OUT_DISCARDS"], data
+            )
 
         elif req_xpath.endswith("out-errors"):
-            self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-errors", "")
+            if_counter_data = self.counter_if_dict[ifname]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, "COUNTERS_PORT_NAME_MAP", ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             try:
                 key = "COUNTERS:" + key
@@ -741,15 +776,18 @@ class Server(object):
             except:
                 return 0
 
-            return data
+            return delta_counter_value(
+                if_counter_data["SAI_PORT_STAT_IF_OUT_ERRORS"], data
+            )
 
     def interface_oper_cb(self, req_xpath):
         # Changing to operational datastore to fetch data
         # for the unconfigurable params in the xpath, data will
         # be fetched from Redis and complete data will be returned.
-        #
-        # WARNING: If we enable below line, sysrepo gets locked and it will not be released
-        # self.sess.switch_datastore("operational")
+
+        # Use 'no_subs=True' parameter in oper_cb to fetch data from operational
+        # datastore and to avoid locking of sysrepo db
+        self.sess.switch_datastore("operational")
         r = {}
         path_list = req_xpath.split("/")
         statistic_leaves = [
@@ -768,14 +806,8 @@ class Server(object):
             "out-errors",
         ]
 
-        try:
-            _data = self.sess.get_data(req_xpath)
-        except:
-            logger.info("Unable for fetch data in oper_cb")
-            return r
-
         if len(path_list) <= 3:
-            r = self.sess.get_data(req_xpath)
+            r = self.sess.get_data(req_xpath, no_subs=True)
             if r == {}:
                 return r
             else:
@@ -796,7 +828,7 @@ class Server(object):
             return r
         elif req_xpath[-10:] == "statistics":
             xpath_T = req_xpath.replace("/statistics", "")
-            r = self.sess.get_data(xpath_T)
+            r = self.sess.get_data(xpath_T, no_subs=True)
             if r == {}:
                 return r
             else:
@@ -819,7 +851,7 @@ class Server(object):
             )
             xpath_T = xpath_T.replace("/oper-status", "")
 
-            r = self.sess.get_data(xpath_T)
+            r = self.sess.get_data(xpath_T, no_subs=True)
             if r == {}:
                 return r
             else:
@@ -847,6 +879,38 @@ class Server(object):
 
         if req_xpath.find("/goldstone-interfaces:interfaces") == 0:
             return self.interface_oper_cb(req_xpath)
+
+    def cache_counters(self):
+        self.counter_if_dict = {}
+        hash_keys = self.sonic_db.keys(
+            self.sonic_db.CONFIG_DB, pattern="PORT|Ethernet*"
+        )
+        if hash_keys != None:
+            hash_keys = map(_decode, hash_keys)
+
+            for _hash in hash_keys:
+                ifname = _hash.split("|")[1]
+
+                key = _decode(
+                    self.sonic_db.get(
+                        self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname
+                    )
+                )
+                tmp_counter_dict = {}
+                counter_key = COUNTER_TABLE_PREFIX + key
+                for counter_name in self.counter_dict.keys():
+                    counter_data = _decode(
+                        self.sonic_db.get(
+                            self.sonic_db.COUNTERS_DB, counter_key, counter_name
+                        )
+                    )
+                    tmp_counter_dict[counter_name] = counter_data
+                self.counter_if_dict[ifname] = tmp_counter_dict
+
+    def enable_counters(self):
+        # This is similar to "counterpoll port enable"
+        value = {"FLEX_COUNTER_STATUS": "enable"}
+        self.sonic_configdb.mod_entry("FLEX_COUNTER_TABLE", "PORT", value)
 
     def reconcile(self):
         intf_data = self.sess.get_data("/goldstone-interfaces:interfaces")
@@ -1082,6 +1146,7 @@ class Server(object):
         )
         self.sonic_db.connect(self.sonic_db.CONFIG_DB)
         self.sonic_db.connect(self.sonic_db.APPL_DB)
+        self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
         logger.debug(
             "****************************reconciliation******************************"

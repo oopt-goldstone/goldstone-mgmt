@@ -20,6 +20,7 @@ class InterfaceGroupCommand(Command):
     SUBCOMMAND_DICT = {
         "brief": Command,
         "description": Command,
+        "counters": Command,
     }
 
     def __init__(self, context, parent, name):
@@ -28,12 +29,20 @@ class InterfaceGroupCommand(Command):
         self.port = self.sonic.port
 
     def exec(self, line):
-        if len(line) < 1 or line[0] not in ["brief", "description"]:
+        if len(line) < 1 or line[0] not in ["brief", "description", "counters"]:
             raise InvalidInput(self.usage())
-        return self.port.show_interface(line[0])
+        if line[0] in ["brief", "description"]:
+            if len(line) == 1:
+                return self.port.show_interface(line[0])
+            else:
+                raise InvalidInput(self.usage())
+        else:
+            self.port.show_counters(line[1:])
 
     def usage(self):
-        return "usage:\n" f" {self.parent.name} {self.name} (brief|description)"
+        return (
+            "usage:\n" f" {self.parent.name} {self.name} (brief|description|counters)"
+        )
 
 
 class VlanGroupCommand(Command):
@@ -296,7 +305,7 @@ class GlobalShowCommand(Command):
     def usage(self):
         return (
             "usage:\n"
-            f" {self.name} interface (brief|description) \n"
+            f" {self.name} interface (brief|description|counters) \n"
             f" {self.name} vlan details \n"
             f" {self.name} transponder (<transponder_name>|summary)\n"
             f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"

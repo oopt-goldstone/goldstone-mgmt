@@ -195,6 +195,30 @@ class Port(object):
 
         print(tabulate(rows, headers, tablefmt="pretty"))
 
+    def show_counters(self, ifname_list):
+        intf_list = self.get_interface_list("operational")
+        existing_ifname_list = [v["name"] for v in intf_list]
+
+        # Raise exception if invalid interfaces are present in list
+        for intf in ifname_list:
+            if intf not in existing_ifname_list:
+                raise InvalidInput(f"Invalid interface : {intf}")
+
+        lines = []
+        for intf in intf_list:
+            if len(ifname_list) == 0 or intf["name"] in ifname_list:
+                if "statistics" in intf:
+                    lines.append(f"Interface  {intf['name']}")
+                    statistics = intf["statistics"]
+                    for key in statistics:
+                        lines.append(f"  {key}: {statistics[key]}")
+                    # One extra line to have readability
+                    lines.append(f"\n")
+                else:
+                    lines.append(f"No statistics for: {intf['name']}")
+
+        print("\n".join(lines))
+
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
 

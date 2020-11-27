@@ -357,6 +357,23 @@ def test_select_intf(cli):
         )
 
 
+def test_statistics(cli):
+    try:
+        ssh(cli, 'gscli -c "show interface counters Ethernet1_1 Ethernet2_2"')
+    except SSHException as e:
+        assert "Invalid interface" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid interface Ethernet2_2")
+
+    output = ssh(cli, 'gscli -c "show interface counters Ethernet1_1 Ethernet2_1"')
+    assert "Ethernet1_1" in output
+    assert "Ethernet2_1" in output
+
+    output = ssh(cli, 'gscli -c "show interface counters"')
+    # Validataing if last interface is present
+    assert "Ethernet20_1" in output
+
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -377,6 +394,8 @@ def main(host, username, password):
         test_invalid_intf(cli)
 
         test_select_intf(cli)
+
+        test_statistics(cli)
 
         try:
             test_vlan_member_add_delete(cli)
