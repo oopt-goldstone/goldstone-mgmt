@@ -3,6 +3,7 @@ import os
 from tabulate import tabulate
 from .sonic import Sonic
 from .tai import Transponder
+from .system import System, TACACS, AAA
 import json
 import libyang as ly
 import sysrepo as sr
@@ -102,6 +103,36 @@ class TransponderGroupCommand(Command):
         )
 
 
+class AAAGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.aaa = AAA(context.conn)
+
+    def exec(self, line):
+        if len(line) == 0:
+            return self.aaa.show_aaa()
+        else:
+            print(self.usage())
+
+    def usage(self):
+        return "usage:\n" f" {self.parent.name} {self.name}"
+
+
+class TACACSGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.tacacs = TACACS(context.conn)
+
+    def exec(self, line):
+        if len(line) == 0:
+            return self.tacacs.show_tacacs()
+        else:
+            print(self.usage())
+
+    def usage(self):
+        return "usage:\n" f" {self.parent.name} {self.name}"
+
+
 class GlobalShowCommand(Command):
     SUBCOMMAND_DICT = {
         "interface": InterfaceGroupCommand,
@@ -112,6 +143,8 @@ class GlobalShowCommand(Command):
         "version": Command,
         "transponder": TransponderGroupCommand,
         "running-config": RunningConfigCommand,
+        "aaa": AAAGroupCommand,
+        "tacacs": TACACSGroupCommand,
     }
 
     def exec(self, line):
@@ -184,10 +217,15 @@ class GlobalShowCommand(Command):
 
         sonic = Sonic(self.context.conn)
         transponder = Transponder(self.context.conn)
+        system = System(self.context.conn)
 
         if module == "all":
             sonic.run_conf()
             transponder.run_conf()
+            system.run_conf()
+
+        elif module == "aaa":
+            system.run_conf()
 
         elif module == "interface":
             print("!")
@@ -278,12 +316,15 @@ class GlobalShowCommand(Command):
             "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST",
             "/goldstone-interfaces:interfaces/interface",
             "/goldstone-tai:modules",
+            "/goldstone-aaa:aaa",
         ]
 
         sonic = Sonic(self.context.conn)
         transponder = Transponder(self.context.conn)
+        system = System(self.context.conn)
         sonic.tech_support()
         transponder.tech_support()
+        system.tech_support()
         print("\nshow datastore:\n")
 
         with self.context.conn.start_session() as session:
@@ -310,6 +351,8 @@ class GlobalShowCommand(Command):
             f" {self.name} transponder (<transponder_name>|summary)\n"
             f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"
             f" {self.name} version \n"
+            f" {self.name} aaa \n"
+            f" {self.name} tacacs \n"
             f" {self.name} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
             f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|]\n"
             f" {self.name} tech-support"

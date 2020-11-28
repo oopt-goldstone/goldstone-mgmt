@@ -26,6 +26,8 @@ from .onlp import Platform
 from .tai_cli import Transponder_CLI
 from .sonic_cli import Interface_CLI, Vlan_CLI
 from .sonic import Sonic
+from .system_cli import AAA_CLI, TACACS_CLI
+from .system import AAA, TACACS
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +51,21 @@ class Root(Object):
 
         super().__init__(None)
         self.sonic = Sonic(conn)
-        self.no_dict = {"vlan": FuzzyWordCompleter(lambda: self.get_vid(), WORD=True)}
+        self.aaa_cli = AAA_CLI(conn)
+        self.tacacs_cli = TACACS_CLI(conn)
+        self.aaa_sys = AAA(conn)
+        self.tacacs_sys = TACACS(conn)
+        self.tacacs_complete = {"host": None}
+        self.aaa_completion = {
+            "authentication": {
+                "login": {"default": {"group": {"tacacs": None}, "local": None}}
+            }
+        }
+        self.no_dict = {
+            "vlan": FuzzyWordCompleter(lambda: self.get_vid(), WORD=True),
+            "aaa": {"authentication": {"login": None}},
+            "tacacs-server": {"host": None},
+        }
         # TODO:add timer for inactive user
 
         @self.command()
@@ -115,6 +131,19 @@ class Root(Object):
         def date(line):
             self.date(line)
 
+        # SYSTEM CLIs  -- START
+        @self.command(NestedCompleter.from_nested_dict(self.aaa_completion))
+        def aaa(line):
+            self.aaa_cli.aaa(line)
+
+        @self.command(
+            NestedCompleter.from_nested_dict(self.tacacs_complete), name="tacacs-server"
+        )
+        def tacacs_server(line):
+            self.tacacs_cli.tacacs_server(line)
+
+        # SYSTEM CLIs  -- END
+
         @self.command(FuzzyWordCompleter(lambda: self.get_vid(), WORD=True))
         def vlan(line):
             if len(line) != 1:
@@ -126,17 +155,31 @@ class Root(Object):
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
         def no(line):
-            if len(line) != 2:
-                raise InvalidInput(self.no_usage())
-            if line[0] == "vlan":
-                vlan_list = self.get_vid()
-                if line[1].isdigit():
-                    if line[1] in vlan_list:
-                        self.sonic.vlan.delete_vlan(line[1])
+            if len(line) == 2:
+                if line[0] == "vlan":
+                    vlan_list = self.get_vid()
+                    if line[1].isdigit():
+                        if line[1] in vlan_list:
+                            self.sonic.vlan.delete_vlan(line[1])
+                        else:
+                            print("The vlan-id provided doesn't exist")
                     else:
-                        print("The vlan-id provided doesn't exist")
+                        print("The vlan-id entered must be numbers and not letters")
                 else:
-                    print("The vlan-id entered must be numbers and not letters")
+                    raise InvalidInput(self.no_usage())
+            elif len(line) == 3:
+                if line[0] == "aaa":
+                    if line[1] == "authentication" and line[2] == "login":
+                        self.aaa_sys.set_no_aaa()
+                    else:
+                        print("Enter the valid no command for aaa")
+                elif line[0] == "tacacs-server":
+                    if line[1] == "host":
+                        self.tacacs_sys.set_no_tacacs(line[2])
+                    else:
+                        print("Enter valid no command for tacacs-server")
+                else:
+                    raise InvalidInput(self.no_usage())
             else:
                 raise InvalidInput(self.no_usage())
 
@@ -168,7 +211,12 @@ class Root(Object):
         subprocess.call(date, shell=True)
 
     def no_usage(self):
-        return "usage: no vlan <vid>"
+        return (
+            "usage:\n"
+            "no vlan <vid>\n"
+            "no aaa authentication login\n"
+            "no tacacs-server host <address>"
+        )
 
     def notification_cb(self, a, b, c, d):
         print(b.print_dict())

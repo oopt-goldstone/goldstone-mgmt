@@ -48,8 +48,10 @@ def run(cmd):
         env=os.environ,
     )
 
+
 def test_system(cli):
     ssh(cli, 'gscli -c "show version"')
+
 
 def test_vlan(cli):
     ssh(cli, 'gscli -c "show vlan details"')
@@ -215,6 +217,79 @@ def test_port_breakout(cli):
     ssh(cli, 'gscli -c "show running-config"')
     ssh(cli, 'gscli -c "show running-config interface"')
     ssh(cli, 'gscli -c "show tech-support"')
+
+
+def test_tacacs(cli):
+
+    # Configuring first TACACS+ server details
+    output = ssh(
+        cli, 'gscli -c "tacacs-server host 192.168.208.100 key testing123; show tacacs"'
+    )
+    assert "192.168.208.100" in output
+    assert "testing123" in output
+    assert "49" in output
+    assert "300" in output
+
+    # checking port number value validation
+    try:
+        ssh(
+            cli,
+            'gscli -c "tacacs-server host 192.168.208.101 key testkey123 port number"',
+        )
+    except SSHException as e:
+        assert "Invalid value" in e.stderr
+
+    # checking timeout value validation
+    try:
+        ssh(
+            cli,
+            'gscli -c "tacacs-server host 192.168.208.101 key testkey123 timeout seconds"',
+        )
+    except SSHException as e:
+        assert "Invalid value" in e.stderr
+
+    # checking port number value and timeout validation
+    try:
+        ssh(
+            cli,
+            'gscli -c "tacacs-server host 192.168.208.101 key testkey123 port number timeout seconds"',
+        )
+    except SSHException as e:
+        assert "Invalid value" in e.stderr
+
+    # Configuring second TACACS+ server details
+    output = ssh(
+        cli,
+        'gscli -c "tacacs-server host 192.168.208.101 key testkey123 port 42; show tacacs"',
+    )
+    assert "192.168.208.101" in output
+    assert "testkey123" in output
+    assert "42" in output
+    assert "300" in output
+
+    # Configuring third TACACS+ server details
+    output = ssh(
+        cli,
+        'gscli -c "tacacs-server host 192.168.208.102 key testing123 port 49 timeout 180; show tacacs"',
+    )
+    assert "192.168.208.102" in output
+    assert "testing123" in output
+    assert "49" in output
+    assert "180" in output
+
+    # setting aaa authentication to local
+    output = ssh(cli, 'gscli -c "aaa authentication login default local; show aaa"')
+    assert "local" in output
+
+    # Unconfigure
+    output = ssh(cli, 'gscli -c "no aaa authentication login"')
+    assert "local" not in output
+    output = ssh(cli, 'gscli -c "no tacacs-server host 192.168.208.102"')
+    assert "192.168.208.102" not in output
+    output = ssh(cli, 'gscli -c "no tacacs-server host 192.168.208.101"')
+    assert "192.168.208.101" not in output
+    output = ssh(cli, 'gscli -c "no tacacs-server host 192.168.208.100"')
+    assert "192.168.208.100" not in output
 
 
 def test_logging(cli):
@@ -386,6 +461,8 @@ def main(host, username, password):
         test_tai(cli)
 
         test_logging(cli)
+
+        test_tacacs(cli)
 
         test_mtu(cli)
 
