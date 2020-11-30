@@ -97,10 +97,6 @@ def main(host, username, password):
         ssh(cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt")
 
         def check_pod(name):
-            # FIXME: Wait for additional 30 seconds for usonic to come
-            # up in case if its restarted
-            if name.endswith("sonic"):
-                time.sleep(60)
             max_iteration = 4
             for i in range(max_iteration):
                 time.sleep(5)
@@ -119,8 +115,13 @@ def main(host, username, password):
                 ssh(cli, f"kubectl describe pods -l app={name}")
                 sys.exit(1)
 
-        check_pod("gs-mgmt-onlp")
+
+        # FIXME: Wait for additional 30 seconds for usonic to come
+        # up in case if its restarted
+        time.sleep(60)
+
         check_pod("gs-mgmt-sonic")
+        check_pod("gs-mgmt-onlp")
         check_pod("gs-mgmt-tai")
 
         def check_gssouth_system():
