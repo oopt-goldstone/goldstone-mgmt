@@ -1,4 +1,5 @@
 import sysrepo
+import pyroute2
 import libyang
 import logging
 import asyncio
@@ -23,6 +24,10 @@ NSS_CONF = "/etc/nsswitch.conf"
 
 VERSION_FILE = "/etc/goldstone/loader/versions.json"
 
+# This hardcoding has to be removed once ENV
+# is added in system file for gssystem-south
+MGMT_INTF_NAME = "eth0"
+
 
 class InvalidXPath(Exception):
     pass
@@ -30,6 +35,7 @@ class InvalidXPath(Exception):
 
 class Server:
     def __init__(self):
+        self.pyroute = pyroute2.IPRoute()
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
 
@@ -338,11 +344,59 @@ class Server:
             elif any(isinstance(change, cls) for cls in [sysrepo.ChangeDeleted]):
                 await self.parse_change_req(change.xpath, "ignore", "true")
 
+    def get_neighbor(self):
+        intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAME)
+        tuple_of_neighbours = self.pyroute.get_neighbours(ifindex=intf_index.pop())
+        neighbour_list = []
+
+        for neighbour in tuple_of_neighbours:
+            neigh_dict = {}
+            for attr in neighbour["attrs"]:
+                if attr[0] == "NDA_DST":
+                    neigh_dict["ip"] = attr[1]
+                if attr[0] == "NDA_LLADDR":
+                    neigh_dict["link-layer-address"] = attr[1]
+            neighbour_list.append(neigh_dict)
+
+        return neighbour_list
+
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+        logger.debug(f"xpath:{xpath}, req_xpath:{req_xpath}")
+
+        if req_xpath.startswith("/goldstone-mgmt-interfaces:interfaces"):
+            self.sess.switch_datastore("operational")
+
+            neighbor = self.get_neighbor()
+            ifdata = self.sess.get_data(req_xpath, no_subs=True)
+            if ifdata == {}:
+                return ifdata
+
+            for intf in ifdata["interfaces"]["interface"]:
+                intf["goldstone-ip:ipv4"] = {"neighbor": neighbor}
+
+            logger.debug("************DATA to be returned in oper_cb()*************")
+            logger.debug(ifdata)
+
+            return ifdata
+
         print(xpath)
         req_xpath = "/goldstone-aaa:aaa/server-groups/server-group[name='TACACS+']/servers/server"
         print(req_xpath)
         # await self.get_change_req(req_xpath)
+
+    def update_oper_db(self):
+        logger.debug("*********inside update oper db***************")
+        self.sess.switch_datastore("operational")
+        xpath = (
+            f"/goldstone-mgmt-interfaces:interfaces/interface[name='{MGMT_INTF_NAME}']"
+        )
+        with pyroute2.NDB() as ndb:
+            i = ndb.interfaces[MGMT_INTF_NAME]
+            self.sess.set_item(f"{xpath}/admin-status", i["state"])
+            self.sess.set_item(f"{xpath}/mtu", i["mtu"])
+
+        self.sess.apply_changes()
+        logger.debug("********* update oper db done***************")
 
     async def system_oper_cb(self, sess, xpath, req_xpath, parent, priv):
         try:
@@ -358,6 +412,8 @@ class Server:
             raise sysrepo.SysrepoInternalError("version details not found")
 
     async def start(self):
+        self.update_oper_db()
+
         try:
             self.sess.switch_datastore("running")
             self.sess.subscribe_module_change(
@@ -367,6 +423,13 @@ class Server:
                 "/goldstone-aaa:aaa/server-groups/server-group[name='TACACS+']/servers/server"
             )
             # self.sess.switch_datastore ('operational')
+            self.sess.subscribe_oper_data_request(
+                "goldstone-mgmt-interfaces",
+                "/goldstone-mgmt-interfaces:interfaces",
+                self.oper_cb,
+                oper_merge=True,
+                asyncio_register=True,
+            )
             self.sess.subscribe_oper_data_request(
                 "goldstone-aaa",
                 "/goldstone-aaa:aaa",

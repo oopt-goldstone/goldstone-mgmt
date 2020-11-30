@@ -1,5 +1,6 @@
 import sys
 import os
+import sysrepo
 from tabulate import tabulate
 from .sonic import Sonic
 from .tai import Transponder
@@ -63,6 +64,31 @@ class VlanGroupCommand(Command):
 
     def usage(self):
         return "usage:\n" f" {self.parent.name} {self.name} details"
+
+
+class ArpGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.conn = sysrepo.SysrepoConnection()
+        self.sess = self.conn.start_session()
+
+    def exec(self, line):
+        self.sess.switch_datastore("operational")
+        xpath = "/goldstone-mgmt-interfaces:interfaces/interface"
+        rows = []
+        try:
+            tree = self.sess.get_data(xpath)
+            if_list = tree["interfaces"]["interface"]
+            for intf in if_list:
+                arp_list = intf["ipv4"]["neighbor"]
+                for arp in arp_list:
+                    row = [arp["ip"], arp["link-layer-address"], intf["name"]]
+                    rows.append(row)
+        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
+            raise InvalidInput(str(error))
+
+        headers = ["Address", "HWaddress", "Iface"]
+        print(tabulate(rows, headers, tablefmt="plain"))
 
 
 class RunningConfigCommand(Command):
@@ -137,6 +163,7 @@ class GlobalShowCommand(Command):
     SUBCOMMAND_DICT = {
         "interface": InterfaceGroupCommand,
         "vlan": VlanGroupCommand,
+        "arp": ArpGroupCommand,
         "datastore": Command,
         "tech-support": Command,
         "logging": Command,
@@ -315,6 +342,7 @@ class GlobalShowCommand(Command):
             "/goldstone-vlan:vlan/VLAN/VLAN_LIST",
             "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST",
             "/goldstone-interfaces:interfaces/interface",
+            "/goldstone-mgmt-interfaces:interfaces/interface",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",
         ]

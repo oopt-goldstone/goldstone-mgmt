@@ -423,6 +423,8 @@ def test_invalid_intf(cli):
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "Ethernet111_1" not in output
 
+def test_mgmt_intf(cli):
+    ssh(cli, 'gscli -c "show arp"')
 
 def test_select_intf(cli):
     output = ssh(cli, 'gscli -c "interface .*; selected"')
@@ -485,6 +487,8 @@ def main(host, username, password):
         test_select_intf(cli)
 
         test_statistics(cli)
+
+        test_mgmt_intf(cli)
 
         try:
             test_vlan_member_add_delete(cli)
