@@ -23,6 +23,7 @@ NSS_CONF = "/etc/nsswitch.conf"
 
 VERSION_FILE = "/etc/goldstone/loader/versions.json"
 
+
 class InvalidXPath(Exception):
     pass
 
@@ -91,6 +92,7 @@ class Server:
                         ] = DEFAULT_TACACS_PORT
 
             logger.debug(f"configured data: {self.data}")
+            self.modify_common_auth_gs_file()
 
         except KeyError as e:
             logger.debug("Not able to fetch configured data")
@@ -151,8 +153,13 @@ class Server:
                             self.data[address] = {}
                             self.data[address]["port"] = DEFAULT_TACACS_PORT
                             self.data[address]["timeout"] = DEFAULT_TACACS_TIMEOUT
+                            self.data[address]["secret-key"] = ""
                         else:
                             logger.error("Reached MAX TACACS SERVER count")
+                            raise sysrepo.SysrepoInvalArgError(
+                                "Maximum TACACS Server count reached"
+                            )
+                            return
             elif xpath == "/timeout":
                 if delete == "true":
                     if address in self.data:
@@ -192,6 +199,8 @@ class Server:
         else:
             raise InvalidXPath()
         logger.debug(f"configured data: {self.data}")
+        print(self.data)
+        self.modify_common_auth_gs_file()
         return None
 
     def config_aaa_auth(self, xpath, value):
@@ -204,7 +213,7 @@ class Server:
 
             self.modify_conf_file()
 
-    def modify_conf_file(self):
+    def modify_common_auth_gs_file(self):
         auth = self.auth_default.copy()
         auth.update(self.auth)
 
@@ -212,48 +221,34 @@ class Server:
 
         with open(PAM_AUTH_CONF, "w") as f:
             content = ""
-            if "tacacs" in auth["login"]:
-                for ip in data_key:
-                    content += (
-                        "\n"
-                        + "auth"
-                        + "\t"
-                        + "[success=done new_authtok_reqd=done default=ignore]"
-                        + "\t"
-                        + "pam_tacplus.so server="
-                        + ip
-                        + ":"
-                        + str(self.data[ip]["port"])
-                        + "\t"
-                        + "secret="
-                        + self.data[ip]["secret-key"]
-                        + "\t"
-                        + "timeout="
-                        + str(self.data[ip]["timeout"])
-                        + "\t"
-                        + "try_first_pass"
-                    )
+            for ip in data_key:
                 content += (
                     "\n"
                     + "auth"
                     + "\t"
-                    + "[success=1 default=ignore]"
+                    + "[success=done new_authtok_reqd=done default=ignore]"
                     + "\t"
-                    + "pam_unix.so nullok try_first_pass"
+                    + "pam_tacplus.so server="
+                    + ip
+                    + ":"
+                    + str(self.data[ip]["port"])
+                    + "\t"
+                    + "secret="
+                    + self.data[ip]["secret-key"]
+                    + "\t"
+                    + "timeout="
+                    + str(self.data[ip]["timeout"])
+                    + "\t"
+                    + "try_first_pass"
                 )
-
-            else:
-                content = (
-                    "\n"
-                    + "auth"
-                    + "\t"
-                    + "[success=1 default=ignore]"
-                    + "\t"
-                    + "pam_unix.so nullok try_first_pass"
-                )
-
             content += (
                 "\n"
+                + "auth"
+                + "\t"
+                + "[success=1 default=ignore]"
+                + "\t"
+                + "pam_unix.so nullok try_first_pass"
+                + "\n"
                 + "auth    requisite                       pam_deny.so"
                 + "\n"
                 + "auth    required                        pam_permit.so"
@@ -261,18 +256,21 @@ class Server:
 
             f.write(content)
 
-        # Modify common-auth include file in /etc/pam.d/login and sshd
-        if os.path.isfile(PAM_AUTH_CONF):
-            self.modify_single_file(
-                "/etc/pam.d/sshd", ["'/^@include/s/common-auth$/common-auth-gs/'"]
-            )
-        else:
-            self.modify_single_file(
-                "/etc/pam.d/sshd", ["'/^@include/s/common-auth-gs$/common-auth/'"]
-            )
+    def modify_conf_file(self):
+        auth = self.auth_default.copy()
+        auth.update(self.auth)
+
+        data_key = list(self.data.keys())
 
         # Add tacplus in nsswitch.conf if TACACS+ enable
         if "tacacs" in auth["login"]:
+            # Modify common-auth include file in /etc/pam.d/login and sshd
+            if os.path.isfile(PAM_AUTH_CONF):
+                self.modify_single_file(
+                    "/etc/pam.d/sshd", ["'/^@include/s/common-auth$/common-auth-gs/'"]
+                )
+
+            # Add tacplus in nsswitch.conf if TACACS+ enable
             if os.path.isfile(NSS_CONF):
                 self.modify_single_file(
                     NSS_CONF,
@@ -283,11 +281,14 @@ class Server:
                     ],
                 )
         else:
+            self.modify_single_file(
+                "/etc/pam.d/sshd", ["'/^@include/s/common-auth-gs$/common-auth/'"]
+            )
             if os.path.isfile(NSS_CONF):
                 self.modify_single_file(NSS_CONF, ["'/^passwd/s/tacplus //g'"])
 
         # Set tacacs+ server in nss-tacplus conf
-        content = ""
+        content = "debug=on" + "\n"
         with open(NSS_TACPLUS_CONF, "w") as f:
             for ip in data_key:
                 content += (
@@ -299,7 +300,15 @@ class Server:
                     + self.data[ip]["secret-key"]
                     + ",timeout="
                     + str(self.data[ip]["timeout"])
+                    + "\n"
                 )
+            content += (
+                "user_priv=15;pw_info=remote_user_su;gid=1001;group=admin;shell=/usr/local/bin/gscli"
+                + "\n"
+                + "user_priv=1;pw_info=remote_user;gid=100;group=users;shell=/usr/local/bin/gscli"
+                + "\n"
+                + "many_to_one=y"
+            )
             f.write(content)
 
     async def parse_change_req(self, xpath, value, delete):
@@ -339,7 +348,11 @@ class Server:
         try:
             with open(VERSION_FILE, "r") as f:
                 d = json.loads(f.read())
-                return {"goldstone-system:system": {"state": {"software-version": d["PRODUCT_ID_VERSION"]}}}
+                return {
+                    "goldstone-system:system": {
+                        "state": {"software-version": d["PRODUCT_ID_VERSION"]}
+                    }
+                }
         except (FileNotFoundError, KeyError) as e:
             logger.error(f"failed to get version info: {e}")
             raise sysrepo.SysrepoInternalError("version details not found")

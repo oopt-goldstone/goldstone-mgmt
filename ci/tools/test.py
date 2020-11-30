@@ -219,14 +219,14 @@ def test_port_breakout(cli):
     ssh(cli, 'gscli -c "show tech-support"')
 
 
-def test_tacacs(cli):
+def test_tacacs(host, cli):
 
     # Configuring first TACACS+ server details
     output = ssh(
-        cli, 'gscli -c "tacacs-server host 192.168.208.100 key testing123; show tacacs"'
+        cli, 'gscli -c "tacacs-server host 192.168.208.100 key testkey123; show tacacs"'
     )
     assert "192.168.208.100" in output
-    assert "testing123" in output
+    assert "testkey123" in output
     assert "49" in output
     assert "300" in output
 
@@ -276,6 +276,18 @@ def test_tacacs(cli):
     assert "testing123" in output
     assert "49" in output
     assert "180" in output
+
+    # setting aaa authentication to tacacs
+    output = ssh(cli, 'gscli -c "aaa authentication login default group tacacs; show aaa"')
+    assert "tacacs" in output
+
+    #login using tacacs username and password 
+    with paramiko.SSHClient() as cli_tacacs:
+        cli_tacacs.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        cli_tacacs.connect(host, username="gs_user1", password="goldstone1")
+
+        output = ssh(cli_tacacs, 'show aaa')
+        assert "tacacs" in output
 
     # setting aaa authentication to local
     output = ssh(cli, 'gscli -c "aaa authentication login default local; show aaa"')
@@ -462,7 +474,7 @@ def main(host, username, password):
 
         test_logging(cli)
 
-        test_tacacs(cli)
+        test_tacacs(host, cli)
 
         test_mtu(cli)
 
