@@ -109,6 +109,59 @@ class Server(object):
         # Release lock and return
         return
 
+    async def parse_change_req(self, xpath):
+        xpath = xpath.split("/")
+        _hash = ""
+        key = ""
+        member = ""
+        attr_dict = {"xpath": xpath}
+        for i in range(len(xpath)):
+            node = xpath[i]
+            if node.find("interface") == 0:
+                ifname = node.split("'")[1]
+                intf_names = self.sonic_db.keys(
+                    self.sonic_db.CONFIG_DB, pattern="PORT|" + ifname
+                )
+                if intf_names == None:
+                    logger.debug(
+                        "*************** Invalid Interface name ****************"
+                    )
+                    raise sysrepo.SysrepoInvalArgError("Invalid Interface name")
+                attr_dict.update({"ifname": ifname})
+                _hash = _hash + "PORT|" + ifname
+                if i + 1 < len(xpath):
+                    key = xpath[i + 1]
+                    if key == "goldstone-ip:ipv4" and i + 2 < len(xpath):
+                        key = xpath[i + 2]
+                    if key == "breakout" and i + 2 < len(xpath):
+                        key = xpath[i + 2]
+                break
+            if node.find("VLAN_LIST") == 0:
+                _hash = _hash + "VLAN|" + node.split("'")[1]
+                if i + 1 < len(xpath):
+                    if xpath[i + 1].find("members") == 0 and xpath[i + 1] != "members":
+                        key = "members@"
+                        member = xpath[i + 1].split("'")[1]
+                    elif xpath[i + 1] == "members":
+                        key = "members@"
+                    else:
+                        key = xpath[i + 1]
+                attr_dict.update({"member": member})
+                break
+            if node.find("VLAN_MEMBER_LIST") == 0:
+                _hash = (
+                    _hash
+                    + "VLAN_MEMBER|"
+                    + node.split("'")[1]
+                    + "|"
+                    + node.split("'")[3]
+                )
+                if i + 1 < len(xpath):
+                    key = xpath[i + 1]
+                break
+
+        return key, _hash, attr_dict
+
     async def breakout_callback(self):
         self.sess.switch_datastore("running")
 
@@ -175,6 +228,20 @@ class Server(object):
         self.sess.switch_datastore("running")
         return self.sess.get_data(xpath)
 
+    def is_breakout_port(self, ifname):
+        xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+        self.sess.switch_datastore("operational")
+        data = self.sess.get_data(xpath, no_subs=True)
+        try:
+            logger.debug(f"data: {data}")
+            data = data["interfaces"]["interface"][ifname]["breakout"]
+            if data.get("num-channels", 1) > 1 or "parent" in data:
+                return True
+        except KeyError:
+            return False
+
+        return False
+
     async def change_cb(self, event, req_id, changes, priv):
         logger.debug(f"change_cb: event: {event}, changes: {changes}")
 
@@ -183,57 +250,19 @@ class Server(object):
             return
 
         valid_speeds = [40000, 100000]
+        breakout_valid_speeds = [1000]
+
         for change in changes:
             logger.debug(f"change_cb: {change}")
 
-            xpath = (change.xpath).split("/")
-            _hash = ""
-            hash_appl = ""
-            key = ""
-            member = ""
-            for i in range(len(xpath)):
-                node = xpath[i]
-                if node.find("interface") == 0:
-                    ifname = node[16:-2]
-                    intf_names = self.sonic_db.keys(
-                        self.sonic_db.CONFIG_DB, pattern="PORT|" + ifname
-                    )
-                    if intf_names == None:
-                        logger.error(f"interface not found: {ifname}, node: {node}")
-                        raise sysrepo.SysrepoInvalArgError(
-                            f"interface not found: {ifname}, node: {node}"
-                        )
-                    _hash = _hash + "PORT|" + ifname
-                    hash_appl = hash_appl + "PORT_TABLE:" + ifname
-                    if i + 1 < len(xpath):
-                        key = xpath[i + 1]
-                        if key == "goldstone-ip:ipv4" and i + 2 < len(xpath):
-                            key = xpath[i + 2]
-                        if key == "breakout" and i + 2 < len(xpath):
-                            key = xpath[i + 2]
-                    break
-                if node.find("VLAN_LIST") == 0:
-                    _hash = _hash + "VLAN|" + node[16:-2]
-                    if i + 1 < len(xpath):
-                        if (
-                            xpath[i + 1].find("members") == 0
-                            and xpath[i + 1] != "members"
-                        ):
-                            key = "members@"
-                            member = xpath[i + 1][11:-2]
-                        elif xpath[i + 1] == "members":
-                            key = "members@"
-                        else:
-                            key = xpath[i + 1]
-                    break
-                if node.find("VLAN_MEMBER_LIST") == 0:
-                    _hash = _hash + "VLAN_MEMBER|" + node[23:-2]
-                    _hash = _hash.replace("'][ifname='", "|")
-                    if i + 1 < len(xpath):
-                        key = xpath[i + 1]
+            key, _hash, attr_dict = await self.parse_change_req(change.xpath)
+            if "member" in attr_dict:
+                member = attr_dict["member"]
+            if "ifname" in attr_dict:
+                ifname = attr_dict["ifname"]
 
             logger.debug(
-                f"_hash: {_hash}, hash_appl: {hash_appl}, key: {key}, member: {member}"
+                f"key: {key}, _hash: {_hash}, attr_dict: {attr_dict}"
             )
 
             def set_config_db(_hash, key, value):
@@ -249,10 +278,20 @@ class Server(object):
                     elif key == "admin-status":
                         set_config_db(_hash, "admin_status", change.value)
                     elif key == "speed":
-                        if change.value not in valid_speeds:
-                            logger.debug("****** Invalid speed value *********")
-                            raise sysrepo.SysrepoInvalArgError("Invalid speed")
+
+                        if event == "change":
+                            ifname = attr_dict["ifname"]
+                            if self.is_breakout_port(ifname):
+                                valids = breakout_valid_speeds
+                            else:
+                                valids = valid_speeds
+
+                            if change.value not in valids:
+                                logger.debug(f"invalid speed: {change.value}, candidates: {valids}")
+                                raise sysrepo.SysrepoInvalArgError("Invalid speed")
+
                         set_config_db(_hash, "speed", change.value)
+
                     elif key == "members@":
                         try:
                             mem = _decode(
@@ -339,10 +378,19 @@ class Server(object):
                     logger.debug("This key:{} should not be set in redis ".format(key))
 
                 elif key == "speed":
-                    if change.value not in valid_speeds:
-                        logger.debug("****** Invalid speed value *********")
-                        raise sysrepo.SysrepoInvalArgError("Invalid speed")
+
+                    if event == "change":
+                        if self.is_breakout_port(ifname):
+                            valids = breakout_valid_speeds
+                        else:
+                            valids = valid_speeds
+
+                        if change.value not in valids:
+                            logger.debug("****** Invalid speed value *********")
+                            raise sysrepo.SysrepoInvalArgError("Invalid speed")
+
                     set_config_db(_hash, "speed", change.value)
+
                 elif key == "num-channels" or key == "channel-speed":
                     logger.debug("This key:{} should not be set in redis ".format(key))
                     raise Exception("Breakout config modification not supported")

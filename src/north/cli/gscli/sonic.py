@@ -425,9 +425,9 @@ class Port(object):
             try:
                 num_of_channels = breakout_data["num-channels"]
                 channel_speed = breakout_data["channel-speed"]
-                common_ifname = ifname.split("/")
+                common_ifname = ifname.split("_")
                 if_list = [
-                    common_ifname[0] + "/" + str(i)
+                    common_ifname[0] + "_" + str(i)
                     for i in range(1, num_of_channels + 1)
                 ]
             except:
@@ -445,7 +445,6 @@ class Port(object):
                     f"Breakout Flush configs: {_if_name} doesnt exist in running db"
                 )
                 continue
-
             for key in if_data.keys():
                 # Configurable parameters for now are speed and mtu(part of ipv4)
                 # admin_status cannot be deleted as it is mandatory parameter
@@ -461,8 +460,7 @@ class Port(object):
             try:
                 tree = self.sr_op.get_data(xpath_vlan, "running")
             except (sr.errors.SysrepoNotFoundError, KeyError):
-                # If no VLAN exist, no need to flush data
-                return
+                continue
 
             try:
                 vlan_list = list(tree["vlan"]["VLAN"]["VLAN_LIST"])
@@ -479,9 +477,6 @@ class Port(object):
                                 )
             except:
                 pass
-
-            if config == False and _if_name != ifname:
-                self.sr_op.delete_data("{}".format(self.xpath(_if_name)))
 
     def set_breakout(self, ifname, number_of_channels, speed, config):
         xpath = self.xpath(ifname)
