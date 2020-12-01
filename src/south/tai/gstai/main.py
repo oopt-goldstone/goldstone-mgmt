@@ -13,6 +13,7 @@ import traceback
 
 #TODO improve taish library
 TAI_STATUS_ITEM_ALREADY_EXISTS = -6
+TAI_STATUS_FAILURE = -1
 
 class InvalidXPath(Exception):
     pass
@@ -51,7 +52,7 @@ class Server(object):
     """
     The TAI south server implementation.
 
-    THe TAI south server is responsible for reconciling hardware configuration, sysrepo running configuration and TAI configuration.
+    The TAI south server is responsible for reconciling hardware configuration, sysrepo running configuration and TAI configuration.
 
     The main YANG model to interact is 'goldstone-tai'.
     The TAI south server doesn't modify the running configuration of goldstone-tai.
@@ -469,8 +470,7 @@ class Server(object):
         # and create/remove TAI modules according to hardware configuration changes
         self.sess.switch_datastore('operational')
         d = self.sess.get_data('/goldstone-onlp:components/component')
-        modules = [{'name': c['name'], 'location': json.loads(c['state']['description'])['location']} for c in d['components']['component'] if c['state']['type'] == 'MODULE']
-
+        modules = [{'name': c['name'], 'location': c['name']} for c in d['components']['component'] if c['state']['type'] == 'PIU' and c['piu']['state']['status'] == ['PRESENT']]
         self.sess.switch_datastore('running')
 
         with self.sess.lock('goldstone-tai'):
@@ -489,6 +489,9 @@ class Server(object):
                     module = await self.taish.create_module(key, attrs=attrs)
                 except taish.TAIException as e:
                     if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
+                        if e.code == TAI_STATUS_FAILURE:
+                            logger.debug(f'Failed to intialize module {key}')
+                            continue
                         raise e
                     module = await self.taish.get_module(key)
                     # reconcile with the sysrepo configuration
@@ -502,6 +505,12 @@ class Server(object):
                     try:
                         netif = await module.create_netif(index)
                         for k, v in attrs:
+                            try:
+                                meta = await netif.get_attribute_metadata(k)
+                                if meta.usage == '<bool>':
+                                    v = 'true' if v else 'false'
+                            except taish.TAIException:
+                                continue
                             await netif.set(k, v)
 
                     except taish.TAIException as e:
@@ -511,6 +520,12 @@ class Server(object):
                         # reconcile with the sysrepo configuration
                         logger.debug(f'module({key})/netif({index}) already exists. updating attributes..')
                         for k, v in attrs:
+                            try:
+                                meta = await netif.get_attribute_metadata(k)
+                                if meta.usage == '<bool>':
+                                    v = 'true' if v else 'false'
+                            except taish.TAIException:
+                                continue
                             await netif.set(k, v)
 
                 hconfig = {n['name']: n.get('config', {}) for n in mconfig.get('host-interface', [])}
@@ -523,7 +538,7 @@ class Server(object):
                             raise e
                         hostif = module.get_hostif(index)
                         # reconcile with the sysrepo configuration
-                        logger.debug(f'module({key})/netif({index}) already exists. updating attributes..')
+                        logger.debug(f'module({key})/hostif({index}) already exists. updating attributes..')
                         for k, v in attrs:
                             await hostif.set(k, v)
 
@@ -611,4 +626,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
