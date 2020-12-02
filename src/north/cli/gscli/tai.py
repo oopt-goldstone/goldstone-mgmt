@@ -234,7 +234,7 @@ class Transponder(object):
         try:
             tree = self.sr_op.get_data("{}".format(self.XPATH))
         except sr.errors.SysrepoNotFoundError as e:
-            print(e)
+            print("!")
             return
         t_dict = {}
         n_dict = {}
@@ -242,12 +242,12 @@ class Transponder(object):
         try:
             data_list = list((tree)["modules"]["module"])
         except Exception as e:
-            print(f"No key named {e} found in the running database")
+            print("!")
             return
         print("!")
         for data in data_list:
             module_data = data.get("config")
-            print("transponder {}".format(data.get("name")))
+            print("transponder {}\n".format(data.get("name")))
             for attr in transponder_run_conf_list:
                 t_dict = {
                     attr: module_data.get(attr, None)
@@ -262,48 +262,46 @@ class Transponder(object):
                         print(" no shutdown ")
             try:
                 netif_data = data["network-interface"]
-            except KeyError as e:
-                print(f"No key named {e} found in the running database")
-                return
-            for netif in netif_data:
-                print("\nnetif {}\n".format(netif.get("name")))
-                net_interface = netif.get("config")
-                for attr in netif_run_conf_list:
-                    n_dict = {
-                        attr: net_interface.get(attr, None)
-                        for attr in netif_run_conf_list
-                    }
-                for key in n_dict:
-                    if (key == "tx-dis") or (key == "differential-encoding"):
-                        if n_dict[key] == True:
-                            print(f" {key} ")
-                        elif n_dict[key] == False:
-                            print(f" no {key} ")
+                for netif in netif_data:
+                    print("\nnetif {}\n".format(netif.get("name")))
+                    net_interface = netif.get("config")
+                    for attr in netif_run_conf_list:
+                        n_dict = {
+                            attr: net_interface.get(attr, None)
+                            for attr in netif_run_conf_list
+                        }
+                    for key in n_dict:
+                        if (key == "tx-dis") or (key == "differential-encoding"):
+                            if n_dict[key] == True:
+                                print(f" {key} ")
+                            elif n_dict[key] == False:
+                                print(f" no {key} ")
+                            else:
+                                pass
                         else:
-                            pass
-                    else:
-                        if n_dict[key] is None:
-                            pass
-                        else:
-                            print(" {} {}".format(key, n_dict[key]))
+                            if n_dict[key] is None:
+                                pass
+                            else:
+                                print(" {} {}".format(key, n_dict[key]))
+            except Exception as e:
+                pass
             try:
                 hostif_data = data["host-interface"]
-            except KeyError as e:
-                print(f"No key named {e} found in the running database")
-                return
-            for hostif in hostif_data:
-                print("\nhostif {} \n".format(hostif.get("name")))
-                host_interface = hostif.get("config")
-                for attr in hostif_run_conf_list:
-                    h_dict = {
-                        attr: host_interface.get(attr, None)
-                        for attr in hostif_run_conf_list
-                    }
-                    if attr == "fec-type":
-                        if h_dict["fec-type"] is None:
-                            pass
-                        else:
-                            print(" {} {}".format(attr, h_dict[attr]))
+                for hostif in hostif_data:
+                    print("\nhostif {}\n".format(hostif.get("name")))
+                    host_interface = hostif.get("config")
+                    for attr in hostif_run_conf_list:
+                        h_dict = {
+                            attr: host_interface.get(attr, None)
+                            for attr in hostif_run_conf_list
+                        }
+                        if attr == "fec-type":
+                            if h_dict["fec-type"] is None:
+                                pass
+                            else:
+                                print(" {} {}".format(attr, h_dict[attr]))
+            except Exception as e:
+                pass
             print("quit")
         print("!")
 
