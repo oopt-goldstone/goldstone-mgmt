@@ -20,6 +20,10 @@ ifndef GS_MGMT_NP2_IMAGE
     GS_MGMT_NP2_IMAGE := gs-mgmt-netopeer2
 endif
 
+ifndef GS_MGMT_SNMPD_IMAGE
+    GS_MGMT_SNMPD_IMAGE := gs-mgmt-snmpd
+endif
+
 ifndef GS_MGMT_IMAGE_TAG
     GS_MGMT_IMAGE_TAG := latest
 endif
@@ -60,7 +64,7 @@ ifndef TAI_META_CUSTOM_FILES
     TAI_META_CUSTOM_FILES := $(abspath $(wildcard scripts/tai/*))
 endif
 
-all: builder np2 docker image debug-image
+all: builder np2 snmpd docker image debug-image
 
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang cli system' $(MAKE) cmd
@@ -86,6 +90,10 @@ np2:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/netopeer2.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_NP2_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+snmpd:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/snmpd.Dockerfile \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_SNMPD_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 yang: yang/goldstone-tai.yang
 

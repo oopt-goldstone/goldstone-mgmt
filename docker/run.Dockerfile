@@ -39,6 +39,10 @@ RUN --mount=type=bind,source=src/south/onlppy,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/south/sonicpy,target=/src,rw pip install /src
 
+RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
+
+RUN --mount=type=bind,source=src/north/snmp,target=/src,rw pip install /src
+
 COPY yang /var/lib/goldstone/yang/gs/
 ENV GS_YANG_REPO /var/lib/goldstone/yang/gs
 COPY sm/openconfig/release/models/ /var/lib/goldstone/yang/oc/

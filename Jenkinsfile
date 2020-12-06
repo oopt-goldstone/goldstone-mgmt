@@ -50,6 +50,7 @@ pipeline {
           sh 'apk add --update docker make python2'
           sh 'git submodule update --init'
           sh 'if [ $BUILD_BUILDER -eq 1 ] ; then make builder np2; fi'
+          sh 'make snmpd'
           sh 'make docker'
           sh 'make image'
           sh 'make debug-image'
