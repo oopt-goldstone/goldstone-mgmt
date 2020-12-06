@@ -241,6 +241,8 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-onlp']
               volumeMounts:
+              - name: dev
+                mountPath: /dev
               - name: shm
                 mountPath: /dev/shm
               - name: sysrepo
@@ -252,11 +254,15 @@ spec:
               - name: host-i2c-lib
                 mountPath: /lib/x86_64-linux-gnu/libi2c.so.0
               securityContext:
+                privileged: true
                 capabilities:
                   add:
                   - IPC_OWNER
                   - IPC_LOCK
             volumes:
+            - name: dev
+              hostPath:
+                  path: /dev
             - name: shm
               hostPath:
                   path: /dev/shm
