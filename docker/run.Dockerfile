@@ -11,7 +11,7 @@ ARG https_proxy
 FROM $GS_MGMT_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && apt install -qy python3 vim curl python3-pip libgrpc++1 libcurl4-gnutls-dev iputils-ping traceroute
+            apt update && apt install -qy python3 python3-pip
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
@@ -33,11 +33,11 @@ RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wh
 
 RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
 
-RUN --mount=type=bind,source=src/south/taipy,target=/src,rw pip install /src
+RUN --mount=type=bind,source=src/south/tai,target=/src,rw pip install /src
 
-RUN --mount=type=bind,source=src/south/onlppy,target=/src,rw pip install /src
+RUN --mount=type=bind,source=src/south/onlp,target=/src,rw pip install /src
 
-RUN --mount=type=bind,source=src/south/sonicpy,target=/src,rw pip install /src
+RUN --mount=type=bind,source=src/south/sonic,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 

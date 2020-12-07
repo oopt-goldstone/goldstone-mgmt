@@ -1,4 +1,4 @@
-.PHONY: builder bash init south onlp openconfig-converter docker yang
+.PHONY: builder bash init docker yang
 
 ifndef DOCKER_CMD
     DOCKER_CMD=bash
@@ -121,27 +121,8 @@ init:
 	sysrepoctl -s $(SONIC_YANG_REPO)/common --install $(SONIC_YANG_REPO)/common/sonic-common.yang
 	sysrepoctl -s $(SONIC_YANG_REPO) --install $(SONIC_YANG_REPO)/sonic-port.yang,$(SONIC_YANG_REPO)/sonic-vlan.yang,$(SONIC_YANG_REPO)/sonic-interface.yang
 
-south: onlp openconfig-converter tai sonic-interface
-
-onlp:
-	$(MAKE) -C src/south/onlp
-
-openconfig-converter:
-	$(MAKE) -C src/south/openconfig-converter
-
-tai:
-	$(MAKE) -C src/south/tai
-
-sonic-interface:
-	$(MAKE) -C src/south/sonic-interface
-
 cli:
 	cd src/north/cli && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
 
 system:
 	cd src/south/system && python setup.py bdist_wheel
-
-clean:
-	$(MAKE) -C src/south/onlp clean
-	$(MAKE) -C src/south/openconfig-converter clean
-	$(MAKE) -C src/south/tai clean

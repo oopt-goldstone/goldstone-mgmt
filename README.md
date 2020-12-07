@@ -1,13 +1,13 @@
 Goldstone Management Framework
 ---
 
-### What this repo could have
+### What this repo inclues
 
-- south daemons
-    - ONLP, SONiC/SAI, TAI
-- north daemons
+- Goldstone management south daemons
+    - ONLP, SONiC/SAI, TAI, System
+- Goldstone management north daemons
     - CLI, netconf(Netopeer2), SNMP
-- Goldstone YANG model
+- Goldstone YANG models
 
 ### Architecture
 
@@ -28,7 +28,7 @@ Using the standard YANG models (OpenConfig, IETF etc..) is also supported by usi
     - provides northbound API (CLI, NETCONF, SNMP, RESTCONF, gNMI etc..)
     - source code under `src/north`
 - south daemon
-    - control/monitor hardware (ONLP, SONiC/SAI, TAI)
+    - control/monitor hardware (ONLP, SONiC/SAI, TAI, System)
     - uses native YANG models to interact with sysrepo
     - source code under `src/south`
 - translater daemon
@@ -40,17 +40,17 @@ Using the standard YANG models (OpenConfig, IETF etc..) is also supported by usi
 South daemon is an entity which acts as a gateway between sysrepo datastore 
 and hardware controller of the platform. We plan to have ONLP, SONiC and TAI south daemon for now.
 
-##### 1. ONLP south daemon (C++)
+##### 1. ONLP south daemon
 
 [ONLP](http://opencomputeproject.github.io/OpenNetworkLinux/onlp/) south daemon is a south daemon which handles peripheral control of the platform.
-It controls the peripherals via `libonlp.so`. 
+It controls the peripherals via the ONLP Python wrapper.
 
-##### 2. SONiC/SAI south daemon (C++)
+##### 2. SONiC/SAI south daemon
 
 SONiC/SAI south daemon is a south daemon which handles Ethernet ASIC control of the platform.
-It controls the ASIC via [sonic-swss-common](https://github.com/Azure/sonic-swss-common) library.
+It controls the ASIC via [sonic-py-swsssdk](https://github.com/Azure/sonic-py-swsssdk) library.
 
-##### 3. TAI south daemon (C++)
+##### 3. TAI south daemon
 
 TAI south daemon is a south daemon which handles coherent optics control of the platform.
 It controls the optical modules via [taish gRPC API](https://github.com/Telecominfraproject/oopt-tai/tree/master/tools/taish).
@@ -60,7 +60,7 @@ It controls the optical modules via [taish gRPC API](https://github.com/Telecomi
 North daemon is an entity which provides northband interface to the user.
 We plan to implement CLI, NETCONF and SNMP north daemon first.
 
-##### 1. CLI north daemon (Python)
+##### 1. CLI north daemon
 
 - supports basic set/get, completion and notification
 - python-prompt-toolkit based
@@ -69,12 +69,10 @@ We plan to implement CLI, NETCONF and SNMP north daemon first.
     - performance could be a problem when syntax tree get larger
     - needs to develop Python wrapper for sysrepo(devel)?
 - TODO: consider automatic code generation based on YANG models
-- alternatives
-    - klish
 
 ##### 2. NETCONF north daemon
 
-- we can use [Netopeer2](https://github.com/CESNET/Netopeer2) as is (hopefully)
+- we use [Netopeer2](https://github.com/CESNET/Netopeer2) as is
 
 ##### 3. SNMP north daemon
 
@@ -87,119 +85,9 @@ We plan to implement CLI, NETCONF and SNMP north daemon first.
 ### How to test
 
 ```bash
-$ git clone git@github.com:ishidawataru/goldstone-mgmt.git
+$ git clone git@github.com:microsonic/goldstone-mgmt.git
+$ cd goldstone-mgmt
 $ git submodule --update --init --recursive
-$ make docker-image
-$ make bash
-# make south
-# make init
-# ./src/south/onlp/main
-
----
-
-$ # from a different terminal
-$ docker exec -it sysrepo bash
-# ./src/south/openconfig-converter/main
-
----
-
-$ # from another terminal
-$ docker exec -it sysrepo bash
-root@d67dc2076ab2:/data# sysrepocfg -d operational -f json -X --xpath "/goldstone-onlp:components/component[name='thermal0']"
-{
-  "goldstone-onlp:components": {
-    "component": [
-      {
-        "name": "thermal0",
-        "config": {
-          "name": "thermal0"
-        },
-        "fan": {
-
-        },
-        "thermal": {
-          "state": {
-            "thresholds": {
-              "warning": 45000,
-              "error": 55000,
-              "shutdown": 60000
-            },
-            "capability": [
-              "GET_TEMPERATURE",
-              "GET_WARNING_THRESHOLD",
-              "GET_ERROR_THRESHOLD",
-              "GET_SHUTDOWN_THRESHOLD"
-            ],
-            "temperature": 38000,
-            "status": [
-              "PRESENT"
-            ]
-          }
-        },
-        "led": {
-
-        },
-        "sys": {
-
-        },
-        "psu": {
-
-        },
-        "state": {
-          "id": 33554433,
-          "description": "CPU Core",
-          "type": "THERMAL"
-        }
-      }
-    ]
-  }
-}
-root@d67dc2076ab2:/data# sysrepocfg -d operational -f json -X --xpath "/openconfig-platform:components/component[name='thermal0']"
-{
-  "openconfig-platform:components": {
-    "component": [
-      {
-        "name": "thermal0",
-        "state": {
-          "description": "CPU Core",
-          "id": "0x2000001",
-          "temperature": {
-            "instant": "38.0"
-          },
-          "empty": false
-        },
-        "chassis": {
-
-        },
-        "port": {
-
-        },
-        "power-supply": {
-          "state": {
-            "openconfig-platform-psu:enabled": true
-          }
-        },
-        "fan": {
-
-        },
-        "fabric": {
-
-        },
-        "storage": {
-
-        },
-        "cpu": {
-
-        },
-        "integrated-circuit": {
-
-        },
-        "backplane": {
-
-        }
-      }
-    ]
-  }
-}
+$ make all
+$ kubectl create -f k8s
 ```
-
