@@ -108,8 +108,9 @@ def main():
 
         try:
             tasks = await server.start()
-            [ asyncio.create_task(t) for t in tasks ]
-            await stop_event.wait()
+            tasks.append(stop_event.wait())
+            ret = await asyncio.gather(*tasks, return_exceptions=True)
+            logger.debug(f"gather: {ret}")
         finally:
             server.stop()
 
