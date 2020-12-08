@@ -76,8 +76,7 @@ def test_tai(cli):
     lines = [line for line in output.split() if "/dev" in line]
 
     if len(lines) == 0:
-        print("no transponder found on this device")
-        return
+        raise Exception("no transponder found on this device")
 
     elems = [elem for elem in lines[0].split("|") if "/dev" in elem]
     if len(elems) == 0:
