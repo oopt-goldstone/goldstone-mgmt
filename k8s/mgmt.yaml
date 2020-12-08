@@ -363,3 +363,43 @@ spec:
             - name: sonic-db-config
               configMap:
                   name: sonic-db-config
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: gs-mgmt-system
+    labels:
+        app: gs-mgmt
+spec:
+    selector:
+        matchLabels:
+            app: gs-mgmt-system
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt-system
+        spec:
+            serviceAccountName: gs-mgmt
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            containers:
+            - name: south-system
+              image: docker.io/microsonic/gs-mgmt-debug:latest
+              imagePullPolicy: IfNotPresent
+              command: ['sh', '-c', 'sleep 10 && /usr/local/bin/gssouthd-system -v']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo

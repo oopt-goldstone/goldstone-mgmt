@@ -11,10 +11,12 @@ ARG https_proxy
 FROM $GS_MGMT_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && apt install -qy python3 python3-pip
+            apt update && apt install -qy --no-install-recommends python3 python3-pip libatomic1
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
+
+RUN pip install setuptools
 
 RUN --mount=type=bind,from=builder,source=/usr/share/onlp,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
 

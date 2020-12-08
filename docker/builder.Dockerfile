@@ -73,7 +73,9 @@ RUN --mount=type=bind,source=sm/libnss-tacplus,target=/root/sm/libnss-tacplus,rw
 RUN pip install grpcio-tools grpclib
 
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
-    cd /root/sm/oopt-tai/tools/taish && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
+    cd /root/sm/oopt-tai/tools/taish && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels/
+
+RUN cd /usr/share/wheels && pip wheel kubernetes_asyncio protobuf
 
 RUN pip install /usr/share/wheels/*.whl
 
