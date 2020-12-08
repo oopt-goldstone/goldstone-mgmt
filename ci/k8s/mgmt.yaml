@@ -239,7 +239,7 @@ spec:
             - name: onlp
               image: docker.io/gs-test/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['gssouthd-onlp']
+              command: ['gssouthd-onlp', '-v']
               volumeMounts:
               - name: dev
                 mountPath: /dev
@@ -306,7 +306,7 @@ spec:
             - name: sonic
               image: docker.io/gs-test/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'sleep 10 && /usr/local/bin/gssouthd-sonic -v']
+              command: ['gssouthd-sonic', '-v']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm

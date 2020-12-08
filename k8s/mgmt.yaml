@@ -172,8 +172,6 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
-              securityContext:
-                privileged: true
             volumes:
             - name: shm
               hostPath:
@@ -295,7 +293,7 @@ spec:
             - name: onlp
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'ln -sf /lib/platform-config/x86-64-kvm-x86-64-r0/onl/lib/libonlp-x86-64-kvm-x86-64.so /lib/x86_64-linux-gnu/libonlp-platform.so.1 && gssouthd-onlp']
+              command: ['sh', '-c', 'ln -sf /lib/platform-config/x86-64-kvm-x86-64-r0/onl/lib/libonlp-x86-64-kvm-x86-64.so /lib/x86_64-linux-gnu/libonlp-platform.so.1 && gssouthd-onlp -v']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -345,7 +343,7 @@ spec:
             - name: sonic
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'sleep 10 && /usr/local/bin/gssouthd-sonic -v']
+              command: ['gssouthd-sonic', '-v']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -390,7 +388,7 @@ spec:
             - name: south-system
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'sleep 10 && /usr/local/bin/gssouthd-system -v']
+              command: ['gssouthd-system', '-v']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
