@@ -109,8 +109,12 @@ def main():
         try:
             tasks = await server.start()
             tasks.append(stop_event.wait())
-            ret = await asyncio.gather(*tasks, return_exceptions=True)
-            logger.debug(f"gather: {ret}")
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            logger.debug(f"done: {done}, pending: {pending}")
+            for task in done:
+                e = task.exception()
+                if e:
+                    raise e
         finally:
             server.stop()
 
