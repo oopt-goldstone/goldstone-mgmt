@@ -78,16 +78,20 @@ class Server(object):
     async def watch_pods(self):
         await self.k8s.watch_pods()
 
+        logger.debug("uSONiC deployment ready")
+
         # Enable counters in SONiC
         self.enable_counters()
 
         # After usonic is UP , its taking approximately
         # 15 seconds to populate counter data
+        logger.debug("waiting another 15 seconds for counters")
         await asyncio.sleep(15)
         # Caching base values of counters
         self.cache_counters()
 
         self.is_usonic_rebooting = False
+        logger.info("uSONiC ready")
 
     async def wait_for_sr_unlock(self):
         # Since is_locked() is returning False always,

@@ -156,7 +156,7 @@ def test_port_breakout(cli):
     assert "Ethernet5_1" in output
     assert "Ethernet5_2" not in output
 
-    for i in range(60):
+    for i in range(90):
         try:
             ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
         except SSHException as e:
@@ -192,7 +192,7 @@ def test_port_breakout(cli):
 
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
-    for i in range(60):
+    for i in range(90):
         try:
             ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
         except SSHException as e:
