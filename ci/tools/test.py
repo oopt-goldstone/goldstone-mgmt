@@ -277,15 +277,17 @@ def test_tacacs(host, cli):
     assert "180" in output
 
     # setting aaa authentication to tacacs
-    output = ssh(cli, 'gscli -c "aaa authentication login default group tacacs; show aaa"')
+    output = ssh(
+        cli, 'gscli -c "aaa authentication login default group tacacs; show aaa"'
+    )
     assert "tacacs" in output
 
-    #login using tacacs username and password 
+    # login using tacacs username and password
     with paramiko.SSHClient() as cli_tacacs:
         cli_tacacs.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         cli_tacacs.connect(host, username="gs_user1", password="goldstone1")
 
-        output = ssh(cli_tacacs, 'show aaa')
+        output = ssh(cli_tacacs, "show aaa")
         assert "tacacs" in output
 
     # setting aaa authentication to local
@@ -422,8 +424,10 @@ def test_invalid_intf(cli):
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "Ethernet111_1" not in output
 
+
 def test_mgmt_intf(cli):
     ssh(cli, 'gscli -c "show arp"')
+
 
 def test_select_intf(cli):
     output = ssh(cli, 'gscli -c "interface .*; selected"')
@@ -462,6 +466,80 @@ def test_statistics(cli):
     assert "Ethernet20_1" in output
 
 
+def test_mgmt_if_cmds(cli):
+    try:
+        ssh(cli, 'gscli -c "interface eth0; ip address 999.999.999.999/24"')
+    except SSHException as e:
+        assert "does not satisfy the constraint" in e.stderr
+    else:
+        raise Exception(
+            "failed to fail with an invalid cmd ip address 999.999.999.999/24"
+        )
+    try:
+        ssh(cli, 'gscli -c "interface eth0; ip address 999.999.999.999.24"')
+    except SSHException as e:
+        assert (
+            "Entered address is not in the expected format - A.B.C.D/<mask>" in e.stderr
+        )
+    else:
+        raise Exception(
+            "failed to fail with an invalid cmd ip address 999.999.999.999/24"
+        )
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip address 20.20.20.0/24; show running-config mgmt-if"',
+    )
+    assert "ip address 20.20.20.0/24" in output
+
+    try:
+        ssh(cli, 'gscli -c "interface eth0; no ip address 999.999.999.999/24"')
+    except SSHException as e:
+        assert "does not satisfy the constraint" in e.stderr
+    else:
+        raise Exception(
+            "failed to fail with an invalid cmd no ip address 999.999.999.999/24"
+        )
+    try:
+        ssh(cli, 'gscli -c "interface eth0; ip address 999.999.999.999.24"')
+    except SSHException as e:
+        assert (
+            "Entered address is not in the expected format - A.B.C.D/<mask>" in e.stderr
+        )
+    else:
+        raise Exception(
+            "failed to fail with an invalid cmd no ip address 999.999.999.999.24"
+        )
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; no ip address 20.20.20.0/24; show running-config mgmt-if"',
+    )
+    assert "ip address 20.20.20.0/24" not in output
+
+    try:
+        ssh(cli, 'gscli -c "interface eth0; ip route 10.10.10.117"')
+    except SSHException as e:
+        assert "does not satisfy the constraint" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid cmd ip route 10.10.10.117")
+    try:
+        ssh(cli, 'gscli -c "interface eth0; ip route 10.10.10.117/35"')
+    except SSHException as e:
+        assert "does not satisfy the constraint" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid cmd ip route 10.10.10.117/35")
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip route 20.20.20.0/24; show running-config mgmt-if"',
+    )
+    assert "ip route 20.20.20.0/24" in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; no ip route 20.20.20.0/24; show running-config mgmt-if"',
+    )
+    assert "ip route 20.20.20.0/24" not in output
+
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -488,6 +566,8 @@ def main(host, username, password):
         test_statistics(cli)
 
         test_mgmt_intf(cli)
+
+        test_mgmt_if_cmds(cli)
 
         try:
             test_vlan_member_add_delete(cli)

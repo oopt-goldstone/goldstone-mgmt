@@ -26,8 +26,8 @@ from .onlp import Platform
 from .tai_cli import Transponder_CLI
 from .sonic_cli import Interface_CLI, Vlan_CLI
 from .sonic import Sonic
-from .system_cli import AAA_CLI, TACACS_CLI
-from .system import AAA, TACACS
+from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI
+from .system import AAA, TACACS, Mgmtif
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ class Root(Object):
         self.tacacs_cli = TACACS_CLI(conn)
         self.aaa_sys = AAA(conn)
         self.tacacs_sys = TACACS(conn)
+        self.mgmt = Mgmtif(conn)
         self.tacacs_complete = {"host": None}
         self.aaa_completion = {
             "authentication": {
@@ -121,11 +122,18 @@ class Root(Object):
                 print(f"There is no device of name {line[0]}")
                 return
 
-        @self.command(FuzzyWordCompleter(lambda: self.get_ifnames(), WORD=True))
+        @self.command(
+            FuzzyWordCompleter(
+                lambda: (self.get_ifnames() + self.get_mgmt_ifname()), WORD=True
+            )
+        )
         def interface(line):
             if len(line) != 1:
                 raise InvalidInput("usage: interface <ifname>")
-            return Interface_CLI(conn, self, line[0])
+            if line[0] in self.get_mgmt_ifname():
+                return Mgmt_CLI(conn, self, line[0])
+            else:
+                return Interface_CLI(conn, self, line[0])
 
         @self.command()
         def date(line):
@@ -193,6 +201,9 @@ class Root(Object):
 
     def get_ifnames(self):
         return [v["name"] for v in self.sonic.port.get_interface_list("operational")]
+
+    def get_mgmt_ifname(self):
+        return [v["name"] for v in self.mgmt.get_mgmt_interface_list("operational")]
 
     def get_vid(self):
         path = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"

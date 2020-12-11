@@ -98,6 +98,7 @@ class RunningConfigCommand(Command):
         "vlan": Command,
         "interface": Command,
         "aaa": Command,
+        "mgmt-if": Command,
     }
 
 
@@ -254,6 +255,10 @@ class GlobalShowCommand(Command):
         elif module == "aaa":
             system.run_conf()
 
+        elif module == "mgmt-if":
+            print("!")
+            system.mgmt_run_conf()
+
         elif module == "interface":
             print("!")
             sonic.port_run_conf()
@@ -343,6 +348,7 @@ class GlobalShowCommand(Command):
             "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST",
             "/goldstone-interfaces:interfaces/interface",
             "/goldstone-mgmt-interfaces:interfaces/interface",
+            "/goldstone-routing:routing/static-routes/ipv4/route",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",
         ]

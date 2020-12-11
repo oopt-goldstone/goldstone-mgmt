@@ -1,8 +1,87 @@
 from .cli import GSObject as Object
 from .base import InvalidInput, Completer
-from .system import AAA, TACACS
+from .system import AAA, TACACS, Mgmtif
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
+import re
+
+
+class Mgmt_CLI(Object):
+    def __init__(self, conn, parent, ifname):
+        super().__init__(parent)
+        self.session = conn.start_session()
+        self.name = ifname
+        self.mgmt = Mgmtif(conn)
+        self.ip_cmd_list = ["address", "route"]
+        self.no_dict = {"ip": {"route": None, "address": None}}
+        mgmt_iflist = [
+            v["name"] for v in self.mgmt.get_mgmt_interface_list("operational")
+        ]
+        if len(mgmt_iflist) == 0 or self.name not in mgmt_iflist:
+            raise InvalidInput(f"no interface found : {ifname}")
+
+        @self.command(NestedCompleter.from_nested_dict(self.no_dict))
+        def no(args):
+            if len(args) < 2:
+                raise InvalidInput("usage: {}".format(self.no_usage))
+            if args[0] == "ip":
+                if args[1] == "address":
+                    if len(args) != 3:
+                        raise InvalidInput("usage: no ip address A.B.C.D/<mask>")
+                    try:
+                        ip_addr = args[2].split("/")[0]
+                        mask = args[2].split("/")[1]
+                    except IndexError as error:
+                        raise InvalidInput(
+                            "Entered address is not in the expected format - A.B.C.D/<mask>"
+                        )
+                    self.mgmt.set_ip_addr(ifname, ip_addr, mask, False)
+                elif args[1] == "route":
+                    if len(args) != 3:
+                        raise InvalidInput("usage :no ip route <dst_prefix>")
+                    dst_prefix = args[2]
+                    self.mgmt.set_route(ifname, dst_prefix, False)
+            else:
+                raise InvalidInput(f"{self.no_usage}")
+
+        @self.command(WordCompleter(self.ip_cmd_list))
+        def ip(args):
+            if len(args) < 2:
+                raise InvalidInput(self.usage())
+            if args[0] == "address":
+                if len(args) != 2:
+                    raise InvalidInput("usage: ip address A.B.C.D/<mask>")
+                try:
+                    ip_addr = args[1].split("/")[0]
+                    mask = args[1].split("/")[1]
+                except IndexError as error:
+                    raise InvalidInput(
+                        "Entered address is not in the expected format - A.B.C.D/<mask>"
+                    )
+                self.mgmt.set_ip_addr(ifname, ip_addr, mask, True)
+            elif args[0] == "route":
+                if len(args) != 2:
+                    raise InvalidInput("usage :ip route <dst_prefix>")
+                dst_prefix = args[1]
+                self.mgmt.set_route(ifname, dst_prefix, True)
+
+            else:
+                raise InvalidInput(self.usage())
+
+        @self.command(parent.get_completer("show"))
+        def show(args):
+            if len(args) != 0:
+                return parent.show(args)
+
+    def __str__(self):
+        return "interface({})".format(self.name)
+
+    def no_usage(self):
+        no_keys = list(self.no_dict.keys())
+        print(f'usage: no [{"|".join(no_keys)}]')
+
+    def usage(self):
+        return "usage:\n ip address A.B.C.D/<mask>\n ip route <dst_prefix>\n"
 
 
 class AAA_CLI(Object):
