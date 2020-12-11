@@ -54,7 +54,14 @@ def main(host, username, password):
         ssh(cli, "systemctl restart usonic")
 
         # stop South system service
-        ssh(cli, "systemctl stop gssouth_system || true") # can fail
+        ssh(cli, "systemctl stop gs-south-system || true") # can fail
+        # stop Goldstone Management service
+        ssh(cli, "systemctl stop gs-mgmt || true") # can fail
+        # stop NETOPEER2 service
+        ssh(cli, "systemctl stop netopeer2 || true") # can fail
+        # stop SNMP service
+        ssh(cli, "systemctl stop gs-snmp || true") # can fail
+
 
         run(
             "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt-debug:latest gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd"
