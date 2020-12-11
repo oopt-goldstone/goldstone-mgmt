@@ -75,15 +75,16 @@ RUN pip install grpcio-tools grpclib
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
     cd /root/sm/oopt-tai/tools/taish && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels/
 
-RUN cd /usr/share/wheels && pip wheel kubernetes_asyncio protobuf
+RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels
+
+RUN --mount=type=bind,source=src/south/sonic,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels
+
+RUN --mount=type=bind,source=src/south/system,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels
 
 RUN pip install /usr/share/wheels/*.whl
-
-RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
-    cd /src && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels
-
-RUN --mount=type=bind,source=src/south/system,target=/src/south/system,rw \
-    cd /src/south/system && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels
 
 RUN --mount=type=bind,source=scripts,target=/src,rw \
     cd /src && cp /src/reload.sh /usr/local/bin/

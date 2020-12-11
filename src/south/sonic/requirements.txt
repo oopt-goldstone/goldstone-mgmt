@@ -1,3 +1,1 @@
-sysrepo
-libyang
 kubernetes_asyncio

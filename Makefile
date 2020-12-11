@@ -125,4 +125,4 @@ cli:
 	cd src/north/cli && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
 
 system:
-	cd src/south/system && python setup.py bdist_wheel
+	cd src/south/system && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist

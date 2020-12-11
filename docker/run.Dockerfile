@@ -26,14 +26,16 @@ RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls
 
 ENV PYTHONPATH /usr/lib/python3/dist-packages
 
-RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
-
-RUN --mount=type=bind,source=src/south/system,target=/src,rw pip install /src
+# taish package misses this to include in requirement.txt
+RUN pip install protobuf
 
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
             pip install /usr/share/wheels/*.whl
 
+
 RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
+
+RUN --mount=type=bind,source=src/south/system,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/south/tai,target=/src,rw pip install /src
 

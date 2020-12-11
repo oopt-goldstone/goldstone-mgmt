@@ -81,14 +81,13 @@ def main(host, username, password):
 
         run("make docker")
         ssh(cli, "rm -rf /tmp/dist")
-        scp.put("./src/north/cli/dist", recursive=True, remote_path="/tmp/dist")
-        scp.put(
-            "./src/south/system/dist/gssystem-0.1.0-py3-none-any.whl",
-            remote_path="/tmp/dist",
-        )
+        ssh(cli, "mkdir -p /tmp/dist")
+        scp.put("./src/north/cli/dist", recursive=True, remote_path="/tmp/dist/cli")
+        scp.put("./src/south/system/dist", recursive=True, remote_path="/tmp/dist/system")
         ssh(cli, "pip3 uninstall -y gscli")
         ssh(cli, "pip3 uninstall -y gssystem")
-        ssh(cli, "pip3 install /tmp/dist/*.whl")
+        ssh(cli, "pip3 install /tmp/dist/cli/*.whl")
+        ssh(cli, "pip3 install /tmp/dist/system/*.whl")
 
         # ssh(cli, 'gscli -c "show version"')
 
