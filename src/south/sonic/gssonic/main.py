@@ -109,7 +109,7 @@ class Server(object):
         # Release lock and return
         return
 
-    async def breakout_callback(self, ifname, num_of_channels):
+    async def breakout_callback(self):
         self.sess.switch_datastore("running")
 
         await self.wait_for_sr_unlock()
@@ -118,28 +118,6 @@ class Server(object):
             with self.sess.lock("goldstone-vlan"):
 
                 await self.watch_pods()
-
-                # Delete breakout subinterfaces from operational DB
-                if ifname != None and num_of_channels != None:
-                    xpath = "/goldstone-interfaces:interfaces/interface[name='{}']"
-                    self.sess.switch_datastore("operational")
-                    # Deleting breakout config case. Need to delete all children interfaces
-                    common_ifname = ifname.split("_")
-                    ifname_list = [
-                        common_ifname[0] + "_" + str(i)
-                        for i in range(1, num_of_channels + 1)
-                    ]
-                    for tmp_ifname in ifname_list:
-                        if ifname != tmp_ifname:
-                            if_xpath = xpath.format(tmp_ifname)
-                            logger.debug(
-                                "deleting {} from operational datastore".format(
-                                    if_xpath
-                                )
-                            )
-                            self.sess.delete_item(if_xpath)
-                    self.sess.apply_changes()
-                self.sess.switch_datastore("running")
 
                 self.reconcile()
                 self.update_oper_db()
@@ -152,6 +130,7 @@ class Server(object):
 
         interface_list = []
 
+        self.sess.switch_datastore("running")
         # Frame interface_list with data available in sysrepo
         intf_data = self.sess.get_data("/goldstone-interfaces:interfaces")
         if "interfaces" in intf_data:
@@ -343,9 +322,9 @@ class Server(object):
                         }
 
                         if event == "done":
-                            resp = await self.breakout_update_usonic(breakout_dict)
-                            if resp:
-                                asyncio.create_task(self.breakout_callback(None, None))
+                            is_updated = await self.breakout_update_usonic(breakout_dict)
+                            if is_updated:
+                                asyncio.create_task(self.breakout_callback())
 
                     else:
                         set_config_db(_hash, key, change.value)
@@ -392,7 +371,7 @@ class Server(object):
                     xpath = "/".join(change.xpath.split("/")[:-1])
                     data = self.get_running_data(xpath)
                     if_list = data["interfaces"]["interface"]
-                    assert(len(if_list) == 1)
+                    assert len(if_list) == 1
                     intf = list(if_list)[0]
                     config = intf.get("breakout", {})
                     ch = config.get("num-channels", None)
@@ -401,7 +380,9 @@ class Server(object):
                     # if both channel and speed configuration are deleted
                     # remove the breakout config from uSONiC
                     if ch != None or speed != None:
-                        logger.debug("breakout config still exists: ch: {ch}, speed: {speed}")
+                        logger.debug(
+                            "breakout config still exists: ch: {ch}, speed: {speed}"
+                        )
                         continue
 
                     breakout_dict = {
@@ -410,9 +391,7 @@ class Server(object):
 
                     is_updated = await self.breakout_update_usonic(breakout_dict)
                     if is_updated:
-                        asyncio.create_task(
-                            self.breakout_callback(ifname, num_of_channels)
-                        )
+                        asyncio.create_task(self.breakout_callback())
 
                 elif _hash.find("VLAN|") == 0 and key == "":
                     if event == "done":
@@ -900,6 +879,7 @@ class Server(object):
         self.sonic_configdb.mod_entry("FLEX_COUNTER_TABLE", "PORT", value)
 
     def reconcile(self):
+        self.sess.switch_datastore("running")
         intf_data = self.sess.get_data("/goldstone-interfaces:interfaces")
         if "interfaces" in intf_data:
             intf_list = intf_data["interfaces"]["interface"]
@@ -1008,6 +988,9 @@ class Server(object):
         logger.debug("updating operational db")
         self.sess.switch_datastore("operational")
 
+        # clear the operational ds
+        self.sess.delete_item("/goldstone-interfaces:interfaces")
+
         hash_keys = self.sonic_db.keys(
             self.sonic_db.CONFIG_DB, pattern="PORT|Ethernet*"
         )
@@ -1091,6 +1074,8 @@ class Server(object):
                         self.sess.set_item(f"{xpath}/admin-status", value)
 
         hash_keys = self.sonic_db.keys(self.sonic_db.CONFIG_DB, pattern="VLAN|Vlan*")
+
+        self.sess.delete_item("/goldstone-vlan:vlan")
 
         if hash_keys != None:
             hash_keys = map(_decode, hash_keys)
