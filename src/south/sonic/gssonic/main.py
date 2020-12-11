@@ -193,17 +193,15 @@ class Server(object):
         return self.sess.get_data(xpath)
 
     async def change_cb(self, event, req_id, changes, priv):
-        logger.debug("Entering change callback")
+        logger.debug(f"change_cb: event: {event}, changes: {changes}")
+        # TODO we need to do the validation in the 'change' event and
+        # actual setting in the 'done' event
         if event != "change":
-            logger.debug(
-                "***********************Inside Change cb event not done************************"
-            )
-            return "Hello"
+            return
+
         valid_speeds = ["40000", "100000"]
         for change in changes:
-            logger.debug(
-                "****************************inside change cb************************************************"
-            )
+            logger.debug(f"change_cb: {change}")
 
             xpath = (change.xpath).split("/")
             _hash = ""
@@ -218,10 +216,8 @@ class Server(object):
                         self.sonic_db.CONFIG_DB, pattern="PORT|" + ifname
                     )
                     if intf_names == None:
-                        logger.debug(
-                            "*************** Invalid Interface name ****************"
-                        )
-                        raise sysrepo.SysrepoInvalArgError("Invalid Interface name")
+                        logger.error(f"interface not found: {ifname}, node: {node}")
+                        raise sysrepo.SysrepoInvalArgError(f"interface not found: {ifname}, node: {node}")
                     _hash = _hash + "PORT|" + ifname
                     hash_appl = hash_appl + "PORT_TABLE:" + ifname
                     if i + 1 < len(xpath):
@@ -250,6 +246,8 @@ class Server(object):
                     _hash = _hash.replace("'][ifname='", "|")
                     if i + 1 < len(xpath):
                         key = xpath[i + 1]
+
+            logger.debug(f"_hash: {_hash}, hash_appl: {hash_appl}, key: {key}, member: {member}")
 
             if isinstance(change, sysrepo.ChangeCreated):
                 logger.debug("......change created......")
@@ -439,6 +437,10 @@ class Server(object):
 
                 elif _hash.find("VLAN_MEMBER|") == 0 and key == "":
                     self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
+
+                elif "PORT|" in _hash and key == "":
+                    self.update_oper_db()
+
 
     def get_oper_data(self, req_xpath):
         def delta_counter_value(base, present):
@@ -1019,6 +1021,7 @@ class Server(object):
                     )
 
     def update_oper_db(self):
+        logger.debug("updating operational db")
         self.sess.switch_datastore("operational")
 
         hash_keys = self.sonic_db.keys(
