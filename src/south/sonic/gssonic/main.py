@@ -65,6 +65,7 @@ class Server(object):
             "SAI_PORT_STAT_IF_IN_OCTETS": 0,
             "SAI_PORT_STAT_IF_OUT_OCTETS": 0,
         }
+        self.counter_if_dict = {}
 
     def stop(self):
         self.sess.stop()
@@ -1163,6 +1164,8 @@ class Server(object):
                 is_updated = await self.breakout_update_usonic(breakout_dict)
                 if is_updated:
                     await self.watch_pods()
+                else:
+                    self.cache_counters()
 
                 self.reconcile()
                 self.update_oper_db()
