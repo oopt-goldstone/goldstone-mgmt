@@ -127,6 +127,18 @@ def test_tai(cli):
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
     assert "dp-16-qam" in output
 
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 2.3"')
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -1.2"')
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz"')
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
+
+    ssh(cli,"kubectl rollout restart ds/gs-mgmt-tai")
+    time.sleep(60)
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
+    assert "2.3" in output
+    assert "-1.2" in output
+    assert "193700000000000" in output
+    assert "dp-qpsk" in output
 
 def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "show vlan details"')
