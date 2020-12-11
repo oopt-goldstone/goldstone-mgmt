@@ -66,11 +66,11 @@ pipeline {
         sh 'docker build -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
 
         timeout(time: 15, unit: 'MINUTES') {
-            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 ./ci/tools/load.py ${params.DEVICE}"
+            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 ./ci/tools/load.py ${params.DEVICE}"
         }
 
         timeout(time: 15, unit: 'MINUTES') {
-            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 ./ci/tools/test.py ${params.DEVICE}"
+            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 ./ci/tools/test.py ${params.DEVICE}"
         }
       }
     }
