@@ -377,40 +377,38 @@ class Server(object):
                         mem.remove(member)
                         value = ",".join(mem)
                         set_config_db(_hash, key, value)
-                elif key == "channel-speed":
-                    # We will consider one of the breakout parameters to delete the config.
-                    pass
-                elif key == "num-channels":
-                    try:
-                        _data = self.get_running_data(change.xpath)
-                    except:
-                        logging.error(
-                            "Failed fetching {} from get_data".format(change.xpath)
-                        )
-                        break
-                    num_of_channels = 0
+                elif key in ["channel-speed", "num-channels"]:
+                    # no validation in change"
+                    if event != "done":
+                        continue
+                    # change.xpath is
+                    # /goldstone-interfaces:interfaces/interface[name='xxx']/breakout/channel-speed
+                    # or
+                    # /goldstone-interfaces:interfaces/interface[name='xxx']/breakout/num-channels
+                    xpath = "/".join(change.xpath.split("/")[:-1])
+                    data = self.get_running_data(xpath)
+                    if_list = data["interfaces"]["interface"]
+                    assert(len(if_list) == 1)
+                    intf = list(if_list)[0]
+                    config = intf.get("breakout", {})
+                    ch = config.get("num-channels", None)
+                    speed = config.get("channel-speed", None)
 
-                    try:
-                        if_list = _data["interfaces"]["interface"]
-                        for intf in if_list:
-                            num_of_channels = intf["breakout"]["num-channels"]
-                    except:
-                        logging.error("Failed fetching num_of_channels from get_data")
-
-                    logger.debug(
-                        "This key:{} should not be deleted in redis ".format(key)
-                    )
+                    # if both channel and speed configuration are deleted
+                    # remove the breakout config from uSONiC
+                    if ch != None or speed != None:
+                        logger.debug("breakout config still exists: ch: {ch}, speed: {speed}")
+                        continue
 
                     breakout_dict = {
                         ifname: {"num-channels": None, "channel-speed": None}
                     }
 
-                    if event == "done":
-                        resp = await self.breakout_update_usonic(breakout_dict)
-                        if resp:
-                            asyncio.create_task(
-                                self.breakout_callback(ifname, num_of_channels)
-                            )
+                    is_updated = await self.breakout_update_usonic(breakout_dict)
+                    if is_updated:
+                        asyncio.create_task(
+                            self.breakout_callback(ifname, num_of_channels)
+                        )
 
                 elif _hash.find("VLAN|") == 0 and key == "":
                     if event == "done":
