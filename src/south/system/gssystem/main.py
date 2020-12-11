@@ -9,6 +9,7 @@ import re
 import os
 import logging
 import json
+import dbus
 
 logger = logging.getLogger(__name__)
 DEFAULT_TACACS_PORT = 49
@@ -411,45 +412,77 @@ class Server:
             logger.error(f"failed to get version info: {e}")
             raise sysrepo.SysrepoInternalError("version details not found")
 
+    def reboot(self, xpath, input_params, event, priv):
+        logger.debug(f"reboot: xpath: {xpath}, input: {input}, event: {event}, priv: {priv}")
+        bus = dbus.SystemBus()
+        logind = bus.get_object(
+            'org.freedesktop.login1',
+            '/org/freedesktop/login1'
+        )
+        manager = dbus.Interface(
+            logind,
+            'org.freedesktop.login1.Manager'
+        )
+        manager.Reboot(False)
+
+    def shutdown(self, xpath, input_params, event, priv):
+        logger.debug(f"shutdown: xpath: {xpath}, input: {input}, event: {event}, priv: {priv}")
+        bus = dbus.SystemBus()
+        logind = bus.get_object(
+            'org.freedesktop.login1',
+            '/org/freedesktop/login1'
+        )
+        manager = dbus.Interface(
+            logind,
+            'org.freedesktop.login1.Manager'
+        )
+        manager.PowerOff(False)
+
     async def start(self):
         self.update_oper_db()
 
-        try:
-            self.sess.switch_datastore("running")
-            self.sess.subscribe_module_change(
-                "goldstone-aaa", None, self.change_cb, asyncio_register=True
-            )
-            self.store_data(
-                "/goldstone-aaa:aaa/server-groups/server-group[name='TACACS+']/servers/server"
-            )
-            # self.sess.switch_datastore ('operational')
-            self.sess.subscribe_oper_data_request(
-                "goldstone-mgmt-interfaces",
-                "/goldstone-mgmt-interfaces:interfaces",
-                self.oper_cb,
-                oper_merge=True,
-                asyncio_register=True,
-            )
-            self.sess.subscribe_oper_data_request(
-                "goldstone-aaa",
-                "/goldstone-aaa:aaa",
-                self.oper_cb,
-                oper_merge=True,
-                asyncio_register=True,
-            )
+        self.sess.switch_datastore("running")
+        self.sess.subscribe_module_change(
+            "goldstone-aaa", None, self.change_cb, asyncio_register=True
+        )
+        self.store_data(
+            "/goldstone-aaa:aaa/server-groups/server-group[name='TACACS+']/servers/server"
+        )
+        # self.sess.switch_datastore ('operational')
+        self.sess.subscribe_oper_data_request(
+            "goldstone-mgmt-interfaces",
+            "/goldstone-mgmt-interfaces:interfaces",
+            self.oper_cb,
+            oper_merge=True,
+            asyncio_register=True,
+        )
+        self.sess.subscribe_oper_data_request(
+            "goldstone-aaa",
+            "/goldstone-aaa:aaa",
+            self.oper_cb,
+            oper_merge=True,
+            asyncio_register=True,
+        )
 
-            self.sess.subscribe_oper_data_request(
-                "goldstone-system",
-                "/goldstone-system:system",
-                self.system_oper_cb,
-                oper_merge=True,
-                asyncio_register=True,
-            )
+        self.sess.subscribe_oper_data_request(
+            "goldstone-system",
+            "/goldstone-system:system",
+            self.system_oper_cb,
+            oper_merge=True,
+            asyncio_register=True,
+        )
 
-        except Exception as e:
-            logger.error(f"error:{str(e)}")
-            return {}
+        self.sess.subscribe_rpc_call(
+            "/goldstone-system:reboot",
+            self.reboot,
+        )
 
+        self.sess.subscribe_rpc_call(
+            "/goldstone-system:shutdown",
+            self.shutdown,
+        )
+
+        return []
 
 def main():
     async def _main():
@@ -461,7 +494,14 @@ def main():
         server = Server()
 
         try:
-            await asyncio.gather(server.start(), stop_event.wait())
+            tasks = await server.start()
+            tasks.append(stop_event.wait())
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            logger.debug(f"done: {done}, pending: {pending}")
+            for task in done:
+                e = task.exception()
+                if e:
+                    raise e
         finally:
             server.stop()
 

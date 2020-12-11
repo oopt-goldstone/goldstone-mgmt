@@ -11,7 +11,7 @@ ARG https_proxy
 FROM $GS_MGMT_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && apt install -qy --no-install-recommends python3 python3-pip libatomic1
+            apt update && apt install -qy --no-install-recommends python3 python3-pip libatomic1 libdbus-1-3
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10

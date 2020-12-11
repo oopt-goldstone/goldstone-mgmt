@@ -8,7 +8,7 @@ ARG https_proxy
 FROM $GS_MGMT_BUILDER_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
@@ -69,6 +69,9 @@ RUN --mount=type=bind,source=sm/libnss-tacplus,target=/root/sm/libnss-tacplus,rw
     cd /root && quilt upgrade && quilt push -a && \
     cd /root/sm/libnss-tacplus && dpkg-buildpackage -rfakeroot -b -us -uc && \
     cd /root/sm && mkdir -p /usr/share/debs/tacacs && cp *.deb /usr/share/debs/tacacs/
+
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libdbus-glib-1-dev
 
 RUN pip install grpcio-tools grpclib
 

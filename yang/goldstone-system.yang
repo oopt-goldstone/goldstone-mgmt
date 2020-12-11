@@ -52,4 +52,26 @@ module goldstone-system {
 
   uses system-top;
 
+  rpc reboot {
+      output {
+          leaf status {
+              type enumeration {
+                  enum failure;
+                  enum success;
+              }
+          }
+      }
+  }
+
+  rpc shutdown {
+      output {
+          leaf status {
+              type enumeration {
+                  enum failure;
+                  enum success;
+              }
+          }
+      }
+  }
+
 }

@@ -142,6 +142,14 @@ class Root(Object):
         def tacacs_server(line):
             self.tacacs_cli.tacacs_server(line)
 
+        @self.command()
+        def reboot(line):
+            print(self.session.rpc_send("/goldstone-system:reboot", {}))
+
+        @self.command()
+        def shutdown(line):
+            print(self.session.rpc_send("/goldstone-system:shutdown", {}))
+
         # SYSTEM CLIs  -- END
 
         @self.command(FuzzyWordCompleter(lambda: self.get_vid(), WORD=True))

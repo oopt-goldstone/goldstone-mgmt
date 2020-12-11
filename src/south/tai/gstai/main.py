@@ -568,7 +568,7 @@ class Server(object):
             try:
                 return await coroutine
             except BaseException as e:
-                logger.info(e)
+                logger.error(e)
 
         return [catch_exception(n) for n in notifiers]
 
@@ -583,8 +583,13 @@ def main():
 
         try:
             tasks = await server.start()
-            [ asyncio.create_task(t) for t in tasks ]
-            await stop_event.wait()
+            tasks.append(stop_event.wait())
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            logger.debug(f"done: {done}, pending: {pending}")
+            for task in done:
+                e = task.exception()
+                if e:
+                    raise e
         finally:
             server.stop()
 
