@@ -194,12 +194,12 @@ class Server(object):
 
     async def change_cb(self, event, req_id, changes, priv):
         logger.debug(f"change_cb: event: {event}, changes: {changes}")
-        # TODO we need to do the validation in the 'change' event and
-        # actual setting in the 'done' event
-        if event != "change":
+
+        if event not in ["change", "done"]:
+            logger.warn("unsupported event: {event}")
             return
 
-        valid_speeds = ["40000", "100000"]
+        valid_speeds = [40000, 100000]
         for change in changes:
             logger.debug(f"change_cb: {change}")
 
@@ -217,7 +217,9 @@ class Server(object):
                     )
                     if intf_names == None:
                         logger.error(f"interface not found: {ifname}, node: {node}")
-                        raise sysrepo.SysrepoInvalArgError(f"interface not found: {ifname}, node: {node}")
+                        raise sysrepo.SysrepoInvalArgError(
+                            f"interface not found: {ifname}, node: {node}"
+                        )
                     _hash = _hash + "PORT|" + ifname
                     hash_appl = hash_appl + "PORT_TABLE:" + ifname
                     if i + 1 < len(xpath):
@@ -247,33 +249,27 @@ class Server(object):
                     if i + 1 < len(xpath):
                         key = xpath[i + 1]
 
-            logger.debug(f"_hash: {_hash}, hash_appl: {hash_appl}, key: {key}, member: {member}")
+            logger.debug(
+                f"_hash: {_hash}, hash_appl: {hash_appl}, key: {key}, member: {member}"
+            )
+
+            def set_config_db(_hash, key, value):
+                if event != "done":
+                    return
+                return self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
 
             if isinstance(change, sysrepo.ChangeCreated):
                 logger.debug("......change created......")
                 if type(change.value) != type({}) and key != "name" and key != "ifname":
                     if key == "description" or key == "alias":
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB, _hash, key, change.value
-                        )
+                        set_config_db(_hash, key, change.value)
                     elif key == "admin-status":
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB,
-                            _hash,
-                            "admin_status",
-                            change.value,
-                        )
+                        set_config_db(_hash, "admin_status", change.value)
                     elif key == "speed":
-                        if str(change.value) in valid_speeds:
-                            self.sonic_db.set(
-                                self.sonic_db.CONFIG_DB,
-                                _hash,
-                                "speed",
-                                str(change.value),
-                            )
-                        else:
+                        if change.value not in valid_speeds:
                             logger.debug("****** Invalid speed value *********")
                             raise sysrepo.SysrepoInvalArgError("Invalid speed")
+                        set_config_db(_hash, "speed", change.value)
                     elif key == "members@":
                         try:
                             mem = _decode(
@@ -282,16 +278,13 @@ class Server(object):
                             mem_list = mem.split(",")
                             if change.value not in mem_list:
                                 mem + "," + str(change.value)
-                            self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, mem)
+                            set_config_db(_hash, key, mem)
                         except:
-                            self.sonic_db.set(
-                                self.sonic_db.CONFIG_DB, _hash, key, str(change.value)
-                            )
+                            set_config_db(_hash, key, change.value)
                     elif key == "forwarding" or key == "enabled":
                         logger.debug(
                             "This key:{} should not be set in redis ".format(key)
                         )
-
                     elif key == "num-channels" or key == "channel-speed":
                         logger.debug(
                             "This key:{} should not be set in redis ".format(key)
@@ -344,49 +337,34 @@ class Server(object):
                         breakout_dict = {
                             ifname: {key: change.value, paired_key: paired_value}
                         }
-                        resp = await self.breakout_update_usonic(breakout_dict)
-                        if resp:
-                            asyncio.create_task(self.breakout_callback(None, None))
+
+                        if event == "done":
+                            resp = await self.breakout_update_usonic(breakout_dict)
+                            if resp:
+                                asyncio.create_task(self.breakout_callback(None, None))
 
                     else:
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB, _hash, key, str(change.value)
-                        )
+                        set_config_db(_hash, key, change.value)
 
             if isinstance(change, sysrepo.ChangeModified):
                 logger.debug("......change modified......")
                 if key == "description" or key == "alias":
-                    self.sonic_db.set(
-                        self.sonic_db.CONFIG_DB, _hash, key, str(change.value)
-                    )
+                    set_config_db(_hash, key, change.value)
                 elif key == "admin-status":
-                    self.sonic_db.set(
-                        self.sonic_db.CONFIG_DB,
-                        _hash,
-                        "admin_status",
-                        str(change.value),
-                    )
+                    set_config_db(_hash, "admin_status", change.value)
                 elif key == "forwarding" or key == "enabled":
                     logger.debug("This key:{} should not be set in redis ".format(key))
 
                 elif key == "speed":
-                    if str(change.value) in valid_speeds:
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB,
-                            _hash,
-                            "speed",
-                            str(change.value),
-                        )
-                    else:
+                    if change.value not in valid_speeds:
                         logger.debug("****** Invalid speed value *********")
                         raise sysrepo.SysrepoInvalArgError("Invalid speed")
+                    set_config_db(_hash, "speed", change.value)
                 elif key == "num-channels" or key == "channel-speed":
                     logger.debug("This key:{} should not be set in redis ".format(key))
                     raise Exception("Breakout config modification not supported")
                 else:
-                    self.sonic_db.set(
-                        self.sonic_db.CONFIG_DB, _hash, key, str(change.value)
-                    )
+                    set_config_db(_hash, key, change.value)
 
             if isinstance(change, sysrepo.ChangeDeleted):
                 logger.debug("......change deleted......")
@@ -398,7 +376,7 @@ class Server(object):
                         mem = mem.split(",")
                         mem.remove(member)
                         value = ",".join(mem)
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
+                        set_config_db(_hash, key, value)
                 elif key == "channel-speed":
                     # We will consider one of the breakout parameters to delete the config.
                     pass
@@ -426,21 +404,25 @@ class Server(object):
                     breakout_dict = {
                         ifname: {"num-channels": None, "channel-speed": None}
                     }
-                    resp = await self.breakout_update_usonic(breakout_dict)
-                    if resp:
-                        asyncio.create_task(
-                            self.breakout_callback(ifname, num_of_channels)
-                        )
+
+                    if event == "done":
+                        resp = await self.breakout_update_usonic(breakout_dict)
+                        if resp:
+                            asyncio.create_task(
+                                self.breakout_callback(ifname, num_of_channels)
+                            )
 
                 elif _hash.find("VLAN|") == 0 and key == "":
-                    self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
+                    if event == "done":
+                        self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
 
                 elif _hash.find("VLAN_MEMBER|") == 0 and key == "":
-                    self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
+                    if event == "done":
+                        self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
 
                 elif "PORT|" in _hash and key == "":
-                    self.update_oper_db()
-
+                    if event == "done":
+                        self.update_oper_db()
 
     def get_oper_data(self, req_xpath):
         def delta_counter_value(base, present):
