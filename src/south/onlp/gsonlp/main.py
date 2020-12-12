@@ -5,6 +5,7 @@ import argparse
 import signal
 import ctypes
 import onlp.onlp
+from pathlib import Path
 
 libonlp = onlp.onlp.libonlp
 
@@ -15,14 +16,17 @@ class Server(object):
     def __init__(self):
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
-        self.oids_dict = {
-                          onlp.onlp.ONLP_OID_TYPE.SYS : [],
-                          onlp.onlp.ONLP_OID_TYPE.THERMAL : [],
-                          onlp.onlp.ONLP_OID_TYPE.FAN : [],
-                          onlp.onlp.ONLP_OID_TYPE.PSU : [],
-                          onlp.onlp.ONLP_OID_TYPE.LED : [],
-                          onlp.onlp.ONLP_OID_TYPE.MODULE : []
-                         }
+        self.onlp_oids_dict = {
+                               onlp.onlp.ONLP_OID_TYPE.SYS : [],
+                               onlp.onlp.ONLP_OID_TYPE.THERMAL : [],
+                               onlp.onlp.ONLP_OID_TYPE.FAN : [],
+                               onlp.onlp.ONLP_OID_TYPE.PSU : [],
+                               onlp.onlp.ONLP_OID_TYPE.LED : [],
+                               #Module here is PIU
+                               onlp.onlp.ONLP_OID_TYPE.MODULE : []
+                              }
+        #This list would bbe indexed by piuId
+        self.onlp_piu_presence = []
 
     def stop(self):
         logger.info(f'stop server')
@@ -43,7 +47,7 @@ class Server(object):
         while True:
             self.sess.switch_datastore('operational')
 
-            for oid in self.oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
+            for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
                 # TODO we set the PIU name as /dev/piu?. This is because libtai-aco.so expects
                 # the module location to be the device file of the module.
                 # However, this device file name might be awkward for network operators.
@@ -52,18 +56,26 @@ class Server(object):
 
                 name = f'/dev/piu{piuId}'
 
+                piu_type = Path(f'/sys/class/piu/piu{piuId}/piu_type')
+
                 xpath = f"/goldstone-onlp:components/component[name='{name}']"
-                self.sess.set_item(f"{xpath}/config/name", 'piu' + str(piuId))
-                self.sess.set_item(f"{xpath}/state/type", "PIU")
 
                 sts = ctypes.c_uint()
                 libonlp.onlp_module_status_get(oid, ctypes.byref(sts))
 
+                #continue if there is no change in status
+                if self.onlp_piu_presence[piuId-1] == sts.value:
+                    continue
+
+                self.onlp_piu_presence[piuId-1] = sts.value
+                self.sess.delete_item(f"{xpath}/piu/state/status")
+                self.sess.delete_item(f"{xpath}/piu/state/piu-type")
+
                 if sts.value == 1:
-                    self.sess.delete_item(f"{xpath}/piu/state/status")
                     self.sess.set_item(f"{xpath}/piu/state/status", "PRESENT")
+                    if piu_type.exists():
+                        self.sess.set_item(f"{xpath}/piu/state/piu-type", piu_type.read_text())
                 else:
-                    self.sess.delete_item(f"{xpath}/piu/state/status")
                     self.sess.set_item(f"{xpath}/piu/state/status", "UNPLUGGED")
 
             self.sess.apply_changes()
@@ -74,12 +86,28 @@ class Server(object):
             try:
                 type = (oid >> 24)
                 logger.debug(f"OID: {hex(oid)}, Type: {type}")
-                self.oids_dict[type].append(oid)
+                self.onlp_oids_dict[type].append(oid)
                 return onlp.onlp.ONLP_STATUS.OK
             except:
                 logger.debug("exception found!!")
                 return onlp.onlp.ONLP_STATUS.E_GENERIC
         return onlp.onlp.onlp_oid_iterate_f(_v)
+
+    def initialise_devices(self):
+        self.sess.switch_datastore('operational')
+
+        for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
+            piuId = oid & 0xFFFFFF
+            name = f'/dev/piu{piuId}'
+
+            xpath = f"/goldstone-onlp:components/component[name='{name}']"
+            self.sess.set_item(f"{xpath}/config/name", 'piu' + str(piuId))
+            self.sess.set_item(f"{xpath}/state/type", "PIU")
+
+            self.onlp_piu_presence.append(0)
+
+        #Extend here for other devices[FAN,PSU,LED etc]
+
 
     async def start(self):
         # passing None to the 2nd argument is important to enable layering the running datastore
@@ -90,10 +118,12 @@ class Server(object):
         self.sess.subscribe_oper_data_request('goldstone-onlp', '/goldstone-onlp:components/component', self.oper_cb, oper_merge=True, asyncio_register=True)
 
         # Read all the OID's , which would be used as handles to invoke ONLP API's
-        self.oids_dict[onlp.onlp.ONLP_OID_TYPE.SYS].append(onlp.onlp.ONLP_OID_SYS)
+        self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.SYS].append(onlp.onlp.ONLP_OID_SYS)
         #loop through the SYS OID and get all the peripheral devices OIDs
         libonlp.onlp_oid_iterate(onlp.onlp.ONLP_OID_SYS, 0, self.oid_iter_cb(), None)
-        logger.debug(f"System OID Dictionary: {self.oids_dict}")
+        logger.debug(f"System OID Dictionary: {self.onlp_oids_dict}")
+
+        self.initialise_devices()
 
         return [self.monitor_piu()]
 

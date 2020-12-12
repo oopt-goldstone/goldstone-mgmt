@@ -343,6 +343,10 @@ module goldstone-onlp {
       }
     }
 
+    leaf piu-type {
+      type string;
+    }
+
     leaf model {
       type string;
     }
