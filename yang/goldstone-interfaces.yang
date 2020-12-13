@@ -51,6 +51,11 @@ module goldstone-interfaces {
     speeds";
   }
 
+  identity SPEED_1GB {
+    base ETHERNET_SPEED;
+    description "1 Gbps Ethernet";
+  }
+
   identity SPEED_10GB {
     base ETHERNET_SPEED;
     description "10 Gbps Ethernet";

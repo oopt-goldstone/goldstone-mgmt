@@ -79,7 +79,7 @@ class Interface_CLI(Object):
                     print("argument vid must be numbers and not letters")
             elif args[0] == "breakout":
                 for ifname in self.ifnames:
-                    self.sonic.port.set_breakout(ifname, None, None, False)
+                    self.sonic.port.set_breakout(ifname, None, None)
             else:
                 self.no_usage()
 
@@ -149,9 +149,7 @@ class Interface_CLI(Object):
                 raise InvalidInput(invalid_input_str)
 
             for ifname in self.ifnames:
-                self.sonic.port.set_breakout(
-                    ifname, input_values[0], input_values[1], True
-                )
+                self.sonic.port.set_breakout(ifname, input_values[0], input_values[1])
 
         @self.command(parent.get_completer("show"))
         def show(args):

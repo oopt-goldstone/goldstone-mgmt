@@ -405,122 +405,81 @@ class Port(object):
         if speed == "10G":
             return "SPEED_10GB"
 
-    def flush_intf_config(self, ifname, config):
-        xpath = self.xpath(ifname)
-        xpath_vlan = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
+    def set_breakout(self, ifname, number_of_channels, speed):
+
+        if (number_of_channels == None) != (speed == None):
+            raise InvalidInput(
+                f"unsupported combination: {number_of_channels}, {speed}"
+            )
+
+        # TODO use the parent leaf to detect if this is a sub-interface or not
+        # using "_1" is vulnerable to the interface nameing schema change
+        if "_1" not in ifname:
+            raise InvalidInput(
+                "Breakout cannot be configured/removed on a sub-interface"
+            )
+
+        def remove_intf_from_all_vlans(intf):
+            try:
+                data = self.sr_op.get_data("/goldstone-vlan:vlan/VLAN/VLAN_LIST")
+                data = data["vlan"]["VLAN"]["VLAN_LIST"]
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                # no VLAN configuration exists
+                return
+
+            for vlan in data:
+                if intf in vlan.get("members", []):
+                    self.set_vlan_mem(intf, None, str(vlan["vlanid"]), True)
+
+        is_delete = number_of_channels == None
+
+        if is_delete:
+            try:
+                xpath = self.xpath(ifname)
+                data = self.sr_op.get_data(f"{xpath}/breakout", "running")
+                data = data["interfaces"]["interface"][ifname]["breakout"]
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                # If no configuration exists, no need to return error
+                return
+
+            print("Sub Interfaces will be deleted")
+
+            data = self.sr_op.get_data(self.XPATH, ds="operational", no_subs=True)
+            for intf in data["interfaces"]["interface"]:
+                parent = intf.get("breakout", {}).get("parent", None)
+                if ifname == parent:
+                    remove_intf_from_all_vlans(intf["name"])
+                    self.sr_op.delete_data(self.xpath(intf["name"]))
 
         print("Existing configurations on parent interfaces will be flushed")
-        if_list = []
-        if config == False:
-            print("Sub Interfaces will be deleted")
-            try:
-                breakout_tree = self.sr_op.get_data(f"{xpath}/breakout", "running")
-                breakout_data = list(breakout_tree["interfaces"]["interface"])[0]
-                breakout_data = breakout_data["breakout"]
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                # If no configuration exists, no need to return error as netconf
-                # doesnt expect errors for no operations
-                return
-
-            try:
-                num_of_channels = breakout_data["num-channels"]
-                channel_speed = breakout_data["channel-speed"]
-                common_ifname = ifname.split("_")
-                if_list = [
-                    common_ifname[0] + "_" + str(i)
-                    for i in range(1, num_of_channels + 1)
-                ]
-            except:
-                parent_if = breakout_data["parent"]
-        else:
-            if_list.append(ifname)
-
-        for _if_name in if_list:
-            # flushing speed, mtu and vlan configs
-            try:
-                tree = self.sr_op.get_data("{}".format(self.xpath(_if_name)), "running")
-                if_data = [v for v in list((tree)["interfaces"]["interface"])][0]
-            except:
-                logger.debug(
-                    f"Breakout Flush configs: {_if_name} doesnt exist in running db"
-                )
-                continue
-            for key in if_data.keys():
-                # Configurable parameters for now are speed and mtu(part of ipv4)
-                # admin_status cannot be deleted as it is mandatory parameter
-                if key == "speed":
-                    self.set_speed(_if_name, sonic_defaults.SPEED, False)
-                if key == "ipv4":
-                    try:
-                        mtu = if_data["ipv4"]["mtu"]
-                    except:
-                        continue
-                    self.set_mtu(_if_name, None)
-
-            try:
-                tree = self.sr_op.get_data(xpath_vlan, "running")
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                continue
-
-            try:
-                vlan_list = list(tree["vlan"]["VLAN"]["VLAN_LIST"])
-                for vlan in vlan_list:
-                    try:
-                        mem_list = list(vlan["members"])
-                    except:
-                        pass
-                    if len(mem_list) >= 1:
-                        for intf in mem_list:
-                            if intf == _if_name:
-                                self.set_vlan_mem(
-                                    _if_name, None, str(vlan["vlanid"]), True
-                                )
-            except:
-                pass
-
-    def set_breakout(self, ifname, number_of_channels, speed, config):
         xpath = self.xpath(ifname)
+        self.sr_op.delete_data(xpath)
+        self.set_admin_status(ifname, "down")
 
-        sub_intf = ifname.split("_")[1]
-        if sub_intf != "1":
-            print("Breakout cannot be configured/removed on a sub-interface")
+        if is_delete:
             return
 
-        # We need to flush interface configurations before breakout config/unconfig
+        # Set breakout configuration
         try:
-            self.flush_intf_config(ifname, config)
-        except:
-            logger.warning(f"Interface:{ifname} configuration flush failed!")
+            set_attribute(
+                self.sr_op,
+                xpath,
+                "interface",
+                ifname,
+                "num-channels",
+                number_of_channels,
+            )
+            set_attribute(
+                self.sr_op,
+                xpath,
+                "interface",
+                ifname,
+                "channel-speed",
+                self.speed_to_yang_val(speed),
+            )
 
-        if config == True:
-            # Set breakout configuration
-            try:
-                set_attribute(
-                    self.sr_op,
-                    xpath,
-                    "interface",
-                    ifname,
-                    "num-channels",
-                    number_of_channels,
-                )
-            except sr.errors.SysrepoValidationFailedError as error:
-                print(str(error))
-                return
-            try:
-                set_attribute(
-                    self.sr_op,
-                    xpath,
-                    "interface",
-                    ifname,
-                    "channel-speed",
-                    self.speed_to_yang_val(speed),
-                )
-            except sr.errors.SysrepoValidationFailedError as error:
-                print(str(error))
-                return
-
-        else:
-            self.sr_op.delete_data("{}/{}".format(xpath, "breakout"))
+        except sr.errors.SysrepoValidationFailedError as error:
+            raise InvalidInput(str(error))
 
     def show(self, ifname):
         xpath = self.xpath(ifname)

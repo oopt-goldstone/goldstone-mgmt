@@ -32,10 +32,13 @@ def speed_to_yang_val(speed):
     # Considering only speeds supported in CLI
     if speed == b"25000":
         return "SPEED_25GB"
-    if speed == b"50000":
+    elif speed == b"50000":
         return "SPEED_50GB"
-    if speed == b"10000":
+    elif speed == b"10000":
         return "SPEED_10GB"
+    elif speed == b"1000":
+        return "SPEED_1GB"
+    raise sysrepo.SysrepoInvalArgError(f"unsupported speed: {speed}")
 
 
 class Server(object):
@@ -242,6 +245,26 @@ class Server(object):
 
         return False
 
+    def get_configured_breakout_ports(self, ifname):
+        xpath = f"/goldstone-interfaces:interfaces/interface"
+        self.sess.switch_datastore("operational")
+        data = self.sess.get_data(xpath, no_subs=True)
+        logger.debug(f"get_configured_breakout_ports: {ifname}, {data}")
+        ports = []
+        for intf in data.get("interfaces", {}).get("interface", []):
+            try:
+                if intf["breakout"]["parent"] == ifname:
+                    name = intf["name"]
+                    d = self.get_running_data(f"{xpath}[name='{name}']")
+                    logger.debug(f"get_configured_breakout_ports: {name}, {d}")
+                    ports.append(intf["name"])
+            except (sysrepo.errors.SysrepoNotFoundError, KeyError):
+                pass
+
+        logger.debug(f"get_configured_breakout_ports: ports: {ports}")
+
+        return ports
+
     async def change_cb(self, event, req_id, changes, priv):
         logger.debug(f"change_cb: event: {event}, changes: {changes}")
 
@@ -311,6 +334,11 @@ class Server(object):
                         logger.debug(
                             "This key:{} should not be set in redis ".format(key)
                         )
+
+                        # TODO use the parent leaf to detect if this is a sub-interface or not
+                        # using "_1" is vulnerable to the interface nameing schema change
+                        if "_1" not in ifname:
+                            raise sysrepo.SysrepoInvalArgError("breakout cannot be configured on a sub-interface")
 
                         paired_key = (
                             "num-channels"
@@ -393,7 +421,7 @@ class Server(object):
 
                 elif key == "num-channels" or key == "channel-speed":
                     logger.debug("This key:{} should not be set in redis ".format(key))
-                    raise Exception("Breakout config modification not supported")
+                    raise sysrepo.SysrepoInvalArgError("Breakout config modification not supported")
                 else:
                     set_config_db(_hash, key, change.value)
 
@@ -409,21 +437,32 @@ class Server(object):
                         value = ",".join(mem)
                         set_config_db(_hash, key, value)
                 elif key in ["channel-speed", "num-channels"]:
-                    # no validation in change"
-                    if event != "done":
+                    if event == "change":
+                        if len(self.get_configured_breakout_ports(ifname)):
+                            raise sysrepo.SysrepoInvalArgError("Breakout can't be removed due to the dependencies")
                         continue
+
+                    assert event == "done"
+
                     # change.xpath is
                     # /goldstone-interfaces:interfaces/interface[name='xxx']/breakout/channel-speed
                     # or
                     # /goldstone-interfaces:interfaces/interface[name='xxx']/breakout/num-channels
+                    #
+                    # set xpath to /goldstone-interfaces:interfaces/interface[name='xxx']/breakout
                     xpath = "/".join(change.xpath.split("/")[:-1])
-                    data = self.get_running_data(xpath)
-                    if_list = data["interfaces"]["interface"]
-                    assert len(if_list) == 1
-                    intf = list(if_list)[0]
-                    config = intf.get("breakout", {})
-                    ch = config.get("num-channels", None)
-                    speed = config.get("channel-speed", None)
+                    try:
+                        data = self.get_running_data(xpath)
+                    except sysrepo.errors.SysrepoNotFoundError:
+                        ch = None
+                        speed = None
+                    else:
+                        if_list = data["interfaces"]["interface"]
+                        assert len(if_list) == 1
+                        intf = list(if_list)[0]
+                        config = intf.get("breakout", {})
+                        ch = config.get("num-channels", None)
+                        speed = config.get("channel-speed", None)
 
                     # if both channel and speed configuration are deleted
                     # remove the breakout config from uSONiC
@@ -451,6 +490,12 @@ class Server(object):
 
                 elif "PORT|" in _hash and key == "":
                     if event == "done":
+                        # since sysrepo wipes out the pushed entry in oper ds
+                        # when the corresponding entry in running ds is deleted,
+                        # we need to repopulate the oper ds.
+                        #
+                        # this behavior might change in the future 
+                        # https://github.com/sysrepo/sysrepo/issues/1937#issuecomment-742851607
                         self.update_oper_db()
 
     def get_oper_data(self, req_xpath):
@@ -1036,7 +1081,7 @@ class Server(object):
         logger.debug("updating operational db")
         self.sess.switch_datastore("operational")
 
-        # clear the operational ds
+        # clear the intf operational ds and build it from scratch
         self.sess.delete_item("/goldstone-interfaces:interfaces")
 
         hash_keys = self.sonic_db.keys(
@@ -1051,6 +1096,8 @@ class Server(object):
                 xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
                 xpath_subif_breakout = f"{xpath}/breakout"
 
+                # TODO use the parent leaf to detect if this is a sub-interface or not
+                # using "_1" is vulnerable to the interface nameing schema change
                 if not ifname.endswith("_1") and ifname.find("_") != -1:
                     _ifname = ifname.split("_")
                     tmp_ifname = _ifname[0] + "_1"
@@ -1060,6 +1107,8 @@ class Server(object):
                         )
                     else:
                         breakout_parent_dict[tmp_ifname] = 1
+
+                    logger.debug(f"ifname: {ifname}, breakout_parent_dict: {breakout_parent_dict}")
 
                     self.sess.set_item(f"{xpath_subif_breakout}/parent", tmp_ifname)
 
@@ -1079,27 +1128,25 @@ class Server(object):
                     ):
                         self.sess.set_item(f"{xpath}/{key}", value)
 
-            if len(breakout_parent_dict) > 1:
-                for key in breakout_parent_dict:
-                    xpath_parent_breakout = f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
-                    speed = self.sonic_db.get(
-                        self.sonic_db.CONFIG_DB, "PORT|" + key, "speed"
+            for key in breakout_parent_dict:
+                xpath_parent_breakout = f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
+                speed = self.sonic_db.get(
+                    self.sonic_db.CONFIG_DB, "PORT|" + key, "speed"
+                )
+                logger.debug(f"key: {key}, speed: {speed}")
+                if speed != None:
+                    self.sess.set_item(
+                        f"{xpath_parent_breakout}/num-channels",
+                        breakout_parent_dict[key] + 1,
                     )
-                    if speed != None:
-                        self.sess.set_item(
-                            f"{xpath_parent_breakout}/num-channels",
-                            breakout_parent_dict[key] + 1,
-                        )
-                        self.sess.set_item(
-                            f"{xpath_parent_breakout}/channel-speed",
-                            speed_to_yang_val(speed),
-                        )
-                    else:
-                        logging.warn(
-                            "Breakout interface:{} doesnt has speed attribute in Redis".format(
-                                key
-                            )
-                        )
+                    self.sess.set_item(
+                        f"{xpath_parent_breakout}/channel-speed",
+                        speed_to_yang_val(speed),
+                    )
+                else:
+                    logger.warn(
+                        f"Breakout interface:{key} doesnt has speed attribute in Redis"
+                    )
 
         hash_keys = self.sonic_db.keys(
             self.sonic_db.APPL_DB, pattern="PORT_TABLE:Ethernet*"
@@ -1123,6 +1170,7 @@ class Server(object):
 
         hash_keys = self.sonic_db.keys(self.sonic_db.CONFIG_DB, pattern="VLAN|Vlan*")
 
+        # clear the VLAN operational ds and build it from scratch
         self.sess.delete_item("/goldstone-vlan:vlan")
 
         if hash_keys != None:
