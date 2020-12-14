@@ -186,11 +186,16 @@ def test_port_breakout(cli):
     except SSHException as e:
         assert "Invalid argument" in e.stderr
     else:
-        raise Exception("failed to fail with an invalid command: speed 25000")
-    output = ssh(cli, 'gscli -c "interface Ethernet5_2; speed 1000; show"')
-    assert "1000" in output
-    output = ssh(cli, 'gscli -c "interface Ethernet5_1; speed 1000; show"')
-    assert "1000" in output
+        raise Exception("failed to fail with an invalid command: speed 10000")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet5_2; speed 1000"')
+    except SSHException as e:
+        assert "Invalid argument" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: speed 1000")
+
+    ssh(cli, 'gscli -c "interface Ethernet5_1; no shutdown"') # add configuration to a sub-interface
+    ssh(cli, 'gscli -c "interface Ethernet5_2; no shutdown"') # add configuration to a sub-interface
 
     # Unconfigure
     ssh(cli, 'gscli -c "interface Ethernet5_1; no breakout"')

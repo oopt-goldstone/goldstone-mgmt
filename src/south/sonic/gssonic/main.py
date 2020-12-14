@@ -273,7 +273,7 @@ class Server(object):
             return
 
         valid_speeds = [40000, 100000]
-        breakout_valid_speeds = [1000]
+        breakout_valid_speeds = [] # no speed change allowed for sub-interfaces
 
         for change in changes:
             logger.debug(f"change_cb: {change}")
