@@ -1232,6 +1232,8 @@ def main():
         logging.basicConfig(level=logging.DEBUG)
         hpack = logging.getLogger("hpack")
         hpack.setLevel(logging.INFO)
+        k8s = logging.getLogger("kubernetes_asyncio.client.rest")
+        k8s.setLevel(logging.INFO)
     else:
         logging.basicConfig(level=logging.INFO)
 
