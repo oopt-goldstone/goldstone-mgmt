@@ -186,37 +186,30 @@ class Transponder(object):
             modules.append(v["name"])
         state_data = []
         try:
-            for module in modules:
-                data_path = "{}[name='{}']".format(self.XPATH, module)
-                mod_data = self.sr_op.get_data(f"{data_path}/state", "operational")
-                state_data.append(mod_data["modules"]["module"][module]["state"])
-            headers = [
-                "transponder",
+            attrs = [
+                "location",
                 "vendor-name",
-                "vendor-part-name",
+                "vendor-part-number",
                 "vendor-serial-number",
                 "admin-status",
                 "oper-status",
             ]
             rows = []
-            for data in state_data:
-                rows.append(
-                    [
-                        data["location"] if "location" in data.keys() else "N/A",
-                        data["vendor-name"] if "vendor-name" in data.keys() else "N/A",
-                        data["vendor-part-name"]
-                        if "vendor-part-name" in data.keys()
-                        else "N/A",
-                        data["vendor-serial-number"]
-                        if "vendor-serial-number" in data.keys()
-                        else "N/A",
-                        data["admin-status"]
-                        if "admin-status" in data.keys()
-                        else "N/A",
-                        data["oper-status"] if "oper-status" in data.keys() else "N/A",
-                    ]
-                )
-            print(tabulate(rows, headers, tablefmt="pretty", colalign="left"))
+            for module in modules:
+                xpath = self.xpath(module)
+                data = []
+                for attr in attrs:
+                    try:
+                        v = self.sr_op.get_data(f"{xpath}/state/{attr}", "operational")
+                        data.append(v["modules"]["module"][module]["state"][attr])
+                    except (sr.SysrepoNotFoundError, KeyError) as e:
+                        data.append("N/A")
+                rows.append(data)
+
+            # change "location" to "transponder" for the header use
+            attrs[0] = "transponder"
+
+            print(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
         except Exception as e:
             print(e)
 
