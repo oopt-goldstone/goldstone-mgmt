@@ -248,7 +248,8 @@ spec:
             - name: tai
               image: docker.io/microsonic/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'sleep 10 && gssouthd-tai -v']
+              command: ['gssouthd-tai']
+              args: ['--taish-server', "$(TAISH_SERVER_SERVICE_HOST):$(TAISH_SERVER_SERVICE_PORT)", "--verbose"]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm

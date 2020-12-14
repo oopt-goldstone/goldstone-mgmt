@@ -157,7 +157,8 @@ spec:
             - name: netopeer2
               image: docker.io/gs-test/gs-mgmt-netopeer2:latest
               imagePullPolicy: IfNotPresent
-              command: ['netopeer2-server', '-d', '-v', '2']
+              command: ['netopeer2-server']
+              args: ['-d', '-v', '2']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -198,7 +199,8 @@ spec:
             - name: tai
               image: docker.io/gs-test/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'gssouthd-tai --taish-server $TAISH_SERVER_SERVICE_HOST:$TAISH_SERVER_SERVICE_PORT --verbose']
+              command: ['gssouthd-tai']
+              args: ['--taish-server', "$(TAISH_SERVER_SERVICE_HOST):$(TAISH_SERVER_SERVICE_PORT)", "--verbose"]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -239,7 +241,8 @@ spec:
             - name: onlp
               image: docker.io/gs-test/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['gssouthd-onlp', '-v']
+              command: ['gssouthd-onlp']
+              args: ['--verbose']
               volumeMounts:
               - name: dev
                 mountPath: /dev
@@ -306,7 +309,8 @@ spec:
             - name: sonic
               image: docker.io/gs-test/gs-mgmt-debug:latest
               imagePullPolicy: IfNotPresent
-              command: ['gssouthd-sonic', '-v']
+              command: ['gssouthd-sonic']
+              args: ['--verbose']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
