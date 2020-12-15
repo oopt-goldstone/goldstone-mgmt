@@ -132,8 +132,12 @@ def test_tai(cli):
     ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
 
-    ssh(cli,"kubectl rollout restart ds/gs-mgmt-tai")
-    time.sleep(60)
+    ssh(cli, "kubectl rollout restart ds/gs-mgmt-tai")
+    time.sleep(15)
+    pod = ssh(cli, "kubectl get pod -l app=gs-mgmt-tai -o jsonpath='{.items[0].metadata.name}'")
+    ssh(cli, f"kubectl wait --timeout=90s --for=condition=ready pod/{pod}")
+    ssh(cli, "kubectl get pods")
+
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
     assert "2.3" in output
     assert "-1.2" in output
