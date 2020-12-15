@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class GoldstoneMIB(
     rfc1213.InterfacesMIB,
+    rfc1213.SystemMIB,
 ):
     """
     If Goldstone was to create custom MIBEntries, they may be specified here.

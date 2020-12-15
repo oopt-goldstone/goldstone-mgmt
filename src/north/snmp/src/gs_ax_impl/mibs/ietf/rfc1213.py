@@ -1,5 +1,6 @@
 import ipaddress
 import python_arptable
+import sysrepo as sr
 from enum import unique, Enum
 from bisect import bisect_right
 
@@ -505,6 +506,122 @@ class InterfacesUpdater(MIBUpdater):
             return IfTypes.ieee8023adLag
         else:
             return IfTypes.ethernetCsmacd
+
+class SystemUpdater(MIBUpdater):
+
+    def __init__(self):
+        self.range = [(i,) for i in range(1,10)]
+        self.update_counter = 0
+        self.reinit_rate = 0
+
+    def reinit_data(self):
+        return
+
+    def update_data(self):
+        return
+
+    def get_next(self, sub_id):
+        """
+        :param sub_id: The 1-based sub-identifier query.
+        :return: the next sub id.
+        """
+        right = bisect_right(self.range, sub_id)
+        if right == len(self.range):
+            return None
+        return self.range[right]
+
+
+    def system_desc(self):
+        version = "Init"
+        sysDescription = "Goldstone Version "
+
+        conn = sr.SysrepoConnection()
+        sess = conn.start_session()
+        xpath = "/goldstone-system:system/state/software-version"
+        try:
+            sess.switch_datastore("operational")
+            data = sess.get_data(xpath)
+            version = (data["system"]["state"]["software-version"])
+            #mibs.logger.warning(f"Goldstone version: {version}")
+        except Exception as e:
+            mibs.logger.warning(f"sysDesc Exception: {e}")
+            pass
+
+        sysDescriptionStr = f"{sysDescription} {version}"
+
+        #mibs.logger.warning("sysDesc '{}'.".format(sysDescriptionStr))
+        return sysDescriptionStr
+
+    def sys_objectid(self):
+        #return "OID: iso.3.6.1.4.1.8072.3.2.10"
+        return ObjectIdentifier.null_oid()
+
+    def get_uptime(self):
+        #return '(8301) 0:01:23.01'
+        return 0
+
+    def get_contact(self):
+        return 'GoldstoneRoot'
+
+    def get_name(self):
+        return 'GoldstoneSNMP'
+
+    def get_location(self):
+        return 'unknown'
+
+    def get_services(self):
+        return 4
+
+    def get_oids(self, sub_id):
+        """
+        :param sub_id: The 1-based sub-identifier query.
+        :return: the 0-based interface ID.
+        """
+        oid_map = [ (1,3,6,1,6,3,11,3,1,1),
+                    (1,3,6,1,6,3,15,2,1,1),
+                    (1,3,6,1,6,3,10,3,1,1),
+                    (1,3,6,1,6,3,1),
+                    (1,3,6,1,6,3,16,2,2,1),
+                    (1,3,6,1,2,1,49),
+                    (1,3,6,1,2,1,4),
+                    (1,3,6,1,2,1,50),
+                    (1,3,6,1,6,3,13,3,1,3),
+                    (1,3,6,1,2,1,92),
+                  ]
+        mibs.logger.warning("SubId in get_oids '{}'.".format(sub_id))
+        if sub_id:
+            return oid_map[sub_id % 10]
+        else:
+            return oid_map[0]
+
+    def get_descriptions(self, sub_id):
+        desc_map = [
+                "The MIB for Message Processing and Dispatching.",
+                "The management information definitions for the SNMP User-based Security Model.",
+                "The SNMP Management Architecture MIB.",
+                "The MIB module for SNMPv2 entities",
+                "View-based Access Control Model for SNMP.",
+                "The MIB module for managing TCP implementations",
+                "The MIB module for managing IP and ICMP implementations",
+                "The MIB module for managing UDP implementations",
+                "The MIB modules for managing SNMP Notification, plus filtering.",
+                "The MIB module for logging SNMP Notifications.",
+                ]
+
+        if sub_id:
+            return desc_map[sub_id % 10]
+
+
+
+class SystemMIB(metaclass=MIBMeta, prefix=".1.3.6.1.2.1.1.1"):
+    """
+    'interfaces' https://tools.ietf.org/html/rfc1213#section-3.4
+    """
+
+    sys_updater = SystemUpdater()
+
+
+    sysDescr = MIBEntry("0", ValueType.OCTET_STRING, sys_updater.system_desc)
 
 
 class InterfacesMIB(metaclass=MIBMeta, prefix=".1.3.6.1.2.1.2"):

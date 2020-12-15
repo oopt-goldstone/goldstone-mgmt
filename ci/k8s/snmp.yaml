@@ -85,5 +85,5 @@ spec:
                   name: sonic-db-config
             - name: redis-sock
               hostPath:
-                  path: /tmp
+                  path: /var/lib/usonic/redis
                   type: Directory

@@ -59,6 +59,10 @@ spec:
               volumeMounts:
               - name: snmpd-config
                 mountPath: /etc/snmp
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
             - name: agentx
               image: docker.io/microsonic/gs-mgmt-north-snmp:latest
               imagePullPolicy: IfNotPresent
