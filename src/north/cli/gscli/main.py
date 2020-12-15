@@ -345,7 +345,8 @@ def main():
     if args.verbose:
         console.setLevel(logging.DEBUG)
         logging.basicConfig(level=logging.DEBUG)
-        logging.getLogger("sysrepo").setLevel(logging.DEBUG)
+        sr.configure_logging(py_logging=True)
+        logging.getLogger("sysrepo").setLevel(logging.INFO)
 
     console.setFormatter(formatter)
 
