@@ -19,6 +19,7 @@ import subprocess
 import logging
 import asyncio
 import json
+import time
 
 from .base import InvalidInput, BreakLoop, Command
 from .cli import GSObject as Object
@@ -255,8 +256,21 @@ class GoldstoneShellCompleter(Completer):
 class GoldstoneShell(object):
     def __init__(self, sess=None, default_prompt="> ", prefix=""):
         if sess == None:
-            conn = sr.SysrepoConnection()
-            sess = conn.start_session()
+            for i in range(10):
+                try:
+                    conn = sr.SysrepoConnection()
+                except sr.errors.SysrepoSysError as e:
+                    logger.warn(
+                        f"failed to establish sysrepo connection: {e} retrying ({i}/10)"
+                    )
+                    time.sleep(0.1)
+                else:
+                    break
+            else:
+                stdout.error("failed to establish sysrepo connection")
+                sys.exit(1)
+
+        sess = conn.start_session()
         self.context = Root(conn)
 
         self.completer = GoldstoneShellCompleter(self.context)
