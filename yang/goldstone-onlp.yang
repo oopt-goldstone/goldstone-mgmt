@@ -344,7 +344,12 @@ module goldstone-onlp {
     }
 
     leaf piu-type {
-      type string;
+      type enumeration {
+          enum ACO;
+          enum DCO;
+          enum QSFP;
+          enum UNKNOWN;
+      }
     }
 
     leaf model {

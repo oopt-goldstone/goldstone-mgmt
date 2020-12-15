@@ -11,6 +11,13 @@ libonlp = onlp.onlp.libonlp
 
 logger = logging.getLogger(__name__)
 
+STATUS_UNPLUGGED      = 0
+STATUS_ACO_PRESENT    = (1 << 0)
+STATUS_DCO_PRESENT    = (1 << 1)
+STATUS_QSFP_PRESENT   = (1 << 2)
+CFP2_STATUS_UNPLUGGED = (1 << 3)
+CFP2_STATUS_PRESENT   = (1 << 4)
+
 class Server(object):
 
     def __init__(self):
@@ -25,8 +32,8 @@ class Server(object):
                                #Module here is PIU
                                onlp.onlp.ONLP_OID_TYPE.MODULE : []
                               }
-        #This list would bbe indexed by piuId
-        self.onlp_piu_presence = []
+        #This list would be indexed by piuId
+        self.onlp_piu_status = []
 
     def stop(self):
         logger.info(f'stop server')
@@ -56,27 +63,33 @@ class Server(object):
 
                 name = f'/dev/piu{piuId}'
 
-                piu_type = Path(f'/sys/class/piu/piu{piuId}/piu_type')
-
                 xpath = f"/goldstone-onlp:components/component[name='{name}']"
 
                 sts = ctypes.c_uint()
                 libonlp.onlp_module_status_get(oid, ctypes.byref(sts))
 
+                status_change = self.onlp_piu_status[piuId-1] ^ sts.value
+
                 #continue if there is no change in status
-                if self.onlp_piu_presence[piuId-1] == sts.value:
+                if status_change == 0:
                     continue
 
-                self.onlp_piu_presence[piuId-1] = sts.value
+                self.onlp_piu_status[piuId-1] = sts.value
                 self.sess.delete_item(f"{xpath}/piu/state/status")
-                self.sess.delete_item(f"{xpath}/piu/state/piu-type")
 
-                if sts.value == 1:
+                if sts.value != STATUS_UNPLUGGED:
                     self.sess.set_item(f"{xpath}/piu/state/status", "PRESENT")
-                    if piu_type.exists():
-                        self.sess.set_item(f"{xpath}/piu/state/piu-type", piu_type.read_text())
+                    if status_change & STATUS_ACO_PRESENT:
+                        self.sess.set_item(f"{xpath}/piu/state/piu-type", "ACO")
+                    elif status_change & STATUS_DCO_PRESENT:
+                        self.sess.set_item(f"{xpath}/piu/state/piu-type", "DCO")
+                    elif status_change & STATUS_QSFP_PRESENT:
+                        self.sess.set_item(f"{xpath}/piu/state/piu-type", "QSFP")
+                    else:
+                        self.sess.set_item(f"{xpath}/piu/state/piu-type", "UNKNOWN")
                 else:
                     self.sess.set_item(f"{xpath}/piu/state/status", "UNPLUGGED")
+                    self.sess.delete_item(f"{xpath}/piu/state/piu-type")
 
             self.sess.apply_changes()
             await asyncio.sleep(1)
@@ -104,7 +117,7 @@ class Server(object):
             self.sess.set_item(f"{xpath}/config/name", 'piu' + str(piuId))
             self.sess.set_item(f"{xpath}/state/type", "PIU")
 
-            self.onlp_piu_presence.append(0)
+            self.onlp_piu_status.append(0)
 
         #Extend here for other devices[FAN,PSU,LED etc]
 
