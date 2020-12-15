@@ -101,6 +101,8 @@ class Command(object):
             self.parent.exec(line)
 
     def __call__(self, line):
+        if type(line) == str:
+            line = [line]
         if len(line) == 0:
             return self.exec(line)
 
@@ -207,7 +209,7 @@ class Object(object):
         if len(t) == 0 or (len(t) == 1 and document.text[-1] != " "):
             # command completion
             if self.fuzzy_completion and complete_event:
-                c = FuzzyWordCompleter(self.commands())
+                c = FuzzyWordCompleter(self.commands(), WORD=True)
                 for v in c.get_completions(document, complete_event):
                     yield v
             else:

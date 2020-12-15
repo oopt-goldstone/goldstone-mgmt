@@ -23,7 +23,7 @@ import json
 from .base import InvalidInput, BreakLoop, Command
 from .cli import GSObject as Object
 from .onlp import Platform
-from .tai_cli import Transponder_CLI
+from .tai_cli import Transponder
 from .sonic_cli import Interface_CLI, Vlan_CLI
 from .sonic import Sonic
 from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI
@@ -117,7 +117,7 @@ class Root(Object):
             if len(line) != 1:
                 raise InvalidInput("usage: transponder <transponder name>")
             elif line[0] in self.get_modules():
-                return Transponder_CLI(conn, self, line[0])
+                return Transponder(conn, self, line[0])
             else:
                 print(f"There is no device of name {line[0]}")
                 return

@@ -12,10 +12,15 @@ from sysrepo.session import DATASTORE_VALUES
 from kubernetes.client.rest import ApiException
 from kubernetes import client, config
 import pydoc
+import logging
 
 from .base import Command, Object, InvalidInput
 
 KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
+
+stdout = logging.getLogger("stdout")
+
+logger = logging.getLogger(__name__)
 
 
 class InterfaceGroupCommand(Command):
@@ -91,31 +96,23 @@ class ArpGroupCommand(Command):
         print(tabulate(rows, headers, tablefmt="plain"))
 
 
-class RunningConfigCommand(Command):
-    SUBCOMMAND_DICT = {
-        "transponder": Command,
-        "onlp": Command,
-        "vlan": Command,
-        "interface": Command,
-        "aaa": Command,
-        "mgmt-if": Command,
-    }
-
-
 class TransponderGroupCommand(Command):
-    SUBCOMMAND_DICT = {
-        "summary": Command,
-    }
-
     def __init__(self, context, parent, name):
-        super().__init__(context, parent, name)
         self.transponder = Transponder(context.conn)
+        if type(parent) == RunningConfigCommand:
+            self.exec = self.exec_runconf
+        elif type(parent) == GlobalShowCommand:
+            self.exec = self.exec_show
+            self.list = self.list_show
+            self.SUBCOMMAND_DICT["summary"] = Command
 
-    def list(self):
+        super().__init__(context, parent, name)
+
+    def list_show(self):
         module_names = self.transponder.get_modules()
         return module_names + super().list()
 
-    def exec(self, line):
+    def exec_show(self, line):
         if len(line) == 1:
             if line[0] == "summary":
                 return self.transponder.show_transponder_summary()
@@ -123,6 +120,9 @@ class TransponderGroupCommand(Command):
                 return self.transponder.show_transponder(line[0])
         else:
             print(self.usage())
+
+    def exec_runconf(self, line):
+        self.transponder.run_conf()
 
     def usage(self):
         return (
@@ -160,6 +160,46 @@ class TACACSGroupCommand(Command):
         return "usage:\n" f" {self.parent.name} {self.name}"
 
 
+class RunningConfigCommand(Command):
+    SUBCOMMAND_DICT = {
+        "transponder": TransponderGroupCommand,
+        "onlp": Command,
+        "vlan": Command,
+        "interface": Command,
+        "aaa": Command,
+        "mgmt-if": Command,
+    }
+
+    def exec(self, line):
+        if len(line) > 0:
+            module = line[0]
+        else:
+            module = "all"
+
+        sonic = Sonic(self.context.conn)
+        system = System(self.context.conn)
+
+        if module == "all":
+            sonic.run_conf()
+            self("transponder")
+            system.run_conf()
+
+        elif module == "aaa":
+            system.run_conf()
+
+        elif module == "mgmt-if":
+            print("!")
+            system.mgmt_run_conf()
+
+        elif module == "interface":
+            print("!")
+            sonic.port_run_conf()
+
+        elif module == "vlan":
+            print("!")
+            sonic.vlan_run_conf()
+
+
 class GlobalShowCommand(Command):
     SUBCOMMAND_DICT = {
         "interface": InterfaceGroupCommand,
@@ -181,9 +221,6 @@ class GlobalShowCommand(Command):
 
         if line[0] == "datastore":
             self.datastore(line)
-
-        elif line[0] == "running-config":
-            self.display_run_conf(line)
 
         elif line[0] == "tech-support":
             self.tech_support(line)
@@ -236,39 +273,6 @@ class GlobalShowCommand(Command):
                     print(sess.get_data(line[1]))
             except Exception as e:
                 print(e)
-
-    def display_run_conf(self, line):
-        if len(line) > 1:
-            module = line[1]
-        else:
-            module = "all"
-
-        sonic = Sonic(self.context.conn)
-        transponder = Transponder(self.context.conn)
-        system = System(self.context.conn)
-
-        if module == "all":
-            sonic.run_conf()
-            transponder.run_conf()
-            system.run_conf()
-
-        elif module == "aaa":
-            system.run_conf()
-
-        elif module == "mgmt-if":
-            print("!")
-            system.mgmt_run_conf()
-
-        elif module == "interface":
-            print("!")
-            sonic.port_run_conf()
-
-        elif module == "vlan":
-            print("!")
-            sonic.vlan_run_conf()
-
-        elif module == "transponder":
-            transponder.run_conf()
 
     def get_version(self, line):
         conn = self.context.conn
@@ -374,8 +378,7 @@ class GlobalShowCommand(Command):
                         print(e)
 
         print("\nRunning Config:\n")
-        args = ["running-config"]
-        self.display_run_conf(args)
+        self(["running-config"])
 
     def usage(self):
         return (

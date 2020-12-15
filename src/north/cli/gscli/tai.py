@@ -6,119 +6,49 @@ from tabulate import tabulate
 from .common import sysrepo_wrap, print_tabular
 from .base import InvalidInput
 
+_FREQ_RE = re.compile(r".+[kmgt]?hz$")
 
-class HostIf(object):
-    def xpath(self, transponder_name, hostif_id):
-        return (
-            "/goldstone-tai:modules/module[name='{}']/host-interface[name='{}']".format(
-                transponder_name, hostif_id
-            )
-        )
 
-    def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
-        self.type = "host-interface"
-
-    def set_fec_type(self, transponder_name, hostif_id, value):
-        set_attribute(
-            self.sr_op, self.type, transponder_name, hostif_id, "fec-type", value
-        )
-
-    def no(self, transponder_name, hostif_id, attr):
-        xpath = self.xpath(transponder_name, hostif_id)
-        self.sr_op.delete_data(f"{xpath}/config/{attr}")
-
-    def show(self, transponder_name, hostif_id):
-        xpath = self.xpath(transponder_name, hostif_id)
+def human_freq(item):
+    if type(item) == str:
         try:
-            b = self.sr_op.get_data(xpath, "operational")
-        except sr.SysrepoNotFoundError as e:
-            print("Not able to fetch data from operational database")
-            return
-        try:
-            h = b["modules"]["module"][transponder_name]["host-interface"][hostif_id][
-                "state"
-            ]
-            print_tabular(h, "")
-        except KeyError as e:
-            print(f"Error while fetching values from operational database")
-            return
+            int(item)
+            return item
+        except ValueError:
+            item = item.lower()
+            if not _FREQ_RE.match(item):
+                raise InvalidInput("invalid frequency input. (e.g 193.50THz)")
+            item = item[:-2]
+            multiplier = 1
+            if item[-1] == "t":
+                multiplier = 1e12
+            elif item[-1] == "g":
+                multiplier = 1e9
+            elif item[-1] == "m":
+                multiplier = 1e6
+            elif item[-1] == "k":
+                multiplier = 1e3
+            return str(round(float(item[:-1]) * multiplier))
+    else:
+        return "{0:.2f}THz".format(int(item) / 1e12)
 
 
-class NetIf(object):
-    def xpath(self, transponder_name, netif_id):
-        return "/goldstone-tai:modules/module[name='{}']/network-interface[name='{}']".format(
-            transponder_name, netif_id
-        )
+def human_ber(item):
+    return "{0:.2e}".format(struct.unpack(">f", base64.b64decode(item))[0])
 
-    def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
-        self.type = "network-interface"
 
-    def set_output_power(self, transponder_name, netif_id, value):
-        set_attribute(
-            self.sr_op, self.type, transponder_name, netif_id, "output-power", value
-        )
+def to_human(d, runconf=False):
+    for key in d:
+        if key.endswith("ber"):
+            d[key] = human_ber(d[key])
+        elif "freq" in key:
+            d[key] = human_freq(d[key])
+        elif type(d[key]) == bool:
+            d[key] = "true" if d[key] else "false"
+        elif not runconf and key.endswith("power"):
+            d[key] = f"{d[key]}dBm"
 
-    def set_modulation_format(self, transponder_name, netif_id, value):
-        set_attribute(
-            self.sr_op,
-            self.type,
-            transponder_name,
-            netif_id,
-            "modulation-format",
-            value,
-        )
-
-    def set_tx_laser_freq(self, transponder_name, netif_id, value):
-        freq_hz = human_freq(value)
-        set_attribute(
-            self.sr_op, self.type, transponder_name, netif_id, "tx-laser-freq", freq_hz
-        )
-
-    def set_tx_dis(self, transponder_name, netif_id, value):
-        set_attribute(
-            self.sr_op, self.type, transponder_name, netif_id, "tx-dis", value
-        )
-
-    def set_differential_encoding(self, transponder_name, netif_id, value):
-        set_attribute(
-            self.sr_op,
-            self.type,
-            transponder_name,
-            netif_id,
-            "differential-encoding",
-            value,
-        )
-
-    def set_voa_rx(self, transponder_name, netif_id, value):
-        set_attribute(
-            self.sr_op, self.type, transponder_name, netif_id, "voa-rx", value
-        )
-
-    # no command will delete the configuration data from the running database
-    def set_no_command(self, transponder_name, netif_id, attr):
-        xpath = self.xpath(transponder_name, netif_id)
-        self.sr_op.delete_data(f"{xpath}/config/{attr}")
-
-    def show(self, transponder_name, netif_id):
-        xpath = self.xpath(transponder_name, netif_id)
-        try:
-            a = self.sr_op.get_data(xpath, "operational")
-        except sr.SysrepoNotFoundError as e:
-            print(f"Error while fetching values from operational database")
-            return
-        try:
-            n = a["modules"]["module"][transponder_name]["network-interface"][netif_id][
-                "state"
-            ]
-            upd_netif = ber_decode(n)
-            print_tabular(upd_netif, "")
-        except KeyError as e:
-            print(f"Error while fetching values from operational database")
-            return
+    return d
 
 
 class Transponder(object):
@@ -130,14 +60,6 @@ class Transponder(object):
     def __init__(self, conn):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
-        self.hostif = HostIf(conn)
-        self.netif = NetIf(conn)
-        self.type = "module"
-
-    def set_admin_status(self, transponder_name, value):
-        set_attribute(
-            self.sr_op, self.type, transponder_name, "Unknown", "admin-status", value
-        )
 
     def show_transponder(self, transponder_name):
         if transponder_name not in self.get_modules():
@@ -145,9 +67,9 @@ class Transponder(object):
                 f"Enter the correct transponder name, {transponder_name} is not a valid transponder name"
             )
             return
-        self.xpath = "{}[name='{}']".format(self.XPATH, transponder_name)
+        xpath = self.xpath(transponder_name)
         try:
-            v = self.sr_op.get_data(self.xpath, "operational")
+            v = self.sr_op.get_data(xpath, "operational")
         except sr.SysrepoNotFoundError as e:
             print(e)
             return
@@ -167,7 +89,7 @@ class Transponder(object):
                 net_interface = v["modules"]["module"][transponder_name][
                     "network-interface"
                 ][f"{netif}"]["state"]
-                upd_net_interface = ber_decode(net_interface)
+                upd_net_interface = to_human(net_interface)
                 print_tabular(upd_net_interface, f"Network Interface {netif}")
             for hostif in range(get_hostif_num):
                 host_interface = v["modules"]["module"][transponder_name][
@@ -224,78 +146,51 @@ class Transponder(object):
             "differential-encoding",
         ]
         hostif_run_conf_list = ["fec-type"]
+
         try:
-            tree = self.sr_op.get_data("{}".format(self.XPATH))
+            tree = self.sr_op.get_data(self.XPATH)
         except sr.errors.SysrepoNotFoundError as e:
             print("!")
             return
-        t_dict = {}
-        n_dict = {}
-        h_dict = {}
-        try:
-            data_list = list((tree)["modules"]["module"])
-        except Exception as e:
+
+        modules = list(tree.get("modules", {}).get("module", []))
+        if len(modules) == 0:
             print("!")
             return
-        print("!")
-        for data in data_list:
-            module_data = data.get("config")
-            print("transponder {}\n".format(data.get("name")))
+
+        for module in modules:
+            print("transponder {}".format(module.get("name")))
+
+            m = to_human(module.get("config", {}))
             for attr in transponder_run_conf_list:
-                t_dict = {
-                    attr: module_data.get(attr, None)
-                    for attr in transponder_run_conf_list
-                }
-                if attr == "admin-status":
-                    if t_dict["admin-status"] is None:
-                        pass
-                    elif t_dict["admin-status"] == "down":
-                        print(" shutdown ")
+                value = m.get(attr, None)
+                if value:
+                    if attr == "admin-status":
+                        v = "shutdown" if value == "down" else "no shutdown"
+                        print(f" {v}")
                     else:
-                        print(" no shutdown ")
-            try:
-                netif_data = data["network-interface"]
-                for netif in netif_data:
-                    print("\nnetif {}\n".format(netif.get("name")))
-                    net_interface = netif.get("config")
-                    for attr in netif_run_conf_list:
-                        n_dict = {
-                            attr: net_interface.get(attr, None)
-                            for attr in netif_run_conf_list
-                        }
-                    for key in n_dict:
-                        if (key == "tx-dis") or (key == "differential-encoding"):
-                            if n_dict[key] == True:
-                                print(f" {key} ")
-                            elif n_dict[key] == False:
-                                print(f" no {key} ")
-                            else:
-                                pass
-                        else:
-                            if n_dict[key] is None:
-                                pass
-                            else:
-                                print(" {} {}".format(key, n_dict[key]))
-            except Exception as e:
-                pass
-            try:
-                hostif_data = data["host-interface"]
-                for hostif in hostif_data:
-                    print("\nhostif {}\n".format(hostif.get("name")))
-                    host_interface = hostif.get("config")
-                    for attr in hostif_run_conf_list:
-                        h_dict = {
-                            attr: host_interface.get(attr, None)
-                            for attr in hostif_run_conf_list
-                        }
-                        if attr == "fec-type":
-                            if h_dict["fec-type"] is None:
-                                pass
-                            else:
-                                print(" {} {}".format(attr, h_dict[attr]))
-            except Exception as e:
-                pass
+                        print(f" {attr} {value}")
+
+            for netif in module.get("network-interface", []):
+                print(f" netif {netif['name']}")
+                n = to_human(netif.get("config", {}), runconf=True)
+                for attr in netif_run_conf_list:
+                    value = n.get(attr, None)
+                    if value:
+                        print(f" {attr} {value}")
+                print(" quit")
+
+            for hostif in module.get("host-interface", []):
+                print(f" hostif {hostif['name']}")
+                n = to_human(hostif.get("config", {}), runconf=True)
+                for attr in hostif_run_conf_list:
+                    value = n.get(attr, None)
+                    if value:
+                        print(f" {attr} {value}")
+                print(" quit")
+
             print("quit")
+
         print("!")
 
     def tech_support(self):
@@ -304,75 +199,7 @@ class Transponder(object):
         for module in modules:
             self.show_transponder(module)
 
-    def _components(self, transponder_name, type_):
-
-        d = self.sr_op.get_data(
-            "{}[name='{}']".format(self.XPATH, transponder_name),
-            "operational",
-            no_subs=True,
-        )
-        d = d.get("modules", {}).get("module", {}).get(transponder_name, {})
-        return [v["name"] for v in d.get(type_, [])]
-
     def get_modules(self):
         path = "/goldstone-tai:modules"
         module_data = self.sr_op.get_data(path, "operational", no_subs=True)
         return [v["name"] for v in module_data.get("modules", {}).get("module", {})]
-
-
-def human_freq(item):
-    if type(item) == str:
-        try:
-            int(item)
-            return item
-        except ValueError:
-            item = item.lower()
-            if not _FREQ_RE.match(item):
-                raise InvalidInput("invalid frequency input. (e.g 193.50THz)")
-            item = item[:-2]
-            multiplier = 1
-            if item[-1] == "t":
-                multiplier = 1e12
-            elif item[-1] == "g":
-                multiplier = 1e9
-            elif item[-1] == "m":
-                multiplier = 1e6
-            elif item[-1] == "k":
-                multiplier = 1e3
-            return str(round(float(item[:-1]) * multiplier))
-    else:
-        return "{0:.2f}THz".format(int(item) / 1e12)
-
-
-def ber_decode(netif_dict):
-    upd_dict = netif_dict
-    for key in upd_dict:
-        if key[-3:] == "ber":
-            upd_dict[key] = human_ber(upd_dict[key])
-    return upd_dict
-
-
-def human_ber(item):
-    return "{0:.2e}".format(struct.unpack(">f", base64.b64decode(item))[0])
-
-
-_FREQ_RE = re.compile(r".+[kmgt]?hz$")
-
-
-def set_attribute(sr_op, type, trans_name, intf_id, attr, value):
-    trans_xpath = "/goldstone-tai:modules/module[name='{}']".format(trans_name)
-    try:
-        sr_op.get_data(trans_xpath, "running")
-    except sr.SysrepoNotFoundError as e:
-        sr_op.set_data(f"{trans_xpath}/config/name", trans_name)
-
-    if type == "network-interface" or type == "host-interface":
-        xpath = "{}/{}[name='{}']".format(trans_xpath, type, intf_id)
-
-        try:
-            sr_op.get_data(xpath, "running")
-        except sr.SysrepoNotFoundError as e:
-            sr_op.set_data(f"{xpath}/config/name", intf_id)
-        sr_op.set_data(f"{xpath}/config/{attr}", value)
-    elif type == "module":
-        sr_op.set_data(f"{trans_xpath}/config/{attr}", value)
