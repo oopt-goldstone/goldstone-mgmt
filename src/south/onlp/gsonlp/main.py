@@ -116,9 +116,11 @@ class Server(object):
             xpath = f"/goldstone-onlp:components/component[name='{name}']"
             self.sess.set_item(f"{xpath}/config/name", 'piu' + str(piuId))
             self.sess.set_item(f"{xpath}/state/type", "PIU")
+            self.sess.set_item(f"{xpath}/piu/state/status", "UNPLUGGED")
 
             self.onlp_piu_status.append(0)
 
+        self.sess.apply_changes()
         #Extend here for other devices[FAN,PSU,LED etc]
 
 
