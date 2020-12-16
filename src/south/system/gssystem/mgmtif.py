@@ -10,6 +10,7 @@ DEFAULT_RT_TABLE = 254
 
 logger = logging.getLogger(__name__)
 
+
 class ManagementInterfaceServer:
     def __init__(self, conn):
         self.pyroute = pyroute2.IPRoute()
@@ -129,6 +130,29 @@ class ManagementInterfaceServer:
 
         return neighbour_list
 
+    def get_routes(self):
+        with pyroute2.NDB() as ndb:
+            routes = []
+            destination_prefix = "0.0.0.0/0"
+            next_hop_address = ""
+            for route in ndb.interfaces[MGMT_INTF_NAME].routes.dump():
+                if ":" not in route["dst"] and route["table"] == DEFAULT_RT_TABLE:
+                    route_dic = {}
+                    route_dic["next-hop"] = {}
+                    if route["dst"] != "":
+                        route_dic["destination-prefix"] = (
+                            route["dst"] + "/" + str(route["dst_len"])
+                        )
+                    else:
+                        route_dic["destination-prefix"] = destination_prefix
+                    if route["gateway"] != None and type(route["gateway"]) != type([]):
+                        route_dic["next-hop"]["outgoing-interface"] = route["gateway"]
+                    if route["metrics"] != None:
+                        route_dic["metric"] = soute["metrics"]
+                    route_dic["flags"] = route["flags"]
+                    routes.append(route_dic)
+            return routes
+
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath:{xpath}, req_xpath:{req_xpath}")
 
@@ -147,6 +171,10 @@ class ManagementInterfaceServer:
             logger.debug(ifdata)
 
             return ifdata
+        if req_xpath.startswith("/goldstone-routing:routes"):
+            route_data = {"routes": {}}
+            route_data["routes"]["route"] = self.get_routes()
+            return route_data
 
     def update_oper_db(self):
         logger.debug("*********inside update oper db***************")
@@ -199,6 +227,13 @@ class ManagementInterfaceServer:
         self.sess.subscribe_oper_data_request(
             "goldstone-mgmt-interfaces",
             "/goldstone-mgmt-interfaces:interfaces",
+            self.oper_cb,
+            oper_merge=True,
+            asyncio_register=True,
+        )
+        self.sess.subscribe_oper_data_request(
+            "goldstone-routing",
+            "/goldstone-routing:routes",
             self.oper_cb,
             oper_merge=True,
             asyncio_register=True,

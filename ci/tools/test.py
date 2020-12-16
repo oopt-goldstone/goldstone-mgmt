@@ -144,6 +144,7 @@ def test_tai(cli):
     assert "193.70THz" in output
     assert "dp-qpsk" in output
 
+
 def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "vlan 1000"')
@@ -210,8 +211,12 @@ def test_port_breakout(cli):
     else:
         raise Exception("failed to fail with an invalid command: speed 1000")
 
-    ssh(cli, 'gscli -c "interface Ethernet5_1; no shutdown"') # add configuration to a sub-interface
-    ssh(cli, 'gscli -c "interface Ethernet5_2; no shutdown"') # add configuration to a sub-interface
+    ssh(
+        cli, 'gscli -c "interface Ethernet5_1; no shutdown"'
+    )  # add configuration to a sub-interface
+    ssh(
+        cli, 'gscli -c "interface Ethernet5_2; no shutdown"'
+    )  # add configuration to a sub-interface
 
     # Unconfigure
     ssh(cli, 'gscli -c "interface Ethernet5_1; no breakout"')
@@ -560,15 +565,21 @@ def test_mgmt_if_cmds(cli):
         raise Exception("failed to fail with an invalid cmd ip route 10.10.10.117/35")
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip route 20.20.20.0/24; show running-config mgmt-if"',
+        'gscli -c "interface eth0; ip route 30.30.30.0/24; show running-config mgmt-if"',
     )
-    assert "ip route 20.20.20.0/24" in output
+    assert "ip route 30.30.30.0/24" in output
+
+    output = ssh(cli, 'gscli -c "show ip route"')
+    assert "30.30.30.0/24" in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip route 20.20.20.0/24; show running-config mgmt-if"',
+        'gscli -c "interface eth0; no ip route 30.30.30.0/24; show running-config mgmt-if"',
     )
-    assert "ip route 20.20.20.0/24" not in output
+    assert "ip route 30.30.30.0/24" not in output
+
+    output = ssh(cli, 'gscli -c "show ip route"')
+    assert "30.30.30.0/24" not in output
 
 
 def main(host, username, password):

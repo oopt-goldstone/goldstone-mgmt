@@ -96,6 +96,44 @@ class ArpGroupCommand(Command):
         print(tabulate(rows, headers, tablefmt="plain"))
 
 
+class IPRouteShowCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.conn = sysrepo.SysrepoConnection()
+        self.sess = self.conn.start_session()
+
+    def exec(self, line):
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+
+        self.sess.switch_datastore("operational")
+        xpath = "/goldstone-routing:routes"
+        lines = []
+        try:
+            tree = self.sess.get_data(xpath)
+            tree = tree["routes"]["route"]
+            for route in tree:
+                line = ""
+                line = line + route["destination-prefix"] + " "
+                if "next-hop" in route and "outgoing-interface" in route["next-hop"]:
+                    line = line + "via " + str(route["next-hop"]["outgoing-interface"])
+                else:
+                    line = line + "is directly connected"
+                lines.append(line)
+            print("\n".join(lines))
+        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
+            raise InvalidInput(str(error))
+
+    def usage(self):
+        return "usage:\n" f" {self.parent.parent.name} {self.parent.name} {self.name}"
+
+
+class IPGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "route": IPRouteShowCommand,
+    }
+
+
 class TransponderGroupCommand(Command):
     def __init__(self, context, parent, name):
         self.transponder = Transponder(context.conn)
@@ -205,6 +243,7 @@ class GlobalShowCommand(Command):
         "interface": InterfaceGroupCommand,
         "vlan": VlanGroupCommand,
         "arp": ArpGroupCommand,
+        "ip": IPGroupCommand,
         "datastore": Command,
         "tech-support": Command,
         "logging": Command,
@@ -385,6 +424,7 @@ class GlobalShowCommand(Command):
             "usage:\n"
             f" {self.name} interface (brief|description|counters) \n"
             f" {self.name} vlan details \n"
+            f" {self.name} ip route\n"
             f" {self.name} transponder (<transponder_name>|summary)\n"
             f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"
             f" {self.name} version \n"
