@@ -11,14 +11,12 @@ ARG https_proxy
 FROM $GS_MGMT_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && apt install -qy --no-install-recommends python3 python3-pip libatomic1 libdbus-1-3
+            apt update && apt install -qy --no-install-recommends python3 python3-pip libatomic1
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
 
 RUN pip install setuptools
-
-RUN --mount=type=bind,from=builder,source=/usr/share/onlp,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
 
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
 
@@ -26,26 +24,8 @@ RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls
 
 ENV PYTHONPATH /usr/lib/python3/dist-packages
 
-# taish package misses this to include in requirement.txt
-RUN pip install protobuf
-
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
-            pip install /usr/share/wheels/*.whl
-
-
-RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
-
-RUN --mount=type=bind,source=src/south/system,target=/src,rw pip install /src
-
-RUN --mount=type=bind,source=src/south/tai,target=/src,rw pip install /src
-
-RUN --mount=type=bind,source=src/south/onlp,target=/src,rw pip install /src
-
-RUN --mount=type=bind,source=src/south/sonic,target=/src,rw pip install /src
-
-RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
-
-RUN --mount=type=bind,source=src/north/snmp,target=/src,rw pip install /src
+            pip install /usr/share/wheels/libyang/*.whl /usr/share/wheels/sysrepo/*.whl
 
 COPY yang /var/lib/goldstone/yang/gs/
 ENV GS_YANG_REPO /var/lib/goldstone/yang/gs

@@ -1,4 +1,4 @@
-.PHONY: builder bash init docker yang
+.PHONY: builder bash init yang base-image images
 
 ifndef DOCKER_CMD
     DOCKER_CMD=bash
@@ -18,6 +18,30 @@ endif
 
 ifndef GS_MGMT_NP2_IMAGE
     GS_MGMT_NP2_IMAGE := gs-mgmt-netopeer2
+endif
+
+ifndef GS_MGMT_SONIC_IMAGE
+    GS_MGMT_SONIC_IMAGE := gs-mgmt-south-sonic
+endif
+
+ifndef GS_MGMT_TAI_IMAGE
+    GS_MGMT_TAI_IMAGE := gs-mgmt-south-tai
+endif
+
+ifndef GS_MGMT_ONLP_IMAGE
+    GS_MGMT_ONLP_IMAGE := gs-mgmt-south-onlp
+endif
+
+ifndef GS_MGMT_SYSTEM_IMAGE
+    GS_MGMT_SYSTEM_IMAGE := gs-mgmt-south-system
+endif
+
+ifndef GS_MGMT_CLI_IMAGE
+    GS_MGMT_CLI_IMAGE := gs-mgmt-north-cli
+endif
+
+ifndef GS_MGMT_SNMP_IMAGE
+    GS_MGMT_SNMP_IMAGE := gs-mgmt-north-snmp
 endif
 
 ifndef GS_MGMT_SNMPD_IMAGE
@@ -64,10 +88,7 @@ ifndef TAI_META_CUSTOM_FILES
     TAI_META_CUSTOM_FILES := $(abspath $(wildcard scripts/tai/*))
 endif
 
-all: builder np2 snmpd docker image debug-image
-
-docker:
-	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make yang cli system' $(MAKE) cmd
+all: builder np2 snmpd base-image images
 
 builder: $(ONLP_DEBS)
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
@@ -75,16 +96,52 @@ builder: $(ONLP_DEBS)
 $(ONLP_DEBS):
 	cd sm/OpenNetworkLinux && docker/tools/onlbuilder -9 --non-interactive --isolate -c "bash -c '../../tools/build_onlp.sh'"
 
-image:
+base-image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
-debug-image:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/debug.Dockerfile \
+images: south-images north-images
+
+south-images: south-sonic south-tai south-onlp south-system
+
+north-images: north-cli north-snmp
+
+south-sonic:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-sonic.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_DEBUG_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+							      -t $(DOCKER_REPO)/$(GS_MGMT_SONIC_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+south-tai:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-tai.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_TAI_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+south-onlp:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-onlp.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_ONLP_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+south-system:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-system.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_SYSTEM_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+north-cli:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/north-cli.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_CLI_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+north-snmp:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/north-snmp.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_SNMP_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 np2:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/netopeer2.Dockerfile \
@@ -108,10 +165,10 @@ cmd:
 
 init:
 	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2`/* /dev/shm/sr*
+	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-extensions.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-onlp.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-tai.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-sonic-interface.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-interface.yang
+	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-interfaces.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-vlan.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-types.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform.yang
@@ -120,9 +177,3 @@ init:
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/system/openconfig-alarm-types.yang
 	sysrepoctl -s $(SONIC_YANG_REPO)/common --install $(SONIC_YANG_REPO)/common/sonic-common.yang
 	sysrepoctl -s $(SONIC_YANG_REPO) --install $(SONIC_YANG_REPO)/sonic-port.yang,$(SONIC_YANG_REPO)/sonic-vlan.yang,$(SONIC_YANG_REPO)/sonic-interface.yang
-
-cli:
-	cd src/north/cli && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
-
-system:
-	cd src/south/system && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist

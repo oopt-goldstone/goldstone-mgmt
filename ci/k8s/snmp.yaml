@@ -59,7 +59,7 @@ spec:
               - name: snmpd-config
                 mountPath: /etc/snmp
             - name: agentx
-              image: docker.io/gs-test/gs-mgmt-debug:latest
+              image: docker.io/gs-test/gs-mgmt-north-snmp:latest
               imagePullPolicy: IfNotPresent
               command: ['gsnorthd-snmp', '-v']
               volumeMounts:

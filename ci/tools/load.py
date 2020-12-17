@@ -64,7 +64,7 @@ def main(host, username, password):
 
 
         run(
-            "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt-debug:latest gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd"
+            "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-north-snmp"
         )
 
         scp = SCPClient(cli.get_transport())
@@ -86,15 +86,18 @@ def main(host, username, password):
         scp.put("deb", recursive=True, remote_path="/tmp/deb")
         ssh(cli, "dpkg -i /tmp/deb/*.deb")
 
-        run("make docker")
-        ssh(cli, "rm -rf /tmp/dist")
-        ssh(cli, "mkdir -p /tmp/dist")
-        scp.put("./src/north/cli/dist", recursive=True, remote_path="/tmp/dist/cli")
-        scp.put("./src/south/system/dist", recursive=True, remote_path="/tmp/dist/system")
-        ssh(cli, "pip3 uninstall -y gscli")
-        ssh(cli, "pip3 uninstall -y gssystem")
-        ssh(cli, "pip3 install /tmp/dist/cli/*.whl")
-        ssh(cli, "pip3 install /tmp/dist/system/*.whl")
+        run("rm -rf wheels && mkdir -p wheels/cli && mkdir -p wheels/system")
+        run(
+            'docker run -v `pwd`/wheels:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/wheels/cli/*.whl /data/cli/"'
+        )
+        run(
+            'docker run -v `pwd`/wheels:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/wheels/system/*.whl /data/system/"'
+        )
+        ssh(cli, "rm -rf /tmp/wheels")
+        scp.put("wheels", recursive=True, remote_path="/tmp/wheels")
+        ssh(cli, "pip3 uninstall -y gscli gssystem")
+        ssh(cli, "pip3 install /tmp/wheels/cli/*.whl")
+        ssh(cli, "pip3 install /tmp/wheels/system/*.whl")
 
         # ssh(cli, 'gscli -c "show version"')
 

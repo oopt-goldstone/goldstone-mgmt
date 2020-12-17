@@ -46,13 +46,15 @@ RUN --mount=type=bind,source=sm/libyang-python,target=/root/sm/libyang-python,rw
     --mount=type=bind,source=patches/libyang-python,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
     cd /root && quilt upgrade && quilt push -a && \
-    cd /root/sm/libyang-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
+    cd /root/sm/libyang-python && python setup.py bdist_wheel \
+    && mkdir -p /usr/share/wheels/libyang && cp dist/*.whl /usr/share/wheels/libyang
 
 RUN --mount=type=bind,source=sm/sysrepo-python,target=/root/sm/sysrepo-python,rw \
     --mount=type=bind,source=patches/sysrepo-python,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
     cd /root && quilt upgrade && quilt push -a && \
-    cd /root/sm/sysrepo-python && python setup.py bdist_wheel && cp dist/*.whl /usr/share/wheels/
+    cd /root/sm/sysrepo-python && python setup.py bdist_wheel \
+    && mkdir -p /usr/share/wheels/sysrepo && cp dist/*.whl /usr/share/wheels/sysrepo
 
 RUN --mount=type=bind,source=sm/pam_tacplus,target=/root/sm/pam_tacplus,rw \
     --mount=type=bind,source=patches/pam,target=/root/patches \
@@ -76,18 +78,22 @@ RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/
 RUN pip install grpcio-tools grpclib
 
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
-    cd /root/sm/oopt-tai/tools/taish && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels/
+    cd /root/sm/oopt-tai/tools/taish && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && mkdir -p /usr/share/wheels/tai && cp dist/*.whl /usr/share/wheels/tai \
+# taish package misses this to include in requirement.txt
+    && cd /usr/share/wheels/tai && pip wheel protobuf
 
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
-    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && mkdir -p /usr/share/wheels/cli && cp dist/*.whl /usr/share/wheels/cli
 
 RUN --mount=type=bind,source=src/south/sonic,target=/src,rw \
-    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && mkdir -p /usr/share/wheels/sonic && cp dist/*.whl /usr/share/wheels/sonic
 
 RUN --mount=type=bind,source=src/south/system,target=/src,rw \
-    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist && cp dist/*.whl /usr/share/wheels
-
-RUN pip install /usr/share/wheels/*.whl
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && mkdir -p /usr/share/wheels/system && cp dist/*.whl /usr/share/wheels/system
 
 RUN --mount=type=bind,source=scripts,target=/src,rw \
     cd /src && cp /src/reload.sh /usr/local/bin/

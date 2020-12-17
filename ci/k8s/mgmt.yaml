@@ -84,7 +84,7 @@ spec:
             restartPolicy: Never
             initContainers: # run prep-sysrepo and prep-np sequentially
             - name: prep-sysrepo
-              image: docker.io/gs-test/gs-mgmt-debug:latest
+              image: docker.io/gs-test/gs-mgmt:latest
               imagePullPolicy: IfNotPresent
               command: ["reload.sh"]
               volumeMounts:
@@ -114,7 +114,7 @@ spec:
                 name: sysrepo
             containers:
             - name: job-done
-              image: docker.io/gs-test/gs-mgmt-debug:latest
+              image: docker.io/gs-test/gs-mgmt:latest
               imagePullPolicy: IfNotPresent
               command: ["sysrepoctl", "-l"]
               volumeMounts:
@@ -197,7 +197,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: tai
-              image: docker.io/gs-test/gs-mgmt-debug:latest
+              image: docker.io/gs-test/gs-mgmt-south-tai:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-tai']
               args: ['--taish-server', "$(TAISH_SERVER_SERVICE_HOST):$(TAISH_SERVER_SERVICE_PORT)", "--verbose"]
@@ -239,7 +239,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: onlp
-              image: docker.io/gs-test/gs-mgmt-debug:latest
+              image: docker.io/gs-test/gs-mgmt-south-onlp:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-onlp']
               args: ['--verbose']
@@ -307,7 +307,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: sonic
-              image: docker.io/gs-test/gs-mgmt-debug:latest
+              image: docker.io/gs-test/gs-mgmt-south-sonic:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-sonic']
               args: ['--verbose']

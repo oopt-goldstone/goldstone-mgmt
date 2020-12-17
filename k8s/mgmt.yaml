@@ -93,7 +93,7 @@ spec:
             restartPolicy: Never
             initContainers: # run prep-sysrepo and prep-np sequentially
             - name: prep-sysrepo
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt:latest
               imagePullPolicy: IfNotPresent
               command: ["reload.sh"]
               volumeMounts:
@@ -123,7 +123,7 @@ spec:
                 name: sysrepo
             containers:
             - name: job-done
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt:latest
               imagePullPolicy: IfNotPresent
               command: ["sysrepoctl", "-l"]
               volumeMounts:
@@ -164,7 +164,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: cli
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-north-cli:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'while true; do gscli -c "transponder; show"; sleep 2; done']
               volumeMounts:
@@ -246,7 +246,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: tai
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-south-tai:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-tai']
               args: ['--taish-server', "$(TAISH_SERVER_SERVICE_HOST):$(TAISH_SERVER_SERVICE_PORT)", "--verbose"]
@@ -292,7 +292,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: onlp
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-south-onlp:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'ln -sf /lib/platform-config/x86-64-kvm-x86-64-r0/onl/lib/libonlp-x86-64-kvm-x86-64.so /lib/x86_64-linux-gnu/libonlp-platform.so.1 && gssouthd-onlp -v']
               volumeMounts:
@@ -342,7 +342,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: sonic
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-south-sonic:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-sonic', '-v']
               volumeMounts:
@@ -387,7 +387,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: south-system
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-south-system:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-system', '-v']
               volumeMounts:
