@@ -454,7 +454,7 @@ class Port(object):
         print("Existing configurations on parent interfaces will be flushed")
         xpath = self.xpath(ifname)
         self.sr_op.delete_data(xpath)
-        self.set_admin_status(ifname, "down")
+        #        self.set_admin_status(ifname, "down")
 
         if is_delete:
             return

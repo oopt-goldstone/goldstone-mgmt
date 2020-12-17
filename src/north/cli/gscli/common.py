@@ -44,7 +44,7 @@ class sysrepo_wrap(object):
         self.session.switch_datastore(ds)
         try:
             self.session.set_item(xpath, value)
-            self.session.apply_changes()
+            self.session.apply_changes(wait=True)
         except (
             sr.errors.SysrepoCallbackFailedError,
             sr.errors.SysrepoValidationFailedError,
@@ -61,7 +61,7 @@ class sysrepo_wrap(object):
         self.session.switch_datastore(ds)
         try:
             self.session.delete_item(xpath)
-            self.session.apply_changes()
+            self.session.apply_changes(wait=True)
         except (
             sr.errors.SysrepoCallbackFailedError,
             sr.errors.SysrepoValidationFailedError,
