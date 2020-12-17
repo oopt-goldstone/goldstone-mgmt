@@ -1,4 +1,4 @@
-.PHONY: builder bash init yang base-image images
+.PHONY: builder bash init yang base-image images docker cli system
 
 ifndef DOCKER_CMD
     DOCKER_CMD=bash
@@ -90,6 +90,9 @@ endif
 
 all: builder np2 snmpd base-image images
 
+docker:
+	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make cli system' $(MAKE) cmd
+
 builder: $(ONLP_DEBS)
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
@@ -162,6 +165,12 @@ bash:
 
 cmd:
 	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_IMAGE) $(DOCKER_CMD)
+
+cli:
+	cd src/north/cli && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
+
+system:
+	cd src/south/system && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
 
 init:
 	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2`/* /dev/shm/sr*

@@ -62,7 +62,6 @@ def main(host, username, password):
         # stop SNMP service
         ssh(cli, "systemctl stop gs-snmp || true") # can fail
 
-
         run(
             "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-north-snmp"
         )
@@ -86,18 +85,14 @@ def main(host, username, password):
         scp.put("deb", recursive=True, remote_path="/tmp/deb")
         ssh(cli, "dpkg -i /tmp/deb/*.deb")
 
-        run("rm -rf wheels && mkdir -p wheels/cli && mkdir -p wheels/system")
-        run(
-            'docker run -v `pwd`/wheels:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/wheels/cli/*.whl /data/cli/"'
-        )
-        run(
-            'docker run -v `pwd`/wheels:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/wheels/system/*.whl /data/system/"'
-        )
+        run("make docker")
         ssh(cli, "rm -rf /tmp/wheels")
-        scp.put("wheels", recursive=True, remote_path="/tmp/wheels")
+        ssh(cli, "mkdir -p /tmp/wheels/cli /tmp/wheels/system")
+        scp.put("src/north/cli/dist", recursive=True, remote_path="/tmp/wheels/cli")
+        scp.put("src/south/system/dist", recursive=True, remote_path="/tmp/wheels/system")
         ssh(cli, "pip3 uninstall -y gscli gssystem")
-        ssh(cli, "pip3 install /tmp/wheels/cli/*.whl")
-        ssh(cli, "pip3 install /tmp/wheels/system/*.whl")
+        ssh(cli, "pip3 install /tmp/wheels/cli/dist/*.whl")
+        ssh(cli, "pip3 install /tmp/wheels/system/dist/*.whl")
 
         # ssh(cli, 'gscli -c "show version"')
 
