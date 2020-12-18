@@ -144,6 +144,9 @@ def test_tai(cli):
     assert "193.70THz" in output
     assert "dp-qpsk" in output
 
+    ssh(cli, f'gscli -c "transponder {device}; shutdown"')
+    ssh(cli, f'gscli -c "transponder {device}; no shutdown"')
+
 
 def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "show vlan details"')

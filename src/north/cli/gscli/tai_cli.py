@@ -85,7 +85,10 @@ class TAIObject(Object):
         self.add_command(TAINoCommand(self, node))
 
     def set(self, node, value):
-        name = node.name()
+        if type(node) == str:
+            name = node
+        else:
+            name = node.name()
         try:
             self.sr_op.get_data(self.module_xpath(), "running")
         except sr.SysrepoNotFoundError as e:
