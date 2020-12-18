@@ -2,6 +2,7 @@ import re
 import base64
 import struct
 import sysrepo as sr
+import libyang as ly
 from tabulate import tabulate
 from .common import sysrepo_wrap, print_tabular
 from .base import InvalidInput
@@ -47,6 +48,8 @@ def to_human(d, runconf=False):
             d[key] = "true" if d[key] else "false"
         elif not runconf and key.endswith("power"):
             d[key] = f"{d[key]:.2f} dBm"
+        elif type(d[key]) == ly.keyed_list.KeyedList:
+            d[key] = ", ".join(d[key])
 
     return d
 
@@ -61,43 +64,35 @@ class Transponder(object):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
 
-    def show_transponder(self, transponder_name):
-        if transponder_name not in self.get_modules():
+    def show_transponder(self, name):
+        if name not in self.get_modules():
             print(
-                f"Enter the correct transponder name, {transponder_name} is not a valid transponder name"
+                f"Enter the correct transponder name. {name} is not a valid transponder name"
             )
             return
-        xpath = self.xpath(transponder_name)
+        xpath = self.xpath(name)
         try:
             v = self.sr_op.get_data(xpath, "operational")
-        except sr.SysrepoNotFoundError as e:
+        except (sr.SysrepoNotFoundError, sr.SysrepoCallbackFailedError) as e:
             print(e)
             return
-        except sr.errors.SysrepoCallbackFailedError as e:
-            print(e)
-            return
+
         try:
-            mod = v["modules"]["module"][transponder_name]["state"]
-            print_tabular(mod, "")
-            get_netif_num = v["modules"]["module"][transponder_name]["state"][
-                "num-network-interfaces"
-            ]
-            get_hostif_num = v["modules"]["module"][transponder_name]["state"][
-                "num-host-interfaces"
-            ]
-            for netif in range(get_netif_num):
-                net_interface = v["modules"]["module"][transponder_name][
-                    "network-interface"
-                ][f"{netif}"]["state"]
-                upd_net_interface = to_human(net_interface)
-                print_tabular(upd_net_interface, f"Network Interface {netif}")
-            for hostif in range(get_hostif_num):
-                host_interface = v["modules"]["module"][transponder_name][
-                    "host-interface"
-                ][f"{hostif}"]["state"]
-                print_tabular(host_interface, f"Host Interface {hostif}")
+            data = v["modules"]["module"][name]
+
+            # module info
+            print_tabular(data["state"])
+
+            for netif in range(data["state"]["num-network-interfaces"]):
+                d = data["network-interface"][str(netif)]["state"]
+                print_tabular(to_human(d), f"Network Interface {netif}")
+
+            for hostif in range(data["state"]["num-host-interfaces"]):
+                d = data["host-interface"][str(hostif)]["state"]
+                print_tabular(to_human(d), f"Host Interface {hostif}")
+
         except KeyError as e:
-            print(f"Error while fetching values from operational database")
+            print(f"Error while fetching values from operational database: {e}")
             return
 
     def show_transponder_summary(self):
@@ -177,7 +172,7 @@ class Transponder(object):
                 for attr in netif_run_conf_list:
                     value = n.get(attr, None)
                     if value:
-                        print(f" {attr} {value}")
+                        print(f"  {attr} {value}")
                 print(" quit")
 
             for hostif in module.get("host-interface", []):
@@ -186,7 +181,7 @@ class Transponder(object):
                 for attr in hostif_run_conf_list:
                     value = n.get(attr, None)
                     if value:
-                        print(f" {attr} {value}")
+                        print(f"  {attr} {value}")
                 print(" quit")
 
             print("quit")

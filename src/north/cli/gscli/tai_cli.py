@@ -7,7 +7,6 @@ from .common import sysrepo_wrap, print_tabular
 import sysrepo as sr
 import logging
 from tabulate import tabulate
-import libyang as ly
 
 logger = logging.getLogger(__name__)
 
@@ -147,9 +146,6 @@ class TAIShowCommand(ShowCommand):
                     continue
                 if not detail and k in self.DETAILED_ATTRS:
                     continue
-
-                if type(v) == ly.keyed_list.KeyedList:
-                    v = ", ".join(v)
 
                 table.append([k, v])
             print(tabulate(table))

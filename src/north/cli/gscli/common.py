@@ -11,15 +11,18 @@ from .base import InvalidInput, LockedError
 TIMEOUT_MS = 10000
 
 # Function to print data from show command with tabulate library
-def print_tabular(h, table_title):
+def print_tabular(h, table_title=""):
     if table_title != "":
-        print("\n", table_title, "\n")
-    headers = ["Attribute Name", "Attribute Value"]
-    upd_dict = {k: h[k] for k in h.keys() - {"index"}}
-    attr = list(upd_dict.keys())
-    rows = list(upd_dict.values())
-    data = {headers[0]: attr, headers[1]: rows}
-    print(tabulate(data, headers="keys", tablefmt="pretty"))
+        print(f"\n{table_title}")
+
+    table = []
+    skip_attrs = ["index", "location"]
+    for k, v in h.items():
+        if k in skip_attrs:
+            continue
+        table.append([k, v])
+
+    print(tabulate(table))
 
 
 class sysrepo_wrap(object):
