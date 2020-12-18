@@ -257,7 +257,7 @@ spec:
               - name: onl
                 mountPath: /etc/onl/
               - name: host-lib
-                mountPath: /lib/x86_64-linux-gnu/libonlp-platform.so
+                mountPath: /lib/x86_64-linux-gnu/libonlp-platform.so.1
               - name: host-i2c-lib
                 mountPath: /lib/x86_64-linux-gnu/libi2c.so.0
               securityContext:

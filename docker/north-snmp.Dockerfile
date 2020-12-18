@@ -10,6 +10,8 @@ ARG https_proxy
 
 FROM $GS_MGMT_BASE
 
+RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
+
 RUN --mount=type=bind,source=src/north/snmp,target=/src,rw pip install /src
 
 # vim:filetype=dockerfile
