@@ -39,14 +39,14 @@ def human_ber(item):
 
 def to_human(d, runconf=False):
     for key in d:
-        if key.endswith("ber"):
+        if key.endswith("-ber"):
             d[key] = human_ber(d[key])
         elif "freq" in key:
             d[key] = human_freq(d[key])
         elif type(d[key]) == bool:
             d[key] = "true" if d[key] else "false"
         elif not runconf and key.endswith("power"):
-            d[key] = f"{d[key]}dBm"
+            d[key] = f"{d[key]:.2f} dBm"
 
     return d
 

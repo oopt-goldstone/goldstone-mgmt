@@ -68,7 +68,7 @@ class Root(Object):
         self.session = conn.start_session()
         self.notif_session = None
 
-        super().__init__(None)
+        super().__init__(None, fuzzy_completion=True)
         self.sonic = Sonic(conn)
         self.aaa_cli = AAA_CLI(conn)
         self.tacacs_cli = TACACS_CLI(conn)

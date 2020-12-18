@@ -13,6 +13,7 @@ from kubernetes.client.rest import ApiException
 from kubernetes import client, config
 import pydoc
 import logging
+from prompt_toolkit.completion import merge_completers
 
 from .base import Command, Object, InvalidInput
 
@@ -434,6 +435,16 @@ class GlobalShowCommand(Command):
             f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|]\n"
             f" {self.name} tech-support"
         )
+
+
+class ShowCommand(Command):
+    def __init__(self, context=None, parent=None, name=None, additional_completer=None):
+        if name == None:
+            name = "show"
+        c = context.root().get_completer("show")
+        if additional_completer:
+            c = merge_completers([c, additional_completer])
+        super().__init__(context, parent, name, c)
 
 
 class GSObject(Object):

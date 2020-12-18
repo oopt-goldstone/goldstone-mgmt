@@ -8,6 +8,7 @@ from prompt_toolkit.completion import (
     FuzzyCompleter,
 )
 from prompt_toolkit.completion import Completer as PromptCompleter
+from prompt_toolkit.completion import merge_completers
 from enum import Enum
 
 import sys
@@ -56,8 +57,11 @@ class Command(object):
 
     SUBCOMMAND_DICT = {}
 
-    def __init__(self, context=None, parent=None, name=None):
-        self._completer = Completer(self)
+    def __init__(self, context=None, parent=None, name=None, additional_completer=None):
+        c = Completer(self)
+        if additional_completer:
+            c = merge_completers([c, additional_completer])
+        self._completer = c
         self.context = context
         self.parent = parent
         self.name = name
@@ -197,6 +201,12 @@ class Object(object):
         except InvalidInput as e:
             return ", ".join(e.candidates)
         return line[-1].strip()
+
+    def root(self):
+        node = self
+        while node.parent:
+            node = node.parent
+        return node
 
     def commands(self):
         return list(self._commands.keys())
