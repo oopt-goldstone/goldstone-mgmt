@@ -35,20 +35,38 @@ logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 
 
+class NotificationCommand(Command):
+    SUBCOMMAND_DICT = {
+        "enable": Command,
+        "disable": Command,
+    }
+
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput(self.usage())
+
+        if line[0] == "enable":
+            self.context.enable_notification()
+        else:
+            self.context.disable_notification()
+
+    def usage(self):
+        return f"usage: {self.parent.name} {self.name} [enable|disable]"
+
+
+class SetCommand(Command):
+    SUBCOMMAND_DICT = {
+        "notification": NotificationCommand,
+    }
+
+
 class Root(Object):
     XPATH = "/"
 
     def __init__(self, conn):
         self.conn = conn
         self.session = conn.start_session()
-
-        try:
-            # TODO consider getting notification xpaths from each commands' classmethod
-            self.session.subscribe_notification_tree(
-                "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
-            )
-        except sr.SysrepoNotFoundError as e:
-            logger.warning(f"mgmt daemons not running?: {e}")
+        self.notif_session = None
 
         super().__init__(None)
         self.sonic = Sonic(conn)
@@ -69,6 +87,8 @@ class Root(Object):
             "tacacs-server": {"host": None},
         }
         # TODO:add timer for inactive user
+
+        self.add_command(SetCommand(self, name="set"))
 
         @self.command()
         def save(line):
@@ -237,6 +257,27 @@ class Root(Object):
             "no aaa authentication login\n"
             "no tacacs-server host <address>"
         )
+
+    def enable_notification(self):
+        if self.notif_session:
+            logger.warning("notification already enabled")
+            return
+        self.notif_session = self.conn.start_session()
+
+        try:
+            # TODO consider getting notification xpaths from each commands' classmethod
+            self.notif_session.subscribe_notification_tree(
+                "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
+            )
+        except sr.SysrepoNotFoundError as e:
+            logger.warning(f"mgmt daemons not running?: {e}")
+
+    def disable_notification(self):
+        if not self.notif_session:
+            logger.warning("notification already disabled")
+            return
+        self.notif_session.stop()
+        self.notif_session = None
 
     def notification_cb(self, a, b, c, d):
         print(b.print_dict())
