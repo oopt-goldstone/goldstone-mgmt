@@ -21,7 +21,7 @@ import asyncio
 import json
 import time
 
-from .base import InvalidInput, BreakLoop, Command
+from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
 from .onlp import Platform
 from .tai_cli import Transponder
@@ -422,7 +422,7 @@ def main():
             for line in stream:
                 try:
                     await shell.exec(line, no_fail=False)
-                except InvalidInput as e:
+                except CLIException as e:
                     stdout.info("failed to execute: {}".format(line))
                     stdout.info(e)
                     sys.exit(1)

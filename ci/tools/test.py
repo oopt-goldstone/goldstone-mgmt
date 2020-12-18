@@ -168,6 +168,14 @@ def test_port_breakout(cli):
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
 
+    # the ds is locked. this must fail
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet5_1; mtu 4000"')
+    except SSHException as e:
+        assert "is locked" in e.stderr
+    else:
+        raise Exception("failed to fail mtu setting under ds locked")
+
     # show interface brief should work during the usonic reboot
     output = ssh(cli, 'gscli -c "show interface brief"')
     assert "Ethernet5_1" in output

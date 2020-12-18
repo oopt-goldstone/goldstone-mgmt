@@ -5,7 +5,7 @@ import libyang as ly
 import sysrepo as sr
 from sysrepo.session import DATASTORE_VALUES
 from tabulate import tabulate
-from .base import InvalidInput
+from .base import InvalidInput, LockedError
 
 
 TIMEOUT_MS = 10000
@@ -55,6 +55,8 @@ class sysrepo_wrap(object):
             msg = str(error)
             msg = msg.split("(")[0]
             raise InvalidInput(msg)
+        except sr.errors.SysrepoLockedError as error:
+            raise LockedError(f"{xpath} is locked", error)
         self.session.switch_datastore("running")
 
     def delete_data(self, xpath, ds="running"):
@@ -71,6 +73,8 @@ class sysrepo_wrap(object):
             msg = str(error)
             msg = msg.split("(")[0]
             raise InvalidInput(msg)
+        except sr.errors.SysrepoLockedError as error:
+            raise LockedError(f"{xpath} is locked", error)
         self.session.switch_datastore("running")
 
     def get_leaf_data(self, xpath, attr, ds="running"):

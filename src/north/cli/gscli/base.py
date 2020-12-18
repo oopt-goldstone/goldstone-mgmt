@@ -18,7 +18,20 @@ import logging
 stdout = logging.getLogger("stdout")
 
 
-class InvalidInput(Exception):
+class CLIException(Exception):
+    pass
+
+
+class LockedError(CLIException):
+    def __init__(self, msg, e):
+        self.msg = msg
+        self.e = e
+
+    def __str__(self):
+        return self.msg
+
+
+class InvalidInput(CLIException):
     def __init__(self, msg, candidates=[]):
         self.msg = msg
         self.candidates = candidates
@@ -27,7 +40,7 @@ class InvalidInput(Exception):
         return self.msg
 
 
-class BreakLoop(Exception):
+class BreakLoop(CLIException):
     pass
 
 
@@ -329,7 +342,7 @@ class Object(object):
                 return await cmd["func"](args)
             else:
                 return cmd["func"](args)
-        except InvalidInput as e:
+        except CLIException as e:
             if not no_fail:
                 raise e
             stdout.info(str(e))
@@ -344,7 +357,7 @@ class Object(object):
             if cmd["async"]:
                 raise InvalidInput("async command not suppoted")
             return cmd["func"](args)
-        except InvalidInput as e:
+        except CLIException as e:
             if not no_fail:
                 raise e
             stdout.info(str(e))
