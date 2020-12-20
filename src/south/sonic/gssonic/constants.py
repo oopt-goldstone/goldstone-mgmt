@@ -1,7 +1,7 @@
 # This map contains interface name, lane number, alias and index
 INTERFACE_MAP = {
-    "Ethernet1_1": [45, "QSPF1-E1_1", 1],
-    "Ethernet2_1": [29, "QSPF2-E5_1", 5],
+    "Ethernet1_1": [45, "QSFP1-E1_1", 1],
+    "Ethernet2_1": [29, "QSFP2-E5_1", 5],
     "Ethernet3_1": [53, "QSFP3-E9_1", 9],
     "Ethernet4_1": [49, "QSFP4-E13_1", 13],
     "Ethernet5_1": [61, "QSFP5-E17_1", 17],

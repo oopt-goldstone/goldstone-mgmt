@@ -74,6 +74,11 @@ class Server(object):
         self.sess.stop()
         self.conn.disconnect()
 
+    def set_config_db(self, event, _hash, key, value):
+        if event != "done":
+            return
+        return self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
+
     async def restart_usonic(self):
         self.is_usonic_rebooting = True
         await self.k8s.restart_usonic()
@@ -265,15 +270,12 @@ class Server(object):
 
         return ports
 
-    async def change_cb(self, event, req_id, changes, priv):
+    async def vlan_change_cb(self, event, req_id, changes, priv):
         logger.debug(f"change_cb: event: {event}, changes: {changes}")
 
         if event not in ["change", "done"]:
             logger.warn("unsupported event: {event}")
             return
-
-        valid_speeds = [40000, 100000]
-        breakout_valid_speeds = [] # no speed change allowed for sub-interfaces
 
         for change in changes:
             logger.debug(f"change_cb: {change}")
@@ -281,25 +283,75 @@ class Server(object):
             key, _hash, attr_dict = await self.parse_change_req(change.xpath)
             if "member" in attr_dict:
                 member = attr_dict["member"]
+
+            logger.debug(f"key: {key}, _hash: {_hash}, attr_dict: {attr_dict}")
+
+            if isinstance(change, sysrepo.ChangeCreated):
+                logger.debug("......change created......")
+                if type(change.value) != type({}) and key != "name" and key != "ifname":
+                    if key == "members@":
+                        try:
+                            mem = _decode(
+                                self.sonic_db.get(self.sonic_db.CONFIG_DB, _hash, key)
+                            )
+                            mem_list = mem.split(",")
+                            if change.value not in mem_list:
+                                mem + "," + str(change.value)
+                            self.set_config_db(event, _hash, key, mem)
+                        except:
+                            self.set_config_db(event, _hash, key, change.value)
+                    else:
+                        self.set_config_db(event, _hash, key, change.value)
+
+            if isinstance(change, sysrepo.ChangeModified):
+                logger.debug("......change modified......")
+                raise sysrepo.SysrepoUnsupportedError("Modification is not supported")
+            if isinstance(change, sysrepo.ChangeDeleted):
+                logger.debug("......change deleted......")
+                if key == "members@":
+                    mem = _decode(
+                        self.sonic_db.get(self.sonic_db.CONFIG_DB, _hash, key)
+                    )
+                    if mem != None:
+                        mem = mem.split(",")
+                        mem.remove(member)
+                        value = ",".join(mem)
+                        self.set_config_db(event, _hash, key, value)
+
+                elif _hash.find("VLAN|") == 0 and key == "":
+                    if event == "done":
+                        self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
+
+                elif _hash.find("VLAN_MEMBER|") == 0 and key == "":
+                    if event == "done":
+                        self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
+
+    async def intf_change_cb(self, event, req_id, changes, priv):
+        logger.debug(f"change_cb: event: {event}, changes: {changes}")
+
+        if event not in ["change", "done"]:
+            logger.warn("unsupported event: {event}")
+            return
+
+        valid_speeds = [40000, 100000]
+        breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
+
+        for change in changes:
+            logger.debug(f"change_cb: {change}")
+
+            key, _hash, attr_dict = await self.parse_change_req(change.xpath)
             if "ifname" in attr_dict:
                 ifname = attr_dict["ifname"]
 
-            logger.debug(
-                f"key: {key}, _hash: {_hash}, attr_dict: {attr_dict}"
-            )
-
-            def set_config_db(_hash, key, value):
-                if event != "done":
-                    return
-                return self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
+            logger.debug(f"key: {key}, _hash: {_hash}, attr_dict: {attr_dict}")
 
             if isinstance(change, sysrepo.ChangeCreated):
                 logger.debug("......change created......")
                 if type(change.value) != type({}) and key != "name" and key != "ifname":
                     if key == "description" or key == "alias":
-                        set_config_db(_hash, key, change.value)
+                        self.set_config_db(event, _hash, key, change.value)
                     elif key == "admin-status":
-                        set_config_db(_hash, "admin_status", change.value)
+                        self.set_config_db(event, _hash, "admin_status", change.value)
                     elif key == "speed":
 
                         if event == "change":
@@ -310,22 +362,13 @@ class Server(object):
                                 valids = valid_speeds
 
                             if change.value not in valids:
-                                logger.debug(f"invalid speed: {change.value}, candidates: {valids}")
+                                logger.debug(
+                                    f"invalid speed: {change.value}, candidates: {valids}"
+                                )
                                 raise sysrepo.SysrepoInvalArgError("Invalid speed")
 
-                        set_config_db(_hash, "speed", change.value)
+                        self.set_config_db(event, _hash, "speed", change.value)
 
-                    elif key == "members@":
-                        try:
-                            mem = _decode(
-                                self.sonic_db.get(self.sonic_db.CONFIG_DB, _hash, key)
-                            )
-                            mem_list = mem.split(",")
-                            if change.value not in mem_list:
-                                mem + "," + str(change.value)
-                            set_config_db(_hash, key, mem)
-                        except:
-                            set_config_db(_hash, key, change.value)
                     elif key == "forwarding" or key == "enabled":
                         logger.debug(
                             "This key:{} should not be set in redis ".format(key)
@@ -338,7 +381,9 @@ class Server(object):
                         # TODO use the parent leaf to detect if this is a sub-interface or not
                         # using "_1" is vulnerable to the interface nameing schema change
                         if "_1" not in ifname:
-                            raise sysrepo.SysrepoInvalArgError("breakout cannot be configured on a sub-interface")
+                            raise sysrepo.SysrepoInvalArgError(
+                                "breakout cannot be configured on a sub-interface"
+                            )
 
                         paired_key = (
                             "num-channels"
@@ -389,19 +434,21 @@ class Server(object):
                         }
 
                         if event == "done":
-                            is_updated = await self.breakout_update_usonic(breakout_dict)
+                            is_updated = await self.breakout_update_usonic(
+                                breakout_dict
+                            )
                             if is_updated:
                                 asyncio.create_task(self.breakout_callback())
 
                     else:
-                        set_config_db(_hash, key, change.value)
+                        self.set_config_db(event, _hash, key, change.value)
 
             if isinstance(change, sysrepo.ChangeModified):
                 logger.debug("......change modified......")
                 if key == "description" or key == "alias":
-                    set_config_db(_hash, key, change.value)
+                    self.set_config_db(event, _hash, key, change.value)
                 elif key == "admin-status":
-                    set_config_db(_hash, "admin_status", change.value)
+                    self.set_config_db(event, _hash, "admin_status", change.value)
                 elif key == "forwarding" or key == "enabled":
                     logger.debug("This key:{} should not be set in redis ".format(key))
 
@@ -417,29 +464,24 @@ class Server(object):
                             logger.debug("****** Invalid speed value *********")
                             raise sysrepo.SysrepoInvalArgError("Invalid speed")
 
-                    set_config_db(_hash, "speed", change.value)
+                    self.set_config_db(event, _hash, "speed", change.value)
 
                 elif key == "num-channels" or key == "channel-speed":
                     logger.debug("This key:{} should not be set in redis ".format(key))
-                    raise sysrepo.SysrepoInvalArgError("Breakout config modification not supported")
+                    raise sysrepo.SysrepoInvalArgError(
+                        "Breakout config modification not supported"
+                    )
                 else:
-                    set_config_db(_hash, key, change.value)
+                    self.set_config_db(event, _hash, key, change.value)
 
             if isinstance(change, sysrepo.ChangeDeleted):
                 logger.debug("......change deleted......")
-                if key == "members@":
-                    mem = _decode(
-                        self.sonic_db.get(self.sonic_db.CONFIG_DB, _hash, key)
-                    )
-                    if mem != None:
-                        mem = mem.split(",")
-                        mem.remove(member)
-                        value = ",".join(mem)
-                        set_config_db(_hash, key, value)
-                elif key in ["channel-speed", "num-channels"]:
+                if key in ["channel-speed", "num-channels"]:
                     if event == "change":
                         if len(self.get_configured_breakout_ports(ifname)):
-                            raise sysrepo.SysrepoInvalArgError("Breakout can't be removed due to the dependencies")
+                            raise sysrepo.SysrepoInvalArgError(
+                                "Breakout can't be removed due to the dependencies"
+                            )
                         continue
 
                     assert event == "done"
@@ -480,21 +522,13 @@ class Server(object):
                     if is_updated:
                         asyncio.create_task(self.breakout_callback())
 
-                elif _hash.find("VLAN|") == 0 and key == "":
-                    if event == "done":
-                        self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
-
-                elif _hash.find("VLAN_MEMBER|") == 0 and key == "":
-                    if event == "done":
-                        self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
-
                 elif "PORT|" in _hash and key == "":
                     if event == "done":
                         # since sysrepo wipes out the pushed entry in oper ds
                         # when the corresponding entry in running ds is deleted,
                         # we need to repopulate the oper ds.
                         #
-                        # this behavior might change in the future 
+                        # this behavior might change in the future
                         # https://github.com/sysrepo/sysrepo/issues/1937#issuecomment-742851607
                         self.update_oper_db()
 
@@ -1108,7 +1142,9 @@ class Server(object):
                     else:
                         breakout_parent_dict[tmp_ifname] = 1
 
-                    logger.debug(f"ifname: {ifname}, breakout_parent_dict: {breakout_parent_dict}")
+                    logger.debug(
+                        f"ifname: {ifname}, breakout_parent_dict: {breakout_parent_dict}"
+                    )
 
                     self.sess.set_item(f"{xpath_subif_breakout}/parent", tmp_ifname)
 
@@ -1129,7 +1165,9 @@ class Server(object):
                         self.sess.set_item(f"{xpath}/{key}", value)
 
             for key in breakout_parent_dict:
-                xpath_parent_breakout = f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
+                xpath_parent_breakout = (
+                    f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
+                )
                 speed = self.sonic_db.get(
                     self.sonic_db.CONFIG_DB, "PORT|" + key, "speed"
                 )
@@ -1241,10 +1279,13 @@ class Server(object):
                 self.sess.switch_datastore("running")
 
                 self.sess.subscribe_module_change(
-                    "goldstone-interfaces", None, self.change_cb, asyncio_register=True
+                    "goldstone-interfaces",
+                    None,
+                    self.intf_change_cb,
+                    asyncio_register=True,
                 )
                 self.sess.subscribe_module_change(
-                    "goldstone-vlan", None, self.change_cb, asyncio_register=True
+                    "goldstone-vlan", None, self.vlan_change_cb, asyncio_register=True
                 )
                 logger.debug(
                     "**************************after subscribe module change****************************"
