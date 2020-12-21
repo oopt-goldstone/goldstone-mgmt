@@ -34,6 +34,8 @@ class Server(object):
                               }
         #This list would be indexed by piuId
         self.onlp_piu_status = []
+        #This list would be indexed by port
+        self.onlp_sfp_presence = []
 
     def stop(self):
         logger.info(f'stop server')
@@ -50,48 +52,85 @@ class Server(object):
 
     # monitor_piu() monitor PIU status periodically and change the operational data store
     # accordingly.
-    async def monitor_piu(self):
-        while True:
-            self.sess.switch_datastore('operational')
+    def monitor_piu(self):
+        self.sess.switch_datastore('operational')
 
-            for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
-                # TODO we set the PIU name as /dev/piu?. This is because libtai-aco.so expects
-                # the module location to be the device file of the module.
-                # However, this device file name might be awkward for network operators.
-                # We may want to think about having more friendly alias for these names.
-                piuId = oid & 0xFFFFFF
+        for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
+            # TODO we set the PIU name as /dev/piu?. This is because libtai-aco.so expects
+            # the module location to be the device file of the module.
+            # However, this device file name might be awkward for network operators.
+            # We may want to think about having more friendly alias for these names.
+            piuId = oid & 0xFFFFFF
 
-                name = f'/dev/piu{piuId}'
+            name = f'/dev/piu{piuId}'
 
-                xpath = f"/goldstone-onlp:components/component[name='{name}']"
+            xpath = f"/goldstone-onlp:components/component[name='{name}']"
 
-                sts = ctypes.c_uint()
-                libonlp.onlp_module_status_get(oid, ctypes.byref(sts))
+            sts = ctypes.c_uint()
+            libonlp.onlp_module_status_get(oid, ctypes.byref(sts))
 
-                status_change = self.onlp_piu_status[piuId-1] ^ sts.value
+            status_change = self.onlp_piu_status[piuId-1] ^ sts.value
 
-                #continue if there is no change in status
-                if status_change == 0:
-                    continue
+            #continue if there is no change in status
+            if status_change == 0:
+                continue
 
-                self.onlp_piu_status[piuId-1] = sts.value
-                self.sess.delete_item(f"{xpath}/piu/state/status")
+            self.onlp_piu_status[piuId-1] = sts.value
+            self.sess.delete_item(f"{xpath}/piu/state/status")
 
-                if sts.value != STATUS_UNPLUGGED:
-                    self.sess.set_item(f"{xpath}/piu/state/status", "PRESENT")
-                    if status_change & STATUS_ACO_PRESENT:
-                        self.sess.set_item(f"{xpath}/piu/state/piu-type", "ACO")
-                    elif status_change & STATUS_DCO_PRESENT:
-                        self.sess.set_item(f"{xpath}/piu/state/piu-type", "DCO")
-                    elif status_change & STATUS_QSFP_PRESENT:
-                        self.sess.set_item(f"{xpath}/piu/state/piu-type", "QSFP")
-                    else:
-                        self.sess.set_item(f"{xpath}/piu/state/piu-type", "UNKNOWN")
+            if sts.value != STATUS_UNPLUGGED:
+                self.sess.set_item(f"{xpath}/piu/state/status", "PRESENT")
+                if status_change & STATUS_ACO_PRESENT:
+                    self.sess.set_item(f"{xpath}/piu/state/piu-type", "ACO")
+                elif status_change & STATUS_DCO_PRESENT:
+                    self.sess.set_item(f"{xpath}/piu/state/piu-type", "DCO")
+                elif status_change & STATUS_QSFP_PRESENT:
+                    self.sess.set_item(f"{xpath}/piu/state/piu-type", "QSFP")
                 else:
-                    self.sess.set_item(f"{xpath}/piu/state/status", "UNPLUGGED")
-                    self.sess.delete_item(f"{xpath}/piu/state/piu-type")
+                    self.sess.set_item(f"{xpath}/piu/state/piu-type", "UNKNOWN")
 
-            self.sess.apply_changes()
+                if status_change & CFP2_STATUS_PRESENT:
+                    self.sess.set_item(f"{xpath}/piu/state/cfp2-presence", "PRESENT")
+                elif status_change & CFP2_STATUS_UNPLUGGED:
+                    self.sess.set_item(f"{xpath}/piu/state/cfp2-presence", "UNPLUGGED")
+            else:
+                self.sess.set_item(f"{xpath}/piu/state/status", "UNPLUGGED")
+                self.sess.delete_item(f"{xpath}/piu/state/piu-type")
+
+        self.sess.apply_changes()
+
+    # monitor_sfp() monitor SFP presence periodically and change the operational data store
+    # accordingly.
+    def monitor_sfp(self):
+        self.sess.switch_datastore('operational')
+
+        for i in range(len(self.onlp_sfp_presence)):
+            port = i + 1
+            name = f'sfp{port}'
+            xpath = f"/goldstone-onlp:components/component[name='{name}']"
+
+            self.sess.set_item(f"{xpath}/config/name", 'sfp' + str(port))
+            self.sess.set_item(f"{xpath}/state/type", "SFP")
+
+            presence = libonlp.onlp_sfp_is_present(port)
+
+            if not(presence ^ self.onlp_sfp_presence[i]):
+                continue;
+
+            if presence:
+                self.sess.set_item(f"{xpath}/sfp/state/presence", "PRESENT")
+            else:
+                self.sess.set_item(f"{xpath}/sfp/state/presence", "UNPLUGGED")
+
+            self.onlp_sfp_presence[i] = presence
+
+    async def monitor_devices(self):
+        while True:
+            # Monitor change in PIU status
+            self.monitor_piu()
+            # Monitor change in QSFP presence
+            self.monitor_sfp()
+
             await asyncio.sleep(1)
 
     def oid_iter_cb(self):
@@ -106,9 +145,10 @@ class Server(object):
                 return onlp.onlp.ONLP_STATUS.E_GENERIC
         return onlp.onlp.onlp_oid_iterate_f(_v)
 
-    def initialise_devices(self):
+    def initialise_component_piu(self):
         self.sess.switch_datastore('operational')
 
+        # Component : PIU
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
             piuId = oid & 0xFFFFFF
             name = f'/dev/piu{piuId}'
@@ -121,6 +161,44 @@ class Server(object):
             self.onlp_piu_status.append(0)
 
         self.sess.apply_changes()
+
+    def initialise_component_sfp(self):
+        self.sess.switch_datastore('operational')
+
+        # Component : SFP
+        libonlp.onlp_sfp_init()
+
+        bitmap = onlp.onlp.aim_bitmap256();
+        libonlp.onlp_sfp_bitmap_t_init(ctypes.byref(bitmap))
+        libonlp.onlp_sfp_bitmap_get(ctypes.byref(bitmap))
+
+        total_sfp_ports = 0
+        for port in range(1,256):
+            if onlp.onlp.aim_bitmap_get(bitmap.hdr, port):
+                name = f'sfp{port}'
+                xpath = f"/goldstone-onlp:components/component[name='{name}']"
+
+                self.sess.set_item(f"{xpath}/config/name", 'sfp' + str(port))
+                self.sess.set_item(f"{xpath}/state/type", "SFP")
+                self.sess.set_item(f"{xpath}/sfp/state/presence", "UNPLUGGED")
+
+                self.onlp_sfp_presence.append(0)
+                total_sfp_ports += 1
+
+        self.sess.apply_changes()
+        logger.debug(f"Total SFP ports supported: {total_sfp_ports}")
+
+    def initialise_component_devices(self):
+        # Read all the OID's , which would be used as handles to invoke ONLP API's
+        self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.SYS].append(onlp.onlp.ONLP_OID_SYS)
+        #loop through the SYS OID and get all the peripheral devices OIDs
+        libonlp.onlp_oid_iterate(onlp.onlp.ONLP_OID_SYS, 0, self.oid_iter_cb(), None)
+        logger.debug(f"System OID Dictionary: {self.onlp_oids_dict}")
+
+        self.initialise_component_piu()
+
+        self.initialise_component_sfp()
+
         #Extend here for other devices[FAN,PSU,LED etc]
 
 
@@ -132,15 +210,9 @@ class Server(object):
         # passing oper_merge=True is important to enable pull/push information layering
         self.sess.subscribe_oper_data_request('goldstone-onlp', '/goldstone-onlp:components/component', self.oper_cb, oper_merge=True, asyncio_register=True)
 
-        # Read all the OID's , which would be used as handles to invoke ONLP API's
-        self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.SYS].append(onlp.onlp.ONLP_OID_SYS)
-        #loop through the SYS OID and get all the peripheral devices OIDs
-        libonlp.onlp_oid_iterate(onlp.onlp.ONLP_OID_SYS, 0, self.oid_iter_cb(), None)
-        logger.debug(f"System OID Dictionary: {self.onlp_oids_dict}")
+        self.initialise_component_devices()
 
-        self.initialise_devices()
-
-        return [self.monitor_piu()]
+        return [self.monitor_devices()]
 
 def main():
     async def _main():

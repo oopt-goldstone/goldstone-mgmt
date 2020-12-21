@@ -360,6 +360,13 @@ module goldstone-onlp {
       type string;
     }
 
+    leaf cfp2-presence {
+      type enumeration {
+        enum PRESENT;
+        enum UNPLUGGED;
+      }
+    }
+
   }
 
   grouping platform-piu-top {
@@ -374,6 +381,48 @@ module goldstone-onlp {
   
         uses platform-piu-top-config;
         uses platform-piu-top-state;
+      }
+    }
+  }
+
+  grouping platform-sfp-top-config {
+  }
+
+  grouping platform-sfp-top-state {
+
+    leaf presence {
+      type enumeration {
+        enum PRESENT;
+        enum UNPLUGGED;
+      }
+    }
+
+    leaf model {
+      type string;
+    }
+
+    leaf serial {
+      type string;
+    }
+
+    leaf vendor {
+      type string;
+    }
+
+  }
+
+  grouping platform-sfp-top {
+
+    container sfp {
+      container config {
+        uses platform-sfp-top-config;
+      }
+
+      container state {
+        config false;
+
+        uses platform-sfp-top-config;
+        uses platform-sfp-top-state;
       }
     }
   }
@@ -406,6 +455,7 @@ module goldstone-onlp {
           enum MODULE;
           enum RTC;
           enum PIU;
+          enum SFP;
       }
       description
         "Type of component as identified by the system";
@@ -490,6 +540,7 @@ module goldstone-onlp {
         uses platform-sys-top;
         uses platform-psu-top;
         uses platform-piu-top;
+        uses platform-sfp-top;
       }
     }
   }

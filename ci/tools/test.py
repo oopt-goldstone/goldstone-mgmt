@@ -592,6 +592,12 @@ def test_mgmt_if_cmds(cli):
     output = ssh(cli, 'gscli -c "show ip route"')
     assert "30.30.30.0/24" not in output
 
+def test_onlp(cli):
+    # ADD test for onlp CLIs here
+    output = ssh(cli, 'gscli -c "show datastore /goldstone-onlp:* operational"')
+    assert "piu" in output
+    assert "sfp" in output
+    print("Component PIU and SFP found in operational-DB")
 
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
@@ -640,6 +646,7 @@ def main(host, username, password):
             ssh(cli, "kubectl describe pods -l app=gs-mgmt-sonic")
             sys.exit(1)
 
+        test_onlp(cli)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Goldstone CI tool")
