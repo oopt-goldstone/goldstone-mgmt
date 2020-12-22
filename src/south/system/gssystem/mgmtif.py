@@ -182,17 +182,15 @@ class ManagementInterfaceServer:
             f"clear_arp: xpath: {xpath}, input: {input}, event: {event}, priv: {priv}"
         )
         intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAME).pop()
-        with pyroute2.NDB() as ndb:
-            for neighbour in ndb.interfaces[MGMT_INTF_NAME].neighbours.dump():
-                dst = neighbour["dst"]
-                lladdr = neighbour["lladdr"]
-                self.pyroute.neigh(
-                    "del",
-                    dst=dst,
-                    lladdr=lladdr,
-                    ifindex=intf_index,
-                    state=ndmsg.states["permanent"],
-                )
+        for n in self.get_neighbor():
+            dst = n["ip"]
+            lladdr = n["link-layer-address"]
+            self.pyroute.neigh(
+                "del",
+                dst=dst,
+                lladdr=lladdr,
+                ifindex=intf_index,
+            )
 
     def update_oper_db(self):
         logger.debug("*********inside update oper db***************")
