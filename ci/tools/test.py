@@ -134,7 +134,10 @@ def test_tai(cli):
 
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-tai")
     time.sleep(15)
-    pod = ssh(cli, "kubectl get pod -l app=gs-mgmt-tai -o jsonpath='{.items[0].metadata.name}'")
+    pod = ssh(
+        cli,
+        "kubectl get pod -l app=gs-mgmt-tai -o jsonpath='{.items[0].metadata.name}'",
+    )
     ssh(cli, f"kubectl wait --timeout=90s --for=condition=ready pod/{pod}")
     ssh(cli, "kubectl get pods")
 
@@ -474,6 +477,12 @@ def test_invalid_intf(cli):
 
 def test_mgmt_intf(cli):
     ssh(cli, 'gscli -c "show arp"')
+    ssh(cli, 'gscli -c "ping 10.10.10.250 -c 4"')
+    output = ssh(cli, 'gscli -c "show arp"')
+    assert "10.10.10.250" in output
+    ssh(cli, 'gscli -c "clear arp"')
+    output = ssh(cli, 'gscli -c "show arp"')
+    assert "10.10.10.250" not in output
 
 
 def test_select_intf(cli):

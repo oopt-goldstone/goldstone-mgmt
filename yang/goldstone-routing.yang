@@ -243,5 +243,15 @@ module goldstone-routing {
 			uses route-metadata;
 		}
 	}
+	rpc clear_arp {
+		output{
+			leaf status {
+				type enumeration {
+					enum failure;
+					enum success;
+				}
+			}
+		}
+	}
 }
 

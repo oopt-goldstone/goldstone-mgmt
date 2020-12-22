@@ -1,6 +1,7 @@
 import pyroute2
 import sysrepo
 import logging
+from pyroute2.netlink.rtnl import ndmsg
 
 # This hardcoding has to be removed once ENV
 # is added in system file for gssystem-south
@@ -176,6 +177,23 @@ class ManagementInterfaceServer:
             route_data["routes"]["route"] = self.get_routes()
             return route_data
 
+    def clear_arp(self, xpath, input_params, event, priv):
+        logger.debug(
+            f"clear_arp: xpath: {xpath}, input: {input}, event: {event}, priv: {priv}"
+        )
+        intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAME).pop()
+        with pyroute2.NDB() as ndb:
+            for neighbour in ndb.interfaces[MGMT_INTF_NAME].neighbours.dump():
+                dst = neighbour["dst"]
+                lladdr = neighbour["lladdr"]
+                self.pyroute.neigh(
+                    "del",
+                    dst=dst,
+                    lladdr=lladdr,
+                    ifindex=intf_index,
+                    state=ndmsg.states["permanent"],
+                )
+
     def update_oper_db(self):
         logger.debug("*********inside update oper db***************")
         self.sess.switch_datastore("operational")
@@ -246,6 +264,10 @@ class ManagementInterfaceServer:
         )
         self.sess.subscribe_module_change(
             "goldstone-routing", None, self.routing_change_cb, asyncio_register=True
+        )
+        self.sess.subscribe_rpc_call(
+            "/goldstone-routing:clear_arp",
+            self.clear_arp,
         )
 
         return []

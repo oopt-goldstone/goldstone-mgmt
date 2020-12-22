@@ -75,7 +75,7 @@ class VlanGroupCommand(Command):
 class ArpGroupCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.conn = sysrepo.SysrepoConnection()
+        self.conn = context.root().conn
         self.sess = self.conn.start_session()
 
     def exec(self, line):
@@ -86,10 +86,11 @@ class ArpGroupCommand(Command):
             tree = self.sess.get_data(xpath)
             if_list = tree["interfaces"]["interface"]
             for intf in if_list:
-                arp_list = intf["ipv4"]["neighbor"]
-                for arp in arp_list:
-                    row = [arp["ip"], arp["link-layer-address"], intf["name"]]
-                    rows.append(row)
+                if "neighbor" in intf["ipv4"]:
+                    arp_list = intf["ipv4"]["neighbor"]
+                    for arp in arp_list:
+                        row = [arp["ip"], arp["link-layer-address"], intf["name"]]
+                        rows.append(row)
         except (KeyError, sr.errors.SysrepoNotFoundError) as error:
             raise InvalidInput(str(error))
 
@@ -100,7 +101,7 @@ class ArpGroupCommand(Command):
 class IPRouteShowCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.conn = sysrepo.SysrepoConnection()
+        self.conn = context.root().conn
         self.sess = self.conn.start_session()
 
     def exec(self, line):
@@ -437,6 +438,16 @@ class GlobalShowCommand(Command):
         )
 
 
+class ClearArpGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.conn = context.root().conn
+        self.sess = self.conn.start_session()
+
+    def exec(self, line):
+        print(self.sess.rpc_send("/goldstone-routing:clear_arp", {}))
+
+
 class ShowCommand(Command):
     def __init__(self, context=None, parent=None, name=None, additional_completer=None):
         if name == None:
@@ -447,7 +458,14 @@ class ShowCommand(Command):
         super().__init__(context, parent, name, c)
 
 
+class GlobalClearCommand(Command):
+    SUBCOMMAND_DICT = {
+        "arp": ClearArpGroupCommand,
+    }
+
+
 class GSObject(Object):
     def __init__(self, parent, fuzzy_completion=False):
         super().__init__(parent, fuzzy_completion)
         self.add_command(GlobalShowCommand(self, name="show"))
+        self.add_command(GlobalClearCommand(self, name="clear"))
