@@ -16,13 +16,12 @@ RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
 
-RUN pip install setuptools
+RUN pip install --upgrade pip
 
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
 
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
 
-ENV PYTHONPATH /usr/lib/python3/dist-packages
 
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
             pip install /usr/share/wheels/libyang/*.whl /usr/share/wheels/sysrepo/*.whl
@@ -36,5 +35,7 @@ ENV SONIC_YANG_REPO /var/lib/goldstone/yang/sonic
 
 RUN --mount=type=bind,source=scripts,target=/src,rw \
     cd /src && cp /src/reload.sh /usr/local/bin/
+
+RUN pip install setuptools
 
 # vim:filetype=dockerfile

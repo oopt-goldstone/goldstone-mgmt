@@ -10,9 +10,6 @@ ARG https_proxy
 
 FROM $GS_MGMT_BASE
 
-RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
-            pip install /usr/share/wheels/sonic/*.whl
-
 RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/south/sonic,target=/src,rw pip install /src

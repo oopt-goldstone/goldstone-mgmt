@@ -113,37 +113,37 @@ north-images: north-cli north-snmp
 south-sonic:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-sonic.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_SONIC_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 south-tai:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-tai.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_TAI_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 south-onlp:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-onlp.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_ONLP_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 south-system:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-system.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_SYSTEM_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 north-cli:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/north-cli.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_CLI_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 north-snmp:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/north-snmp.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_SNMP_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 np2:
