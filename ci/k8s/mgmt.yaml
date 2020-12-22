@@ -3,11 +3,14 @@ kind: Service
 metadata:
     name: netopeer2
 spec:
-    selector:
-        app: gs-mgmt
-    ports:
-    - protocol: TCP
-      port: 830
+  type: LoadBalancer
+  ports:
+  - protocol: TCP
+    port: 830
+    targetPort: 830
+    name: netconf
+  selector:
+      app: gs-mgmt
 
 ---
 

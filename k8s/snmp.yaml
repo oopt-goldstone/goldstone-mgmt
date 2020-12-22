@@ -17,13 +17,12 @@ kind: Service
 metadata:
   name: gs-mgmt-snmp
 spec:
-  type: NodePort
+  type: LoadBalancer
   ports:
     - port: 161
       targetPort: 161
       protocol: UDP
       name: snmp
-      nodePort: 30010
   selector:
     app: gs-mgmt-snmp
 
