@@ -27,7 +27,7 @@ from .onlp import Platform
 from .tai_cli import Transponder
 from .sonic_cli import Interface_CLI, Vlan_CLI
 from .sonic import Sonic
-from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI
+from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI, System
 from .system import AAA, TACACS, Mgmtif
 
 logger = logging.getLogger(__name__)
@@ -132,6 +132,12 @@ class Root(Object):
             if len(line) != 0:
                 raise InvalidInput("usage: platform[cr]")
             return Platform(conn, self)
+
+        @self.command()
+        def system(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: system[cr]")
+            return System(conn, self)
 
         @self.command(FuzzyWordCompleter(lambda: self.get_modules(), WORD=True))
         def transponder(line):

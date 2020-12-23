@@ -14,16 +14,12 @@ def main(host, username, password):
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         cli.connect(host, username=username, password=password)
 
-        with open("/tmp/nacm.json", "w") as f:
-            f.write('{"ietf-netconf-acm:nacm": {"enable-nacm": "false"}}')
-
-        scp = SCPClient(cli.get_transport())
-        scp.put("/tmp/nacm.json", "/tmp")
-        ssh(cli, "sysrepocfg -m ietf-netconf-acm --import=/tmp/nacm.json --format=json")
+        ssh(cli, 'gscli -c "system; netconf; nacm; disable"')
 
         run("rm -rf id_rsa id_rsa.pub")
         run("ssh-keygen -f id_rsa -N ''")
         ssh(cli, "mkdir -p /home/admin/.ssh")
+        scp = SCPClient(cli.get_transport())
         scp.put("id_rsa.pub", "/home/admin/.ssh/authorized_keys")
         ssh(cli, "chown admin:admin /home/admin/.ssh/authorized_keys")
 

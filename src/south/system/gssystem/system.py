@@ -44,6 +44,12 @@ class SystemServer:
         manager = dbus.Interface(logind, "org.freedesktop.login1.Manager")
         manager.PowerOff(False)
 
+    async def change_cb(self, event, req_id, changes, priv):
+        if event != "done":
+            return
+        for change in changes:
+            logger.info(change, change.xpath)
+
     async def start(self):
         self.sess.switch_datastore("running")
 
@@ -52,6 +58,13 @@ class SystemServer:
             "/goldstone-system:system",
             self.oper_cb,
             oper_merge=True,
+            asyncio_register=True,
+        )
+
+        self.sess.subscribe_module_change(
+            "goldstone-system",
+            None,
+            self.change_cb,
             asyncio_register=True,
         )
 

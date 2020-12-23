@@ -143,9 +143,16 @@ class NoArgOption(Option):
 class Object(object):
     XPATH = ""
 
-    def __init__(self, parent, fuzzy_completion=False):
+    def __init__(self, parent, fuzzy_completion=None):
         self.parent = parent
         self._commands = {}
+
+        if fuzzy_completion == None:
+            if parent == None:
+                fuzzy_completion = False
+            else:
+                fuzzy_completion = parent.fuzzy_completion
+
         self.fuzzy_completion = fuzzy_completion
 
         @self.command()

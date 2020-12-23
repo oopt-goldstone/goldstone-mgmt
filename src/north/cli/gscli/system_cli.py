@@ -3,6 +3,7 @@ from .base import InvalidInput, Completer
 from .system import AAA, TACACS, Mgmtif
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
+from .common import sysrepo_wrap
 import re
 
 
@@ -157,3 +158,73 @@ class TACACS_CLI(Object):
             timeout = args[7]
 
         self.tacacs.set_tacacs_server(ipAddress, key, port, timeout)
+
+
+class NACM(Object):
+
+    XPATH = "/ietf-netconf-acm:nacm"
+
+    def __init__(self, conn, parent):
+        super().__init__(parent)
+        self.session = conn.start_session()
+        self.sr_op = sysrepo_wrap(self.session)
+
+        @self.command()
+        def disable(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: disable[cr]")
+            self.sr_op.set_data(f"{self.XPATH}/enable-nacm", False)
+
+        @self.command()
+        def enable(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: enable[cr]")
+            self.sr_op.set_data(f"{self.XPATH}/enable-nacm", True)
+
+    def __str__(self):
+        return "nacm"
+
+
+class Netconf(Object):
+
+    XPATH = "/goldstone-system:system/netconf"
+
+    def __init__(self, conn, parent):
+        super().__init__(parent)
+        self.session = conn.start_session()
+        self.sr_op = sysrepo_wrap(self.session)
+
+        @self.command()
+        def shutdown(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: shutdown[cr]")
+            self.sr_op.set_data(f"{self.XPATH}/config/enabled", False)
+
+        @self.command(WordCompleter(["shutdown"]))
+        def no(line):
+            if len(line) != 1 or line[0] != "shutdown":
+                raise InvalidInput("usage: no shutdown")
+            self.sr_op.set_data(f"{self.XPATH}/config/enabled", True)
+
+        @self.command()
+        def nacm(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: nacm[cr]")
+            return NACM(conn, self)
+
+    def __str__(self):
+        return "netconf"
+
+
+class System(Object):
+    def __init__(self, conn, parent):
+        super().__init__(parent)
+
+        @self.command(name="netconf")
+        def netconf(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: netconf[cr]")
+            return Netconf(conn, self)
+
+    def __str__(self):
+        return "system"
