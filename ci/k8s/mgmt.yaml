@@ -4,13 +4,13 @@ metadata:
     name: netopeer2
 spec:
   type: LoadBalancer
+  selector:
+      app: gs-mgmt-np2
   ports:
   - protocol: TCP
     port: 830
     targetPort: 830
     name: netconf
-  selector:
-      app: gs-mgmt
 
 ---
 
@@ -167,6 +167,15 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+              - name: home
+                mountPath: /home
+                readOnly: true
+              - name: passwd
+                mountPath: /etc/passwd
+                readOnly: true
+              - name: shadow
+                mountPath: /etc/shadow
+                readOnly: true
             volumes:
             - name: shm
               hostPath:
@@ -174,6 +183,16 @@ spec:
             - name: sysrepo
               hostPath:
                   path: /var/lib/sysrepo
+            - name: home
+              hostPath:
+                  path: /home
+            - name: passwd
+              hostPath:
+                  path: /etc/passwd
+            - name: shadow
+              hostPath:
+                  path: /etc/shadow
+
 
 ---
 
