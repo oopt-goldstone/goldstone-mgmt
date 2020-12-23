@@ -1119,6 +1119,27 @@ class Server(object):
         self.sess.delete_item("/goldstone-interfaces:interfaces")
 
         hash_keys = self.sonic_db.keys(
+            self.sonic_db.APPL_DB, pattern="PORT_TABLE:Ethernet*"
+        )
+        if hash_keys != None:
+            hash_keys = map(_decode, hash_keys)
+
+            for _hash in hash_keys:
+                ifname = _hash.split(":")[1]
+                xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+                intf_data = self.sonic_db.get_all(self.sonic_db.APPL_DB, _hash)
+                logger.debug(f"key: {_hash}, value: {intf_data}")
+                for key in intf_data:
+                    value = _decode(intf_data[key])
+                    key = _decode(key)
+                    if key == "alias" or key == "description":
+                        self.sess.set_item(f"{xpath}/{key}", value)
+                    elif key == "admin_status":
+                        if value == None:
+                            value = "down"
+                        self.sess.set_item(f"{xpath}/admin-status", value)
+
+        hash_keys = self.sonic_db.keys(
             self.sonic_db.CONFIG_DB, pattern="PORT|Ethernet*"
         )
         if hash_keys != None:
@@ -1186,26 +1207,6 @@ class Server(object):
                         f"Breakout interface:{key} doesnt has speed attribute in Redis"
                     )
 
-        hash_keys = self.sonic_db.keys(
-            self.sonic_db.APPL_DB, pattern="PORT_TABLE:Ethernet*"
-        )
-        if hash_keys != None:
-            hash_keys = map(_decode, hash_keys)
-
-            for _hash in hash_keys:
-                ifname = _hash.split(":")[1]
-                xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-                intf_data = self.sonic_db.get_all(self.sonic_db.APPL_DB, _hash)
-                for key in intf_data:
-                    value = _decode(intf_data[key])
-                    key = _decode(key)
-                    if key == "alias" or key == "description":
-                        self.sess.set_item(f"{xpath}/{key}", value)
-                    elif key == "admin_status":
-                        if value == None:
-                            value = "down"
-                        self.sess.set_item(f"{xpath}/admin-status", value)
-
         hash_keys = self.sonic_db.keys(self.sonic_db.CONFIG_DB, pattern="VLAN|Vlan*")
 
         # clear the VLAN operational ds and build it from scratch
@@ -1244,7 +1245,11 @@ class Server(object):
                     key = _decode(key)
                     self.sess.set_item(f"{xpath}/{key}", value)
 
-        self.sess.apply_changes()
+        try:
+            self.sess.apply_changes(timeout_ms=5000, wait=True)
+        except sysrepo.SysrepoTimeOutError as e:
+            logger.warn(f"update oper ds timeout: {e}")
+            self.sess.apply_changes(timeout_ms=5000, wait=True)
 
     async def start(self):
 
@@ -1299,6 +1304,8 @@ class Server(object):
                     asyncio_register=True,
                 )
 
+        return []
+
 
 def main():
     async def _main():
@@ -1308,8 +1315,16 @@ def main():
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
         server = Server()
+
         try:
-            await asyncio.gather(server.start(), stop_event.wait())
+            tasks = await server.start()
+            tasks.append(stop_event.wait())
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            logger.debug(f"done: {done}, pending: {pending}")
+            for task in done:
+                e = task.exception()
+                if e:
+                    raise e
         finally:
             server.stop()
 
