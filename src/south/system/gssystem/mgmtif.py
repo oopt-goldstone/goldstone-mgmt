@@ -8,6 +8,7 @@ from pyroute2.netlink.rtnl import ndmsg
 MGMT_INTF_NAME = "eth0"
 MAX_PREFIX_LENGTH = 32
 DEFAULT_RT_TABLE = 254
+RT_PROTO_STATIC_TYPE = 4
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,21 @@ class ManagementInterfaceServer:
                         ndb.routes[
                             {"oif": intf["index"], "dst": destination_prefix}
                         ].remove().commit()
+                    if xpath.startswith(
+                        "/goldstone-routing:routing/static-routes/ipv4/"
+                    ) and xpath.endswith("route"):
+                        for route in ndb.routes.dump().filter(
+                            oif=intf["index"],
+                            proto=RT_PROTO_STATIC_TYPE,
+                            table=DEFAULT_RT_TABLE,
+                        ):
+                            ndb.routes[
+                                {
+                                    "oif": intf["index"],
+                                    "table": DEFAULT_RT_TABLE,
+                                    "proto": RT_PROTO_STATIC_TYPE,
+                                }
+                            ].remove().commit()
 
     async def ip_change_cb(self, event, req_id, changes, priv):
         if event != "change":
@@ -149,7 +165,7 @@ class ManagementInterfaceServer:
                     if route["gateway"] != None and type(route["gateway"]) != type([]):
                         route_dic["next-hop"]["outgoing-interface"] = route["gateway"]
                     if route["metrics"] != None:
-                        route_dic["metric"] = soute["metrics"]
+                        route_dic["metric"] = route["metrics"]
                     route_dic["flags"] = route["flags"]
                     routes.append(route_dic)
             return routes

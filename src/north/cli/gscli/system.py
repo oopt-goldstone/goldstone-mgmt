@@ -50,10 +50,22 @@ class Mgmtif(object):
             self.sr_op.get_data(self.xpath_mgmt(ifname), "running")
         except sr.SysrepoNotFoundError as e:
             self.sr_op.set_data(f"{self.xpath_mgmt(ifname)}/admin-status", "up")
+        self.sr_op.set_data(
+            f"{xpath}[destination-prefix='{dst_prefix}']/destination-prefix",
+            dst_prefix,
+        )
         if config == False:
             self.sr_op.delete_data(
                 f"{xpath}[destination-prefix='{dst_prefix}']/destination-prefix"
             )
+
+    def clear_route(self, ifname):
+        xpath = "/goldstone-routing:routing/static-routes/ipv4/route"
+        try:
+            self.sr_op.get_data(xpath, "running")
+        except sr.SysrepoNotFoundError as e:
+            raise InvalidInput("no routes are present to be cleared")
+        self.sr_op.delete_data(f"{xpath}")
 
     def run_conf(self):
         mgmt_dict = {}

@@ -601,12 +601,41 @@ def test_mgmt_if_cmds(cli):
     output = ssh(cli, 'gscli -c "show ip route"')
     assert "30.30.30.0/24" not in output
 
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip route 30.20.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip route 30.20.0.0/16" in output
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip route 20.10.20.0/24; show running-config mgmt-if"',
+    )
+    assert "ip route 20.10.20.0/24" in output
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip route 30.20.20.0/24; show running-config mgmt-if"',
+    )
+    assert "ip route 30.20.20.0/24" in output
+    output = ssh(cli, 'gscli -c "show ip route"')
+    assert "30.20.0.0/16" in output
+    assert "20.10.20.0/24" in output
+    assert "30.20.20.0/24" in output
+
+    ssh(cli, 'gscli -c "interface eth0; clear ip route"')
+
+    output = ssh(cli, 'gscli -c "show ip route"')
+    assert "30.20.0.0/16" not in output
+    assert "20.10.20.0/24" not in output
+    assert "30.20.20.0/24" not in output
+
+
 def test_onlp(cli):
     # ADD test for onlp CLIs here
     output = ssh(cli, 'gscli -c "show datastore /goldstone-onlp:* operational"')
     assert "piu" in output
     assert "sfp" in output
     print("Component PIU and SFP found in operational-DB")
+
 
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
@@ -656,6 +685,7 @@ def main(host, username, password):
             sys.exit(1)
 
         test_onlp(cli)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Goldstone CI tool")
