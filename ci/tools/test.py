@@ -580,7 +580,7 @@ def test_mgmt_if_cmds(cli):
     assert "20.10.20.0/24" in output
     assert "30.20.20.0/24" in output
 
-    ssh(cli, 'gscli -c "interface eth0; clear ip route"')
+    ssh(cli, 'gscli -c "clear ip route"')
 
     output = ssh(cli, 'gscli -c "show ip route"')
     assert "30.20.0.0/16" not in output

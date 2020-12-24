@@ -14,7 +14,6 @@ class Mgmt_CLI(Object):
         self.name = ifname
         self.mgmt = Mgmtif(conn)
         self.ip_cmd_list = ["address", "route"]
-        self.clr_cmd_dict = {"ip": {"route": None}}
         self.no_dict = {"ip": {"route": None, "address": None}}
         mgmt_iflist = [
             v["name"] for v in self.mgmt.get_mgmt_interface_list("operational")
@@ -70,18 +69,6 @@ class Mgmt_CLI(Object):
             else:
                 raise InvalidInput(self.usage())
 
-        @self.command(NestedCompleter.from_nested_dict(self.clr_cmd_dict))
-        def clear(args):
-            if len(args) < 2:
-                raise InvalidInput("usage: {}".format(self.clear_usage()))
-            if args[0] == "ip":
-                if args[1] == "route":
-                    if len(args) > 2:
-                        raise InvalidInput(self.clear_usage())
-                    self.mgmt.clear_route(ifname)
-            else:
-                raise InvalidInput(self.clear_usage())
-
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
@@ -96,9 +83,6 @@ class Mgmt_CLI(Object):
 
     def usage(self):
         return "usage:\n ip address A.B.C.D/<mask>\n ip route <dst_prefix>\n"
-
-    def clear_usage(self):
-        return "usage:\n clear ip route\n"
 
 
 class AAA_CLI(Object):

@@ -4,7 +4,7 @@ import sysrepo
 from tabulate import tabulate
 from .sonic import Sonic
 from .tai import Transponder
-from .system import System, TACACS, AAA
+from .system import System, TACACS, AAA, Mgmtif
 import json
 import libyang as ly
 import sysrepo as sr
@@ -438,6 +438,29 @@ class GlobalShowCommand(Command):
         )
 
 
+class ClearIpGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "route": Command,
+    }
+
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.conn = context.root().conn
+        self.mgmtif = Mgmtif(self.conn)
+
+    def exec(self, line):
+        if len(line) < 1 or line[0] not in ["route"]:
+            raise InvalidInput(self.usage())
+
+        if len(line) == 1:
+            return self.mgmtif.clear_route()
+        else:
+            raise InvalidInput(self.usage())
+
+    def usage(self):
+        return "usage:\n" f" {self.parent.name} {self.name} (route)"
+
+
 class ClearArpGroupCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
@@ -461,6 +484,7 @@ class ShowCommand(Command):
 class GlobalClearCommand(Command):
     SUBCOMMAND_DICT = {
         "arp": ClearArpGroupCommand,
+        "ip": ClearIpGroupCommand,
     }
 
 
