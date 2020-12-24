@@ -427,15 +427,22 @@ def test_mtu(cli):
     assert "3500" in output
 
     output = ssh(cli, 'gscli -c "interface Ethernet1_1; no mtu; show"')
-    assert "mtu" not in output
+    assert "9100" in output
 
     # check multiple 'no mtu' command won't crash
     ssh(cli, 'gscli -c "interface Ethernet1_1; no mtu"')
     ssh(cli, 'gscli -c "interface Ethernet1_1; no mtu"')
 
     output = ssh(cli, 'gscli -c "show datastore /goldstone-interfaces:*"')
+    assert "9100" not in output
     assert "mtu" not in output
-    assert "ipv4" not in output
+
+    output = ssh(
+        cli,
+        "gscli -c \"show datastore /goldstone-interfaces:interfaces/interface[name='Ethernet1_1'] operational\"",
+    )
+    assert "9100" in output
+    assert "ipv4" in output
 
 
 def test_speed(cli):
@@ -477,6 +484,9 @@ def test_speed(cli):
 
     output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 40000; show"')
     assert "40000" in output
+
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; no speed ; show"')
+    assert "100000" in output
 
 
 def test_invalid_intf(cli):

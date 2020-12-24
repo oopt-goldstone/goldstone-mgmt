@@ -38,6 +38,8 @@ def speed_to_yang_val(speed):
         return "SPEED_25GB"
     elif speed == b"50000":
         return "SPEED_50GB"
+    elif speed == b"100000":
+        return "SPEED_100GB"
     elif speed == b"10000":
         return "SPEED_10GB"
     elif speed == b"1000":
@@ -74,10 +76,22 @@ class Server(object):
         }
         self.counter_if_dict = {}
         self.notif_if = {}
+        self.mtu_default = self.get_default_from_yang("mtu")
+        self.speed_default = "100000"
 
     def stop(self):
         self.sess.stop()
         self.conn.disconnect()
+
+    def get_default_from_yang(self, key):
+        ctx = self.sess.get_ly_ctx()
+        xpath = "/goldstone-interfaces:interfaces"
+        xpath += "/goldstone-interfaces:interface"
+        if key == "mtu":
+            xpath += "/goldstone-ip:ipv4"
+            xpath += "/goldstone-ip:mtu"
+        for node in ctx.find_path(xpath):
+            return node.default()
 
     def set_config_db(self, event, _hash, key, value):
         if event != "done":
@@ -527,6 +541,18 @@ class Server(object):
                     is_updated = await self.breakout_update_usonic(breakout_dict)
                     if is_updated:
                         asyncio.create_task(self.breakout_callback())
+
+                elif key in ["mtu", "speed"]:
+
+                    if event == "done":
+                        if key == "mtu":
+                            value = self.mtu_default
+                        elif key == "speed":
+                            value = self.speed_default
+
+                        logger.debug(f"adding default value of {key} to redis")
+                        self.pack_defaults_to_redis(ifname=ifname, leaf_node=key)
+                        self.update_oper_db()
 
                 elif "PORT|" in _hash and key == "":
                     if event == "done":
@@ -1017,6 +1043,22 @@ class Server(object):
         )
         self.cache_counters()
 
+    def pack_defaults_to_redis(self, ifname, leaf_node):
+        if leaf_node == "mtu":
+            self.sonic_db.set(
+                self.sonic_db.CONFIG_DB,
+                "PORT|" + ifname,
+                "mtu",
+                str(self.mtu_default),
+            )
+        elif leaf_node == "speed" and not self.is_breakout_port(ifname):
+            self.sonic_db.set(
+                self.sonic_db.CONFIG_DB,
+                "PORT|" + ifname,
+                "speed",
+                self.speed_default,
+            )
+
     def reconcile(self):
         self.sess.switch_datastore("running")
         intf_data = self.sess.get_data("/goldstone-interfaces:interfaces")
@@ -1121,6 +1163,14 @@ class Server(object):
                         "PORT|" + ifname,
                         "admin_status",
                         "down",
+                    )
+
+                if "mtu" not in intf_keys:
+                    self.sonic_db.set(
+                        self.sonic_db.CONFIG_DB,
+                        "PORT|" + ifname,
+                        "mtu",
+                        str(self.mtu_default),
                     )
 
     def update_oper_db(self):

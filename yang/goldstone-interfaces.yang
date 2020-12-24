@@ -341,6 +341,9 @@ module goldstone-interfaces {
                }
         }
         units "bits/second";
+        /*Having default value for speed is causing issues for sub-interfaces after breakout.
+          Even sub-interfaces are getting configuration with this value automatically from sysrepo.
+        default 100000;*/
         description
             "An estimate of the interface's current bandwidth in bits
              per second.  For interfaces that do not vary in

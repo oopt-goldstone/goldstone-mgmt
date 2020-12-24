@@ -157,6 +157,7 @@
 
           }
           units "octets";
+          default 9100;
           description
             "The size, in octets, of the largest IPv4 packet that the
           interface will send and receive.
@@ -271,6 +272,7 @@
 
           }
           units "octets";
+          default 9100;
           description
             "The size, in octets, of the largest IPv4 packet that the
           interface will send and receive.

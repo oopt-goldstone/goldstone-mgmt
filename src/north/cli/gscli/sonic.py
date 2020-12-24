@@ -165,9 +165,11 @@ class Port(object):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
 
-    def get_interface_list(self, datastore):
+    def get_interface_list(self, datastore, include_implicit_values=True):
         try:
-            tree = self.sr_op.get_data(self.XPATH, datastore)
+            tree = self.sr_op.get_data(
+                self.XPATH, datastore, False, include_implicit_values
+            )
             return natsorted(tree["interfaces"]["interface"], key=lambda x: x["name"])
         except (KeyError, sr.errors.SysrepoNotFoundError) as error:
             return []
@@ -225,7 +227,7 @@ class Port(object):
         runn_conf_list = ["admin-status", "ipv4", "speed", "name", "breakout"]
         v_dict = {}
 
-        interface_list = self.get_interface_list("running")
+        interface_list = self.get_interface_list("running", False)
         if not interface_list:
             return
 

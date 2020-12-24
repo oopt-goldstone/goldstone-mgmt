@@ -346,13 +346,21 @@ class GlobalShowCommand(Command):
 
             sess.switch_datastore(ds)
 
+            if ds == "operational":
+                defaults = True
+            else:
+                defaults = False
+
             try:
-                if fmt == "json":
-                    print(json.dumps(sess.get_data(line[1]), indent=4))
-                else:
-                    print(sess.get_data(line[1]))
+                data = sess.get_data(line[1], include_implicit_defaults=defaults)
             except Exception as e:
                 print(e)
+                return
+
+            if fmt == "json":
+                print(json.dumps(data), indent=4)
+            else:
+                print(data)
 
     def get_version(self, line):
         conn = self.context.conn

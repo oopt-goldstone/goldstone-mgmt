@@ -29,9 +29,17 @@ class sysrepo_wrap(object):
     def __init__(self, session):
         self.session = session
 
-    def get_data(self, xpath, ds="running", no_subs=False):
+    def get_data(
+        self, xpath, ds="running", no_subs=False, include_implicit_values=True
+    ):
         self.session.switch_datastore(ds)
-        data = self.session.get_data("{}".format(xpath), 0, TIMEOUT_MS, no_subs=no_subs)
+        data = self.session.get_data(
+            "{}".format(xpath),
+            0,
+            TIMEOUT_MS,
+            no_subs=no_subs,
+            include_implicit_defaults=include_implicit_values,
+        )
         self.session.switch_datastore("running")
         return data
 
