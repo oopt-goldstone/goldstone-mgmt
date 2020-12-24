@@ -314,9 +314,11 @@ class Server(object):
                     )
                     if mem != None:
                         mem = mem.split(",")
-                        mem.remove(member)
-                        value = ",".join(mem)
-                        self.set_config_db(event, _hash, key, value)
+                        if member in mem:
+                            mem.remove(member)
+                        if len(mem) >= 1:
+                            value = ",".join(mem)
+                            self.set_config_db(event, _hash, key, value)
 
                 elif _hash.find("VLAN|") == 0 and key == "":
                     if event == "done":
@@ -1319,7 +1321,9 @@ def main():
         try:
             tasks = await server.start()
             tasks.append(stop_event.wait())
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            done, pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
+            )
             logger.debug(f"done: {done}, pending: {pending}")
             for task in done:
                 e = task.exception()

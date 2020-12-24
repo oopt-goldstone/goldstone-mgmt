@@ -7,6 +7,7 @@ import sys
 
 from .common import *
 
+
 def test_system(cli):
     ssh(cli, 'gscli -c "show version"')
 
@@ -119,11 +120,30 @@ def test_vlan_member_add_delete(cli):
         'gscli -c "interface Ethernet1_1; no shutdown; switchport mode trunk vlan 1000; show"',
     )
     ssh(cli, 'gscli -c "show vlan details"')
+    ssh(
+        cli,
+        'gscli -c "interface Ethernet2_1; no shutdown; switchport mode trunk vlan 1000; show"',
+    )
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(
+        cli,
+        'gscli -c "interface Ethernet1_1; no shutdown; no switchport mode trunk vlan 1000; show"',
+    )
+    ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "no vlan 1000"')
     ssh(cli, 'gscli -c "show vlan details"')
 
 
 def test_port_breakout(cli):
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "vlan 1000"')
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(
+        cli,
+        'gscli -c "interface Ethernet5_1; no shutdown; switchport mode trunk vlan 1000; show"',
+    )
+    ssh(cli, 'gscli -c "show vlan details"')
+
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_1; breakout 4X10GB"')
     except:
@@ -190,6 +210,16 @@ def test_port_breakout(cli):
     ssh(
         cli, 'gscli -c "interface Ethernet5_2; no shutdown"'
     )  # add configuration to a sub-interface
+
+    ssh(
+        cli,
+        'gscli -c "interface Ethernet5_1; no shutdown; switchport mode trunk vlan 1000; show"',
+    )
+    ssh(
+        cli,
+        'gscli -c "interface Ethernet5_3; no shutdown; switchport mode trunk vlan 1000; show"',
+    )
+    ssh(cli, 'gscli -c "show vlan details"')
 
     # Unconfigure
     ssh(cli, 'gscli -c "interface Ethernet5_1; no breakout"')

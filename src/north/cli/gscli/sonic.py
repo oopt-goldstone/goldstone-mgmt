@@ -370,14 +370,14 @@ class Port(object):
                 # Since we dont have utiity function in sysrepo to delete one node in
                 # leaf-list , we are deleting 'members' with old data and creating again
                 # with new data.
-                if len(mem_list) > 1:
+                for mem_intf in mem_list:
                     set_attribute(
                         self.sr_op,
                         xpath_mem_list,
                         "vlan",
                         vlan_name,
                         "members",
-                        mem_list,
+                        mem_intf,
                     )
             # Unconfig done
             return
@@ -452,6 +452,7 @@ class Port(object):
                     self.sr_op.delete_data(self.xpath(intf["name"]))
 
         print("Existing configurations on parent interfaces will be flushed")
+        remove_intf_from_all_vlans(ifname)
         xpath = self.xpath(ifname)
         self.sr_op.delete_data(xpath)
         #        self.set_admin_status(ifname, "down")
