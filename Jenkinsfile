@@ -35,6 +35,9 @@ pipeline {
     }
 
     stage('Lint') {
+      when {
+        environment name: 'SKIP', value: '0'
+      }
       steps {
           sh 'DOCKER_BUILDKIT=1 docker build --build-arg GS_MGMT_BUILDER_IMAGE=$DOCKER_REPO/gs-mgmt-netopeer2:latest -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
           sh "docker run -t -v `pwd`:`pwd` -w `pwd`/src/north/cli/gscli gs-mgmt-test bash -c 'exit \$(black -q --diff *.py | wc -l)'"
