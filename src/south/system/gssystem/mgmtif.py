@@ -253,7 +253,48 @@ class ManagementInterfaceServer:
         self.sess.apply_changes()
         logger.debug("********* update oper db done***************")
 
+    def reconcile(self):
+        self.sess.switch_datastore("running")
+
+        mgmtif_data = self.sess.get_data("/goldstone-mgmt-interfaces:interfaces")
+        if "interfaces" in mgmtif_data:
+            mgmtif_list = list(mgmtif_data["interfaces"]["interface"])
+            logger.debug(mgmtif_list)
+            with pyroute2.NDB() as ndb:
+                mgmtif = mgmtif_list.pop()
+                if mgmtif["name"] != MGMT_INTF_NAME:
+                    raise sysrepo.SysrepoInvalArgError(
+                        f"{mgmtif['name']} not the supported management interface"
+                    )
+                for key in mgmtif:
+                    if key == "ipv4":
+                        ip_list = mgmtif["ipv4"]["address"]
+                        logger.debug(ip_list)
+                        for ip in ip_list:
+                            try:
+                                ndb.interfaces[MGMT_INTF_NAME].add_ip(
+                                    ip["ip"] + "/" + str(ip["prefix-length"])
+                                ).commit()
+                            except KeyError as error:
+                                logger.debug(f"{str(error)} : address already present")
+
+        route_data = self.sess.get_data("/goldstone-routing:routing")
+        if "routing" in route_data:
+            route_list = route_data["routing"]["static-routes"]["ipv4"]["route"]
+            logger.debug(route_list)
+            with pyroute2.NDB() as ndb:
+                intf = ndb.interfaces[MGMT_INTF_NAME]
+                for route in route_list:
+                    try:
+                        ndb.routes.create(
+                            dst=route["destination-prefix"],
+                            oif=intf["index"],
+                        ).commit()
+                    except KeyError as error:
+                        logger.debug(f"{str(error)} : route already present")
+
     async def start(self):
+        self.reconcile()
         self.update_oper_db()
         self.sess.switch_datastore("running")
         self.sess.subscribe_oper_data_request(

@@ -626,6 +626,43 @@ def test_onlp(cli):
     print("Component PIU and SFP found in operational-DB")
 
 
+def test_system_reconcile(cli):
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip route 31.21.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip route 31.21.0.0/16" in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip address 20.21.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip address 20.21.0.0/16" in output
+
+    output = ssh(cli, 'gscli -c "show ip route"')
+    assert "31.21.0.0/16" in output
+
+    ssh(cli, "systemctl restart gs-south-system")
+    time.sleep(10)
+
+    output = ssh(cli, 'gscli -c "show ip route"')
+    assert "31.21.0.0/16" in output
+    output = ssh(cli, 'gscli -c "show running-config mgmt-if"')
+    assert "ip address 20.21.0.0/16" in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; no ip route 31.21.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip route 31.21.0.0/16" not in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; no ip address 20.21.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip address 20.21.0.0/16" not in output
+
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -654,6 +691,8 @@ def main(host, username, password):
         test_mgmt_intf(cli)
 
         test_mgmt_if_cmds(cli)
+
+        test_system_reconcile(cli)
 
         try:
             test_vlan_member_add_delete(cli)
