@@ -84,6 +84,7 @@ def main(host, username, password):
                 print("timeout")
                 ssh(cli, "kubectl get pods -A")
                 ssh(cli, f"kubectl describe pods -l app={name}")
+                ssh(cli, f"kubectl logs ds/{name}")
                 sys.exit(1)
 
 
