@@ -1336,14 +1336,16 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
+    fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format=fmt)
         hpack = logging.getLogger("hpack")
         hpack.setLevel(logging.INFO)
         k8s = logging.getLogger("kubernetes_asyncio.client.rest")
         k8s.setLevel(logging.INFO)
+        sysrepo.configure_logging(py_logging=True)
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO, format=fmt)
 
     asyncio.run(_main())
 
