@@ -93,9 +93,7 @@ class Interface_CLI(Object):
         @self.command()
         def speed(args):
             if len(args) != 1:
-                raise InvalidInput(
-                    "usage: speed 1000|10000|25000|40000|50000|100000|400000"
-                )
+                raise InvalidInput("usage: speed 40000|100000")
             speed = args[0]
             if speed.isdigit():
                 for ifname in self.ifnames:
