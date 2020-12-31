@@ -267,9 +267,7 @@ class ManagementInterfaceServer:
                     )
                 for key in mgmtif:
                     if key == "ipv4":
-                        ip_list = mgmtif["ipv4"]["address"]
-                        logger.debug(ip_list)
-                        for ip in ip_list:
+                        for ip in mgmtif["ipv4"].get("address", []):
                             try:
                                 ndb.interfaces[MGMT_INTF_NAME].add_ip(
                                     ip["ip"] + "/" + str(ip["prefix-length"])

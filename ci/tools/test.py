@@ -681,6 +681,58 @@ def test_system_reconcile(cli):
     )
     assert "ip address 20.21.0.0/16" not in output
 
+    # case for saving a tree without leaf address
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip address 56.10.0.0/16" in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip address 56.10.0.0/16" not in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip route 100.17.0.0/16" in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip route 100.17.0.0/16" not in output
+
+    ssh(cli, "systemctl restart gs-south-system")
+    time.sleep(10)
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip address 56.10.0.0/16" in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip address 56.10.0.0/16" not in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip route 100.17.0.0/16" in output
+
+    output = ssh(
+        cli,
+        'gscli -c "interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if"',
+    )
+    assert "ip route 100.17.0.0/16" not in output
+
 
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
