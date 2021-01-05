@@ -668,51 +668,51 @@ def main(host, username, password):
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         cli.connect(host, username=username, password=password)
 
-        test_system(cli)
-
-        test_vlan(cli)
-
-        test_tai(cli)
-
-        test_logging(cli)
-
-        test_tacacs(host, cli)
-
-        test_mtu(cli)
-
-        test_speed(cli)
-
-        test_invalid_intf(cli)
-
-        test_select_intf(cli)
-
-        test_statistics(cli)
-
-        test_mgmt_intf(cli)
-
-        test_mgmt_if_cmds(cli)
-
-        test_system_reconcile(cli)
+        try:
+            test_system(cli)
+            test_logging(cli)
+            test_tacacs(host, cli)
+            test_mgmt_intf(cli)
+            test_mgmt_if_cmds(cli)
+            test_system_reconcile(cli)
+        except Exception as e:
+            ssh(cli, "systemctl status gs-south-system.service")
+            ssh(cli, "journalctl -u gs-south-system.service")
+            raise e
 
         try:
+            ssh(cli, "kubectl exec -t deploy/tai -- taish -c 'log-level debug'")
+            test_tai(cli)
+        except Exception as e:
+            ssh(cli, "kubectl get pods -A")
+            ssh(cli, "kubectl logs -l app=gs-mgmt-tai")
+            ssh(cli, "kubectl logs deploy/tai")
+            raise e
+        finally:
+            ssh(cli, "kubectl exec -t deploy/tai -- taish -c 'log-level info'")
+
+        try:
+            test_vlan(cli)
+            test_mtu(cli)
+            test_speed(cli)
+            test_invalid_intf(cli)
+            test_select_intf(cli)
+            test_statistics(cli)
             test_vlan_member_add_delete(cli)
-        except SSHException as e:
-            print(f"test_vlan_member_add_delete() failed: {e}")
+            test_port_breakout(cli)
+        except Exception as e:
             ssh(cli, "kubectl get pods -A")
             ssh(cli, "kubectl logs -l app=gs-mgmt-sonic")
             ssh(cli, "kubectl describe pods -l app=gs-mgmt-sonic")
-            sys.exit(1)
+            raise e
 
         try:
-            test_port_breakout(cli)
-        except SSHException as e:
-            print(f"test_port_breakout() failed: {e}")
+            test_onlp(cli)
+        except Exception as e:
             ssh(cli, "kubectl get pods -A")
-            ssh(cli, "kubectl logs -l app=gs-mgmt-sonic")
-            ssh(cli, "kubectl describe pods -l app=gs-mgmt-sonic")
-            sys.exit(1)
-
-        test_onlp(cli)
+            ssh(cli, "kubectl logs -l app=gs-mgmt-onlp")
+            ssh(cli, "kubectl describe pods -l app=gs-mgmt-onlp")
+            raise e
 
 
 if __name__ == "__main__":
