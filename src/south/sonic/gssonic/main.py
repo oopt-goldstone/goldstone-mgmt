@@ -271,14 +271,13 @@ class Server(object):
         return ports
 
     async def vlan_change_cb(self, event, req_id, changes, priv):
-        logger.debug(f"change_cb: event: {event}, changes: {changes}")
+        logger.debug(f"event: {event}, changes: {changes}")
 
         if event not in ["change", "done"]:
             logger.warn("unsupported event: {event}")
             return
 
         for change in changes:
-            logger.debug(f"change_cb: {change}")
 
             key, _hash, attr_dict = await self.parse_change_req(change.xpath)
             if "member" in attr_dict:
@@ -287,7 +286,7 @@ class Server(object):
             logger.debug(f"key: {key}, _hash: {_hash}, attr_dict: {attr_dict}")
 
             if isinstance(change, sysrepo.ChangeCreated):
-                logger.debug("......change created......")
+                logger.debug(f"change created: {change}")
                 if type(change.value) != type({}) and key != "name" and key != "ifname":
                     if key == "members@":
                         try:
@@ -304,10 +303,10 @@ class Server(object):
                         self.set_config_db(event, _hash, key, change.value)
 
             if isinstance(change, sysrepo.ChangeModified):
-                logger.debug("......change modified......")
+                logger.debug(f"change modified: {change}")
                 raise sysrepo.SysrepoUnsupportedError("Modification is not supported")
             if isinstance(change, sysrepo.ChangeDeleted):
-                logger.debug("......change deleted......")
+                logger.debug(f"change deleted: {change}")
                 if key == "members@":
                     mem = _decode(
                         self.sonic_db.get(self.sonic_db.CONFIG_DB, _hash, key)
@@ -1172,6 +1171,7 @@ class Server(object):
                     self.sess.set_item(f"{xpath_subif_breakout}/parent", tmp_ifname)
 
                 intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
+                logger.debug(f"config db entry: key: {_hash}, value: {intf_data}")
                 for key in intf_data:
                     value = _decode(intf_data[key])
                     key = _decode(key)
