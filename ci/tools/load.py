@@ -97,25 +97,22 @@ def main(host, username, password):
         check_pod("gs-mgmt-tai")
         check_pod('gs-mgmt-snmp')
 
-        def check_gssouth_system():
+        def restart_gssouth_system():
             max_iteration = 3
-            running = 0
             for i in range(max_iteration):
-                time.sleep(10)
-                output = ssh(cli, "systemctl status gssouth_system")
+                ssh(cli, "systemctl restart gs-south-system")
+                time.sleep(1)
+                output = ssh(cli, "systemctl status gs-south-system")
                 if "running" in output:
                     print("Goldstone South System daemon is RUNNING")
-                    running = 1
                     break
-            if running == 0:
+                time.sleep(5)
+            else:
                 print("Goldstone South System daemon is NOT RUNNING")
                 ssh(cli, "journalctl -u gssouth_system")
                 sys.exit(1)
 
-        # Restart South system service
-        ssh(cli, "systemctl restart gssouth_system")
-
-        check_gssouth_system()
+        restart_gssouth_system()
 
 
 if __name__ == "__main__":
