@@ -98,7 +98,6 @@ class Server(object):
         # Caching base values of counters
         self.cache_counters()
 
-        self.is_usonic_rebooting = False
         logger.info("uSONiC ready")
 
     async def wait_for_sr_unlock(self):
@@ -182,6 +181,7 @@ class Server(object):
 
                 self.reconcile()
                 self.update_oper_db()
+                self.is_usonic_rebooting = False
 
                 self.sess.switch_datastore("running")
 
@@ -1296,6 +1296,7 @@ class Server(object):
 
                 self.reconcile()
                 self.update_oper_db()
+                self.is_usonic_rebooting = False
 
                 self.sess.switch_datastore("running")
 
