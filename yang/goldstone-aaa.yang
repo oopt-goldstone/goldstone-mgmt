@@ -7,6 +7,9 @@ module goldstone-aaa {
 
   prefix "gs-aaa";
 
+  import ietf-inet-types {
+      prefix inet;
+    }
 
   // meta
   organization "Goldstone";
@@ -161,7 +164,7 @@ module goldstone-aaa {
       "Common configuration data for AAA servers";
 
     leaf address {
-      type string;
+      type inet:ipv4-address-no-zone;
       description "Address of the authentication server";
     }
 
