@@ -39,3 +39,4 @@ nss/0004-Skip-accessing-tacacs-servers-for-local-non-tacacs-u.patch
 nss/0005-libnss-Modify-parsing-of-IP-addr-and-port-number-str.patch
 nss/0006-fix-compiling-warning-about-token-dereference.patch
 
+sonic-py-swsssdk/comment_out_getting_lag_name_map.patch

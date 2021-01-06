@@ -60,11 +60,17 @@ def main():
         print("something went wrong")
         sys.exit(1)
 
-    with open(f'{os.path.dirname(__file__)}/../patches/{args.submodule}/series') as f:
-        series = f.read()
+    d = f'{os.path.dirname(__file__)}/../patches/{args.submodule}'
+    os.makedirs(d, exist_ok=True)
+
+    try:
+        with open(f'{d}/series') as f:
+            series = f.read()
+    except:
+        series = ""
 
     if patch not in series:
-        with open(f'{os.path.dirname(__file__)}/../patches/{args.submodule}/series', 'a') as f:
+        with open(f'{d}/series', 'a') as f:
             f.write(patch + '\n')
 
 if __name__ == '__main__':
