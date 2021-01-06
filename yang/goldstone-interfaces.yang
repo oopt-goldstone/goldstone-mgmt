@@ -143,6 +143,58 @@ module goldstone-interfaces {
       }
     }
   }
+
+  grouping interface_oper_status {
+      leaf oper-status {
+        type enumeration {
+          enum up {
+            value 1;
+            description
+              "Ready to pass packets.";
+          }
+          enum down {
+            value 2;
+
+            description
+              "The interface does not pass any packets.";
+          }
+          enum testing {
+            value 3;
+            description
+              "In some test mode.  No operational packets can
+               be passed.";
+          }
+          enum unknown {
+            value 4;
+            description
+              "Status cannot be determined for some reason.";
+          }
+          enum dormant {
+            value 5;
+            description
+              "Waiting for some external event.";
+          }
+          enum not-present {
+            value 6;
+            description
+              "Some component (typically hardware) is missing.";
+          }
+          enum lower-layer-down {
+            value 7;
+            description
+              "Down due to state of lower-layer interface(s).";
+          }
+        }
+        config false;
+        mandatory true;
+        description
+          "The current operational state of the interface.
+           This leaf has the same semantics as ifOperStatus.";
+        reference
+          "RFC 2863: The Interfaces Group MIB - ifOperStatus";
+      }
+  }
+
   container interfaces {
     description
       "Interface parameters.";
@@ -251,55 +303,7 @@ module goldstone-interfaces {
           "RFC 2863: The Interfaces Group MIB - ifAdminStatus";
       }
 
-      leaf oper-status {
-        type enumeration {
-          enum up {
-            value 1;
-            description
-              "Ready to pass packets.";
-          }
-          enum down {
-            value 2;
-
-            description
-              "The interface does not pass any packets.";
-          }
-          enum testing {
-            value 3;
-            description
-              "In some test mode.  No operational packets can
-               be passed.";
-          }
-          enum unknown {
-            value 4;
-            description
-              "Status cannot be determined for some reason.";
-          }
-          enum dormant {
-            value 5;
-            description
-              "Waiting for some external event.";
-          }
-          enum not-present {
-            value 6;
-            description
-              "Some component (typically hardware) is missing.";
-          }
-          enum lower-layer-down {
-            value 7;
-            description
-              "Down due to state of lower-layer interface(s).";
-          }
-        }
-        config false;
-        mandatory true;
-        description
-          "The current operational state of the interface.
-
-           This leaf has the same semantics as ifOperStatus.";
-        reference
-          "RFC 2863: The Interfaces Group MIB - ifOperStatus";
-      }
+      uses interface_oper_status;
 
       leaf if-index {
         type int32 {
@@ -595,4 +599,17 @@ module goldstone-interfaces {
 
     }
   }
+
+  /*
+   * Notifications
+   */
+
+  notification interface-link-state-notify-event{
+    leaf ifname {
+      type string;
+    }
+
+    uses interface_oper_status;
+  }
+
 }

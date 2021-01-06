@@ -9,12 +9,16 @@ import struct
 import base64
 import swsssdk
 import re
+import redis
+import os
 from .k8s_api import incluster_apis
 
 logger = logging.getLogger(__name__)
 
 COUNTER_PORT_MAP = "COUNTERS_PORT_NAME_MAP"
 COUNTER_TABLE_PREFIX = "COUNTERS:"
+REDIS_SERVICE_HOST = os.getenv("REDIS_SERVICE_HOST")
+REDIS_SERVICE_PORT = os.getenv("REDIS_SERVICE_PORT")
 
 
 def _decode(string):
@@ -69,6 +73,7 @@ class Server(object):
             "SAI_PORT_STAT_IF_OUT_OCTETS": 0,
         }
         self.counter_if_dict = {}
+        self.notif_if = {}
 
     def stop(self):
         self.sess.stop()
@@ -1267,6 +1272,41 @@ class Server(object):
                 logger.warn(f"update oper ds timeout: {e}")
                 sess.apply_changes(timeout_ms=5000, wait=True)
 
+    def event_handler(self, msg):
+        try:
+            key = _decode(msg["channel"])
+            key = key.replace("__keyspace@0__:", "")
+            name = key.replace("PORT_TABLE:", "")
+            oper_status = _decode(
+                self.sonic_db.get(self.sonic_db.APPL_DB, key, "oper_status")
+            )
+
+            if name in self.notif_if:
+                curr_oper_status = self.notif_if[name]
+            else:
+                curr_oper_status = "unknown"
+
+            if curr_oper_status == oper_status:
+                return
+
+            eventname = "goldstone-interfaces:interface-link-state-notify-event"
+            notif = {
+                eventname: {
+                    "ifname": name,
+                    "oper-status": oper_status,
+                }
+            }
+            with self.conn.start_session() as sess:
+                ly_ctx = sess.get_ly_ctx()
+                n = json.dumps(notif)
+                logger.info(f"Notification: {n}")
+                dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
+                sess.notification_send_ly(dnode)
+                self.notif_if[name] = oper_status
+        except Exception as exp:
+            logger.error(exp)
+            pass
+
     async def start(self):
 
         logger.debug(
@@ -1320,6 +1360,13 @@ class Server(object):
                     oper_merge=True,
                     asyncio_register=True,
                 )
+
+                cache = redis.Redis(REDIS_SERVICE_HOST, REDIS_SERVICE_PORT)
+                pubsub = cache.pubsub()
+                pubsub.psubscribe(
+                    **{"__keyspace@0__:PORT_TABLE:Ethernet*": self.event_handler}
+                )
+                pubsub.run_in_thread(sleep_time=2)
 
         return []
 
