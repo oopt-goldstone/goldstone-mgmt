@@ -12,17 +12,18 @@ def main():
     parser.add_argument('--submodule')
     parser.add_argument('--sha1')
     parser.add_argument('--list-submodules', '-l', action='store_true')
+    parser.add_argument('--stage', '-s', action='store_true', help='stage a temporal branch which applies all patches for the specified submodule')
 
     args = parser.parse_args()
 
     repo = Repo(os.path.dirname(__file__) + '/..' )
 
     if args.list_submodules:
-        print(' '.join(m.name for m in repo.submodules))
+        print('\n'.join(m.name.split('/')[-1] for m in repo.submodules))
         return
 
-    if args.submodule == None or args.sha1 == None:
-        print('option --submodule and --sha1 is required')
+    if args.submodule == None:
+        print('option --submodule is required')
         sys.exit(1)
 
     if 'sm/' + args.submodule not in [m.name for m in repo.submodules]:
@@ -38,6 +39,20 @@ def main():
         if 'sm/' + args.submodule == m.name:
             sm = m
             break
+
+    if args.stage:
+        d = f'{os.path.dirname(__file__)}/../patches'
+        subprocess.run(['rm', '-rf', f'{os.path.dirname(__file__)}/../.pc'])
+        subprocess.run(['sudo', 'mount', '--bind', f'{d}/{args.submodule}', d])
+        try:
+            subprocess.run(['quilt', 'push', '-a'])
+        finally:
+            subprocess.run(['sudo', 'umount', d])
+        return
+
+    if args.sha1 == None:
+        print('option --sha1 is required')
+        sys.exit(1)
 
     try:
         commit = sm.module().commit(args.sha1)
