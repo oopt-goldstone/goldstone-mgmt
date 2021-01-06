@@ -547,4 +547,13 @@ module goldstone-onlp {
 
   uses platform-component-top;
 
+  notification piu-notify-event {
+    uses platform-component-config;
+    uses platform-piu-top-state;
+  }
+
+  notification sfp-notify-event {
+    uses platform-component-config;
+    uses platform-sfp-top-state;
+  }
 }

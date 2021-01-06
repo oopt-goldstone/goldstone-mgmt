@@ -99,7 +99,7 @@ def test_tai(cli):
     )
     ssh(cli, f"kubectl wait --timeout=90s --for=condition=ready pod/{pod}")
     ssh(cli, "kubectl get pods")
-    time.sleep(10)
+    time.sleep(20)
 
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
     assert "2.3" in output

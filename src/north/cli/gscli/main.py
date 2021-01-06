@@ -275,6 +275,9 @@ class Root(Object):
             self.notif_session.subscribe_notification_tree(
                 "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
             )
+            self.notif_session.subscribe_notification_tree(
+                "goldstone-onlp", "/goldstone-onlp:*", 0, 0, self.notification_cb
+            )
         except sr.SysrepoNotFoundError as e:
             logger.warning(f"mgmt daemons not running?: {e}")
 
