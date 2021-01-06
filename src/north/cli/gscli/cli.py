@@ -89,6 +89,8 @@ class ArpGroupCommand(Command):
                 if "neighbor" in intf["ipv4"]:
                     arp_list = intf["ipv4"]["neighbor"]
                     for arp in arp_list:
+                        if "link-layer-address" not in arp:
+                            arp["link-layer-address"] = "(incomplete)"
                         row = [arp["ip"], arp["link-layer-address"], intf["name"]]
                         rows.append(row)
         except (KeyError, sr.errors.SysrepoNotFoundError) as error:

@@ -472,6 +472,13 @@ def test_mgmt_intf(cli):
     ssh(cli, 'gscli -c "clear arp"')
     output = ssh(cli, 'gscli -c "show arp"')
     assert "10.10.10.250" not in output
+    ssh(cli, 'gscli -c "show arp"')
+    ssh(cli, 'gscli -c "ping 10.10.10.100 -c 4"')
+    output = ssh(cli, 'gscli -c "show arp"')
+    assert "10.10.10.100" in output
+    ssh(cli, 'gscli -c "clear arp"')
+    output = ssh(cli, 'gscli -c "show arp"')
+    assert "10.10.10.100" not in output
 
 
 def test_select_intf(cli):

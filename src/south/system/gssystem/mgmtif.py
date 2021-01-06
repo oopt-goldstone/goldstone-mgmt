@@ -200,11 +200,10 @@ class ManagementInterfaceServer:
         intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAME).pop()
         for n in self.get_neighbor():
             dst = n["ip"]
-            lladdr = n["link-layer-address"]
             self.pyroute.neigh(
                 "del",
                 dst=dst,
-                lladdr=lladdr,
+                lladdr=n.get("link-layer-address", None),
                 ifindex=intf_index,
             )
 
