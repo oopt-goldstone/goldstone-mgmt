@@ -1,2 +1,3 @@
 sysrepoctl-install.patch
 skip_test.patch
+add_debug_log_in_locking_methods.patch
