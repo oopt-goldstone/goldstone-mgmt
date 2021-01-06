@@ -469,7 +469,7 @@ class Server(object):
         # this can be implemented by subscribing to ONLP operational datastore
         # and create/remove TAI modules according to hardware configuration changes
         self.sess.switch_datastore('operational')
-        d = self.sess.get_data('/goldstone-onlp:components/component')
+        d = self.sess.get_data('/goldstone-onlp:components/component', no_subs=True)
         modules = [{'name': c['name'], 'location': c['name']} for c in d['components']['component'] if c['state']['type'] == 'PIU' and c['piu']['state']['status'] == ['PRESENT']]
         self.sess.switch_datastore('running')
 

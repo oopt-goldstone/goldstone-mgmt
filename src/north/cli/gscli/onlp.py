@@ -1,114 +1,104 @@
 import sys
 import os
-
-from .base import InvalidInput, Completer
-from .cli import GSObject as Object
-import json
+from .base import InvalidInput
 import libyang as ly
 import sysrepo as sr
+from .common import sysrepo_wrap
+from tabulate import tabulate
 
-from prompt_toolkit.completion import WordCompleter
 
-
-class Component(Object):
-    XPATH = "/goldstone-onlp:components/component"
-
-    def __init__(self, conn, parent, type_, name):
-        if type_ not in ["fan", "thermal", "psu", "led"]:
-            raise InvalidInput("invalid component")
-        self._type = type_
-        self.name = name
+class Component(object):
+    def __init__(self, conn):
         self.session = conn.start_session()
-        super(Component, self).__init__(parent)
+        self.sr_op = sysrepo_wrap(self.session)
+        self.component = {}
+        self.XPATH = "/goldstone-onlp:components"
 
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput("usage: show[cr]")
-            self.session.switch_datastore("operational")
-            d = self.session.get_data("{}[name='{}']".format(self.XPATH, self.name))
-            d = d["components"]["component"][self.name][self._type]
-            print(d)
-            self.session.switch_datastore("running")
+    def get_state_attr(self, details, component):
+        table = []
+        try:
+            data = self.component["components"]["component"][component][details][
+                "state"
+            ]
+            if details != "piu" and details != "sfp":
+                desc = self.component["components"]["component"][component]["state"][
+                    "description"
+                ]
+                table.append(["description", desc])
+            for k, v in data.items():
+                subnode = data[k]
+                if isinstance(subnode, dict):
+                    table.append([k])
+                    for p, q in subnode.items():
+                        table.append([p, q])
+                elif isinstance(subnode, list):
+                    for p in subnode:
+                        table.append([k, p])
+                else:
+                    table.append([k, v])
+        except (sr.errors.SysrepoNotFoundError, KeyError) as error:
+            print(error)
+        return table
 
-    def __str__(self):
-        return "{}({})".format(self._type, self.name)
+    def show_onlp(self, option="all"):
 
+        self.component = self.sr_op.get_data(self.XPATH, "operational")
+        if option == "all":
+            types = ["fan", "psu", "led", "piu", "sfp", "thermal", "sys"]
+            components = self.get_components(option)
+            for type_ in types:
+                print("\n")
+                t = type_.upper()
+                print("-------------------------------")
+                print(f"{t} INFORMATION")
+                print("-------------------------------")
+                components = self.get_components(type_)
+                for component in components:
+                    table = self.get_state_attr(type_, component)
+                    print(component)
+                    print(tabulate(table))
 
-class FanCompleter(Completer):
-    def __init__(self):
-        super(FanCompleter, self).__init__(lambda: ["percentage"])
+        elif option == "transceiver":
+            components = self.get_components("piu")
+            components.sort()
+            for component in components:
+                table = self.get_state_attr("piu", component)
+                print(component)
+                print(tabulate(table))
+            components = self.get_components("sfp")
+            components.sort()
+            for component in components:
+                table = self.get_state_attr("sfp", component)
+                print(component)
+                print(tabulate(table))
+        elif option == "system":
+            components = self.get_components("sys")
+            components.sort()
+            for component in components:
+                table = self.get_state_attr("sys", component)
+                print(component)
+                print(tabulate(table))
 
+        else:
+            components = self.get_components(option)
+            components.sort()
+            for component in components:
+                table = self.get_state_attr(option, component)
+                print(component)
+                print(tabulate(table))
 
-class Fan(Component):
-    def __init__(self, *args):
-        super(Fan, self).__init__(*args)
+    def get_components(self, type_):
+        if type_ != "all":
+            return [
+                v["name"]
+                for v in self.component.get("components", {}).get("component", [])
+                if v["state"]["type"] == type_.upper()
+            ]
+        else:
+            return [
+                v for v in self.component.get("components", {}).get("component", [])
+            ]
 
-        @self.command(FanCompleter())
-        def set(args):
-            if len(args) != 2:
-                raise InvalidInput("usage: set <attribute> <value>[cr]")
-            self.session.set_item(
-                "{}[name='{}']/fan/config/{}".format(self.XPATH, self.name, args[0]),
-                args[1],
-            )
-            self.session.apply_changes()
-            # raise InvalidInput exception when value is invalid
-            return self
-
-
-class Platform(Object):
-    XPATH = "/goldstone-onlp:components"
-
-    def __init__(self, conn, parent):
-        self.session = conn.start_session()
-        super(Platform, self).__init__(parent)
-
-        self.session.switch_datastore("operational")
-        tree = self.session.get_data_ly(self.XPATH)
-        self.session.switch_datastore("running")
-        self._component_map = json.loads(tree.print_mem("json"))
-
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput("usage: show[cr]")
-            self.session.switch_datastore("operational")
-            tree = self.session.get_data_ly(self.XPATH)
-            print(tree.print_mem("json"))
-            self.session.switch_datastore("running")
-
-        @self.command(WordCompleter(lambda: self._components("fan")))
-        def fan(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: fan <name>")
-            return Fan(self.session, self, "fan", args[0])
-
-        @self.command(WordCompleter(lambda: self._components("thermal")))
-        def thermal(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: thermal <name>")
-            return Component(self.session, self, "thermal", args[0])
-
-        @self.command(WordCompleter(lambda: self._components("psu")))
-        def psu(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: psu <name>")
-            return Component(self.session, self, "psu", args[0])
-
-        @self.command(WordCompleter(lambda: self._components("led")))
-        def led(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: led <name>")
-            return Component(self.session, self, "led", args[0])
-
-    def __str__(self):
-        return "platform"
-
-    def _components(self, type_):
-        d = self._component_map
-        return [
-            v["name"]
-            for v in d.get("goldstone-onlp:components", {}).get("component", [])
-            if v["state"]["type"] == type_.upper()
-        ]
+    def tech_support(self):
+        print("\n Show Onlp details")
+        self.show_onlp()

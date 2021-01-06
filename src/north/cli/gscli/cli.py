@@ -5,6 +5,7 @@ from tabulate import tabulate
 from .sonic import Sonic
 from .tai import Transponder
 from .system import System, TACACS, AAA, Mgmtif
+from .onlp import Component
 import json
 import libyang as ly
 import sysrepo as sr
@@ -172,6 +173,41 @@ class TransponderGroupCommand(Command):
         )
 
 
+class OnlpGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "fan": Command,
+        "psu": Command,
+        "led": Command,
+        "transceiver": Command,
+        "thermal": Command,
+        "system": Command,
+        "all": Command,
+    }
+
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.onlp_component = Component(context.conn)
+
+    def exec(self, line):
+        if len(line) < 1 or line[0] not in [
+            "fan",
+            "psu",
+            "led",
+            "transceiver",
+            "thermal",
+            "system",
+            "all",
+        ]:
+            raise InvalidInput(self.usage())
+        return self.onlp_component.show_onlp(line[0])
+
+    def usage(self):
+        return (
+            "usage:\n"
+            f" {self.parent.name} {self.name} (fan|psu|led|transceiver|thermal|system|all)"
+        )
+
+
 class AAAGroupCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
@@ -254,6 +290,7 @@ class GlobalShowCommand(Command):
         "version": Command,
         "transponder": TransponderGroupCommand,
         "running-config": RunningConfigCommand,
+        "chassis-hardware": OnlpGroupCommand,
         "aaa": AAAGroupCommand,
         "tacacs": TACACSGroupCommand,
     }
@@ -430,6 +467,7 @@ class GlobalShowCommand(Command):
             f" {self.name} vlan details \n"
             f" {self.name} ip route\n"
             f" {self.name} transponder (<transponder_name>|summary)\n"
+            f" {self.name} chassis-hardware (fan|psu|led|transceiver|thermal|system|all)\n"
             f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"
             f" {self.name} version \n"
             f" {self.name} aaa \n"

@@ -631,6 +631,15 @@ def test_onlp(cli):
     assert "piu" in output
     assert "sfp" in output
     print("Component PIU and SFP found in operational-DB")
+    ssh(cli, 'gscli -c "show chassis-hardware fan"')
+    ssh(cli, 'gscli -c "show chassis-hardware led"')
+    ssh(cli, 'gscli -c "show chassis-hardware psu"')
+    output = ssh(cli, 'gscli -c "show chassis-hardware transceiver"')
+    assert "/dev/piu" in output
+    assert "PRESENT" in output
+    output = ssh(cli, 'gscli -c "show chassis-hardware all"')
+    assert "/dev/piu" in output
+    assert "PRESENT" in output
 
 
 def test_system_reconcile(cli):

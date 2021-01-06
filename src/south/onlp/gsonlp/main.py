@@ -37,19 +37,329 @@ class Server(object):
         self.onlp_piu_status = []
         # This list would be indexed by port
         self.onlp_sfp_presence = []
+        self.components = {}
 
     def stop(self):
         logger.info(f"stop server")
         self.sess.stop()
         self.conn.disconnect()
 
+    def get_thermal_info(self):
+        thermal = onlp.onlp.onlp_thermal_info()
+        threshold = onlp.onlp.onlp_thermal_info_thresholds()
+        for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.THERMAL]:
+            libonlp.onlp_thermal_info_get(oid, ctypes.byref(thermal))
+            thermal_id = oid & 0xFFFFF
+            name = f"THERMAL SENSOR{thermal_id}"
+            if thermal.status & onlp.onlp.ONLP_THERMAL_STATUS.PRESENT:
+                status = "PRESENT"
+            else:
+                status = "FAILED"
+                r = {
+                    "name": name,
+                    "config": {"name": name},
+                    "state": {
+                        "type": "THERMAL",
+                        "description": str(thermal.hdr.description, "utf-8"),
+                    },
+                    "thermal": {"state": {"status": [status]}},
+                }
+                self.components["goldstone-onlp:components"]["component"].append(r)
+                continue
+
+            if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_TEMPERATURE:
+                temperature = thermal.mcelcius
+            else:
+                temperature = 0
+
+            if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_WARNING_THRESHOLD:
+                threshold_warning = threshold.warning
+            else:
+                threhold_warning = 0
+
+            if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_ERROR_THRESHOLD:
+                threshold_error = threshold.error
+            else:
+                threhold_error = 0
+
+            if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_SHUTDOWN_THRESHOLD:
+                threshold_shutdown = threshold.shutdown
+            else:
+                threhold_shutdown = 0
+
+            r = {
+                "name": name,
+                "config": {"name": name},
+                "state": {
+                    "type": "THERMAL",
+                    "description": str(thermal.hdr.description, "utf-8"),
+                },
+                "thermal": {
+                    "state": {
+                        "status": [status],
+                        "temperature": temperature,
+                        "thresholds": {
+                            "warning": threshold.warning,
+                            "error": threshold_error,
+                            "shutdown": threshold_shutdown,
+                        },
+                    }
+                },
+            }
+            self.components["goldstone-onlp:components"]["component"].append(r)
+
+    def get_fan_info(self):
+        fan = onlp.onlp.onlp_fan_info()
+        for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.FAN]:
+            libonlp.onlp_fan_info_get(oid, ctypes.byref(fan))
+            fan_id = oid & 0xFFFFFF
+            name = f"FAN{fan_id}"
+            if fan.status & onlp.onlp.ONLP_FAN_STATUS.PRESENT:
+                status = "PRESENT"
+            else:
+                status = "FAILED"
+                r = {
+                    "name": name,
+                    "config": {"name": name},
+                    "state": {
+                        "type": "FAN",
+                        "description": str(fan.hdr.description, "utf-8"),
+                    },
+                    "fan": {"state": {"status": [status]}},
+                }
+
+                self.components["goldstone-onlp:components"]["component"].append(r)
+                continue
+
+            if fan.status & onlp.onlp.ONLP_FAN_STATUS.B2F:
+                direction = "B2F"
+            else:
+                direction = "F2B"
+
+            if fan.caps & onlp.onlp.ONLP_FAN_CAPS.GET_RPM:
+                rpm = fan.rpm
+            else:
+                rpm = 0
+
+            if fan.caps & onlp.onlp.ONLP_FAN_CAPS.GET_PERCENTAGE:
+                percentage = fan.percentage
+            else:
+                percentage = 0
+
+            r = {
+                "name": name,
+                "config": {"name": name},
+                "state": {
+                    "type": "FAN",
+                    "description": str(fan.hdr.description, "utf-8"),
+                },
+                "fan": {
+                    "state": {
+                        "rpm": rpm,
+                        "percentage": percentage,
+                        "direction": direction,
+                        "status": [status],
+                    }
+                },
+            }
+
+            self.components["goldstone-onlp:components"]["component"].append(r)
+
+    def get_psu_info(self):
+        psu = onlp.onlp.onlp_psu_info()
+        for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.PSU]:
+            libonlp.onlp_psu_info_get(oid, ctypes.byref(psu))
+            psu_id = oid & 0xFFFFFF
+            name = f"PSU{psu_id}"
+            if psu.status & onlp.onlp.ONLP_PSU_STATUS.PRESENT:
+                status = "PRESENT"
+            else:
+                status = "FAILED"
+                r = {
+                    "name": name,
+                    "config": {"name": name},
+                    "state": {
+                        "type": "PSU",
+                        "description": str(psu.hdr.description, "utf-8"),
+                    },
+                    "psu": {"state": {"status": [status]}},
+                }
+
+            model = str(psu.model, "utf-8")
+            serial = str(psu.serial, "utf-8")
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.IIN:
+                in_curr = psu.miin
+            else:
+                in_curr = 0
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.IOUT:
+                out_curr = psu.miout
+            else:
+                out_curr = 0
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.PIN:
+                in_power = psu.mpin
+            else:
+                in_power = 0
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.POUT:
+                out_power = psu.mpout
+            else:
+                out_power = 0
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.VIN:
+                in_volt = psu.mvin
+            else:
+                in_volt = 0
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.VOUT:
+                out_volt = psu.mvout
+            else:
+                out_volt = 0
+
+            r = {
+                "name": name,
+                "config": {"name": name},
+                "state": {
+                    "type": "PSU",
+                    "description": str(psu.hdr.description, "utf-8"),
+                },
+                "psu": {
+                    "state": {
+                        "status": [status],
+                        "model": model,
+                        "serial": serial,
+                        "input-voltage": in_volt,
+                        "output-voltage": out_volt,
+                        "input-current": in_curr,
+                        "output-current": out_curr,
+                        "input-power": in_power,
+                        "output-power": out_power,
+                    }
+                },
+            }
+
+            self.components["goldstone-onlp:components"]["component"].append(r)
+
+    def get_led_info(self):
+        led = onlp.onlp.onlp_led_info()
+        for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.LED]:
+            libonlp.onlp_led_info_get(oid, ctypes.byref(led))
+            led_id = oid & 0xFFFFFF
+            name = f"LED{led_id}"
+            if led.status & onlp.onlp.ONLP_LED_STATUS.PRESENT:
+                status = "PRESENT"
+            else:
+                status = "FAILED"
+                r = {
+                    "name": name,
+                    "config": {"name": name},
+                    "state": {
+                        "type": "LED",
+                        "description": str(led.hdr.description, "utf-8"),
+                    },
+                    "led": {"state": {"status": [status]}},
+                }
+
+            mode = "OFF"
+            if led.mode == onlp.onlp.ONLP_LED_MODE.OFF:
+                mode = "OFF"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.ON:
+                mode = "ON"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.RED:
+                mode = "RED"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.RED_BLINKING:
+                mode = "RED_BLINKING"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.ORANGE:
+                mode = "ORANGE"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.ORANGE_BLINKING:
+                mode = "ORANGE_BLINKING"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.YELLOW:
+                mode = "YELLOW"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.YELLOW_BLINKING:
+                mode = "YELLOW_BLINKING"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.GREEN:
+                mode = "GREEN"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.GREEN_BLINKING:
+                mode = "GREEN_BLINKING"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.BLUE:
+                mode = "BLUE"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.BLUE_BLINKING:
+                mode = "BLUE_BLINKING"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.PURPLE:
+                mode = "PURPLE"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.PURPLE_BLINKING:
+                mode = "PURPLE_BLINKING"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.AUTO:
+                mode = "AUTO"
+            elif led.mode == onlp.onlp.ONLP_LED_MODE.AUTO_BLINKING:
+                mode = "AUTO_BLINKING"
+
+            r = {
+                "name": name,
+                "config": {"name": name},
+                "state": {
+                    "type": "LED",
+                    "description": str(led.hdr.description, "utf-8"),
+                },
+                "led": {"state": {"mode": mode, "status": [status]}},
+            }
+
+            self.components["goldstone-onlp:components"]["component"].append(r)
+
+    def get_sys_info(self):
+        sys = onlp.onlp.onlp_sys_info()
+        libonlp.onlp_sys_info_get(ctypes.byref(sys))
+        name = "SYS"
+        product_name   = " "
+        part_number    = " "
+        serial_number  = " "
+        cpld_versions  = " "
+        other_versions = " "
+        if isinstance(sys.onie_info.product_name, bytes):
+            product_name = str(sys.onie_info.product_name, "utf-8")
+        if isinstance(sys.onie_info.part_number, bytes):
+            part_number = str(sys.onie_info.part_number, "utf-8")
+        if isinstance(sys.onie_info.serial_number, bytes):
+            serial_number = str(sys.onie_info.serial_number, "utf-8")
+        if isinstance(sys.platform_info.cpld_versions, bytes):
+            cpld_versions = str(sys.platform_info.cpld_versions, "utf-8")
+        if isinstance(sys.platform_info.other_versions, bytes):
+            other_versions = str(sys.platform_info.other_versions, "utf-8")
+
+        r = {
+            "name": name,
+            "config": {"name": name},
+            "state": {"type": "SYS", "description": "System Information"},
+            "sys": {
+                "state": {
+                    "onie": {
+                        "product-name": product_name,
+                        "part-number": part_number,
+                        "serial-number": serial_number,
+                    },
+                    "cpld-version": cpld_versions,
+                    "other-versions": other_versions,
+                }
+            },
+        }
+        self.components["goldstone-onlp:components"]["component"].append(r)
+
     async def change_cb(self, event, req_id, changes, priv):
         logger.info(f"change_cb: {event}, {req_id}, {changes}")
         return
 
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
-        logger.info(f"oper get callback requested xpath: {req_xpath}")
-        return {}
+        self.components = {"goldstone-onlp:components": {"component": []}}
+        logger.debug(f"oper_cb: {xpath}, {req_xpath}")
+        print (f"oper_cb: {xpath}, {req_xpath}")
+        self.get_thermal_info()
+        self.get_fan_info()
+        self.get_psu_info()
+        self.get_led_info()
+        self.get_sys_info()
+        return self.components
 
     def send_notifcation(self, notif):
         ly_ctx = self.sess.get_ly_ctx()
@@ -138,13 +448,13 @@ class Server(object):
             name = f"sfp{port}"
             xpath = f"/goldstone-onlp:components/component[name='{name}']"
 
-            self.sess.set_item(f"{xpath}/config/name", "sfp" + str(port))
-            self.sess.set_item(f"{xpath}/state/type", "SFP")
-
             presence = libonlp.onlp_sfp_is_present(port)
 
             if not (presence ^ self.onlp_sfp_presence[i]):
                 continue
+
+            self.sess.set_item(f"{xpath}/config/name", "sfp" + str(port))
+            self.sess.set_item(f"{xpath}/state/type", "SFP")
 
             if presence:
                 sfp_presence = "PRESENT"
@@ -237,6 +547,7 @@ class Server(object):
     async def start(self):
         # passing None to the 2nd argument is important to enable layering the running datastore
         # as the bottom layer of the operational datastore
+        self.sess.switch_datastore("running")
         self.sess.subscribe_module_change(
             "goldstone-onlp", None, self.change_cb, asyncio_register=True
         )

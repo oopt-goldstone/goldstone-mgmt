@@ -23,7 +23,6 @@ import time
 
 from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
-from .onlp import Platform
 from .tai_cli import Transponder
 from .sonic_cli import Interface_CLI, Vlan_CLI
 from .sonic import Sonic
@@ -126,12 +125,6 @@ class Root(Object):
                 subprocess.call(hst_name, shell=True)
             except:
                 print("Unexpected error:", sys.exc_info()[0])
-
-        @self.command()
-        def platform(line):
-            if len(line) != 0:
-                raise InvalidInput("usage: platform[cr]")
-            return Platform(conn, self)
 
         @self.command()
         def system(line):
