@@ -36,10 +36,15 @@ class ManagementInterfaceServer:
                     ) and xpath.endswith("']"):
                         value = change.value
                         destination_prefix = value["destination-prefix"]
-                        ndb.routes.create(
-                            dst=destination_prefix,
-                            oif=intf["index"],
-                        ).commit()
+                        try:
+                            ndb.routes.create(
+                                dst=destination_prefix,
+                                oif=intf["index"],
+                            ).commit()
+                        except KeyError as error:
+                            raise sysrepo.SysrepoInvalArgError(
+                                f"Object exists: {str(error)}"
+                            )
                 if isinstance(change, sysrepo.ChangeModified):
                     raise sysrepo.SysrepoUnsupportedError(
                         "Modification is not supported"
@@ -96,9 +101,14 @@ class ManagementInterfaceServer:
                             raise sysrepo.SysrepoInvalArgError(
                                 "interface name is not the management interface"
                             )
-                        ndb.interfaces[intf_name].add_ip(
-                            ip + "/" + str(change.value)
-                        ).commit()
+                        try:
+                            ndb.interfaces[intf_name].add_ip(
+                                ip + "/" + str(change.value)
+                            ).commit()
+                        except KeyError as error:
+                            raise sysrepo.SysrepoInvalArgError(
+                                f"Object exists: {str(error)}"
+                            )
                 if isinstance(change, sysrepo.ChangeModified):
                     raise sysrepo.SysrepoUnsupportedError(
                         "Modification is not supported"
