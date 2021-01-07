@@ -514,6 +514,30 @@ class ClearArpGroupCommand(Command):
         print(self.sess.rpc_send("/goldstone-routing:clear_arp", {}))
 
 
+class ClearInterfaceGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "counters": Command,
+    }
+
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.conn = context.root().conn
+        self.sess = self.conn.start_session()
+
+    def exec(self, line):
+        if len(line) < 1 or line[0] not in ["counters"]:
+            raise InvalidInput(self.usage())
+        if len(line) == 1:
+            if line[0] == "counters":
+                self.sess.rpc_send("/goldstone-interfaces:clear_counters", {})
+                print("Interface counters are cleared.\n")
+        else:
+            raise InvalidInput(self.usage())
+
+    def usage(self):
+        return "usage:\n" f" {self.parent.name} {self.name} (counters)"
+
+
 class ShowCommand(Command):
     def __init__(self, context=None, parent=None, name=None, additional_completer=None):
         if name == None:
@@ -528,6 +552,7 @@ class GlobalClearCommand(Command):
     SUBCOMMAND_DICT = {
         "arp": ClearArpGroupCommand,
         "ip": ClearIpGroupCommand,
+        "interface": ClearInterfaceGroupCommand,
     }
 
 

@@ -612,4 +612,14 @@ module goldstone-interfaces {
     uses interface_oper_status;
   }
 
+  rpc clear_counters {
+    output {
+      leaf status {
+        type enumeration {
+          enum faliure;
+          enum success;
+        }
+      }
+    }
+  }
 }

@@ -517,6 +517,9 @@ def test_statistics(cli):
     # Validataing if last interface is present
     assert "Ethernet20_1" in output
 
+    output = ssh(cli, 'gscli -c "clear interface counters"')
+    assert "Interface counters are cleared" in output
+
 
 def test_mgmt_if_cmds(cli):
     try:

@@ -1011,6 +1011,12 @@ class Server(object):
         value = {"FLEX_COUNTER_STATUS": "enable"}
         self.sonic_configdb.mod_entry("FLEX_COUNTER_TABLE", "PORT", value)
 
+    def clear_counters(self, xpath, input_params, event, priv):
+        logger.debug(
+            f"clear_counters: xpath: {xpath}, input: {input}, event: {event}, priv: {priv}"
+        )
+        self.cache_counters()
+
     def reconcile(self):
         self.sess.switch_datastore("running")
         intf_data = self.sess.get_data("/goldstone-interfaces:interfaces")
@@ -1359,6 +1365,10 @@ class Server(object):
                     self.oper_cb,
                     oper_merge=True,
                     asyncio_register=True,
+                )
+                self.sess.subscribe_rpc_call(
+                    "/goldstone-interfaces:clear_counters",
+                    self.clear_counters,
                 )
 
                 cache = redis.Redis(REDIS_SERVICE_HOST, REDIS_SERVICE_PORT)
