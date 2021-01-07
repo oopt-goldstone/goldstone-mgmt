@@ -312,10 +312,10 @@ class Server(object):
         sys = onlp.onlp.onlp_sys_info()
         libonlp.onlp_sys_info_get(ctypes.byref(sys))
         name = "SYS"
-        product_name   = " "
-        part_number    = " "
-        serial_number  = " "
-        cpld_versions  = " "
+        product_name = " "
+        part_number = " "
+        serial_number = " "
+        cpld_versions = " "
         other_versions = " "
         if isinstance(sys.onie_info.product_name, bytes):
             product_name = str(sys.onie_info.product_name, "utf-8")
@@ -353,7 +353,6 @@ class Server(object):
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         self.components = {"goldstone-onlp:components": {"component": []}}
         logger.debug(f"oper_cb: {xpath}, {req_xpath}")
-        print (f"oper_cb: {xpath}, {req_xpath}")
         self.get_thermal_info()
         self.get_fan_info()
         self.get_psu_info()
@@ -367,6 +366,7 @@ class Server(object):
             logger.warning(f"nothing to notify")
         else:
             n = json.dumps(notif)
+            logger.info(f"Notification: {n}")
             dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
             self.sess.notification_send_ly(dnode)
 
@@ -392,49 +392,65 @@ class Server(object):
             libonlp.onlp_module_status_get(oid, ctypes.byref(sts))
 
             status_change = self.onlp_piu_status[piuId - 1] ^ sts.value
+            piu_sts_change = status_change & (
+                STATUS_ACO_PRESENT | STATUS_DCO_PRESENT | STATUS_QSFP_PRESENT
+            )
+            cfp_sts_change = status_change & (
+                CFP2_STATUS_UNPLUGGED | CFP2_STATUS_PRESENT
+            )
 
             # continue if there is no change in status
             if status_change == 0:
                 continue
 
             self.onlp_piu_status[piuId - 1] = sts.value
-            self.sess.delete_item(f"{xpath}/piu/state/status")
 
-            if sts.value != STATUS_UNPLUGGED:
-                self.sess.set_item(f"{xpath}/piu/state/status", "PRESENT")
-                if status_change & STATUS_ACO_PRESENT:
+            piu_type = "UNKNOWN"
+            cfp2_presence = "UNPLUGGED"
+
+            if sts.value == STATUS_UNPLUGGED:
+                piu_presence = "UNPLUGGED"
+                notif = {eventname: {"name": name, "status": ["UNPLUGGED"]}}
+            else:
+                piu_presence = "PRESENT"
+                if sts.value & STATUS_ACO_PRESENT:
                     piu_type = "ACO"
-                elif status_change & STATUS_DCO_PRESENT:
+                elif sts.value & STATUS_DCO_PRESENT:
                     piu_type = "DCO"
-                elif status_change & STATUS_QSFP_PRESENT:
+                elif sts.value & STATUS_QSFP_PRESENT:
                     piu_type = "QSFP"
                 else:
                     piu_type = "UNKNOWN"
-
-                self.sess.set_item(f"{xpath}/piu/state/piu-type", piu_type)
-
-                if status_change & CFP2_STATUS_PRESENT:
-                    cfp2_status = "PRESENT"
-                    self.sess.set_item(f"{xpath}/piu/state/cfp2-presence", "PRESENT")
-                elif status_change & CFP2_STATUS_UNPLUGGED:
-                    cfp2_status = "UNPLUGGED"
-                    self.sess.set_item(f"{xpath}/piu/state/cfp2-presence", "UNPLUGGED")
-
+                if sts.value & CFP2_STATUS_PRESENT:
+                    cfp2_presence = "PRESENT"
+                else:
+                    cfp2_presence = "UNPLUGGED"
                 notif = {
                     eventname: {
                         "name": name,
                         "status": ["PRESENT"],
                         "piu-type": piu_type,
-                        "cfp2-presence": cfp2_status,
+                        "cfp2-presence": cfp2_presence,
                     }
                 }
-
-            else:
-                self.sess.set_item(f"{xpath}/piu/state/status", "UNPLUGGED")
-                self.sess.delete_item(f"{xpath}/piu/state/piu-type")
-                notif = {eventname: {"name": name, "status": ["UNPLUGGED"]}}
-
             self.send_notifcation(notif)
+
+            if piu_sts_change != 0:
+                self.sess.delete_item(f"{xpath}/piu/state/status")
+                if piu_presence == "PRESENT":
+                    self.sess.set_item(f"{xpath}/piu/state/piu-type", piu_type)
+                    self.sess.set_item(
+                        f"{xpath}/piu/state/cfp2-presence", cfp2_presence
+                    )
+                else:
+                    self.sess.delete_item(f"{xpath}/piu/state/piu-type")
+                    self.sess.delete_item(f"{xpath}/piu/state/cfp2-presence")
+
+                self.sess.set_item(f"{xpath}/piu/state/status", piu_presence)
+
+            if cfp_sts_change != 0 and sts.value != STATUS_UNPLUGGED:
+                self.sess.set_item(f"{xpath}/piu/state/cfp2-presence", cfp2_presence)
+
         self.sess.apply_changes()
 
     # monitor_sfp() monitor SFP presence periodically and change the operational data store
