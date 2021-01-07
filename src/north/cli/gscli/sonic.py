@@ -340,9 +340,10 @@ class Port(object):
         if config == False:
             self.sr_op.delete_data("{}/speed".format(xpath))
 
-    def set_vlan_mem(self, ifname, mode, vid, no=False):
+    def set_vlan_mem(self, ifname, mode, vid, config=True):
         xpath_mem_list = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
         xpath_mem_mode = "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST"
+        mode_map = {"tagged": "trunk", "untagged": "access"}
 
         vlan_name = "Vlan" + vid
         xpath_mem_list = xpath_mem_list + "[name='{}']".format(vlan_name)
@@ -357,12 +358,40 @@ class Port(object):
         except sr.SysrepoNotFoundError as e:
             self.sr_op.set_data("{}/admin-status".format(self.xpath(ifname)), "down")
 
-        if no == False:
+        if config == True:
             set_attribute(
                 self.sr_op, xpath_mem_list, "vlan", vlan_name, "members", ifname
             )
-        else:
+            if mode == "trunk":
+                set_attribute(
+                    self.sr_op,
+                    xpath_mem_mode,
+                    "vlan",
+                    vlan_name,
+                    "tagging_mode",
+                    "tagged",
+                )
+            elif mode == "access":
+                set_attribute(
+                    self.sr_op,
+                    xpath_mem_mode,
+                    "vlan",
+                    vlan_name,
+                    "tagging_mode",
+                    "untagged",
+                )
+
+        elif config == False:
             mem_list = self.sr_op.get_leaf_data(xpath_mem_list, "members")
+            if len(mem_list) == 0:
+                raise InvalidInput("No members added")
+            mode_data = self.sr_op.get_leaf_data(xpath_mem_mode, "tagging_mode")
+            mode_data = mode_data.pop()
+            if mode == None:
+                mode = mode_map[mode_data]
+            # checking whether the delete was triggered with the correct mode in the command issued
+            if mode_map[mode_data] != mode:
+                raise InvalidInput(f"Incorrect mode given : {mode}")
             if ifname in mem_list:
                 self.sr_op.delete_data("{}/{}".format(xpath_mem_list, "members"))
                 self.sr_op.delete_data("{}".format(xpath_mem_mode))
@@ -381,20 +410,6 @@ class Port(object):
                     )
             # Unconfig done
             return
-
-        if mode == "trunk":
-            set_attribute(
-                self.sr_op, xpath_mem_mode, "vlan", vlan_name, "tagging_mode", "tagged"
-            )
-        elif mode == "access":
-            set_attribute(
-                self.sr_op,
-                xpath_mem_mode,
-                "vlan",
-                vlan_name,
-                "tagging_mode",
-                "untagged",
-            )
 
     def speed_to_yang_val(self, speed):
         # Considering only speeds supported in CLI
@@ -429,7 +444,7 @@ class Port(object):
 
             for vlan in data:
                 if intf in vlan.get("members", []):
-                    self.set_vlan_mem(intf, None, str(vlan["vlanid"]), True)
+                    self.set_vlan_mem(intf, None, str(vlan["vlanid"]), config=False)
 
         is_delete = number_of_channels == None
 

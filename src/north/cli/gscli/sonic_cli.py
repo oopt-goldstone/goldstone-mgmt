@@ -50,6 +50,7 @@ class Interface_CLI(Object):
             "breakout": None,
         }
         self.breakout_list = ["2X50G", "4X25G", "4X10G"]
+        self.tagging_mode_list = ["trunk", "access"]
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
         def no(args):
@@ -67,16 +68,24 @@ class Interface_CLI(Object):
                 for ifname in self.ifnames:
                     self.sonic.port.set_mtu(ifname, None)
             elif args[0] == "switchport" and len(args) == 5:
+                if args[1] != "mode" and args[2] not in self.tagging_mode_list:
+                    raise InvalidInput(
+                        "usage : no switchport mode trunk|access vlan <vid>"
+                    )
+                if args[3] != "vlan":
+                    raise InvalidInput(
+                        "usage : no switchport mode trunk|access vlan <vid>"
+                    )
                 if args[4].isdigit():
                     if args[4] in parent.get_vid():
                         for ifname in self.ifnames:
                             self.sonic.port.set_vlan_mem(
-                                ifname, args[1], args[4], no=True
+                                ifname, args[2], args[4], config=False
                             )
                     else:
-                        print("Entered vid does not exist")
+                        raise InvalidInput("Entered vid does not exist")
                 else:
-                    print("argument vid must be numbers and not letters")
+                    raise InvalidInput("Entered <vid> must be numbers and not letters")
             elif args[0] == "breakout":
                 for ifname in self.ifnames:
                     self.sonic.port.set_breakout(ifname, None, None)
@@ -117,6 +126,12 @@ class Interface_CLI(Object):
         @self.command(NestedCompleter.from_nested_dict(self.switchprt_dict))
         def switchport(args):
             if len(args) != 4:
+                raise InvalidInput("usage: switchport mode (trunk|access) vlan <vid>")
+
+            if args[0] != "mode" or args[1] not in self.tagging_mode_list:
+                raise InvalidInput("usage: switchport mode (trunk|access) vlan <vid>")
+
+            if args[2] != "vlan":
                 raise InvalidInput("usage: switchport mode (trunk|access) vlan <vid>")
 
             if not args[3].isdigit():

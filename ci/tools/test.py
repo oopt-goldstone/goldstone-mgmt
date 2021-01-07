@@ -129,6 +129,52 @@ def test_vlan_member_add_delete(cli):
         cli,
         'gscli -c "interface Ethernet1_1; no shutdown; no switchport mode trunk vlan 1000; show"',
     )
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; switchport mode trunk vlab 1000"')
+    except SSHException as e:
+        assert "usage: switchport mode (trunk|access) vlan <vid>" in e.stderr
+    else:
+        raise Exception(
+            "failed to fail with an invalid cmd switchport mode trunk vlab 1000"
+        )
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; switchport mode trunk access 1000"')
+    except SSHException as e:
+        assert "usage: switchport mode (trunk|access) vlan <vid>" in e.stderr
+    else:
+        raise Exception(
+            "failed to fail with an invalid cmd switchport mode trunk access 1000"
+        )
+
+    ssh(cli, 'gscli -c "interface Ethernet1_1; switchport mode trunk vlan 1000"')
+    output = ssh(cli, 'gscli -c "show vlan details"')
+    assert "Ethernet1_1" in output
+    try:
+        ssh(
+            cli, 'gscli -c "interface Ethernet1_1; no switchport mode access vlan 1000"'
+        )
+    except SSHException as e:
+        assert "Incorrect mode given" in e.stderr
+    else:
+        raise Exception(
+            "failed to fail with an invalid cmd no switchport mode access vlan 1000"
+        )
+    try:
+        ssh(
+            cli,
+            'gscli -c "interface Ethernet1_1; no switchport mode trunk access 1000"',
+        )
+    except SSHException as e:
+        assert "usage : no switchport mode trunk|access vlan <vid>" in e.stderr
+    else:
+        raise Exception(
+            "failed to fail with an invalid cmd no switchport mode trunk access 1000"
+        )
+
+    ssh(cli, 'gscli -c "interface Ethernet1_1; no switchport mode trunk vlan 1000"')
+    output = ssh(cli, 'gscli -c "show vlan details"')
+    assert "Ethernet1_1" not in output
+
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "no vlan 1000"')
     ssh(cli, 'gscli -c "show vlan details"')
