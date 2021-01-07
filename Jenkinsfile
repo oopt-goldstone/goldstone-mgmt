@@ -79,7 +79,7 @@ pipeline {
         environment name: 'SKIP', value: '0'
       }
       steps {
-        sh 'DOCKER_BUILDKIT=1 docker build --build-arg GS_MGMT_BUILDER_IMAGE=$DOCKER_REPO/gs-mgmt-netopeer2:latest -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
+        sh 'make tester'
 
         timeout(time: 15, unit: 'MINUTES') {
             sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test ${params.DEVICE}"
