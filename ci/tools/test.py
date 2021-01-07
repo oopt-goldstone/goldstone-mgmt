@@ -640,6 +640,9 @@ def test_onlp(cli):
     output = ssh(cli, 'gscli -c "show chassis-hardware all"')
     assert "/dev/piu" in output
     assert "PRESENT" in output
+    output = ssh(cli, 'gscli -c "show tech-support"')
+    assert "/dev/piu" in output
+    assert "PRESENT" in output
 
 
 def test_system_reconcile(cli):

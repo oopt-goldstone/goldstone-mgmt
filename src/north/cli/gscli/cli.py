@@ -435,14 +435,17 @@ class GlobalShowCommand(Command):
             "/goldstone-routing:routing/static-routes/ipv4/route",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",
+            "/goldstone-onlp:components",
         ]
 
         sonic = Sonic(self.context.conn)
         transponder = Transponder(self.context.conn)
         system = System(self.context.conn)
+        onlp_component = Component(self.context.conn)
         sonic.tech_support()
         transponder.tech_support()
         system.tech_support()
+        onlp_component.tech_support()
         print("\nshow datastore:\n")
 
         with self.context.conn.start_session() as session:
