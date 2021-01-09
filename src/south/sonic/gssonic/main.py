@@ -994,7 +994,7 @@ class Server(object):
                 return r
         return r
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+    def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(
             "****************************inside oper-callback******************************"
         )
@@ -1414,7 +1414,6 @@ class Server(object):
                     "/goldstone-interfaces:interfaces",
                     self.oper_cb,
                     oper_merge=True,
-                    asyncio_register=True,
                 )
                 self.sess.subscribe_rpc_call(
                     "/goldstone-interfaces:clear_counters",
