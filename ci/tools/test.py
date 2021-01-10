@@ -485,7 +485,7 @@ def test_speed(cli):
     output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 40000; show"')
     assert "40000" in output
 
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; no speed ; show"')
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; no speed ; !sleep 1; show"')
     assert "100000" in output
 
 
