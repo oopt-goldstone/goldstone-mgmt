@@ -793,6 +793,22 @@ def test_system_reconcile(cli):
     assert "ip route 100.17.0.0/16" not in output
 
 
+def test_subcommands(cli):
+    output = ssh(cli, 'gscli -c "show transponder summary"')
+    lines = [line for line in output.split() if "/dev" in line]
+
+    if len(lines) == 0:
+        raise Exception("no transponder found on this device")
+
+    elems = [elem for elem in lines[0].split("|") if "/dev" in elem]
+    if len(elems) == 0:
+        raise Exception(f"invalid output: {output}")
+    output = ssh(cli, 'gscli -c "show interface counters Ethernet1_1"')
+    assert "Ethernet1_1" in output
+    ssh(cli, 'gscli -c "show interface brief"')
+    ssh(cli, 'gscli -c "show interface description"')
+
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -813,6 +829,7 @@ def main(host, username, password):
         try:
             ssh(cli, "kubectl exec -t deploy/tai -- taish -c 'log-level debug'")
             test_tai(cli)
+            test_subcommands(cli)
         except Exception as e:
             ssh(cli, "kubectl get pods -A")
             ssh(cli, "kubectl logs -l app=gs-mgmt-tai")

@@ -147,7 +147,9 @@ class TransponderGroupCommand(Command):
         elif type(parent) == GlobalShowCommand:
             self.exec = self.exec_show
             self.list = self.list_show
-            self.SUBCOMMAND_DICT["summary"] = Command
+            self.SUBCOMMAND_DICT = {
+                "summary": Command,
+            }
 
         super().__init__(context, parent, name)
 
