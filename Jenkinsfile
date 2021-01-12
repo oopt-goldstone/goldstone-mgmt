@@ -40,7 +40,7 @@ pipeline {
       }
       steps {
           sh 'DOCKER_BUILDKIT=1 docker build --build-arg GS_MGMT_BUILDER_IMAGE=$DOCKER_REPO/gs-mgmt-netopeer2:latest -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
-          sh "docker run -t -v `pwd`:`pwd` -w `pwd`/src/north/cli/gscli gs-mgmt-test bash -c 'exit \$(black -q --diff *.py | wc -l)'"
+          sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test bash -c 'exit \$(black -q --diff --exclude src/north/snmp/src src | wc -l)'"
           sh "docker run -t -v `pwd`:`pwd` -w `pwd`/yang gs-mgmt-test bash -c 'pyang *.yang'"
       }
     }
