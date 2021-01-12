@@ -384,9 +384,14 @@ async def loop_async(shell):
             p = shell.prompt()
             b = shell.bindings()
             session.app.shell = shell
-            line = await session.prompt_async(
-                p, completer=c, key_bindings=b, default=shell.default_input
-            )
+            try:
+                line = await session.prompt_async(
+                    p, completer=c, key_bindings=b, default=shell.default_input
+                )
+            except KeyboardInterrupt:
+                print("Execute 'exit' to exit")
+                continue
+
             if len(line) > 0:
                 await shell.exec(line)
 
