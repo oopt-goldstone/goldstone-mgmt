@@ -9,6 +9,7 @@ import tempfile
 
 from .common import *
 
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -24,7 +25,8 @@ def main(host, username, password):
         ssh(cli, "chown admin:admin /home/admin/.ssh/authorized_keys")
 
         with open("/tmp/check_np2.sh", "w") as f:
-            f.write(f"""#!/bin/sh
+            f.write(
+                f"""#!/bin/sh
 
 netopeer2-cli <<EOF
 auth pref publickey 4
@@ -36,7 +38,8 @@ get --filter-xpath "/goldstone-interfaces:*"
 get-config --source running --filter-xpath "/goldstone-tai:modules"
 
 EOF
-""")
+"""
+            )
         run("chmod +x /tmp/check_np2.sh && /tmp/check_np2.sh")
 
 

@@ -1,6 +1,6 @@
 import setuptools
 
-with open('requirements.txt') as f:
+with open("requirements.txt") as f:
     install_requires = f.read().split()
 
 setuptools.setup(

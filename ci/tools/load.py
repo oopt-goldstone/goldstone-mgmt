@@ -8,6 +8,7 @@ import time
 
 from .common import *
 
+
 def main(host, username, password):
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -21,13 +22,13 @@ def main(host, username, password):
         ssh(cli, "systemctl restart usonic")
 
         # stop South system service
-        ssh(cli, "systemctl stop gs-south-system || true") # can fail
+        ssh(cli, "systemctl stop gs-south-system || true")  # can fail
         # stop Goldstone Management service
-        ssh(cli, "systemctl stop gs-mgmt || true") # can fail
+        ssh(cli, "systemctl stop gs-mgmt || true")  # can fail
         # stop NETOPEER2 service
-        ssh(cli, "systemctl stop netopeer2 || true") # can fail
+        ssh(cli, "systemctl stop netopeer2 || true")  # can fail
         # stop SNMP service
-        ssh(cli, "systemctl stop gs-snmp || true") # can fail
+        ssh(cli, "systemctl stop gs-snmp || true")  # can fail
 
         run(
             "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-north-snmp"
@@ -56,7 +57,9 @@ def main(host, username, password):
         ssh(cli, "rm -rf /tmp/wheels")
         ssh(cli, "mkdir -p /tmp/wheels/cli /tmp/wheels/system")
         scp.put("src/north/cli/dist", recursive=True, remote_path="/tmp/wheels/cli")
-        scp.put("src/south/system/dist", recursive=True, remote_path="/tmp/wheels/system")
+        scp.put(
+            "src/south/system/dist", recursive=True, remote_path="/tmp/wheels/system"
+        )
         ssh(cli, "pip3 uninstall -y gscli gssystem")
         ssh(cli, "pip3 install /tmp/wheels/cli/dist/*.whl")
         ssh(cli, "pip3 install /tmp/wheels/system/dist/*.whl")
@@ -87,7 +90,6 @@ def main(host, username, password):
                 ssh(cli, f"kubectl logs ds/{name}")
                 sys.exit(1)
 
-
         # FIXME: Wait for additional 30 seconds for usonic to come
         # up in case if its restarted
         time.sleep(60)
@@ -95,7 +97,7 @@ def main(host, username, password):
         check_pod("gs-mgmt-sonic")
         check_pod("gs-mgmt-onlp")
         check_pod("gs-mgmt-tai")
-        check_pod('gs-mgmt-snmp')
+        check_pod("gs-mgmt-snmp")
 
         def restart_gssouth_system():
             max_iteration = 3

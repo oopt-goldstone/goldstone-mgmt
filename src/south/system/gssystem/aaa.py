@@ -12,10 +12,13 @@ PAM_AUTH_CONF = "/etc/pam.d/common-auth-gs"
 NSS_TACPLUS_CONF = "/etc/tacplus_nss.conf"
 NSS_CONF = "/etc/nsswitch.conf"
 
+
 class InvalidXPath(Exception):
     pass
 
+
 logger = logging.getLogger(__name__)
+
 
 class AAAServer:
     def __init__(self, conn):

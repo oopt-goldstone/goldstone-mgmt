@@ -11,6 +11,7 @@ from .mgmtif import ManagementInterfaceServer
 
 logger = logging.getLogger(__name__)
 
+
 def main():
     async def _main():
         loop = asyncio.get_event_loop()
@@ -47,6 +48,7 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO)
     asyncio.run(_main())
+
 
 if __name__ == "__main__":
     main()

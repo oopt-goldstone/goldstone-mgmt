@@ -2,6 +2,7 @@ import subprocess
 import os
 import sys
 
+
 class SSHException(Exception):
     def __init__(self, msg, ret, stdout, stderr):
         super().__init__(msg)

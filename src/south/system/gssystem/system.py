@@ -6,6 +6,7 @@ VERSION_FILE = "/etc/goldstone/loader/versions.json"
 
 logger = logging.getLogger(__name__)
 
+
 class SystemServer:
     def __init__(self, conn):
         self.sess = conn.start_session()

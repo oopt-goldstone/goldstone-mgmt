@@ -16,6 +16,7 @@ DEFAULT_UPDATE_FREQUENCY = 5
 
 logger = logging.getLogger(__name__)
 
+
 class GoldstoneMIB(
     rfc1213.InterfacesMIB,
     rfc1213.SystemMIB,
@@ -23,6 +24,7 @@ class GoldstoneMIB(
     """
     If Goldstone was to create custom MIBEntries, they may be specified here.
     """
+
 
 def main():
     async def _main(host, update_freq):
@@ -44,8 +46,10 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("--update-frequency", default=DEFAULT_UPDATE_FREQUENCY, type=int)
-    parser.add_argument("--host", default='tcp:localhost:3161')
+    parser.add_argument(
+        "--update-frequency", default=DEFAULT_UPDATE_FREQUENCY, type=int
+    )
+    parser.add_argument("--host", default="tcp:localhost:3161")
     args = parser.parse_args()
 
     if args.verbose:
@@ -55,5 +59,6 @@ def main():
 
     asyncio.run(_main(args.host, args.update_frequency))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

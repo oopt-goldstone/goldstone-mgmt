@@ -5,6 +5,7 @@ import paramiko
 
 from .common import *
 
+
 def main(host, username, password):
 
     with paramiko.SSHClient() as cli:
@@ -18,6 +19,7 @@ def main(host, username, password):
         except Exception as e:
             print("TODO: snmpwalk ifTable can fail now after breakout configuration")
             ssh(cli, "kubectl logs ds/gs-mgmt-snmp agentx")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Goldstone test SNMP")
