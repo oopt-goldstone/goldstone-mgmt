@@ -55,35 +55,45 @@ def test_tai(cli):
         raise Exception("failed to fail with an invalid command: tx-laser-freq aaa")
 
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; output-power -1; show"'
+        cli,
+        f'gscli -c "transponder {device}; netif 0; output-power -1; show" | grep output-power',
     )
-    assert "-1" in output
+    assert "-1.00 dBm" in output
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; no output-power; show"'
+        cli,
+        f'gscli -c "transponder {device}; netif 0; no output-power; show" | grep output-power',
     )
-    assert "1" in output
-
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 2; show"')
-    assert "2" in output
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no voa-rx; show"')
-    assert "0" in output
+    assert "1.00 dBm" in output
 
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; show"'
+        cli, f'gscli -c "transponder {device}; netif 0; voa-rx 2; show" | grep voa-rx'
+    )
+    assert "2.0" in output
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; no voa-rx; show" | grep voa-rx'
+    )
+    assert "0.0" in output
+
+    output = ssh(
+        cli,
+        f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; show" | grep tx-laser-freq',
     )
     assert "193.70THz" in output
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; show"'
+        cli,
+        f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; show" | grep tx-laser-freq',
     )
     assert "193.50THz" in output
 
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"'
+        cli,
+        f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk; show" | grep modulation-format',
     )
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
     assert "dp-qpsk" in output
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; no modulation-format"')
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" ')
+    output = ssh(
+        cli,
+        f'gscli -c "transponder {device}; netif 0; no modulation-format; show" | grep modulation-format',
+    )
     assert "dp-16-qam" in output
 
     ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 2.3"')
@@ -101,10 +111,19 @@ def test_tai(cli):
     ssh(cli, "kubectl get pods")
     time.sleep(20)
 
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
+    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
     assert "2.3" in output
-    assert "-1.2" in output
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; show" | grep output-power'
+    )
+    assert "-1.20 dBm" in output
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; show" | grep tx-laser-freq'
+    )
     assert "193.70THz" in output
+    output = ssh(
+        cli, f'gscli -c "transponder {device}; netif 0; show" | grep modulation-format'
+    )
     assert "dp-qpsk" in output
 
     ssh(cli, f'gscli -c "transponder {device}; shutdown"')
@@ -423,10 +442,10 @@ def test_mtu(cli):
         assert "does not satisfy the constraint" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: mtu 10000")
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 3500; show"')
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 3500; show" | grep mtu')
     assert "3500" in output
 
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; no mtu; show"')
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; no mtu; show" | grep mtu')
     assert "9100" in output
 
     # check multiple 'no mtu' command won't crash
@@ -482,7 +501,9 @@ def test_speed(cli):
     # TODO this should fail
     # output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000; show"')
 
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 40000; show"')
+    output = ssh(
+        cli, 'gscli -c "interface Ethernet1_1; speed 40000; show" | grep speed'
+    )
     assert "40000" in output
 
     output = ssh(cli, 'gscli -c "interface Ethernet1_1; no speed ; !sleep 1; show"')
@@ -693,6 +714,8 @@ def test_onlp(cli):
     ssh(cli, 'gscli -c "show chassis-hardware fan"')
     ssh(cli, 'gscli -c "show chassis-hardware led"')
     ssh(cli, 'gscli -c "show chassis-hardware psu"')
+    ssh(cli, 'gscli -c "show chassis-hardware thermal"')
+    ssh(cli, 'gscli -c "show chassis-hardware system"')
     output = ssh(cli, 'gscli -c "show chassis-hardware transceiver"')
     assert "/dev/piu" in output
     assert "PRESENT" in output
@@ -700,8 +723,7 @@ def test_onlp(cli):
     assert "/dev/piu" in output
     assert "PRESENT" in output
     output = ssh(cli, 'gscli -c "show tech-support"')
-    assert "/dev/piu" in output
-    assert "PRESENT" in output
+    assert "FAN INFORMATION" in output
 
 
 def test_system_reconcile(cli):
