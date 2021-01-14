@@ -1,257 +1,258 @@
 module goldstone-routing {
-	yang-version "1.1";
-	namespace "http://goldstone.net/yang/goldstone-routing";
-	prefix "gs-route";
+  yang-version "1.1";
+  namespace "http://goldstone.net/yang/goldstone-routing";
+  prefix "gs-route";
 
-	import ietf-yang-types {
-		prefix "yang";
-	}
+  import ietf-yang-types {
+    prefix "yang";
+  }
 
 
-	import ietf-inet-types {
-		prefix inet;
-	}
+  import ietf-inet-types {
+    prefix inet;
+  }
 
-	import goldstone-mgmt-interfaces {
-		prefix "gs-mgmt-if";
-	}
+  import goldstone-mgmt-interfaces {
+    prefix "gs-mgmt-if";
+  }
 
-	organization
-		"Goldstone";
+  organization
+    "Goldstone";
 
-	description
-		"This module contains a collection of YANG definitions for
-		configuring IP route.It is extracted from  https://tools.ietf.org/html/rfc8022
+  description
+    "This module contains a collection of YANG definitions for
+    configuring IP route.It is extracted from  https://tools.ietf.org/html/rfc8022
                 and further reduced to fit requirments.";
 
 
-	revision "2020-12-04" {
-		description "Initial revision.";
-		reference
-			"0.1.0";
+  revision "2020-12-04" {
+    description "Initial revision.";
+    reference
+      "0.1.0";
 
-	}
+  }
 
-	/* Identities */
-	identity control-plane-protocol {
-		description
-			"Base identity from which control-plane protocol identities are
-			derived.";
-	}
+  /* Identities */
+  identity control-plane-protocol {
+    description
+      "Base identity from which control-plane protocol identities are
+      derived.";
+  }
 
-	identity routing-protocol {
-		base control-plane-protocol;
-		description
-			"Identity from which Layer 3 routing protocol identities are
-			derived.";
-	}
+  identity routing-protocol {
+    base control-plane-protocol;
+    description
+      "Identity from which Layer 3 routing protocol identities are
+      derived.";
+  }
 
-	identity direct {
-		base routing-protocol;
-		description
-			"Routing pseudo-protocol that provides routes to directly
-			connected networks.";
-	}
+  identity direct {
+    base routing-protocol;
+    description
+      "Routing pseudo-protocol that provides routes to directly
+      connected networks.";
+  }
 
-	identity static {
-		base routing-protocol;
-		description
-			"'Static' routing pseudo-protocol.";
-	}
+  identity static {
+    base routing-protocol;
+    description
+      "'Static' routing pseudo-protocol.";
+  }
 
-	/* Type Definitions */
+  /* Type Definitions */
 
-	typedef route-preference {
-		type uint32;
-		description
-			"This type is used for route preferences.";
-	}
+  typedef route-preference {
+    type uint32;
+    description
+      "This type is used for route preferences.";
+  }
 
-	/* Groupings */
+  /* Groupings */
 
-	grouping special-next-hop {
-		description
-			"This grouping provides a leaf with an enumeration of special
-			next hops.";
-		leaf special-next-hop {
-			type enumeration {
-				enum blackhole {
-					description
-						"Silently discard the packet.";
-				}
-				enum unreachable {
-					description
-						"Discard the packet and notify the sender with an error
-						message indicating that the destination host is
-						unreachable.";
-				}
-				enum prohibit {
-					description
-						"Discard the packet and notify the sender with an error
-						message indicating that the communication is
-						administratively prohibited.";
-				}
-				enum receive {
-					description
-						"The packet will be received by the local system.";
-				}
-			}
-			description
-				"Options for special next hops.";
-		}
-	}
-
-
-	grouping next-hop-state-content {
-		description
-			"Generic state parameters of next hops.";
-		choice next-hop-options {
-			mandatory true;
-			description
-				"Options for next hops.
-
-				It is expected that further cases will be added through
-				augments from other modules, e.g., for recursive
-				next hops.";
-			case simple-next-hop {
-				description
-					"This case represents a simple next hop consisting of the
-					next-hop address and/or outgoing interface.
-					Modules for address families MUST augment this case with a
-					leaf containing a next-hop address of that address
-					family.";
-				leaf outgoing-interface {
-					type gs-mgmt-if:interface-ref;
-					description
-						"Name of the outgoing interface.";
-				}
-			}
-		}
-	}
+  grouping special-next-hop {
+    description
+      "This grouping provides a leaf with an enumeration of special
+      next hops.";
+    leaf special-next-hop {
+      type enumeration {
+        enum blackhole {
+          description
+            "Silently discard the packet.";
+        }
+        enum unreachable {
+          description
+            "Discard the packet and notify the sender with an error
+            message indicating that the destination host is
+            unreachable.";
+        }
+        enum prohibit {
+          description
+            "Discard the packet and notify the sender with an error
+            message indicating that the communication is
+            administratively prohibited.";
+        }
+        enum receive {
+          description
+            "The packet will be received by the local system.";
+        }
+      }
+      description
+        "Options for special next hops.";
+    }
+  }
 
 
-	grouping route-metadata {
-		description
-			"Common route metadata.";
-		leaf source-protocol {
-			type identityref {
-				base routing-protocol;
-			}
-			mandatory true;
-			description
-				"Type of the routing protocol from which the route
-				originated.";
-		}
-		leaf active {
-			type empty;
-			description
-				"The presence of this leaf indicates that the route is
-				preferred among all routes in the same RIB that have the
-				same destination prefix.";
-		}
-		leaf last-updated {
-			type yang:date-and-time;
-			description
-				"Timestamp of the last modification of the route.  If the
-				route was never modified, it is the time when the route was
-				inserted into the RIB.";
-		}
-	}
+  grouping next-hop-state-content {
+    description
+      "Generic state parameters of next hops.";
+    choice next-hop-options {
+      mandatory true;
+      description
+        "Options for next hops.
+
+        It is expected that further cases will be added through
+        augments from other modules, e.g., for recursive
+        next hops.";
+      case simple-next-hop {
+        description
+          "This case represents a simple next hop consisting of the
+          next-hop address and/or outgoing interface.
+          Modules for address families MUST augment this case with a
+          leaf containing a next-hop address of that address
+          family.";
+        leaf outgoing-interface {
+          type gs-mgmt-if:interface-ref;
+          description
+            "Name of the outgoing interface.";
+        }
+      }
+    }
+  }
 
 
-	container routing {
-		container interfaces {
-			config false;
-			description
-				"Network-layer interfaces used for routing.";
-			leaf-list interface {
-				type gs-mgmt-if:interface-ref;
-				description
-					"Each entry is a reference to the name of a configured
-					network-layer interface.";
-			}
-		}
+  grouping route-metadata {
+    description
+      "Common route metadata.";
+    leaf source-protocol {
+      type identityref {
+        base routing-protocol;
+      }
+      mandatory true;
+      description
+        "Type of the routing protocol from which the route
+        originated.";
+    }
+    leaf active {
+      type empty;
+      description
+        "The presence of this leaf indicates that the route is
+        preferred among all routes in the same RIB that have the
+        same destination prefix.";
+    }
+    leaf last-updated {
+      type yang:date-and-time;
+      description
+        "Timestamp of the last modification of the route.  If the
+        route was never modified, it is the time when the route was
+        inserted into the RIB.";
+    }
+  }
 
-		container static-routes {
-			description
-				"This container is only valid for the 'static' routing
-				protocol.";
 
-			container ipv4 {
-				description
-					"Support for a 'static' pseudo-protocol instance
-					consists of a list of routes.";
-				list route {
-					key "destination-prefix";
-					description
-						"A list of static routes.";
-					leaf destination-prefix {
-						type inet:ipv4-prefix;
-						mandatory true;
-						description
-							"IPv4 destination prefix.";
-					}
-					leaf next-hop-address {
-						type inet:ipv4-address;
-						description
-							"IPv4 address of the next hop.";
-					}
-				}
-			}
-		}
-	}
+  container routing {
+    container interfaces {
+      config false;
+      description
+        "Network-layer interfaces used for routing.";
+      leaf-list interface {
+        type gs-mgmt-if:interface-ref;
+        description
+          "Each entry is a reference to the name of a configured
+          network-layer interface.";
+      }
+    }
 
-	container routes {
-		config false;
-		description
-			"Current contents of the RIB.";
-		list route {
-			key "destination-prefix";
-			description
-				"A RIB route entry.  This data node MUST be augmented
-				with information specific to routes of each address
-				family.";
-			leaf route-preference {
-				type route-preference;
-				description
-					"This route attribute, also known as 'administrative
-					distance', allows for selecting the preferred route
-					among routes with the same destination prefix.  A
-					smaller value indicates a route that is
-					more preferred.";
-			}
-			leaf destination-prefix {
-				type inet:ipv4-prefix;
-				description
-					"IPv4 destination prefix.";
-			}
-			leaf metric {
-				type uint8 {
-					range "0..16";
-				}
-			}
-			leaf flags {
-				type uint8 {
-					range "0..16";
-				}
-			}
-			container next-hop {
-				description
-					"Route's next-hop attribute.";
-				uses next-hop-state-content;
-			}
-			uses route-metadata;
-		}
-	}
-	rpc clear_arp {
-		output{
-			leaf status {
-				type enumeration {
-					enum failure;
-					enum success;
-				}
-			}
-		}
-	}
+    container static-routes {
+      description
+        "This container is only valid for the 'static' routing
+        protocol.";
+
+      container ipv4 {
+        description
+          "Support for a 'static' pseudo-protocol instance
+          consists of a list of routes.";
+        list route {
+          key "destination-prefix";
+          description
+            "A list of static routes.";
+          leaf destination-prefix {
+            type inet:ipv4-prefix;
+            mandatory true;
+            description
+              "IPv4 destination prefix.";
+          }
+          leaf next-hop-address {
+            type inet:ipv4-address;
+            description
+              "IPv4 address of the next hop.";
+          }
+        }
+      }
+    }
+  }
+
+  container routes {
+    config false;
+    description
+      "Current contents of the RIB.";
+    list route {
+      key "destination-prefix";
+      description
+        "A RIB route entry.  This data node MUST be augmented
+        with information specific to routes of each address
+        family.";
+      leaf route-preference {
+        type route-preference;
+        description
+          "This route attribute, also known as 'administrative
+          distance', allows for selecting the preferred route
+          among routes with the same destination prefix.  A
+          smaller value indicates a route that is
+          more preferred.";
+      }
+      leaf destination-prefix {
+        type inet:ipv4-prefix;
+        description
+          "IPv4 destination prefix.";
+      }
+      leaf metric {
+        type uint8 {
+          range "0..16";
+        }
+      }
+      leaf flags {
+        type uint8 {
+          range "0..16";
+        }
+      }
+      container next-hop {
+        description
+          "Route's next-hop attribute.";
+        uses next-hop-state-content;
+      }
+      uses route-metadata;
+    }
+  }
+
+  rpc clear_arp {
+    output{
+      leaf status {
+        type enumeration {
+          enum failure;
+          enum success;
+        }
+      }
+    }
+  }
 }
 
