@@ -56,43 +56,43 @@ def test_tai(cli):
 
     output = ssh(
         cli,
-        f'gscli -c "transponder {device}; netif 0; output-power -1; show" | grep output-power',
+        f'gscli -c "transponder {device}; netif 0; output-power -1; !sleep 1; show" | grep output-power',
     )
     assert "-1.00 dBm" in output
     output = ssh(
         cli,
-        f'gscli -c "transponder {device}; netif 0; no output-power; show" | grep output-power',
+        f'gscli -c "transponder {device}; netif 0; no output-power; !sleep 1; show" | grep output-power',
     )
     assert "1.00 dBm" in output
 
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; voa-rx 2; show" | grep voa-rx'
+        cli, f'gscli -c "transponder {device}; netif 0; voa-rx 2; !sleep 1; show" | grep voa-rx'
     )
     assert "2.0" in output
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; no voa-rx; show" | grep voa-rx'
+        cli, f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx'
     )
     assert "0.0" in output
 
     output = ssh(
         cli,
-        f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; show" | grep tx-laser-freq',
+        f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; !sleep 1; show" | grep tx-laser-freq',
     )
     assert "193.70THz" in output
     output = ssh(
         cli,
-        f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; show" | grep tx-laser-freq',
+        f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; !sleep 1; show" | grep tx-laser-freq',
     )
     assert "193.50THz" in output
 
     output = ssh(
         cli,
-        f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk; show" | grep modulation-format',
+        f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk; !sleep 1; show" | grep modulation-format',
     )
     assert "dp-qpsk" in output
     output = ssh(
         cli,
-        f'gscli -c "transponder {device}; netif 0; no modulation-format; show" | grep modulation-format',
+        f'gscli -c "transponder {device}; netif 0; no modulation-format; !sleep 1; show" | grep modulation-format',
     )
     assert "dp-16-qam" in output
 
