@@ -39,7 +39,7 @@ pipeline {
         environment name: 'SKIP', value: '0'
       }
       steps {
-          sh 'DOCKER_BUILDKIT=1 docker build --build-arg GS_MGMT_BUILDER_IMAGE=$DOCKER_REPO/gs-mgmt-netopeer2:latest -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
+          sh 'make tester'
           sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test bash -c 'exit \$(black -q --diff --exclude src/north/snmp/src src | wc -l)'"
           sh "docker run -t -v `pwd`:`pwd` -w `pwd`/yang gs-mgmt-test bash -c 'pyang *.yang'"
       }
@@ -65,8 +65,7 @@ pipeline {
         environment name: 'SKIP', value: '0'
       }
       steps {
-        sh 'DOCKER_BUILDKIT=1 docker build --build-arg GS_MGMT_BUILDER_IMAGE=$DOCKER_REPO/gs-mgmt-netopeer2:latest -t gs-mgmt-test -f ci/docker/gs-mgmt-test.Dockerfile ci'
-
+        sh 'make tester'
         timeout(time: 15, unit: 'MINUTES') {
             sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.load ${params.DEVICE}"
         }
@@ -80,7 +79,6 @@ pipeline {
       }
       steps {
         sh 'make tester'
-
         timeout(time: 15, unit: 'MINUTES') {
             sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test ${params.DEVICE}"
             sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_np2 ${params.DEVICE}"
