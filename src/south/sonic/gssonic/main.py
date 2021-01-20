@@ -1066,6 +1066,8 @@ class Server(object):
             intf_list = intf_data["interfaces"]["interface"]
             for intf in intf_list:
                 name = intf.pop("name")
+                logger.debug(f"interface config: {intf}")
+
                 for key in intf:
                     if key == "ipv4":
                         if "mtu" in intf[key]:
@@ -1111,6 +1113,7 @@ class Server(object):
 
         vlan_data = self.sess.get_data("/goldstone-vlan:vlan")
         if "vlan" in vlan_data:
+            logger.debug(f"vlan config: {vlan_data}")
             if "VLAN" in vlan_data["vlan"]:
                 vlan_list = vlan_data["vlan"]["VLAN"]["VLAN_LIST"]
 
@@ -1180,13 +1183,13 @@ class Server(object):
 
             try:
                 v = sess.get_data("/goldstone-interfaces:*", no_subs=True)
-                logger.debug(f"oper ds before delete: {v}")
+                logger.debug(f"interface oper ds before delete: {v}")
 
                 # clear the intf operational ds and build it from scratch
                 sess.delete_item("/goldstone-interfaces:interfaces")
 
                 v = sess.get_data("/goldstone-interfaces:*", no_subs=True)
-                logger.debug(f"oper ds after delete: {v}")
+                logger.debug(f"interface oper ds after delete: {v}")
             except Exception as e:
                 logger.debug(e)
 
@@ -1287,7 +1290,17 @@ class Server(object):
             )
 
             # clear the VLAN operational ds and build it from scratch
-            sess.delete_item("/goldstone-vlan:vlan")
+            try:
+                v = sess.get_data("/goldstone-vlan:*", no_subs=True)
+                logger.debug(f"VLAN oper ds before delete: {v}")
+
+                # clear the intf operational ds and build it from scratch
+                sess.delete_item("/goldstone-vlan:vlan")
+
+                v = sess.get_data("/goldstone-vlan:*", no_subs=True)
+                logger.debug(f"VLAN oper ds after delete: {v}")
+            except Exception as e:
+                logger.debug(e)
 
             if hash_keys != None:
                 hash_keys = map(_decode, hash_keys)
@@ -1297,6 +1310,7 @@ class Server(object):
                     xpath = f"/goldstone-vlan:vlan/VLAN/VLAN_LIST[name='{name}']"
                     vlanDATA = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
                     for key in vlanDATA:
+                        logger.debug(f"vlan config: {vlanDATA}")
                         value = _decode(vlanDATA[key])
                         key = _decode(key)
                         if key == "members@":
