@@ -135,7 +135,7 @@ class Server(object):
         # Release lock and return
         return
 
-    async def parse_change_req(self, xpath):
+    def parse_change_req(self, xpath):
         xpath = xpath.split("/")
         _hash = ""
         key = ""
@@ -289,7 +289,7 @@ class Server(object):
 
         return ports
 
-    async def vlan_change_cb(self, event, req_id, changes, priv):
+    def vlan_change_cb(self, event, req_id, changes, priv):
         logger.debug(f"event: {event}, changes: {changes}")
 
         if event not in ["change", "done"]:
@@ -298,7 +298,7 @@ class Server(object):
 
         for change in changes:
 
-            key, _hash, attr_dict = await self.parse_change_req(change.xpath)
+            key, _hash, attr_dict = self.parse_change_req(change.xpath)
             if "member" in attr_dict:
                 member = attr_dict["member"]
 
@@ -359,7 +359,7 @@ class Server(object):
         for change in changes:
             logger.debug(f"change_cb: {change}")
 
-            key, _hash, attr_dict = await self.parse_change_req(change.xpath)
+            key, _hash, attr_dict = self.parse_change_req(change.xpath)
             if "ifname" in attr_dict:
                 ifname = attr_dict["ifname"]
 
@@ -1417,7 +1417,7 @@ class Server(object):
                     asyncio_register=True,
                 )
                 self.sess.subscribe_module_change(
-                    "goldstone-vlan", None, self.vlan_change_cb, asyncio_register=True
+                    "goldstone-vlan", None, self.vlan_change_cb
                 )
                 logger.debug(
                     "**************************after subscribe module change****************************"
