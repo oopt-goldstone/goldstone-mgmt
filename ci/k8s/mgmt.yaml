@@ -336,6 +336,9 @@ spec:
               image: docker.io/gs-test/gs-mgmt-south-sonic:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-sonic']
+              env:
+              - name: USONIC_TEMPLATE_DIR
+                value: /var/lib/current
               args: ['--verbose']
               volumeMounts:
               - name: shm
@@ -344,6 +347,8 @@ spec:
                 mountPath: /var/lib/sysrepo
               - name: sonic-db-config
                 mountPath: /var/run/redis/sonic-db/
+              - name: current
+                mountPath: /var/lib/current
             volumes:
             - name: shm
               hostPath:
@@ -351,6 +356,9 @@ spec:
             - name: sysrepo
               hostPath:
                   path: /var/lib/sysrepo
+            - name: current
+              hostPath:
+                  path: /var/lib/goldstone/device/current/usonic
             - name: sonic-db-config
               configMap:
                   name: sonic-db-config

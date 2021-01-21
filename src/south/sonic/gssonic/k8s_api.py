@@ -1,16 +1,21 @@
 import datetime
 import io
 import re
+import os
 import logging
 import asyncio
+import json
 
 from .constants import INTERFACE_MAP
 from .constants import CONFIG_BCM_CONTSTANTS1, CONFIG_BCM_CONTSTANTS2
 
 from kubernetes_asyncio import config, client, watch
+from jinja2 import Template
 
 DEPLOYMENT_NAME = "usonic"
 USONIC_CONFIGMAP_NAME = "usonic-config"
+USONIC_TEMPLATE_DIR = os.getenv("USONIC_TEMPLATE_DIR")
+PORT_PREFIX = "Ethernet"
 
 logger = logging.getLogger(__name__)
 
@@ -105,89 +110,39 @@ class incluster_apis(object):
         return config_bcm
 
     def create_usonic_port_config(self, interface_list):
-        port_config = ""
-        header = "# name      lanes            alias         index speed\n"
-        pattern = "{} {} {} {} {}\n"
+        with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
+            master = json.loads(f.read())
 
-        port_config = header
-        # inteface_map is standard map of interfaces with values
-        # required to build port_config.ini and config.bcm
-        for interface in INTERFACE_MAP:
+        interfaces = []
+        for i, m in enumerate(master):
+            name = f"{PORT_PREFIX}{i+1}_1"
+            channel = 1
+            speed = m["speed"]
 
-            line = ""
-            lane_num = INTERFACE_MAP[interface][0]
-            alias = INTERFACE_MAP[interface][1]
-            index = INTERFACE_MAP[interface][2]
-            speed = "100000"
-
-            # Loop through interface_list if this interface exists and get the
-            # breakout configuration
-            breakout_config = []
-            for intf in interface_list:
-                if intf[0] == interface:
-                    breakout_config = intf
+            for c in interface_list:
+                logger.debug(f"intf: {c}")
+                if c[0] == name and c[1] != None and c[2] != None:
+                    channel = c[1]
+                    speed = c[2] * 1000
                     break
 
-            if len(breakout_config) == 0 or (
-                breakout_config[1] == None and breakout_config[2] == None
-            ):
-                # If interface is not present in received interface list
-                # OR interface doesnt have breakout configurations
-                lanes = (
-                    str(lane_num)
-                    + ","
-                    + str(lane_num + 1)
-                    + ","
-                    + str(lane_num + 2)
-                    + ","
-                    + str(lane_num + 3)
+            lane_num = m["lane_num"] // channel
+
+            for ii in range(channel):
+                name = f"{PORT_PREFIX}{i+1}_{ii+1}"
+                interface = {"name": name}
+                first_lane = m["first_lane"] + ii * lane_num
+                interface["lanes"] = ",".join(
+                    str(first_lane + idx) for idx in range(lane_num)
                 )
-                # Adding line according to header
-                line = pattern.format(interface, lanes, alias, str(index), speed)
-            else:
-                # Interface with num-channels and channel-speed
-                if breakout_config[1] != None and breakout_config[2] != None:
-                    common_ifname = interface.split("_")
-                    common_alias = alias.split("_")
+                interface["alias"] = f"{m['alias_prefix']}-{m['index']+ii}"
+                interface["speed"] = speed
+                interface["index"] = m["index"] + ii * lane_num
+                interfaces.append(interface)
 
-                    # Channel speed
-                    speed = str(int(breakout_config[2]) * 1000)
-                    # Number of channels
-                    if breakout_config[1] == 2:
-                        # Parent Interface
-                        lanes = str(lane_num) + "," + str(lane_num + 1)
-                        line = pattern.format(
-                            interface, lanes, alias, str(index), speed
-                        )
-
-                        # Sub-if
-                        index = index + 2
-                        lanes = str(lane_num + 2) + "," + str(lane_num + 3)
-                        line = line + pattern.format(
-                            common_ifname[0] + "_2",
-                            lanes,
-                            common_alias[0] + "_2",
-                            str(index),
-                            speed,
-                        )
-                    elif breakout_config[1] == 4:
-                        # Parent Interface
-                        line = pattern.format(
-                            interface, str(lane_num), alias, str(index), speed
-                        )
-
-                        # Sub-interfaces
-                        for i in range(1, 3 + 1):
-                            tmp_index = index + i
-                            lanes = str(lane_num + i)
-                            tmp_ifname = common_ifname[0] + "_" + str(i + 1)
-                            tmp_alias = common_alias[0] + "_" + str(i + 1)
-                            line = line + pattern.format(
-                                tmp_ifname, lanes, tmp_alias, str(tmp_index), speed
-                            )
-            port_config = port_config + line
-
-        return port_config
+        with open(USONIC_TEMPLATE_DIR + "/port_config.ini.j2") as f:
+            t = Template(f.read())
+            return t.render(interfaces=interfaces)
 
     async def update_usonic_config(self, interface_list):
         cm_name = USONIC_CONFIGMAP_NAME

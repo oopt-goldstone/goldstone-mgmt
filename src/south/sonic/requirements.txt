@@ -1,1 +1,2 @@
 kubernetes_asyncio
+jinja2

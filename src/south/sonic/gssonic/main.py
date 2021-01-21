@@ -29,7 +29,7 @@ def _decode(string):
 
 def yang_val_to_speed(yang_val):
     yang_val = yang_val.split("_")
-    return yang_val[1].split("GB")[0]
+    return int(yang_val[1].split("GB")[0])
 
 
 def speed_to_yang_val(speed):
