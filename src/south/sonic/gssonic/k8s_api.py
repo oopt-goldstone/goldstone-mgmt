@@ -6,9 +6,6 @@ import logging
 import asyncio
 import json
 
-from .constants import INTERFACE_MAP
-from .constants import CONFIG_BCM_CONTSTANTS1, CONFIG_BCM_CONTSTANTS2
-
 from kubernetes_asyncio import config, client, watch
 from jinja2 import Template
 
@@ -28,86 +25,34 @@ class incluster_apis(object):
         self.v1_ext = client.AppsV1beta2Api()
         self.usonic_deleted = 0
 
-    def get_portmap_number_from_lane(self, lane):
-        if lane <= 29:
-            return lane
-        if lane >= 33 and lane <= 61:
-            return lane + 1
-        if lane == 69:
-            return 68
-        if lane == 65:
-            return 72
-        if lane == 77:
-            return 76
-        if lane == 73:
-            return 80
-        if lane >= 81 and lane <= 93:
-            return lane + 3
-        if lane >= 97 and lane <= 125:
-            return lane + 5
-
     def create_usonic_config_bcm(self, interface_list):
-        # config_bcm is divided in 3 parts
-        # 1. Configurations present above portmap configs are stored
-        #    in CONFIG_BCM_CONTSTANTS1
-        # 2. Create port_map from inteface_map
-        # 3. Configurations present below portmap configs are stored
-        #    in CONFIG_BCM_CONTSTANTS2
-        config_bcm = CONFIG_BCM_CONTSTANTS1
-        pattern = "portmap_{}={}:{}\n"
+        with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
+            master = json.loads(f.read())
 
-        for interface in INTERFACE_MAP:
+        interfaces = []
+        for i, m in enumerate(master):
+            name = f"{PORT_PREFIX}{i+1}_1"
+            channel = 1
+            speed = m["speed"] // 1000
 
-            line = ""
-            lane_num = INTERFACE_MAP[interface][0]
-            port_num = self.get_portmap_number_from_lane(lane_num)
-            speed = "100"
-
-            # Loop through interface_list if this interface exists and get the
-            # breakout configuration
-            breakout_config = []
-            for intf in interface_list:
-                if intf[0] == interface:
-                    breakout_config = intf
+            for c in interface_list:
+                if c[0] == name and c[1] != None and c[2] != None:
+                    channel = c[1]
+                    speed = c[2]
                     break
 
-            if len(breakout_config) == 0 or (
-                breakout_config[1] == None and breakout_config[2] == None
-            ):
-                # If interface is not present in received interface list
-                # OR interface doesnt have breakout configurations
-                line = pattern.format(str(port_num), str(lane_num), speed)
-            else:
-                # Interface with num-channels and channel-speed
-                if breakout_config[1] != None and breakout_config[2] != None:
-                    speed = str(breakout_config[2])
-                    if breakout_config[1] == 2:
-                        # Parent Interface
-                        line = pattern.format(str(port_num), str(lane_num), speed)
+            lane_num = m["lane_num"] // channel
 
-                        # Sub-if
-                        tmp_port_num = port_num + 2
-                        tmp_lane_num = lane_num + 2
-                        line = line + pattern.format(
-                            str(tmp_port_num), str(tmp_lane_num), speed
-                        )
-                    elif breakout_config[1] == 4:
-                        # Parent Interface
-                        line = pattern.format(str(port_num), str(lane_num), speed)
+            for ii in range(channel):
+                interface = {}
+                interface["port"] = m["port"] + ii * lane_num
+                interface["lane"] = m["first_lane"] + ii * lane_num
+                interface["speed"] = speed
+                interfaces.append(interface)
 
-                        # Sub-interfaces
-                        for i in range(1, 3 + 1):
-                            tmp_port_num = port_num + i
-                            tmp_lane_num = lane_num + i
-                            line = line + pattern.format(
-                                str(tmp_port_num), str(tmp_lane_num), speed
-                            )
-
-            config_bcm = config_bcm + line
-
-        config_bcm = config_bcm + CONFIG_BCM_CONTSTANTS2
-
-        return config_bcm
+        with open(USONIC_TEMPLATE_DIR + "/config.bcm.j2") as f:
+            t = Template(f.read())
+            return t.render(interfaces=interfaces)
 
     def create_usonic_port_config(self, interface_list):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
@@ -120,7 +65,6 @@ class incluster_apis(object):
             speed = m["speed"]
 
             for c in interface_list:
-                logger.debug(f"intf: {c}")
                 if c[0] == name and c[1] != None and c[2] != None:
                     channel = c[1]
                     speed = c[2] * 1000
