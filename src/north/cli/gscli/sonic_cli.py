@@ -188,13 +188,6 @@ class Vlan_CLI(Object):
         self.sonic = Sonic(conn)
         self.sonic.vlan.create_vlan(self.vid)
 
-        @self.command()
-        def name(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: name <vlan_name>")
-            vlan_name = args[0]
-            self.sonic.vlan.set_name(vlan_name)
-
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
