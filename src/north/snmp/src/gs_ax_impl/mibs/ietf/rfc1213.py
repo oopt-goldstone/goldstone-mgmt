@@ -486,8 +486,9 @@ class InterfacesUpdater(MIBUpdater):
             return
 
         speed = int(entry.get("speed", 0))
+
         # speed is reported in Mbps in the db
-        return min(self.RFC1213_MAX_SPEED, speed * 1000000)
+        return speed
 
     def get_if_type(self, sub_id):
         """
