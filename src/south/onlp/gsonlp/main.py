@@ -75,17 +75,17 @@ class Server(object):
             if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_WARNING_THRESHOLD:
                 threshold_warning = threshold.warning
             else:
-                threhold_warning = 0
+                threshold_warning = 0
 
             if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_ERROR_THRESHOLD:
                 threshold_error = threshold.error
             else:
-                threhold_error = 0
+                threshold_error = 0
 
             if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_SHUTDOWN_THRESHOLD:
                 threshold_shutdown = threshold.shutdown
             else:
-                threhold_shutdown = 0
+                threshold_shutdown = 0
 
             r = {
                 "name": name,
@@ -99,7 +99,7 @@ class Server(object):
                         "status": [status],
                         "temperature": temperature,
                         "thresholds": {
-                            "warning": threshold.warning,
+                            "warning": threshold_warning,
                             "error": threshold_error,
                             "shutdown": threshold_shutdown,
                         },
