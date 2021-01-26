@@ -10,6 +10,16 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: goldstone-version
+data:
+  versions.json: |
+      {"PRODUCT_ID_VERSION": "0.0.8"}
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
   name: usonic-config
 data:
   lanemap.ini: |
@@ -440,6 +450,8 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+              - name: goldstone-version
+                mountPath: /etc/goldstone/loader
             volumes:
             - name: shm
               hostPath:
@@ -447,3 +459,6 @@ spec:
             - name: sysrepo
               hostPath:
                   path: /var/lib/sysrepo
+            - name: goldstone-version
+              configMap:
+                  name: goldstone-version

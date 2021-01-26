@@ -1,8 +1,12 @@
 import dbus
 import logging
 import json
+import sysrepo
+import os
 
-VERSION_FILE = "/etc/goldstone/loader/versions.json"
+VERSION_FILE = os.getenv(
+    "GOLDSTONE_VERSION_FILE", "/etc/goldstone/loader/versions.json"
+)
 
 logger = logging.getLogger(__name__)
 
