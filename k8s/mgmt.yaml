@@ -8,6 +8,36 @@ data:
 ---
 
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: usonic-config
+data:
+  lanemap.ini: |
+    vEthernet1:1,2,3,4
+    vEthernet2:5,6,7,8
+  port_config.ini: |
+    Ethernet1 1,2,3,4
+    Ethernet2 5,6,7,8
+  port_config.ini.j2: "# name lanes alias index speed\n
+{% for i in interfaces -%}\n
+{{ '%-15s' | format(i['name']) }} {{ '%-15s' | format(i['lanes']) }} {{ '%-15s' | format(i['alias']) }} {{ '%-5s' | format(i['index']) }} {{ i['speed'] }}\n
+{% endfor %}"
+  config.bcm: |
+    # dummy
+  config.bcm.j2: |
+    # dummy
+  interfaces.json: |
+    [
+    {"port": 1, "first_lane": 1, "lane_num": 4, "alias_prefix": "QSFP1", "index": 1, "speed": 100000},
+    {"port": 2, "first_lane": 5, "lane_num": 4, "alias_prefix": "QSFP2", "index": 5, "speed": 100000}
+    ]
+  sai.profile: |
+    SAI_VS_SWITCH_TYPE=SAI_VS_SWITCH_TYPE_BCM56850
+    SAI_VS_INTERFACE_LANE_MAP_FILE=/etc/usonic/lanemap.ini
+
+---
+
+apiVersion: v1
 kind: Service
 metadata:
     name: netopeer2
@@ -256,7 +286,7 @@ spec:
               image: docker.io/microsonic/gs-mgmt-south-tai:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-tai']
-              args: ['--taish-server', "$(TAISH_SERVER_SERVICE_HOST):$(TAISH_SERVER_SERVICE_PORT)", "--verbose"]
+              args: ['--taish-server', "127.0.0.1:50051", "--verbose"]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -352,6 +382,9 @@ spec:
               image: docker.io/microsonic/gs-mgmt-south-sonic:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-sonic', '-v']
+              env:
+              - name: USONIC_TEMPLATE_DIR
+                value: "/var/lib/usonic"
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -359,6 +392,8 @@ spec:
                 mountPath: /var/lib/sysrepo
               - name: sonic-db-config
                 mountPath: /var/run/redis/sonic-db/
+              - name: usonic-config
+                mountPath: /var/lib/usonic
             volumes:
             - name: shm
               hostPath:
@@ -369,6 +404,9 @@ spec:
             - name: sonic-db-config
               configMap:
                   name: sonic-db-config
+            - name: usonic-config
+              configMap:
+                  name: usonic-config
 
 ---
 apiVersion: apps/v1
