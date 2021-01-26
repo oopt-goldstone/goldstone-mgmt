@@ -514,6 +514,7 @@ class SystemUpdater(MIBUpdater):
         self.range = [(i,) for i in range(1,10)]
         self.update_counter = 0
         self.reinit_rate = 0
+        self.conn = sr.SysrepoConnection()
 
     def reinit_data(self):
         return
@@ -536,22 +537,17 @@ class SystemUpdater(MIBUpdater):
         version = "Init"
         sysDescription = "Goldstone Version "
 
-        conn = sr.SysrepoConnection()
-        sess = conn.start_session()
         xpath = "/goldstone-system:system/state/software-version"
-        try:
-            sess.switch_datastore("operational")
-            data = sess.get_data(xpath)
-            version = (data["system"]["state"]["software-version"])
-            #mibs.logger.warning(f"Goldstone version: {version}")
-        except Exception as e:
-            mibs.logger.warning(f"sysDesc Exception: {e}")
-            pass
+        with self.conn.start_session() as sess:
+            try:
+                sess.switch_datastore("operational")
+                data = sess.get_data(xpath)
+                version = (data["system"]["state"]["software-version"])
+                #mibs.logger.warning(f"Goldstone version: {version}")
+            except Exception as e:
+                mibs.logger.warning(f"sysDesc Exception: {e}")
 
-        sysDescriptionStr = f"{sysDescription} {version}"
-
-        #mibs.logger.warning("sysDesc '{}'.".format(sysDescriptionStr))
-        return sysDescriptionStr
+        return f"{sysDescription} {version}"
 
     def sys_objectid(self):
         #return "OID: iso.3.6.1.4.1.8072.3.2.10"
