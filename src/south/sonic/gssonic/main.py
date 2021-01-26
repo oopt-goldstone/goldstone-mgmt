@@ -566,7 +566,10 @@ class Server(object):
 
     def get_oper_data(self, req_xpath):
         def delta_counter_value(base, present):
-            return str(int(present) - int(base))
+            if base and present:
+                return int(present) - int(base)
+            else:
+                return 0
 
         path_prefix = "/goldstone-interfaces:interfaces/interface[name='"
 
