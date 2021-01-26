@@ -9,9 +9,10 @@ import json
 from kubernetes_asyncio import config, client, watch
 from jinja2 import Template
 
-DEPLOYMENT_NAME = "usonic"
-USONIC_CONFIGMAP_NAME = "usonic-config"
-USONIC_TEMPLATE_DIR = os.getenv("USONIC_TEMPLATE_DIR")
+USONIC_DEPLOYMENT = os.getenv("USONIC_DEPLOYMENT", "usonic")
+USONIC_NAMESPACE = os.getenv("USONIC_NAMESPACE", "default")
+USONIC_CONFIGMAP = os.getenv("USONIC_CONFIGMAP", "usonic-config")
+USONIC_TEMPLATE_DIR = os.getenv("USONIC_TEMPLATE_DIR", "/var/lib/usonic")
 PORT_PREFIX = "Ethernet"
 
 logger = logging.getLogger(__name__)
@@ -89,9 +90,7 @@ class incluster_apis(object):
             return t.render(interfaces=interfaces)
 
     async def update_usonic_config(self, interface_list):
-        cm_name = USONIC_CONFIGMAP_NAME
-
-        logger.debug("configmap update: {} {} ".format(cm_name, interface_list))
+        logger.debug(f"interface list: {interface_list}")
 
         # 1. create complete port_config.ini and config.bcm from the interface_list argument
         #    without using the existing config_map data
@@ -106,7 +105,8 @@ class incluster_apis(object):
 
         # 2. get the config_map using k8s API if it already exists
         resp = await self.v1_api.read_namespaced_config_map(
-            name=cm_name, namespace="default"
+            name=USONIC_CONFIGMAP,
+            namespace=USONIC_NAMESPACE,
         )
 
         configMap = resp
@@ -124,9 +124,9 @@ class incluster_apis(object):
             logger.error("config.bcm is not present")
             return False
 
-        logger.debug(f"Running port_config.ini :\n {port_config}")
+        logger.debug(f"Running port_config.ini :\n {running_port_config}")
 
-        logger.debug(f"Running config.bcm :\n {config_bcm}")
+        logger.debug(f"Running config.bcm :\n {running_config_bcm}")
 
         # 3. if the generated port_config.ini / config.bcm is different from what exists in k8s API, update it
         if (running_port_config == port_config) and (running_config_bcm == config_bcm):
@@ -138,27 +138,35 @@ class incluster_apis(object):
         configMap.data["config.bcm"] = config_bcm
 
         await self.v1_api.patch_namespaced_config_map(
-            name=cm_name, namespace="default", body=configMap
+            name=USONIC_CONFIGMAP, namespace=USONIC_NAMESPACE, body=configMap
         )
 
         # 4. return True when we've updated the configmap, return False if not.
-        logger.info("ConfigMap {} updated".format(cm_name))
+        logger.info(f"ConfigMap {USONIC_CONFIGMAP} updated")
         return True
 
     async def restart_usonic(self):
-        deployment_name = DEPLOYMENT_NAME
 
         deployment = await self.deploy_api.read_namespaced_deployment(
-            name=deployment_name, namespace="default"
+            name=USONIC_DEPLOYMENT,
+            namespace=USONIC_NAMESPACE,
         )
+
         # Update annotation, to restart the deployment
-        deployment.spec.template.metadata.annotations[
-            "kubectl.kubernetes.io/restartedAt"
-        ] = str(datetime.datetime.now())
+        annotations = deployment.spec.template.metadata.annotations
+        if annotations:
+            annotations["kubectl.kubernetes.io/restartedAt"] = str(
+                datetime.datetime.now()
+            )
+        else:
+            annotations = {
+                "kubectl.kubernetes.io/restartedAt": str(datetime.datetime.now())
+            }
+        deployment.spec.template.metadata.annotations = annotations
 
         # Update the deployment
         await self.deploy_api.patch_namespaced_deployment(
-            name=deployment_name, namespace="default", body=deployment
+            name=USONIC_DEPLOYMENT, namespace=USONIC_NAMESPACE, body=deployment
         )
         logger.info("Deployment updated")
 
