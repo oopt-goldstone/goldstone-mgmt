@@ -84,10 +84,16 @@ We plan to implement CLI, NETCONF and SNMP north daemon first.
 
 ### How to test
 
+#### prerequisite
+
+- Git
+- Docker ( version >= 18.09 )
+- Python2.7
+
 ```bash
 $ git clone git@github.com:microsonic/goldstone-mgmt.git
 $ cd goldstone-mgmt
-$ git submodule --update --init --recursive
+$ git submodule --update --init
 $ make all
 $ kubectl create -f k8s
 ```
