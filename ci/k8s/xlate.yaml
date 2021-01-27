@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: gs-mgmt-openconfig
+    labels:
+        app: gs-mgmt
+spec:
+    selector:
+        matchLabels:
+            app: gs-mgmt-openconfig
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt-openconfig
+        spec:
+            serviceAccountName: gs-mgmt
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            containers:
+            - name: xlate-openconfig
+              image: docker.io/gs-test/gs-mgmt-xlate-openconfig:latest
+              imagePullPolicy: IfNotPresent
+              command: ['gsxlated-openconfig', '-v']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo

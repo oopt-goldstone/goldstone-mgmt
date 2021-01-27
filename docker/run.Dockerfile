@@ -30,8 +30,8 @@ COPY yang /var/lib/goldstone/yang/gs/
 ENV GS_YANG_REPO /var/lib/goldstone/yang/gs
 COPY sm/openconfig/release/models/ /var/lib/goldstone/yang/oc/
 ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
-COPY --from=builder /usr/local/sonic/  /var/lib/goldstone/yang/sonic/
-ENV SONIC_YANG_REPO /var/lib/goldstone/yang/sonic
+COPY sm/openconfig/third_party/ietf/ /var/lib/goldstone/yang/ietf
+ENV IETF_YANG_REPO /var/lib/goldstone/yang/ietf
 
 RUN --mount=type=bind,source=scripts,target=/src,rw \
     cd /src && cp /src/reload.sh /usr/local/bin/

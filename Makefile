@@ -48,6 +48,10 @@ ifndef GS_MGMT_SNMPD_IMAGE
     GS_MGMT_SNMPD_IMAGE := gs-mgmt-snmpd
 endif
 
+ifndef GS_MGMT_OC_IMAGE
+    GS_MGMT_OC_IMAGE := gs-mgmt-xlate-openconfig
+endif
+
 ifndef GS_MGMT_IMAGE_TAG
     GS_MGMT_IMAGE_TAG := latest
 endif
@@ -104,11 +108,13 @@ base-image:
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
-images: south-images north-images
+images: south-images north-images xlate-images
 
 south-images: south-sonic south-tai south-onlp south-system
 
 north-images: north-cli north-snmp
+
+xlate-images: xlate-openconfig
 
 south-sonic:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-sonic.Dockerfile \
@@ -146,6 +152,14 @@ north-snmp:
 							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_SNMP_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
+xlate-openconfig:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/xlate-openconfig.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_OC_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+
+
 np2:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/netopeer2.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
@@ -179,15 +193,9 @@ system:
 
 init:
 	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2`/* /dev/shm/sr*
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-extensions.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-onlp.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-tai.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-interfaces.yang
 	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-vlan.yang
-	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-types.yang
 	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform.yang
-	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-fan.yang
-	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform-psu.yang
-	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/system/openconfig-alarm-types.yang
-	sysrepoctl -s $(SONIC_YANG_REPO)/common --install $(SONIC_YANG_REPO)/common/sonic-common.yang
-	sysrepoctl -s $(SONIC_YANG_REPO) --install $(SONIC_YANG_REPO)/sonic-port.yang,$(SONIC_YANG_REPO)/sonic-vlan.yang,$(SONIC_YANG_REPO)/sonic-interface.yang
+	sysrepoctl -s $(OC_YANG_REPO):$(OC_YANG_REPO)/../../third_party/ietf --install $(OC_YANG_REPO)/interfaces/openconfig-interfaces.yang

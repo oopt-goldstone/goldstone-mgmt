@@ -31,7 +31,7 @@ def main(host, username, password):
         ssh(cli, "systemctl stop gs-snmp || true")  # can fail
 
         run(
-            "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-north-snmp"
+            "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-north-snmp gs-test/gs-mgmt-xlate-openconfig"
         )
 
         scp = SCPClient(cli.get_transport())
@@ -98,6 +98,7 @@ def main(host, username, password):
         check_pod("gs-mgmt-onlp")
         check_pod("gs-mgmt-tai")
         check_pod("gs-mgmt-snmp")
+        check_pod("gs-mgmt-openconfig")
 
         def restart_gssouth_system():
             max_iteration = 3
