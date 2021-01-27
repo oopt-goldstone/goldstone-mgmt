@@ -93,6 +93,10 @@ class Server(object):
         for node in ctx.find_path(xpath):
             return node.default()
 
+    def get_config_db_keys(self, pattern):
+        keys = self.sonic_db.keys(self.sonic_db.CONFIG_DB, pattern=pattern)
+        return map(_decode, keys) if keys else []
+
     def set_config_db(self, event, _hash, key, value):
         if event != "done":
             return
@@ -564,6 +568,22 @@ class Server(object):
                         # https://github.com/sysrepo/sysrepo/issues/1937#issuecomment-742851607
                         self.update_oper_db()
 
+    def get_counter(self, ifname, counter):
+        if ifname not in self.counter_if_dict:
+            return 0
+        base = self.counter_if_dict[ifname].get(counter, 0)
+        key = _decode(
+            self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
+        )
+        try:
+            key = "COUNTERS:" + key
+            present = _decode(self.sonic_db.get(self.sonic_db.COUNTERS_DB, key, counter))
+        except:
+            return 0
+        if base and present:
+            return int(present) - int(base)
+        return 0
+
     def get_oper_data(self, req_xpath):
         def delta_counter_value(base, present):
             if base and present:
@@ -584,329 +604,70 @@ class Server(object):
             return data
 
         elif req_xpath.endswith("in-octets"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-octets", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_OCTETS"
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_IN_OCTETS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_OCTETS")
 
         elif req_xpath.endswith("in-unicast-pkts"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-unicast-pkts", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_UCAST_PKTS"
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_IN_UCAST_PKTS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_UCAST_PKTS")
 
         elif req_xpath.endswith("in-broadcast-pkts"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-broadcast-pkts", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB,
-                        key,
-                        "SAI_PORT_STAT_IF_IN_BROADCAST_PKTS",
-                    )
-                )
-            except:
-                return 0
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_IN_BROADCAST_PKTS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_BROADCAST_PKTS")
 
         elif req_xpath.endswith("in-multicast-pkts"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-multicast-pkts", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB,
-                        key,
-                        "SAI_PORT_STAT_IF_IN_MULTICAST_PKTS",
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_IN_MULTICAST_PKTS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_MULTICAST_PKTS")
 
         elif req_xpath.endswith("in-discards"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-discards", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_DISCARDS"
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_IN_DISCARDS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_DISCARDS")
 
         elif req_xpath.endswith("in-errors"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-errors", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_IN_ERRORS"
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_IN_ERRORS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_ERRORS")
 
         elif req_xpath.endswith("in-unknown-protos"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/in-unknown-protos", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB,
-                        key,
-                        "SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS",
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS")
 
         elif req_xpath.endswith("out-octets"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-octets", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_OCTETS"
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_OUT_OCTETS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_OCTETS")
 
         elif req_xpath.endswith("out-unicast-pkts"):
 
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-unicast-pkts", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB,
-                        key,
-                        "SAI_PORT_STAT_IF_OUT_UCAST_PKTS",
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_OUT_UCAST_PKTS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_UCAST_PKTS")
 
         elif req_xpath.endswith("out-broadcast-pkts"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-broadcast-pkts", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB,
-                        key,
-                        "SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS",
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS")
 
         elif req_xpath.endswith("out-multicast-pkts"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-multicast-pkts", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB,
-                        key,
-                        "SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS",
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS")
 
         elif req_xpath.endswith("out-discards"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-discards", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_DISCARDS"
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_OUT_DISCARDS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_DISCARDS")
 
         elif req_xpath.endswith("out-errors"):
-
             req_xpath = req_xpath.replace(path_prefix, "")
             ifname = req_xpath.replace("']/statistics/out-errors", "")
-            if_counter_data = self.counter_if_dict[ifname]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            try:
-                key = "COUNTERS:" + key
-
-                data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, key, "SAI_PORT_STAT_IF_OUT_ERRORS"
-                    )
-                )
-            except:
-                return 0
-
-            return delta_counter_value(
-                if_counter_data["SAI_PORT_STAT_IF_OUT_ERRORS"], data
-            )
+            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_ERRORS")
 
     def interface_oper_cb(self, req_xpath):
         # Changing to operational datastore to fetch data
@@ -1010,30 +771,26 @@ class Server(object):
 
     def cache_counters(self):
         self.counter_if_dict = {}
-        hash_keys = self.sonic_db.keys(
-            self.sonic_db.CONFIG_DB, pattern="PORT|Ethernet*"
-        )
-        if hash_keys != None:
-            hash_keys = map(_decode, hash_keys)
+        for key in self.get_config_db_keys("PORT|Ethernet*"):
+            ifname = key.split("|")[1]
 
-            for _hash in hash_keys:
-                ifname = _hash.split("|")[1]
-
-                key = _decode(
+            key = _decode(
+                self.sonic_db.get(
+                    self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname
+                )
+            )
+            if not key:
+                continue
+            tmp_counter_dict = {}
+            counter_key = COUNTER_TABLE_PREFIX + key
+            for counter_name in self.counter_dict.keys():
+                counter_data = _decode(
                     self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname
+                        self.sonic_db.COUNTERS_DB, counter_key, counter_name
                     )
                 )
-                tmp_counter_dict = {}
-                counter_key = COUNTER_TABLE_PREFIX + key
-                for counter_name in self.counter_dict.keys():
-                    counter_data = _decode(
-                        self.sonic_db.get(
-                            self.sonic_db.COUNTERS_DB, counter_key, counter_name
-                        )
-                    )
-                    tmp_counter_dict[counter_name] = counter_data
-                self.counter_if_dict[ifname] = tmp_counter_dict
+                tmp_counter_dict[counter_name] = counter_data
+            self.counter_if_dict[ifname] = tmp_counter_dict
 
     def enable_counters(self):
         # This is similar to "counterpoll port enable"
@@ -1152,32 +909,26 @@ class Server(object):
                         vlan_member["tagging_mode"],
                     )
 
-        hash_keys = self.sonic_db.keys(
-            self.sonic_db.CONFIG_DB, pattern="PORT|Ethernet*"
-        )
-        if hash_keys != None:
-            hash_keys = map(_decode, hash_keys)
+        for key in self.get_config_db_keys("PORT|Ethernet*"):
+            ifname = key.split("|")[1]
+            intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
+            intf_keys = [v.decode("ascii") for v in list(intf_data.keys())]
 
-            for _hash in hash_keys:
-                ifname = _hash.split("|")[1]
-                intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
-                intf_keys = [v.decode("ascii") for v in list(intf_data.keys())]
+            if "admin_status" not in intf_keys:
+                self.sonic_db.set(
+                    self.sonic_db.CONFIG_DB,
+                    "PORT|" + ifname,
+                    "admin_status",
+                    "down",
+                )
 
-                if "admin_status" not in intf_keys:
-                    self.sonic_db.set(
-                        self.sonic_db.CONFIG_DB,
-                        "PORT|" + ifname,
-                        "admin_status",
-                        "down",
-                    )
-
-                if "mtu" not in intf_keys:
-                    self.sonic_db.set(
-                        self.sonic_db.CONFIG_DB,
-                        "PORT|" + ifname,
-                        "mtu",
-                        str(self.mtu_default),
-                    )
+            if "mtu" not in intf_keys:
+                self.sonic_db.set(
+                    self.sonic_db.CONFIG_DB,
+                    "PORT|" + ifname,
+                    "mtu",
+                    str(self.mtu_default),
+                )
 
     def update_oper_db(self):
         logger.debug("updating operational db")
@@ -1219,74 +970,69 @@ class Server(object):
                                 value = "down"
                             sess.set_item(f"{xpath}/admin-status", value)
 
-            hash_keys = self.sonic_db.keys(
-                self.sonic_db.CONFIG_DB, pattern="PORT|Ethernet*"
-            )
-            if hash_keys != None:
-                hash_keys = map(_decode, hash_keys)
-                breakout_parent_dict = {}
+            breakout_parent_dict = {}
+            for key in self.get_config_db_keys("PORT|Ethernet*"):
+                ifname = key.split("|")[1]
+                intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
+                logger.debug(f"config db entry: key: {key}, value: {intf_data}")
 
-                for _hash in hash_keys:
-                    ifname = _hash.split("|")[1]
-                    xpath = (
-                        f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-                    )
-                    xpath_subif_breakout = f"{xpath}/breakout"
+                xpath = (
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+                )
+                xpath_subif_breakout = f"{xpath}/breakout"
 
-                    # TODO use the parent leaf to detect if this is a sub-interface or not
-                    # using "_1" is vulnerable to the interface nameing schema change
-                    if not ifname.endswith("_1") and ifname.find("_") != -1:
-                        _ifname = ifname.split("_")
-                        tmp_ifname = _ifname[0] + "_1"
-                        if tmp_ifname in breakout_parent_dict.keys():
-                            breakout_parent_dict[tmp_ifname] = (
-                                breakout_parent_dict[tmp_ifname] + 1
-                            )
-                        else:
-                            breakout_parent_dict[tmp_ifname] = 1
-
-                        logger.debug(
-                            f"ifname: {ifname}, breakout_parent_dict: {breakout_parent_dict}"
-                        )
-
-                        sess.set_item(f"{xpath_subif_breakout}/parent", tmp_ifname)
-
-                    intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
-                    logger.debug(f"config db entry: key: {_hash}, value: {intf_data}")
-                    for key in intf_data:
-                        value = _decode(intf_data[key])
-                        key = _decode(key)
-                        if key == "mtu":
-                            sess.set_item(f"{xpath}/goldstone-ip:ipv4/{key}", value)
-                        elif (
-                            key != "index"
-                            and key != "phys-address"
-                            and key != "admin_status"
-                            and key != "alias"
-                            and key != "description"
-                            and key != "breakout"
-                        ):
-                            sess.set_item(f"{xpath}/{key}", value)
-
-                for key in breakout_parent_dict:
-                    xpath_parent_breakout = f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
-                    speed = self.sonic_db.get(
-                        self.sonic_db.CONFIG_DB, "PORT|" + key, "speed"
-                    )
-                    logger.debug(f"key: {key}, speed: {speed}")
-                    if speed != None:
-                        sess.set_item(
-                            f"{xpath_parent_breakout}/num-channels",
-                            breakout_parent_dict[key] + 1,
-                        )
-                        sess.set_item(
-                            f"{xpath_parent_breakout}/channel-speed",
-                            speed_to_yang_val(speed),
+                # TODO use the parent leaf to detect if this is a sub-interface or not
+                # using "_1" is vulnerable to the interface nameing schema change
+                if not ifname.endswith("_1") and ifname.find("_") != -1:
+                    _ifname = ifname.split("_")
+                    tmp_ifname = _ifname[0] + "_1"
+                    if tmp_ifname in breakout_parent_dict.keys():
+                        breakout_parent_dict[tmp_ifname] = (
+                            breakout_parent_dict[tmp_ifname] + 1
                         )
                     else:
-                        logger.warn(
-                            f"Breakout interface:{key} doesnt has speed attribute in Redis"
-                        )
+                        breakout_parent_dict[tmp_ifname] = 1
+
+                    logger.debug(
+                        f"ifname: {ifname}, breakout_parent_dict: {breakout_parent_dict}"
+                    )
+
+                    sess.set_item(f"{xpath_subif_breakout}/parent", tmp_ifname)
+
+                for key in intf_data:
+                    value = _decode(intf_data[key])
+                    key = _decode(key)
+                    if key == "mtu":
+                        sess.set_item(f"{xpath}/goldstone-ip:ipv4/{key}", value)
+                    elif (
+                        key != "index"
+                        and key != "phys-address"
+                        and key != "admin_status"
+                        and key != "alias"
+                        and key != "description"
+                        and key != "breakout"
+                    ):
+                        sess.set_item(f"{xpath}/{key}", value)
+
+            for key in breakout_parent_dict:
+                xpath_parent_breakout = f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
+                speed = self.sonic_db.get(
+                    self.sonic_db.CONFIG_DB, "PORT|" + key, "speed"
+                )
+                logger.debug(f"key: {key}, speed: {speed}")
+                if speed != None:
+                    sess.set_item(
+                        f"{xpath_parent_breakout}/num-channels",
+                        breakout_parent_dict[key] + 1,
+                    )
+                    sess.set_item(
+                        f"{xpath_parent_breakout}/channel-speed",
+                        speed_to_yang_val(speed),
+                    )
+                else:
+                    logger.warn(
+                        f"Breakout interface:{key} doesnt has speed attribute in Redis"
+                    )
 
             hash_keys = self.sonic_db.keys(
                 self.sonic_db.CONFIG_DB, pattern="VLAN|Vlan*"
