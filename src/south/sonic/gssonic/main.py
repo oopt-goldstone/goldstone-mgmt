@@ -577,7 +577,9 @@ class Server(object):
         )
         try:
             key = "COUNTERS:" + key
-            present = _decode(self.sonic_db.get(self.sonic_db.COUNTERS_DB, key, counter))
+            present = _decode(
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, key, counter)
+            )
         except:
             return 0
         if base and present:
@@ -775,9 +777,7 @@ class Server(object):
             ifname = key.split("|")[1]
 
             key = _decode(
-                self.sonic_db.get(
-                    self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname
-                )
+                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
             )
             if not key:
                 continue
@@ -976,9 +976,7 @@ class Server(object):
                 intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
                 logger.debug(f"config db entry: key: {key}, value: {intf_data}")
 
-                xpath = (
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-                )
+                xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
                 xpath_subif_breakout = f"{xpath}/breakout"
 
                 # TODO use the parent leaf to detect if this is a sub-interface or not
@@ -1015,7 +1013,9 @@ class Server(object):
                         sess.set_item(f"{xpath}/{key}", value)
 
             for key in breakout_parent_dict:
-                xpath_parent_breakout = f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
+                xpath_parent_breakout = (
+                    f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
+                )
                 speed = self.sonic_db.get(
                     self.sonic_db.CONFIG_DB, "PORT|" + key, "speed"
                 )

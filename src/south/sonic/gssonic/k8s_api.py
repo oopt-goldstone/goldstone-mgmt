@@ -55,6 +55,40 @@ class incluster_apis(object):
             t = Template(f.read())
             return t.render(interfaces=interfaces)
 
+    def create_usonic_vs_lanemap(self, interface_list):
+        with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
+            master = json.loads(f.read())
+
+        interfaces = []
+        for i, m in enumerate(master):
+            name = f"{PORT_PREFIX}{i+1}_1"
+            channel = 1
+            speed = m["speed"]
+
+            for c in interface_list:
+                if c[0] == name and c[1] != None and c[2] != None:
+                    channel = c[1]
+                    speed = c[2] * 1000
+                    break
+
+            lane_num = m["lane_num"] // channel
+
+            for ii in range(channel):
+                name = f"v{PORT_PREFIX}{i+1}_{ii+1}"
+                interface = {"name": name}
+                first_lane = m["first_lane"] + ii * lane_num
+                interface["lanes"] = ",".join(
+                    str(first_lane + idx) for idx in range(lane_num)
+                )
+                interface["alias"] = f"{m['alias_prefix']}-{m['index']+ii}"
+                interface["speed"] = speed
+                interface["index"] = m["index"] + ii * lane_num
+                interfaces.append(interface)
+
+        with open(USONIC_TEMPLATE_DIR + "/lanemap.ini.j2") as f:
+            t = Template(f.read())
+            return t.render(interfaces=interfaces)
+
     def create_usonic_port_config(self, interface_list):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = json.loads(f.read())
@@ -104,22 +138,21 @@ class incluster_apis(object):
         logger.debug(f"config.bcm file after creating :\n {config_bcm}")
 
         # 2. get the config_map using k8s API if it already exists
-        resp = await self.v1_api.read_namespaced_config_map(
+        config_map = await self.v1_api.read_namespaced_config_map(
             name=USONIC_CONFIGMAP,
             namespace=USONIC_NAMESPACE,
         )
 
-        configMap = resp
         running_port_config = ""
         running_config_bcm = ""
         try:
-            running_port_config = configMap.data["port_config.ini"]
+            running_port_config = config_map.data["port_config.ini"]
         except:
             logger.error("port_config.ini is not present")
             return False
 
         try:
-            running_config_bcm = configMap.data["config.bcm"]
+            running_config_bcm = config_map.data["config.bcm"]
         except:
             logger.error("config.bcm is not present")
             return False
@@ -133,12 +166,16 @@ class incluster_apis(object):
             logger.debug(f"No changes in port_config.ini and config.bcm")
             return False
 
-        configMap.data["port_config.ini"] = port_config
+        config_map.data["port_config.ini"] = port_config
+        config_map.data["config.bcm"] = config_bcm
 
-        configMap.data["config.bcm"] = config_bcm
+        if "lanemap.ini" in config_map.data:
+            logger.debug("lanemap.ini found in config map. update it as well")
+            v = self.create_usonic_vs_lanemap(interface_list)
+            config_map.data["lanemap.ini"] = v
 
         await self.v1_api.patch_namespaced_config_map(
-            name=USONIC_CONFIGMAP, namespace=USONIC_NAMESPACE, body=configMap
+            name=USONIC_CONFIGMAP, namespace=USONIC_NAMESPACE, body=config_map
         )
 
         # 4. return True when we've updated the configmap, return False if not.
