@@ -6,8 +6,10 @@ import signal
 import itertools
 
 from .interface import InterfaceServer
+from .platform import PlatformServer
 
 logger = logging.getLogger(__name__)
+
 
 def main():
     async def _main():
@@ -17,7 +19,7 @@ def main():
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
         conn = sysrepo.SysrepoConnection()
-        servers = [InterfaceServer(conn)]
+        servers = [InterfaceServer(conn), PlatformServer(conn)]
 
         try:
             tasks = list(
@@ -49,6 +51,7 @@ def main():
         logging.basicConfig(level=logging.INFO, format=fmt)
 
     asyncio.run(_main())
+
 
 if __name__ == "__main__":
     main()

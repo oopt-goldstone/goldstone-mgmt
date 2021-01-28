@@ -3,7 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class InterfaceServer(object):
+class PlatformServer(object):
     def __init__(self, conn):
         self.conn = conn
         self.sess = self.conn.start_session()
@@ -14,21 +14,24 @@ class InterfaceServer(object):
     def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         self.sess.switch_datastore("operational")
         data = self.sess.get_data("/goldstone-interfaces:interfaces")
-        interfaces = []
+        components = []
 
         for i in data.get("interfaces", {}).get("interface", []):
-            intf = {
+            if "parent" in i:
+                continue
+            port = {
                 "name": i["name"],
                 "config": {
                     "name": i["name"],
-                    "type": "iana-if-type:ethernetCsmacd",
-                    "mtu": i["ipv4"]["mtu"],
-                    "description": i["alias"],
+                },
+                "state": {
+                    "name": i["name"],
+                    "type": "openconfig-platform-types:PORT",
                 },
             }
-            interfaces.append(intf)
+            components.append(port)
 
-        return {"interfaces": {"interface": interfaces}}
+        return {"components": {"component": components}}
 
     async def start(self):
 
@@ -36,8 +39,8 @@ class InterfaceServer(object):
             sess.switch_datastore("running")
 
             self.sess.subscribe_oper_data_request(
-                "openconfig-interfaces",
-                "/openconfig-interfaces:interfaces",
+                "openconfig-platform",
+                "/openconfig-platform:components",
                 self.oper_cb,
                 oper_merge=True,
             )
