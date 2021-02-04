@@ -66,26 +66,27 @@ class Server(object):
                 }
                 self.components["goldstone-onlp:components"]["component"].append(r)
                 continue
+            threshold = thermal.thresholds
 
             if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_TEMPERATURE:
                 temperature = thermal.mcelcius
             else:
-                temperature = 0
+                temperature = 0xFFFF
 
             if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_WARNING_THRESHOLD:
                 threshold_warning = threshold.warning
             else:
-                threshold_warning = 0
+                threshold_warning = 0xFFFF
 
             if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_ERROR_THRESHOLD:
                 threshold_error = threshold.error
             else:
-                threshold_error = 0
+                threshold_error = 0xFFFF
 
             if thermal.caps & onlp.onlp.ONLP_THERMAL_CAPS.GET_SHUTDOWN_THRESHOLD:
                 threshold_shutdown = threshold.shutdown
             else:
-                threshold_shutdown = 0
+                threshold_shutdown = 0xFFFF
 
             r = {
                 "name": name,
@@ -114,10 +115,17 @@ class Server(object):
             libonlp.onlp_fan_info_get(oid, ctypes.byref(fan))
             fan_id = oid & 0xFFFFFF
             name = f"FAN{fan_id}"
-            if fan.status & onlp.onlp.ONLP_FAN_STATUS.PRESENT:
-                status = "PRESENT"
+            fan_state = fan.status & onlp.onlp.ONLP_FAN_STATUS.PRESENT
+            fan_status = fan.status & 3
+            if fan_state:
+                state = "PRESENT"
+                if fan_status == 1:
+                    status = "RUNNING"
+                elif fan_status == 3:
+                    status = "FAILED"
+
             else:
-                status = "FAILED"
+                state = "NOT-PRESENT"
                 r = {
                     "name": name,
                     "config": {"name": name},
@@ -125,7 +133,7 @@ class Server(object):
                         "type": "FAN",
                         "description": str(fan.hdr.description, "utf-8"),
                     },
-                    "fan": {"state": {"status": [status]}},
+                    "fan": {"state": {"fan-state": state}},
                 }
 
                 self.components["goldstone-onlp:components"]["component"].append(r)
@@ -139,12 +147,12 @@ class Server(object):
             if fan.caps & onlp.onlp.ONLP_FAN_CAPS.GET_RPM:
                 rpm = fan.rpm
             else:
-                rpm = 0
+                rpm = 0xFFFF
 
             if fan.caps & onlp.onlp.ONLP_FAN_CAPS.GET_PERCENTAGE:
                 percentage = fan.percentage
             else:
-                percentage = 0
+                percentage = 0xFFFF
 
             r = {
                 "name": name,
@@ -158,7 +166,8 @@ class Server(object):
                         "rpm": rpm,
                         "percentage": percentage,
                         "direction": direction,
-                        "status": [status],
+                        "fan-state": state,
+                        "status": status,
                     }
                 },
             }
@@ -171,10 +180,47 @@ class Server(object):
             libonlp.onlp_psu_info_get(oid, ctypes.byref(psu))
             psu_id = oid & 0xFFFFFF
             name = f"PSU{psu_id}"
-            if psu.status & onlp.onlp.ONLP_PSU_STATUS.PRESENT:
-                status = "PRESENT"
+            model = str(psu.model, "utf-8")
+            serial = str(psu.serial, "utf-8")
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.IIN:
+                in_curr = psu.miin
             else:
-                status = "FAILED"
+                in_curr = 0xFFFF
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.IOUT:
+                out_curr = psu.miout
+            else:
+                out_curr = 0xFFFF
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.PIN:
+                in_power = psu.mpin
+            else:
+                in_power = 0xFFFF
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.POUT:
+                out_power = psu.mpout
+            else:
+                out_power = 0xFFFF
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.VIN:
+                in_volt = psu.mvin
+            else:
+                in_volt = 0xFFFF
+
+            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.VOUT:
+                out_volt = psu.mvout
+            else:
+                out_volt = 0xFFFF
+
+            status_present = psu.status & onlp.onlp.ONLP_PSU_STATUS.PRESENT
+            status_psu = psu.status ^ onlp.onlp.ONLP_PSU_STATUS.PRESENT
+            if status_present:
+                state = "PRESENT"
+                if status_psu == 0:
+                    status = "RUNNING"
+                else:
+                    status = "UNPLUGGED-OR-FAILED"
                 r = {
                     "name": name,
                     "config": {"name": name},
@@ -182,64 +228,32 @@ class Server(object):
                         "type": "PSU",
                         "description": str(psu.hdr.description, "utf-8"),
                     },
-                    "psu": {"state": {"status": [status]}},
+                    "psu": {
+                        "state": {
+                            "psu-state": state,
+                            "status": status,
+                            "model": model,
+                            "serial": serial,
+                            "input-voltage": in_volt,
+                            "output-voltage": out_volt,
+                            "input-current": in_curr,
+                            "output-current": out_curr,
+                            "input-power": in_power,
+                            "output-power": out_power,
+                        }
+                    },
                 }
-
-            model = str(psu.model, "utf-8")
-            serial = str(psu.serial, "utf-8")
-
-            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.IIN:
-                in_curr = psu.miin
             else:
-                in_curr = 0
-
-            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.IOUT:
-                out_curr = psu.miout
-            else:
-                out_curr = 0
-
-            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.PIN:
-                in_power = psu.mpin
-            else:
-                in_power = 0
-
-            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.POUT:
-                out_power = psu.mpout
-            else:
-                out_power = 0
-
-            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.VIN:
-                in_volt = psu.mvin
-            else:
-                in_volt = 0
-
-            if psu.caps & onlp.onlp.ONLP_PSU_CAPS.VOUT:
-                out_volt = psu.mvout
-            else:
-                out_volt = 0
-
-            r = {
-                "name": name,
-                "config": {"name": name},
-                "state": {
-                    "type": "PSU",
-                    "description": str(psu.hdr.description, "utf-8"),
-                },
-                "psu": {
+                state = "NOT-PRESENT"
+                r = {
+                    "name": name,
+                    "config": {"name": name},
                     "state": {
-                        "status": [status],
-                        "model": model,
-                        "serial": serial,
-                        "input-voltage": in_volt,
-                        "output-voltage": out_volt,
-                        "input-current": in_curr,
-                        "output-current": out_curr,
-                        "input-power": in_power,
-                        "output-power": out_power,
-                    }
-                },
-            }
-
+                        "type": "PSU",
+                        "description": str(psu.hdr.description, "utf-8"),
+                    },
+                    "psu": {"state": {"psu-state": state}},
+                }
             self.components["goldstone-onlp:components"]["component"].append(r)
 
     def get_led_info(self):

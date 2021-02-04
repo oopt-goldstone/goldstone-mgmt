@@ -7,6 +7,28 @@ from .common import sysrepo_wrap
 from tabulate import tabulate
 
 
+def to_human(d):
+    for key, val in d.items():
+        if val == 0xFFFF:
+            continue
+        if "temperature" in key:
+            d[key] = f"{d[key]/1000}°C"
+        elif key.endswith("power"):
+            d[key] = f"{d[key]/1000:.2f} W"
+        elif key.endswith("voltage"):
+            d[key] = f"{d[key]/1000:.2f} V"
+        elif key.endswith("current"):
+            d[key] = f"{d[key]/1000:.2f} A"
+        elif "thresholds" in key:
+            for p, q in d[key].items():
+                if q == 0xFFFF:
+                    continue
+                else:
+                    d[key][p] = f"{q/1000:.2f}°C"
+
+    return d
+
+
 class Component(object):
     def __init__(self, conn):
         self.session = conn.start_session()
@@ -20,6 +42,7 @@ class Component(object):
             data = self.component["components"]["component"][component][details][
                 "state"
             ]
+            data = to_human(data)
             if details != "piu" and details != "sfp":
                 desc = self.component["components"]["component"][component]["state"][
                     "description"
@@ -30,11 +53,17 @@ class Component(object):
                 if isinstance(subnode, dict):
                     table.append([k])
                     for p, q in subnode.items():
+                        if q == 0xFFFF:
+                            q = "-"
                         table.append([p, q])
                 elif isinstance(subnode, list):
                     for p in subnode:
+                        if p == 0xFFFF:
+                            p = "-"
                         table.append([k, p])
                 else:
+                    if v == 0xFFFF:
+                        v = "-"
                     table.append([k, v])
         except (sr.errors.SysrepoNotFoundError, KeyError) as error:
             print(error)
@@ -57,6 +86,7 @@ class Component(object):
                     table = self.get_state_attr(type_, component)
                     print(component)
                     print(tabulate(table))
+            print("Note: Values with the symbol '-' are unsupported")
 
         elif option == "transceiver":
             components = self.get_components("piu")
@@ -86,6 +116,7 @@ class Component(object):
                 table = self.get_state_attr(option, component)
                 print(component)
                 print(tabulate(table))
+            print("Note: Values with the symbol '-' are unsupported")
 
     def get_components(self, type_):
         if type_ != "all":

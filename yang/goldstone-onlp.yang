@@ -48,12 +48,18 @@ module goldstone-onlp {
           }
       }
 
-      leaf-list status {
+      leaf fan-state {
           type enumeration {
               enum PRESENT;
+              enum NOT-PRESENT;
+              
+          }
+      }
+
+      leaf status {
+          type enumeration {
+              enum RUNNING;
               enum FAILED;
-              enum B2F;
-              enum F2B;
           }
       }
   }
@@ -267,13 +273,19 @@ module goldstone-onlp {
       }
     }
 
-    leaf-list status {
+    leaf psu-state {
       type enumeration {
         enum PRESENT;
-        enum FAILED;
-        enum UNPLUGGED;
+	enum NOT-PRESENT;
       }
     }
+
+    leaf status {
+     type enumeration {
+       enum UNPLUGGED-OR-FAILED;
+       enum RUNNING;
+     }
+   }
 
     leaf model {
       type string;
@@ -557,3 +569,5 @@ module goldstone-onlp {
     uses platform-sfp-top-state;
   }
 }
+
+
