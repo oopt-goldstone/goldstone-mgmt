@@ -701,11 +701,13 @@ def main():
 
     args = parser.parse_args()
 
+    fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format=fmt)
         # hpack debug log is too verbose. change it INFO level
         hpack = logging.getLogger("hpack")
         hpack.setLevel(logging.INFO)
+        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO)
 
