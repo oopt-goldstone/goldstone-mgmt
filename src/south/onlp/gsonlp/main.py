@@ -472,6 +472,7 @@ class Server(object):
     def monitor_sfp(self):
         self.sess.switch_datastore("operational")
         eventname = "goldstone-onlp:sfp-notify-event"
+        eeprom = ctypes.POINTER(ctypes.c_ubyte)()
 
         for i in range(len(self.onlp_sfp_presence)):
             port = i + 1
@@ -488,6 +489,21 @@ class Server(object):
 
             if presence:
                 sfp_presence = "PRESENT"
+                libonlp.onlp_sfp_eeprom_read(port, ctypes.byref(eeprom))
+                sffEeprom = onlp.sff.sff_eeprom()
+                libonlp.sff_eeprom_parse(ctypes.byref(sffEeprom), eeprom)
+                vendor = sffEeprom.info.vendor.strip()
+                model = sffEeprom.info.model.strip()
+                serial_number = sffEeprom.info.serial.strip()
+                if isinstance(vendor, bytes):
+                    vendor = str(vendor, "utf-8")
+                if isinstance(model, bytes):
+                    model = str(model, "utf-8")
+                if isinstance(serial_number, bytes):
+                    serial_number = str(serial_number, "utf-8")
+                self.sess.set_item(f"{xpath}/sfp/state/vendor", vendor)
+                self.sess.set_item(f"{xpath}/sfp/state/model", model)
+                self.sess.set_item(f"{xpath}/sfp/state/serial", serial_number)
             else:
                 sfp_presence = "UNPLUGGED"
 
