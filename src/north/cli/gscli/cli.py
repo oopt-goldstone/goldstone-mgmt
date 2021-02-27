@@ -16,7 +16,7 @@ import pydoc
 import logging
 from prompt_toolkit.completion import merge_completers
 
-from .base import Command, Object, InvalidInput
+from .base import Command, Object, InvalidInput, Completer, Choice
 
 KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 
@@ -548,6 +548,49 @@ class ClearInterfaceGroupCommand(Command):
         return "usage:\n" f" {self.parent.name} {self.name} (counters)"
 
 
+class ClearDatastoreGroupCommand(Command):
+    def exec(self, line):
+        if len(line) < 1:
+            raise InvalidInput(
+                "usage: {self.parent.name} {self.name} [ <module name> | all ] [ running | startup ]"
+            )
+
+        ds = line[1] if len(line) == 2 else "running"
+
+        root = self.context.root()
+
+        try:
+            with root.conn.start_session() as sess:
+                sess.switch_datastore(ds)
+
+                if line[0] == "all":
+                    ctx = root.conn.get_ly_ctx()
+                    modules = [m.name() for m in ctx if "goldstone" in m.name()]
+                else:
+                    modules = [line[0]]
+
+                for m in modules:
+                    stdout.info(f"clearing module {m}")
+                    sess.replace_config({}, m)
+
+                sess.apply_changes()
+
+        except sr.SysrepoError as e:
+            raise CLIException(f"failed to clear: {e}")
+
+    def get(self, arg):
+        elected = self.complete_subcommand(arg)
+        if elected == None:
+            return None
+        return Choice(["running", "startup"], self.context, self, elected)
+
+    def list(self):
+        ctx = self.context.root().conn.get_ly_ctx()
+        cmds = [m.name() for m in ctx if "goldstone" in m.name()]
+        cmds.append("all")
+        return cmds
+
+
 class ShowCommand(Command):
     def __init__(self, context=None, parent=None, name=None, additional_completer=None):
         if name == None:
@@ -563,6 +606,7 @@ class GlobalClearCommand(Command):
         "arp": ClearArpGroupCommand,
         "ip": ClearIpGroupCommand,
         "interface": ClearInterfaceGroupCommand,
+        "datastore": ClearDatastoreGroupCommand,
     }
 
 

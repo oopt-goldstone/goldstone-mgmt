@@ -84,7 +84,7 @@ class Command(object):
     def completer(self):
         return self._completer
 
-    def get(self, arg):
+    def complete_subcommand(self, arg):
         candidates = [v for v in self.list() if v.startswith(arg)]
         if len(candidates) == 0:
             return None
@@ -99,6 +99,10 @@ class Command(object):
             else:
                 return None  # no match
 
+    def get(self, arg):
+        elected = self.complete_subcommand(arg)
+        if elected == None:
+            return None
         cmd = self.SUBCOMMAND_DICT.get(elected, Command)(self.context, self, elected)
 
         if isinstance(cmd, Option):
@@ -128,6 +132,20 @@ class Command(object):
             return cmd(self.context, self, line[0])(line[1:])
         else:
             return self.exec(cmd)
+
+
+class Choice(Command):
+    def __init__(
+        self, choices, context=None, parent=None, name=None, additional_completer=None
+    ):
+        super().__init__(context, parent, name, additional_completer)
+        self.choices = choices
+
+    def list(self):
+        if callable(self.choices):
+            return self.choices()
+        else:
+            return self.choices
 
 
 class Option(Command):
