@@ -1,4 +1,5 @@
 # sysrepo patches
+sysrepo-python/add_get_module_access_and_set_module_access.patch
 sysrepo/sysrepoctl-install.patch
 sysrepo/skip_test.patch
 

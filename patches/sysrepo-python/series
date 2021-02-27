@@ -5,3 +5,4 @@ add_more_info_to_oper_callback.patch
 add_copy_config.patch
 add_lock_unlock.patch
 add_sr_get_lock.patch
+add_get_module_access_and_set_module_access.patch
