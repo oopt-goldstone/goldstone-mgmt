@@ -59,6 +59,34 @@ class SetCommand(Command):
     }
 
 
+class SaveCommand(Command):
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput(f"usage: {self.name} [ <module name> | all ]")
+
+        with self.context.conn.start_session() as sess:
+            sess.switch_datastore("startup")
+
+            if line[0] == "all":
+                ctx = self.context.conn.get_ly_ctx()
+                modules = [m.name() for m in ctx if "goldstone" in m.name()]
+            else:
+                modules = [line[0]]
+
+            for m in modules:
+                try:
+                    stdout.info(f"saving module {m}")
+                    sess.copy_config("running", m)
+                except sr.SysrepoError as e:
+                    raise CLIException(f"failed to save {m}: {e}")
+
+    def list(self):
+        ctx = self.context.conn.get_ly_ctx()
+        cmds = [m.name() for m in ctx if "goldstone" in m.name()]
+        cmds.append("all")
+        return cmds
+
+
 class Root(Object):
     XPATH = "/"
 
@@ -88,17 +116,7 @@ class Root(Object):
         # TODO:add timer for inactive user
 
         self.add_command(SetCommand(self, name="set"))
-
-        @self.command()
-        def save(line):
-            if len(line) != 1:
-                raise InvalidInput("usage: save <module name>")
-            self.session.switch_datastore("startup")
-
-            try:
-                self.session.copy_config("running", line[0])
-            except sr.SysrepoError as e:
-                print(e)
+        self.add_command(SaveCommand(self, name="save"))
 
         @self.command()
         def ping(line):
