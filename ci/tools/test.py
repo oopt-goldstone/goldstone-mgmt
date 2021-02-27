@@ -63,7 +63,7 @@ def test_tai(cli):
         cli,
         f'gscli -c "transponder {device}; netif 0; no output-power; !sleep 1; show" | grep output-power',
     )
-    assert "1.00 dBm" in output
+    assert "0.00 dBm" in output
 
     output = ssh(
         cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx'
@@ -128,6 +128,7 @@ def test_tai(cli):
 
     ssh(cli, f'gscli -c "transponder {device}; shutdown"')
     ssh(cli, f'gscli -c "transponder {device}; no shutdown"')
+    ssh(cli, f'gscli -c "clear datastore goldstone-tai"')
 
 
 def test_vlan_member_add_delete(cli):

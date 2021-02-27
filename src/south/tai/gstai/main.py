@@ -44,15 +44,39 @@ def attr_tai2yang(attr, meta, schema):
     raise taish.TAIException()
 
 
+MODULE_DEFAULT_VALUES = {"admin-status": "up", "enable-notify": False}
+
 NETIF_DEFAULT_VALUES = {
-    "modulation-format": "dp-16-qam",
-    "output-power": 1,
-    "voa-rx": 0,
-    "tx-laser-freq": 193500000000000,
     "tx-dis": False,
+    "output-power": 0,
+    "tx-laser-freq": 193500000000000,
+    "tx-fine-tune-laser-freq": 0,
+    "modulation-format": "dp-16-qam",
     "differential-encoding": False,
+    "pulse-shaping-tx": False,
+    "pulse-shaping-rx": False,
+    "pulse-shaping-tx-beta": 0,
+    "pulse-shaping-rx-beta": 0,
+    "voa-rx": 0,
+    "loopback-type": "none",
+    "prbs-type": "none",
+    "ch1-freq": 191150000000000,
+    "enable-notify": False,
+    "enable-alarm-notification": False,
+    "losi": False,
+    "ber-period": 10000000,
+    "hd-fec-type": "hgfec",
+    "sd-fec-type": "on",
+    "mld": "4-lanes",
 }
-HOSTIF_DEFAULT_VALUES = {"fec-type": "none"}
+
+HOSTIF_DEFAULT_VALUES = {
+    "signal-rate": "100-gbe",
+    "fec-type": "none",
+    "loopback-type": "none",
+    "enable-notify": False,
+    "enable-alarm-notification": False,
+}
 
 
 class Server(object):
@@ -124,17 +148,20 @@ class Server(object):
         self.conn.disconnect()
         self.taish.close()
 
-    def get_default_value(self, intf, attr):
+    def get_default_value(self, obj, attr):
         try:
-            if intf == "network-interface":
+            if obj == "network-interface":
                 return NETIF_DEFAULT_VALUES[attr]
-            elif intf == "host-interface":
+            elif obj == "host-interface":
                 return HOSTIF_DEFAULT_VALUES[attr]
+            elif obj == "module":
+                return MODULE_DEFAULT_VALUES[attr]
         except KeyError:
-            raise sysrepo.SysrepoInvalArgError(f"no default value for {intf} {attr}")
-        raise sysrepo.SysrepoInvalArgError(f"no default value for {intf} {attr}")
+            pass
+        logger.warning(f"no default value for {obj} {attr}")
+        return None
 
-    async def parse_change_req(self, xpath, value, is_change_deleted):
+    async def parse_change_req(self, xpath, value):
         """
         Helper method to parse sysrepo ChangeCreated, ChangeModified and ChangeDeleted.
         This returns a TAI object and a dict of attributes to be set
@@ -142,7 +169,7 @@ class Server(object):
         :arg xpath:
             The xpath for the change
         :arg value:
-            The value of the change
+            The value of the change. None if the xpath leaf needs is deleted
 
         :returns:
             TAI object and a dict of attributes to be set
@@ -171,6 +198,11 @@ class Server(object):
 
         if xpath.startswith("/config/"):
             xpath = xpath[len("/config/") :]
+            if value == None:
+                value = self.get_default_value("module", xpath)
+                if value == None:
+                    return None, None
+
             return module, {xpath: value}
         elif any((i in xpath) for i in ["/network-interface", "/host-interface"]):
             intf = (
@@ -196,8 +228,11 @@ class Server(object):
             if xpath.startswith("/config/"):
                 xpath = xpath[len("/config/") :]
 
-                if is_change_deleted:
+                if value == None:
                     value = self.get_default_value(intf, xpath)
+                    if value == None:
+                        return None, None
+
                 return obj, {xpath: value}
 
         return None, None
@@ -320,10 +355,8 @@ class Server(object):
                 ]
             ):
                 is_deleted = isinstance(change, sysrepo.ChangeDeleted)
-                value = "" if is_deleted else change.value
-                obj, items = await self.parse_change_req(
-                    change.xpath, value, is_deleted
-                )
+                value = None if is_deleted else change.value
+                obj, items = await self.parse_change_req(change.xpath, value)
 
                 if obj and items:
                     for k, v in items.items():

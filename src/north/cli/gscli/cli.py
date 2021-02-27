@@ -16,7 +16,7 @@ import pydoc
 import logging
 from prompt_toolkit.completion import merge_completers
 
-from .base import Command, Object, InvalidInput, Completer, Choice
+from .base import *
 
 KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 
