@@ -98,6 +98,7 @@ class Command(object):
                     break
             else:
                 return None  # no match
+        return elected
 
     def get(self, arg):
         elected = self.complete_subcommand(arg)

@@ -496,17 +496,13 @@ class ClearIpGroupCommand(Command):
         "route": Command,
     }
 
-    def __init__(self, context, parent, name):
-        super().__init__(context, parent, name)
-        self.conn = context.root().conn
-        self.mgmtif = Mgmtif(self.conn)
-
     def exec(self, line):
         if len(line) < 1 or line[0] not in ["route"]:
             raise InvalidInput(self.usage())
 
         if len(line) == 1:
-            return self.mgmtif.clear_route()
+            mgmtif = Mgmtif(self.context.root().conn)
+            return mgmtif.clear_route()
         else:
             raise InvalidInput(self.usage())
 
@@ -515,13 +511,10 @@ class ClearIpGroupCommand(Command):
 
 
 class ClearArpGroupCommand(Command):
-    def __init__(self, context, parent, name):
-        super().__init__(context, parent, name)
-        self.conn = context.root().conn
-        self.sess = self.conn.start_session()
-
     def exec(self, line):
-        print(self.sess.rpc_send("/goldstone-routing:clear_arp", {}))
+        conn = self.context.root().conn
+        with conn.start_session() as sess:
+            print(sess.rpc_send("/goldstone-routing:clear_arp", {}))
 
 
 class ClearInterfaceGroupCommand(Command):
@@ -529,20 +522,17 @@ class ClearInterfaceGroupCommand(Command):
         "counters": Command,
     }
 
-    def __init__(self, context, parent, name):
-        super().__init__(context, parent, name)
-        self.conn = context.root().conn
-        self.sess = self.conn.start_session()
-
     def exec(self, line):
-        if len(line) < 1 or line[0] not in ["counters"]:
-            raise InvalidInput(self.usage())
-        if len(line) == 1:
-            if line[0] == "counters":
-                self.sess.rpc_send("/goldstone-interfaces:clear_counters", {})
-                print("Interface counters are cleared.\n")
-        else:
-            raise InvalidInput(self.usage())
+        conn = self.context.root().conn
+        with conn.start_session() as sess:
+            if len(line) < 1 or line[0] not in ["counters"]:
+                raise InvalidInput(self.usage())
+            if len(line) == 1:
+                if line[0] == "counters":
+                    sess.rpc_send("/goldstone-interfaces:clear_counters", {})
+                    print("Interface counters are cleared.\n")
+            else:
+                raise InvalidInput(self.usage())
 
     def usage(self):
         return "usage:\n" f" {self.parent.name} {self.name} (counters)"
@@ -552,7 +542,7 @@ class ClearDatastoreGroupCommand(Command):
     def exec(self, line):
         if len(line) < 1:
             raise InvalidInput(
-                "usage: {self.parent.name} {self.name} [ <module name> | all ] [ running | startup ]"
+                f"usage: {self.parent.name} {self.name} [ <module name> | all ] [ running | startup ]"
             )
 
         ds = line[1] if len(line) == 2 else "running"
