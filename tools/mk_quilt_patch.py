@@ -6,6 +6,11 @@ from git import Repo
 import os
 import sys
 import gitdb
+import time
+
+def run(args, cwd=None):
+    print(f'cmd: {args}, cwd: {cwd}')
+    subprocess.run(args, cwd=cwd)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -16,7 +21,8 @@ def main():
 
     args = parser.parse_args()
 
-    repo = Repo(os.path.dirname(__file__) + '/..' )
+    root = os.path.relpath(os.path.dirname(__file__) + '/..')
+    repo = Repo(root)
 
     if args.list_submodules:
         print('\n'.join(m.name.split('/')[-1] for m in repo.submodules))
@@ -41,13 +47,13 @@ def main():
             break
 
     if args.stage:
-        d = f'{os.path.dirname(__file__)}/../patches'
-        subprocess.run(['rm', '-rf', f'{os.path.dirname(__file__)}/../.pc'])
-        subprocess.run(['sudo', 'mount', '--bind', f'{d}/{args.submodule}', d])
+        d = f'{root}/patches'
+        run(['rm', '-rf', f'{root}/.pc'])
+        run(['sudo', 'mount', '--bind', f'{d}/{args.submodule}', d])
         try:
-            subprocess.run(['quilt', 'push', '-a'])
+            run(['quilt', 'push', '-a'])
         finally:
-            subprocess.run(['sudo', 'umount', d])
+            run(['sudo', 'umount', d])
         return
 
     if args.sha1 == None:
@@ -62,20 +68,20 @@ def main():
 
     patch = commit.message.split('\n')[0].replace(' ', '_').replace('/', '_').lower() + '.patch'
 
-    subprocess.run(['git', 'checkout', f'{args.sha1}^'], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
-    subprocess.run(['quilt', 'new', args.submodule + '/' + patch])
+    run(['git', 'checkout', f'{args.sha1}^'], cwd=f'{root}/sm/{args.submodule}')
+    run(['quilt', 'new', args.submodule + '/' + patch], cwd=root)
     for filename in commit.stats.files.keys():
-        subprocess.run(['quilt', 'add', f'{os.path.dirname(__file__)}/../sm/{args.submodule}/{filename}'])
+        run(['quilt', 'add', f'{root}/sm/{args.submodule}/{filename}'], cwd=root)
 
-    subprocess.run(['git', 'checkout', args.sha1], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
-    subprocess.run(['quilt', 'refresh'])
-    subprocess.run(['git', 'submodule', 'update', f'sm/{args.submodule}'], cwd=f'{os.path.dirname(__file__)}/../')
+    run(['git', 'checkout', args.sha1], cwd=f'{root}/sm/{args.submodule}')
+    run(['quilt', 'refresh'], cwd=root)
+    run(['git', 'submodule', 'update', f'sm/{args.submodule}'], cwd=root)
 
     if repo.is_dirty(path='sm/' + args.submodule):
         print("something went wrong")
         sys.exit(1)
 
-    d = f'{os.path.dirname(__file__)}/../patches/{args.submodule}'
+    d = f'{root}/patches/{args.submodule}'
     os.makedirs(d, exist_ok=True)
 
     try:
