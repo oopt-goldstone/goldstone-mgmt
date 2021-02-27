@@ -8,6 +8,7 @@ import itertools
 from .system import SystemServer
 from .aaa import AAAServer
 from .mgmtif import ManagementInterfaceServer
+from .k8s import KubernetesServer
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,12 @@ def main():
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
         conn = sysrepo.SysrepoConnection()
-        servers = [SystemServer(conn), AAAServer(conn), ManagementInterfaceServer(conn)]
+        servers = [
+            SystemServer(conn),
+            AAAServer(conn),
+            ManagementInterfaceServer(conn),
+            KubernetesServer(conn),
+        ]
 
         try:
             tasks = list(
