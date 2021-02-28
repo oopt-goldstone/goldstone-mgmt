@@ -341,8 +341,15 @@ class Server(object):
         raise InvalidXPath()
 
     async def change_cb(self, event, req_id, changes, priv):
+        if event == "done":
+            # TODO can be smarter. detect when the container is removed
+            if any(isinstance(change, sysrepo.ChangeDeleted) for change in changes):
+                await self.update_operds()
+            return
+
         if event != "change":
             return
+
         for change in changes:
             logger.debug(f"change_cb: {change}")
 
@@ -536,6 +543,49 @@ class Server(object):
         dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
         self.sess.notification_send_ly(dnode)
 
+    async def update_operds(self, return_notifiers=False):
+
+        logger.info("updating operds")
+
+        with self.conn.start_session() as sess:
+
+            sess.switch_datastore("operational")
+
+            modules = await self.taish.list()
+            notifiers = []
+            for key, m in modules.items():
+                try:
+                    module = await self.taish.get_module(key)
+                except Exception as e:
+                    logger.warning(f"failed to get module location: {key}. err: {e}")
+                    continue
+
+                xpath = f"/goldstone-tai:modules/module[name='{key}']"
+                sess.set_item(f"{xpath}/config/name", key)
+
+                for i in range(len(m.netifs)):
+                    sess.set_item(
+                        f"{xpath}/network-interface[name='{i}']/config/name", i
+                    )
+                    if return_notifiers:
+                        n = module.get_netif(i)
+                        notifiers.append(
+                            n.monitor("alarm-notification", self.tai_cb, json=True)
+                        )
+
+                for i in range(len(m.hostifs)):
+                    sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
+                    if return_notifiers:
+                        h = module.get_hostif(i)
+                        notifiers.append(
+                            h.monitor("alarm-notification", self.tai_cb, json=True)
+                        )
+
+            sess.apply_changes()
+
+        if return_notifiers:
+            return notifiers
+
     async def start(self):
         # get hardware configuration from ONLP datastore ( ONLP south must be running )
         # TODO check if the module is present by a status flag
@@ -643,41 +693,7 @@ class Server(object):
                         for k, v in attrs:
                             await hostif.set(k, v)
 
-            self.sess.switch_datastore("operational")
-
-            modules = await self.taish.list()
-            notifiers = []
-            for key, m in modules.items():
-                try:
-                    module = await self.taish.get_module(key)
-                except Exception as e:
-                    logger.warning(f"failed to get module location: {key}. err: {e}")
-                    continue
-
-                xpath = f"/goldstone-tai:modules/module[name='{key}']"
-                self.sess.set_item(f"{xpath}/config/name", key)
-
-                notifiers.append(module.monitor("notify", self.tai_cb, json=True))
-
-                for i in range(len(m.netifs)):
-                    self.sess.set_item(
-                        f"{xpath}/network-interface[name='{i}']/config/name", i
-                    )
-                    n = module.get_netif(i)
-                    notifiers.append(
-                        n.monitor("alarm-notification", self.tai_cb, json=True)
-                    )
-
-                for i in range(len(m.hostifs)):
-                    self.sess.set_item(
-                        f"{xpath}/host-interface[name='{i}']/config/name", i
-                    )
-                    h = module.get_hostif(i)
-                    notifiers.append(
-                        h.monitor("alarm-notification", self.tai_cb, json=True)
-                    )
-
-            self.sess.apply_changes()
+            notifiers = await self.update_operds(return_notifiers=True)
 
             self.sess.switch_datastore("running")
 
