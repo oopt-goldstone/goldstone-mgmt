@@ -3,6 +3,7 @@ from kubernetes_asyncio import config, client
 import asyncio
 import os
 import logging
+import os.path
 
 KUBECONFIG = os.getenv("KUBECONFIG", "/etc/rancher/k3s/k3s.yaml")
 K8S_SERVICE = os.getenv("K8S_SERVICE", "k3s.service")
@@ -41,6 +42,10 @@ class KubernetesServer:
         return True
 
     async def monitor(self):
+
+        while not os.path.exists(KUBECONFIG):
+            logger.warn(f"{KUBECONFIG} doesn't exist. sleep 10sec")
+            await asyncio.sleep(10)
 
         while True:
 
