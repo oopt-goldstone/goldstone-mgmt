@@ -6,23 +6,30 @@ from git import Repo
 import os
 import sys
 import gitdb
+import time
+
+def run(args, cwd=None):
+    print(f'cmd: {args}, cwd: {cwd}')
+    subprocess.run(args, cwd=cwd)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--submodule')
     parser.add_argument('--sha1')
     parser.add_argument('--list-submodules', '-l', action='store_true')
+    parser.add_argument('--stage', '-s', action='store_true', help='stage a temporal branch which applies all patches for the specified submodule')
 
     args = parser.parse_args()
 
-    repo = Repo(os.path.dirname(__file__) + '/..' )
+    root = os.path.relpath(os.path.dirname(__file__) + '/..')
+    repo = Repo(root)
 
     if args.list_submodules:
-        print(' '.join(m.name for m in repo.submodules))
+        print('\n'.join(m.name.split('/')[-1] for m in repo.submodules))
         return
 
-    if args.submodule == None or args.sha1 == None:
-        print('option --submodule and --sha1 is required')
+    if args.submodule == None:
+        print('option --submodule is required')
         sys.exit(1)
 
     if 'sm/' + args.submodule not in [m.name for m in repo.submodules]:
@@ -39,6 +46,20 @@ def main():
             sm = m
             break
 
+    if args.stage:
+        d = f'{root}/patches'
+        run(['rm', '-rf', f'{root}/.pc'])
+        run(['sudo', 'mount', '--bind', f'{d}/{args.submodule}', d])
+        try:
+            run(['quilt', 'push', '-a'])
+        finally:
+            run(['sudo', 'umount', d])
+        return
+
+    if args.sha1 == None:
+        print('option --sha1 is required')
+        sys.exit(1)
+
     try:
         commit = sm.module().commit(args.sha1)
     except gitdb.exc.BadName as e:
@@ -47,24 +68,30 @@ def main():
 
     patch = commit.message.split('\n')[0].replace(' ', '_').replace('/', '_').lower() + '.patch'
 
-    subprocess.run(['git', 'checkout', f'{args.sha1}^'], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
-    subprocess.run(['quilt', 'new', args.submodule + '/' + patch])
+    run(['git', 'checkout', f'{args.sha1}^'], cwd=f'{root}/sm/{args.submodule}')
+    run(['quilt', 'new', args.submodule + '/' + patch], cwd=root)
     for filename in commit.stats.files.keys():
-        subprocess.run(['quilt', 'add', f'{os.path.dirname(__file__)}/../sm/{args.submodule}/{filename}'])
+        run(['quilt', 'add', f'{root}/sm/{args.submodule}/{filename}'], cwd=root)
 
-    subprocess.run(['git', 'checkout', args.sha1], cwd=f'{os.path.dirname(__file__)}/../sm/{args.submodule}')
-    subprocess.run(['quilt', 'refresh'])
-    subprocess.run(['git', 'submodule', 'update', f'sm/{args.submodule}'], cwd=f'{os.path.dirname(__file__)}/../')
+    run(['git', 'checkout', args.sha1], cwd=f'{root}/sm/{args.submodule}')
+    run(['quilt', 'refresh'], cwd=root)
+    run(['git', 'submodule', 'update', f'sm/{args.submodule}'], cwd=root)
 
     if repo.is_dirty(path='sm/' + args.submodule):
         print("something went wrong")
         sys.exit(1)
 
-    with open(f'{os.path.dirname(__file__)}/../patches/{args.submodule}/series') as f:
-        series = f.read()
+    d = f'{root}/patches/{args.submodule}'
+    os.makedirs(d, exist_ok=True)
+
+    try:
+        with open(f'{d}/series') as f:
+            series = f.read()
+    except:
+        series = ""
 
     if patch not in series:
-        with open(f'{os.path.dirname(__file__)}/../patches/{args.submodule}/series', 'a') as f:
+        with open(f'{d}/series', 'a') as f:
             f.write(patch + '\n')
 
 if __name__ == '__main__':

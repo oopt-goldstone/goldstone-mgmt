@@ -1,327 +1,559 @@
 import sys
 import os
 
-from .base import Object, InvalidInput, Completer
+from tabulate import tabulate
 import json
 import sysrepo as sr
+from .common import sysrepo_wrap, print_tabular
 
 from prompt_toolkit.completion import WordCompleter
+from .base import InvalidInput
 
-TIMEOUT_MS = 10000
+from natsort import natsorted
 
+import logging
 
-class vlan_list(Object):
-    XPATH = '/sonic-vlan:sonic-vlan/VLAN/VLAN_LIST'
-
-    def xpath_vlan_list(self):
-        return "{}[name='{}']".format(self.XPATH, 'Vlan' + self.vlan_name)
-
-    def __init__(self, session, parent, *args):
-        self.session = session
-        self.vlan_name = args[0]
-        self._get_hook = {}
-        self._set_hook = {}
-        self.session.switch_datastore('operational')
-        self.vlan_tree = self.session.get_data("{}".format(self.xpath_vlan_list()))
-        self._set_map = {"members":"string"}
-        try:
-            self._map = list(self.vlan_tree['sonic-vlan']['VLAN']['VLAN_LIST'])[0]
-
-        except KeyError as error:
-            print("Vlan list configurations are empty")
-
-        self.session.switch_datastore('running')
-        super(vlan_list, self).__init__(parent)
-       
- 
-        @self.command(WordCompleter(self._components()))
-        def get(args):
-            if len(args) != 1:
-                raise InvalidInput('usage: get <parameter_name>')
-            self.session.switch_datastore('operational')
-            try:
-                items = self.session.get_items("{}/{}".format(self.xpath_vlan_list(), args[0]))
-                for item in items:
-                    if args[0] in self._get_hook:
-                        print(self._get_hook[args[0]](item))
-                    else:
-                        print(item.value)
-            except sr.errors.SysrepoCallbackFailedError as e:
-                print(e)
-            self.session.switch_datastore('running')
+logger = logging.getLogger(__name__)
 
 
-
-        @self.command(WordCompleter(self._set_components()))
-        def set(args):
-            if len(args) != 2:
-                raise InvalidInput('usage: set <parameter_name> <value>')
-            if args[0] in self._set_hook:
-                v = self._set_hook[args[0]](args[1])
-            else:
-                v = args[1]
-            if (args[0] == 'vlanid' or args[0] =='name'):
-                raise InvalidInput('Cannot change the property')
-            else:
-                self.session.set_item('{}/{}'.format(self.xpath_vlan_list(), args[0]), v)
-                self.session.apply_changes()
+class sonic_defaults:
+    SPEED = "100000"
 
 
+class Vlan(object):
 
-    def _components(self):
-        d = self._map
-        return [v for v in d]
+    XPATH = "/goldstone-vlan:vlan/VLAN"
+    XPATHport = "/goldstone-vlan:vlan/VLAN_MEMBER"
 
-    def _set_components(self):
-        d = self._set_map
-        return [v for v in d]
+    def xpath_vlan(self, vid):
+        return "{}/VLAN_LIST[name='{}']".format(self.XPATH, "Vlan" + vid)
 
-    def __str__(self):
-        return 'vlan({})'.format(self.vlan_name)
-
-
-
-
-class Ifname(Object):
-    XPATH = '/sonic-port:sonic-port/PORT/PORT_LIST'
-
-    def xpath(self):
-        return "{}[ifname='{}']".format(self.XPATH, self.ifname)
-
-    def __init__(self, session, parent, *args):
-        self.session = session
-        self.ifname = args[0]
-        self._get_hook = {}
-        self._set_hook = {}
-        self.session.switch_datastore('operational')
-        self.iftree = self.session.get_data(self.xpath())
-        self._set_map = {"alias":"string", "speed":"integer" , "mtu":"integer", "admin_status":"up/down" }
-        try:
-            self._map = list((self.iftree)['sonic-port']['PORT']['PORT_LIST'])[0]
-        except KeyError as error:
-            print("sonic-port interfaces  are not configured")
-        self.session.switch_datastore('running')
-        super(Ifname, self).__init__(parent)
-
-
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            print (json.dumps(self.iftree))
-
-        @self.command(WordCompleter(self._components()))
-        def get(args):
-            if len(args) != 1:
-                raise InvalidInput('usage: get <parameter_name>')
-            self.session.switch_datastore('operational')
-            try:
-                items = self.session.get_items("{}/{}".format(self.xpath(), args[0]))
-                for item in items:
-                    if args[0] in self._get_hook:
-                        print(self._get_hook[args[0]](item))
-                    else:
-                        print(item.value)
-            except sr.errors.SysrepoCallbackFailedError as e:
-                print(e)
-            self.session.switch_datastore('running')
-
-        @self.command(WordCompleter(self._set_components()))
-        def set(args):
-            if len(args) != 2:
-                raise InvalidInput('usage: set <parameter_name> <value>')
-            if args[0] in self._set_hook:
-                v = self._set_hook[args[0]](args[1])
-            else:
-                v = args[1]
-            try:
-                self.session.set_item('{}/{}'.format(self.xpath(), args[0]), v)
-                self.session.apply_changes()
-            except sr.errors.SysrepoCallbackFailedError as e:
-                print(e)
-
-
-    def _ifnames(self):
-        d = self._ifname_map
-        return [v['ifname'] for v in d.get('sonic-port:sonic-port/PORT/PORT_LIST', {}).get('ifname', {})]
-
-    def __str__(self):
-        return 'ifname({})'.format(self.ifname)
-
-    def _components(self):
-        d = self._map
-        return [v for v in d]
-
-    def _set_components(self):
-        d = self._set_map
-        return [v for v in d]
-
-
-
-class Vlan(Object):
-
-    XPATH = '/sonic-vlan:sonic-vlan/VLAN'
-
+    def xpath_mem(self, vid):
+        return "{}/VLAN_MEMBER_LIST[name='{}']".format(self.XPATHport, "Vlan" + vid)
 
     def __init__(self, conn, parent):
         self.session = conn.start_session()
-        self.session.switch_datastore('operational')
-        self.tree = self.session.get_data("{}".format(self.XPATH), 0, TIMEOUT_MS)
+        self.sr_op = sysrepo_wrap(self.session)
+        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
+        self.treeport = self.sr_op.get_data_ly(
+            "{}".format(self.XPATHport), "operational"
+        )
         try:
-            self._vlan_map = list(self.tree['sonic-vlan']['VLAN']['VLAN_LIST'])
+            self._vlan_map = json.loads(self.tree.print_mem("json"))[
+                "goldstone-vlan:vlan"
+            ]["VLAN"]["VLAN_LIST"]
         except KeyError as error:
-            print("No VLAN configurations created")
-        self.session.switch_datastore('running')
-        super(Vlan, self).__init__(parent)
+            pass
 
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            print (json.dumps(self.tree))
-        
-        @self.command(WordCompleter(lambda : self._vlan_components()))
-        def vlan(args):
-            if len(args) != 1:
-               raise InvalidInput('usage: vlan <vlan_id>')
-            return vlan_list(self.session, self, args[0])
+    def show_vlan(self, details="details"):
+        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
+        self.treeport = self.sr_op.get_data_ly(
+            "{}".format(self.XPATHport), "operational"
+        )
+        dl1 = self.tree.print_mem("json")
+        dl2 = self.treeport.print_mem("json")
+        try:
+            dl1 = json.loads(dl1)
+            dl2 = json.loads(dl2)
+        except KeyError as error:
+            pass
+
+        if dl1 == {}:
+            print(tabulate([], ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
+        else:
+            try:
+                dl1 = dl1["goldstone-vlan:vlan"]["VLAN"]["VLAN_LIST"]
+                dl2 = dl2["goldstone-vlan:vlan"]["VLAN_MEMBER"]["VLAN_MEMBER_LIST"]
+            except KeyError as error:
+                pass
+            dln = []
+            for i in range(len(dl1)):
+                if "members" in dl1[i]:
+                    for j in range(len(dl1[i]["members"])):
+                        tg = ""
+                        for k in range(len(dl2)):
+                            if (
+                                dl2[k]["name"] == dl1[i]["name"]
+                                and dl2[k]["ifname"] == dl1[i]["members"][j]
+                            ):
+                                tg = dl2[k]["tagging_mode"]
+                                break
+                        dln.append([dl1[i]["vlanid"], dl1[i]["members"][j], tg])
+                else:
+                    dln.append([dl1[i]["vlanid"], "-", "-"])
+            print(tabulate(dln, ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
+        self.session.switch_datastore("running")
 
     def _vlan_components(self):
         d = self._vlan_map
-        return [str(v['vlanid']) for v in d]
-    
-    def __str__(self):
-        return 'vlan'
+        return [str(v["vlanid"]) for v in d]
 
-
-
-
-class Interface(Object):
-
-    XPATH = '/sonic-interface:sonic-interface/INTERFACE'
-
-
-    def xpath_iplist(self):
-        return "{}/INTERFACE_IPADDR_LIST".format(self.XPATH)
-
-    def __init__(self, conn, parent):
-        self.session = conn.start_session()
-        super(Interface, self).__init__(parent)
-
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            self.session.switch_datastore('operational')
-            try:
-                tree = self.session.get_data_ly(self.xpath_iplist())
-                print (tree.print_mem("json"))
-            except sr.errors.SysrepoNotFoundError as e:
-                print(e)
-            except KeyError as error:
-                print("Sonic-interface ip addr list not configured")
-            self.session.switch_datastore('running')
-        
-
-        @self.command()
-        def get(args):
-            if len(args) != 1:
-                raise InvalidInput('usage: get <portname> <ip_prefix>')
-            self.session.switch_datastore('operational')
-            try:
-                items = self.session.get_items("{}=[portname= '{}'],[ipprefix='{}']".format(self.xpath_iplist(), args[0]))
-                for item in items:
-                    if args[0] in self._get_hook:
-                        print(self._get_hook[args[0]](item))
-                    else:
-                        print(item.value)
-            except sr.errors.SysrepoCallbackFailedError as e:
-                print(e)
-            self.session.switch_datastore('running')
-
-        @self.command()
-        def set(args):
-            if len(args) != 2:
-                raise InvalidInput('usage: set <parameter_name> <value>')
-            if args[0] in self._set_hook:
-                v = self._set_hook[args[0]](args[1])
-            else:
-                v = args[1]
-            self.session.set_item("{}=[ipprefix='{}']".format(self.xpath_iplist(), args[0], v))
-            self.session.apply_changes()
-
-    def __str__(self):
-        return 'interface'
-
-
-
-
-
-class Port(Object):
-
-    XPATH = '/sonic-port:sonic-port/PORT/PORT_LIST'
-
-    def __init__(self, conn, parent):
-        self.session = conn.start_session()
-        self.session.switch_datastore('operational')
+    def set_name(self, vlan_name):
+        vid = vlan_name[4:]
         try:
-            self.tree = self.session.get_data(self.XPATH)
-            self._ifname_map = list(self.tree['sonic-port']['PORT']['PORT_LIST'])
-        except KeyError as error:
-            print("Port list is not configured")
+            self.sr_op.set_data("{}/name".format(self.xpath_vlan(vid)), vlan_name)
+        except sr.errors.SysrepoValidationFailedError as error:
+            msg = str(error)
+            print(msg)
+
+    def create_vlan(self, vid):
+        vlan_name = "Vlan" + vid
+        try:
+            data_tree = self.session.get_data_ly(self.XPATH)
+            vlan_map = json.loads(data_tree.print_mem("json"))["goldstone-vlan:vlan"][
+                "VLAN"
+            ]["VLAN_LIST"]
+        except (sr.errors.SysrepoNotFoundError, KeyError) as error:
+            logger.warning(error)
+        else:
+            if vlan_name in vlan_map:
+                return
+        self.sr_op.set_data("{}/vlanid".format(self.xpath_vlan(vid)), vid)
+
+    def delete_vlan(self, vid):
+        vlan_name = "Vlan" + vid
+        try:
+            mem_dict = self.sr_op.get_data("{}/members".format(self.xpath_vlan(vid)))
+            mem_dict = list(mem_dict["vlan"]["VLAN"]["VLAN_LIST"])[0]
+            mem_list = mem_dict["members"]
         except sr.errors.SysrepoNotFoundError as error:
-            print("sonic-mgmt is down")
-        self.session.switch_datastore('running')
-        super(Port, self).__init__(parent)
+            self.sr_op.delete_data(self.xpath_vlan(vid))
+            return
+        for member in mem_list:
+            self.sr_op.delete_data(
+                "{}[ifname='{}']".format(self.xpath_mem(vid), member)
+            )
 
-        @self.command()
-        def show(args):
-            if len(args) != 0:
-                raise InvalidInput('usage: show[cr]')
-            print (json.dumps(self.tree))
+        self.sr_op.delete_data("{}/{}".format(self.xpath_vlan(vid), "members"))
+        self.sr_op.delete_data(self.xpath_vlan(vid))
 
-        @self.command(WordCompleter(lambda : self._ifname_components()))
-        def ifname(args):
-            if len(args) != 1:
-                raise InvalidInput('usage: ifname <interface_name>')
-            return Ifname(self.session, self, args[0])
+    def show(self, vid):
+        xpath = self.xpath_vlan(vid)
+        tree = self.sr_op.get_data(xpath, "operational")
+        data = [v for v in list((tree)["vlan"]["VLAN"]["VLAN_LIST"])][0]
+        if "members" in data:
+            mem_delim = ","
+            mem_delim = mem_delim.join(data["members"])
+            data["members"] = mem_delim
+        else:
+            data["members"] = "-"
+        print_tabular(data, "")
 
-    def __str__(self):
-        return 'port'
+    def run_conf(self):
+        try:
+            self.tree = self.sr_op.get_data(
+                "{}/VLAN_LIST".format(self.XPATH), "running"
+            )
+            d_list = self.tree["vlan"]["VLAN"]["VLAN_LIST"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return
+        for data in d_list:
+            print("vlan {}".format(data["vlanid"]))
+            print("  quit")
+        print("!")
+
+
+class Port(object):
+
+    XPATH = "/goldstone-interfaces:interfaces/interface"
+
+    def xpath(self, ifname):
+        self.path = self.XPATH
+        return "{}[name='{}']".format(self.path, ifname)
+
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
+        self.sr_op = sysrepo_wrap(self.session)
+
+    def get_interface_list(self, datastore, include_implicit_values=True):
+        try:
+            tree = self.sr_op.get_data(
+                self.XPATH, datastore, False, include_implicit_values
+            )
+            return natsorted(tree["interfaces"]["interface"], key=lambda x: x["name"])
+        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
+            return []
+
+    def show_interface(self, details="description"):
+        rows = []
+        for intf in self.get_interface_list("operational"):
+            row = [
+                intf["name"],
+                intf.get("oper-status", "-"),
+                intf.get("admin-status", "-"),
+                intf.get("alias", "-"),
+            ]
+            if details == "description":
+                row += [intf.get("speed", "-"), intf.get("ipv4", {}).get("mtu", "-")]
+
+            rows.append(row)
+
+        if details == "brief":
+            headers = ["name", "oper-status", "admin-status", "alias"]
+        elif details == "description":
+            headers = ["name", "oper-status", "admin-status", "alias", "speed", "mtu"]
+        else:
+            raise InvalidInput(f"unsupported format: {details}")
+
+        print(tabulate(rows, headers, tablefmt="pretty"))
+
+    def show_counters(self, ifname_list):
+        intf_list = self.get_interface_list("operational")
+        existing_ifname_list = [v["name"] for v in intf_list]
+
+        # Raise exception if invalid interfaces are present in list
+        for intf in ifname_list:
+            if intf not in existing_ifname_list:
+                raise InvalidInput(f"Invalid interface : {intf}")
+
+        lines = []
+        for intf in intf_list:
+            if len(ifname_list) == 0 or intf["name"] in ifname_list:
+                if "statistics" in intf:
+                    lines.append(f"Interface  {intf['name']}")
+                    statistics = intf["statistics"]
+                    for key in statistics:
+                        lines.append(f"  {key}: {statistics[key]}")
+                    # One extra line to have readability
+                    lines.append(f"\n")
+                else:
+                    lines.append(f"No statistics for: {intf['name']}")
+
+        print("\n".join(lines))
+
+    def run_conf(self):
+        xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
+
+        runn_conf_list = ["admin-status", "ipv4", "speed", "name", "breakout"]
+        v_dict = {}
+
+        interface_list = self.get_interface_list("running", False)
+        if not interface_list:
+            return
+
+        for data in interface_list:
+            print("interface {}".format(data.get("name")))
+            for v in runn_conf_list:
+                v_dict = {v: data.get(v, None) for v in runn_conf_list}
+                if v == "admin-status":
+                    if v_dict["admin-status"] == "down":
+                        print("  shutdown ")
+                    elif v_dict["admin-status"] == None:
+                        pass
+
+                elif v == "ipv4":
+                    try:
+                        mtu = v_dict["ipv4"]["mtu"]
+                    except:
+                        mtu = None
+
+                    if mtu:
+                        print("  {} {}".format("mtu", mtu))
+
+                elif v == "speed":
+                    if (v_dict["speed"] == sonic_defaults.SPEED) or (
+                        v_dict["speed"] == None
+                    ):
+                        pass
+                    else:
+                        print("  {} {}".format(v, v_dict[v]))
+
+                elif v == "breakout":
+                    if v_dict["breakout"] == None:
+                        pass
+                    else:
+                        num_of_channels = v_dict["breakout"]["num-channels"]
+                        channel_speed = v_dict["breakout"]["channel-speed"]
+                        channel_speed = channel_speed.split("_")
+                        channel_speed = channel_speed[1].split("B")
+                        print("  {} {}X{}".format(v, num_of_channels, channel_speed[0]))
+
+                elif v == "name":
+                    try:
+                        vlan_tree = self.sr_op.get_data_ly(
+                            "{}".format(xpath_vlan), "running"
+                        )
+                        vlan_memlist = json.loads(vlan_tree.print_mem("json"))
+                        vlan_memlist = vlan_memlist["goldstone-vlan:vlan"][
+                            "VLAN_MEMBER"
+                        ]["VLAN_MEMBER_LIST"]
+                    except (sr.errors.SysrepoNotFoundError, KeyError):
+                        # No vlan configrations is a valid case
+                        continue
+
+                    for vlan in range(len(vlan_memlist)):
+                        if vlan_memlist[vlan]["ifname"] == v_dict["name"]:
+                            vlanId = (vlan_memlist[vlan]["name"]).split("Vlan", 1)[1]
+                            if vlan_memlist[vlan]["tagging_mode"] == "tagged":
+                                print(
+                                    "  switchport mode trunk vlan {}".format(
+                                        str(vlanId)
+                                    )
+                                )
+                            else:
+                                print(
+                                    "  switchport mode access vlan {}".format(
+                                        str(vlanId)
+                                    )
+                                )
+
+            print("  quit")
+        print("!")
 
     def _ifname_components(self):
         d = self._ifname_map
-        return [v['ifname'] for v in d]
+        return [v["name"] for v in d]
+
+    def set_admin_status(self, ifname, value):
+        xpath = self.xpath(ifname)
+        set_attribute(self.sr_op, xpath, "interface", ifname, "admin-status", value)
+
+    def set_mtu(self, ifname, value):
+        xpath = self.xpath(ifname)
+        if value:
+            set_attribute(self.sr_op, xpath, "interface", ifname, "mtu", value)
+        else:
+            self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4/mtu")
+
+            # if the mtu leaf was the only node under the ipv4 container
+            # remove the container
+            try:
+                data = self.sr_op.get_data(f"{xpath}/goldstone-ip:ipv4")
+            except sr.errors.SysrepoNotFoundError:
+                return
+
+            data = data.get("interfaces", {}).get("interface", {})
+            data = data.get(ifname, {}).get("ipv4", None) if len(data) else None
+            if not data:
+                self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4")
+
+    def mtu_range(self):
+        ctx = self.session.get_ly_ctx()
+        xpath = "/goldstone-interfaces:interfaces"
+        xpath += "/goldstone-interfaces:interface"
+        xpath += "/goldstone-ip:ipv4"
+        xpath += "/goldstone-ip:mtu"
+        for node in ctx.find_path(xpath):
+            return node.type().range()
+
+    def set_speed(self, ifname, value, config=True):
+        xpath = self.xpath(ifname)
+        set_attribute(self.sr_op, xpath, "interface", ifname, "speed", value)
+        if config == False:
+            self.sr_op.delete_data("{}/speed".format(xpath))
+
+    def set_vlan_mem(self, ifname, mode, vid, config=True):
+        xpath_mem_list = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
+        xpath_mem_mode = "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST"
+        mode_map = {"tagged": "trunk", "untagged": "access"}
+
+        vlan_name = "Vlan" + vid
+        xpath_mem_list = xpath_mem_list + "[name='{}']".format(vlan_name)
+        xpath_mem_mode = xpath_mem_mode + "[name='{}'][ifname='{}']".format(
+            vlan_name, ifname
+        )
+
+        # in order to create the interface node if it doesn't exist in running DS
+        try:
+            self.sr_op.get_data(self.xpath(ifname), "running")
+
+        except sr.SysrepoNotFoundError as e:
+            self.sr_op.set_data("{}/admin-status".format(self.xpath(ifname)), "down")
+
+        if config == True:
+            set_attribute(
+                self.sr_op, xpath_mem_list, "vlan", vlan_name, "members", ifname
+            )
+            if mode == "trunk":
+                set_attribute(
+                    self.sr_op,
+                    xpath_mem_mode,
+                    "vlan",
+                    vlan_name,
+                    "tagging_mode",
+                    "tagged",
+                )
+            elif mode == "access":
+                set_attribute(
+                    self.sr_op,
+                    xpath_mem_mode,
+                    "vlan",
+                    vlan_name,
+                    "tagging_mode",
+                    "untagged",
+                )
+
+        elif config == False:
+            mem_list = self.sr_op.get_leaf_data(xpath_mem_list, "members")
+            if len(mem_list) == 0:
+                raise InvalidInput("No members added")
+            mode_data = self.sr_op.get_leaf_data(xpath_mem_mode, "tagging_mode")
+            mode_data = mode_data.pop()
+            if mode == None:
+                mode = mode_map[mode_data]
+            # checking whether the delete was triggered with the correct mode in the command issued
+            if mode_map[mode_data] != mode:
+                raise InvalidInput(f"Incorrect mode given : {mode}")
+            if ifname in mem_list:
+                self.sr_op.delete_data("{}/{}".format(xpath_mem_list, "members"))
+                self.sr_op.delete_data("{}".format(xpath_mem_mode))
+                mem_list.remove(ifname)
+                # Since we dont have utiity function in sysrepo to delete one node in
+                # leaf-list , we are deleting 'members' with old data and creating again
+                # with new data.
+                for mem_intf in mem_list:
+                    set_attribute(
+                        self.sr_op,
+                        xpath_mem_list,
+                        "vlan",
+                        vlan_name,
+                        "members",
+                        mem_intf,
+                    )
+            # Unconfig done
+            return
+
+    def speed_to_yang_val(self, speed):
+        # Considering only speeds supported in CLI
+        if speed == "25G":
+            return "SPEED_25GB"
+        if speed == "50G":
+            return "SPEED_50GB"
+        if speed == "10G":
+            return "SPEED_10GB"
+
+    def set_breakout(self, ifname, number_of_channels, speed):
+
+        if (number_of_channels == None) != (speed == None):
+            raise InvalidInput(
+                f"unsupported combination: {number_of_channels}, {speed}"
+            )
+
+        # TODO use the parent leaf to detect if this is a sub-interface or not
+        # using "_1" is vulnerable to the interface nameing schema change
+        if "_1" not in ifname:
+            raise InvalidInput(
+                "Breakout cannot be configured/removed on a sub-interface"
+            )
+
+        def remove_intf_from_all_vlans(intf):
+            try:
+                data = self.sr_op.get_data("/goldstone-vlan:vlan/VLAN/VLAN_LIST")
+                data = data["vlan"]["VLAN"]["VLAN_LIST"]
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                # no VLAN configuration exists
+                return
+
+            for vlan in data:
+                if intf in vlan.get("members", []):
+                    self.set_vlan_mem(intf, None, str(vlan["vlanid"]), config=False)
+
+        is_delete = number_of_channels == None
+
+        if is_delete:
+            try:
+                xpath = self.xpath(ifname)
+                data = self.sr_op.get_data(f"{xpath}/breakout", "running")
+                data = data["interfaces"]["interface"][ifname]["breakout"]
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                # If no configuration exists, no need to return error
+                return
+
+            print("Sub Interfaces will be deleted")
+
+            data = self.sr_op.get_data(self.XPATH, ds="operational", no_subs=True)
+            for intf in data["interfaces"]["interface"]:
+                parent = intf.get("breakout", {}).get("parent", None)
+                if ifname == parent:
+                    remove_intf_from_all_vlans(intf["name"])
+                    self.sr_op.delete_data(self.xpath(intf["name"]))
+
+        print("Existing configurations on parent interfaces will be flushed")
+        remove_intf_from_all_vlans(ifname)
+        xpath = self.xpath(ifname)
+        self.sr_op.delete_data(xpath)
+        #        self.set_admin_status(ifname, "down")
+
+        if is_delete:
+            return
+
+        # Set breakout configuration
+        try:
+            set_attribute(
+                self.sr_op,
+                xpath,
+                "interface",
+                ifname,
+                "num-channels",
+                number_of_channels,
+            )
+            set_attribute(
+                self.sr_op,
+                xpath,
+                "interface",
+                ifname,
+                "channel-speed",
+                self.speed_to_yang_val(speed),
+            )
+
+        except sr.errors.SysrepoValidationFailedError as error:
+            raise InvalidInput(str(error))
+
+    def show(self, ifname):
+        xpath = self.xpath(ifname)
+        tree = self.sr_op.get_data(xpath, "operational")
+        data = [v for v in list((tree)["interfaces"]["interface"])][0]
+        if "ipv4" in data:
+            mtu_dict = data["ipv4"]
+            data["mtu"] = mtu_dict.get("mtu", "-")
+            del data["ipv4"]
+        if "statistics" in data:
+            del data["statistics"]
+        if "breakout" in data:
+            try:
+                data["breakout:num-channels"] = data["breakout"]["num-channels"]
+                data["breakout:channel-speed"] = data["breakout"]["channel-speed"]
+            except:
+                data["breakout:parent"] = data["breakout"]["parent"]
+            del data["breakout"]
+        print_tabular(data, "")
 
 
+class Sonic(object):
+    def __init__(self, conn):
+        self.port = Port(conn, self)
+        self.vlan = Vlan(conn, self)
 
-class Sonic(Object):
-    XPATH = '/sonic-port:sonic-port/PORT/PORT_LIST'
+    def port_run_conf(self):
+        self.port.run_conf()
 
-    def __init__(self, conn, parent):
-        self.session = conn.start_session()
-        super(Sonic, self).__init__(parent)
+    def vlan_run_conf(self):
+        self.vlan.run_conf()
 
-        @self.command()
-        def interface(args):
-            if len(args) != 0:
-               raise InvalidInput('usage: interface[cr] ')
-            return Interface(conn, self)
+    def run_conf(self):
+        print("!")
+        self.vlan_run_conf()
+        self.port_run_conf()
 
-
-        @self.command()
-        def port(args):
-            if len(args) != 0:
-               raise InvalidInput('usage: port[cr] ')
-            return Port(conn, self)
+    def tech_support(self):
+        print("\nshow vlan details:\n")
+        self.vlan.show_vlan()
+        print("\nshow interface description:\n")
+        self.port.show_interface()
 
 
-        @self.command()
-        def vlan(args):
-            if len(args) != 0:
-               raise InvalidInput('usage: vlan[cr] ')
-            return Vlan(conn, self)
+def set_attribute(sr_op, path, module, name, attr, value):
+    try:
+        sr_op.get_data(path, "running")
+    except sr.SysrepoNotFoundError as e:
+        if module == "interface":
+            sr_op.set_data(f"{path}/admin-status", "up")
+        if attr != "tagging_mode":
+            sr_op.set_data(f"{path}/name", name)
 
-    def __str__(self):
-        return 'sonic'
-
+    if module == "interface" and attr == "mtu":
+        sr_op.set_data("{}/goldstone-ip:ipv4/{}".format(path, attr), value)
+    elif module == "interface" and (attr == "num-channels" or attr == "channel-speed"):
+        sr_op.set_data("{}/breakout/{}".format(path, attr), value)
+    else:
+        sr_op.set_data(f"{path}/{attr}", value)

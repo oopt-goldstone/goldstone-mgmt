@@ -1,0 +1,265 @@
+module goldstone-aaa {
+
+  yang-version "1";
+
+  // namespace
+  namespace "http://goldstone.net/yang/goldstone-aaa";
+
+  prefix "gs-aaa";
+
+  import ietf-inet-types {
+      prefix inet;
+    }
+
+  // meta
+  organization "Goldstone";
+
+  description
+    "This module defines configuration and operational state data
+    related to authorization, authentication, and accounting (AAA)
+    management.
+
+    Portions of this model reuse data definitions or structure from
+    RFC 7317 - A YANG Data Model for System Management";
+
+
+  revision "2020-10-13" {
+    description
+      "Initial version.";
+    reference "0.1.0";
+  }
+
+
+  // identity statements
+
+  identity AAA_SERVER_TYPE {
+    description
+      "Base identity for types of AAA servers";
+  }
+
+  identity TACACS {
+    base AAA_SERVER_TYPE;
+    description
+      "Terminal Access Controller Access Control System (TACACS+)
+      AAA server";
+    reference
+      "The TACACS+ Protocol (draft-ietf-opsawg-tacacs-05)
+      RFC 1492 - An Access Control Protocol, Sometimes Called
+      TACACS";
+  }
+
+  // typedef statements
+  typedef port-number {
+    type uint16;
+    description
+      "A 16-bit port number used by a transport protocol such as TCP
+      or UDP.";
+    reference
+      "RFC 768 User Datagram Protocol
+       RFC 793 Transmission Control Protocol";
+  }
+
+  // grouping statements
+
+  grouping aaa-tacacs-server-config {
+    description
+      "Configuration data for a TACACS+ server";
+
+    leaf port {
+      type port-number;
+      default 49;
+      description
+        "The port number on which to contact the TACACS server";
+    }
+
+    leaf secret-key {
+      type string;
+      description
+        "The unencrypted shared key used between the authentication
+        server and the device.";
+    }
+
+    leaf secret-key-hashed {
+      type string;
+      description
+        "The hashed shared key used between the authentication
+        server and the device.";
+    }
+  }
+
+  grouping aaa-tacacs-server-top {
+    description
+      "Top-level grouping for TACACS+ sever data";
+
+    container tacacs {
+      description
+        "Top-level container for TACACS+ server data";
+
+      container config {
+        description
+          "Configuration data for TACACS+ server";
+
+        uses aaa-tacacs-server-config;
+      }
+    }
+  }
+
+  grouping aaa-servergroup-common-config {
+    description
+      "Configuration data for AAA server groups";
+
+    leaf name {
+      type string;
+      description
+        "Name for the server group";
+    }
+
+    leaf type {
+      type identityref {
+        base AAA_SERVER_TYPE;
+      }
+      description
+        "AAA server type -- all servers in the group must be of this
+        type";
+    }
+  }
+
+  grouping aaa-servergroup-common-top {
+    description
+      "Top-level grouping for AAA server groups";
+
+    container server-groups {
+      description
+        "Enclosing container for AAA server groups";
+
+      list server-group {
+        key "name";
+        description
+          "List of AAA server groups.  All servers in a group
+          must have the same type as indicated by the server
+          type.";
+
+        leaf name {
+          type leafref {
+            path "../config/name";
+          }
+          description
+            "Reference to configured name of the server group";
+        }
+
+        container config {
+          description
+            "Configuration data for each server group";
+
+          uses aaa-servergroup-common-config;
+        }
+
+        uses aaa-server-top;
+      }
+    }
+  }
+
+  grouping aaa-server-config {
+    description
+      "Common configuration data for AAA servers";
+
+    leaf address {
+      type inet:ipv4-address-no-zone;
+      description "Address of the authentication server";
+    }
+
+    leaf timeout {
+      type uint16;
+      units seconds;
+      description
+        "Set the timeout in seconds on responses from the AAA
+        server";
+    }
+  }
+
+  grouping aaa-server-top {
+    description
+      "Top-level grouping for list of AAA servers";
+
+    container servers {
+      description
+        "Enclosing container the list of servers";
+
+      list server {
+        key "address";
+        description
+          "List of AAA servers";
+
+        leaf address {
+          type leafref {
+            path "../config/address";
+          }
+          description
+            "Reference to the configured address of the AAA server";
+        }
+
+        container config {
+          description
+            "Configuration data ";
+
+          uses aaa-server-config;
+        }
+
+        uses aaa-tacacs-server-top;
+      }
+    }
+  }
+
+
+  grouping aaa-authentication-config {
+    description
+      "Configuration data for global authentication";
+
+    leaf-list authentication-method {
+      type string;
+      ordered-by user;
+      description
+        "Ordered list of authentication methods for users.  This
+        can be either a reference to a server group, or a well-
+        defined designation in the AAA_METHOD_TYPE identity.  If
+        authentication fails with one method, the next defined
+        method is tried -- failure of all methods results in the
+        user being denied access.";
+    }
+  }
+
+
+  grouping aaa-authentication-top {
+    description
+      "Top-level grouping for top-level authentication";
+
+    container authentication {
+      description
+        "Top-level container for global authentication data";
+
+      container config {
+        description
+          "Configuration data for global authentication services";
+
+        uses aaa-authentication-config;
+      }
+    }
+  }
+
+
+  grouping aaa-top {
+    description
+      "Top-level grouping for AAA services";
+
+    container aaa {
+      description
+        "Top-level container for AAA services";
+
+      uses aaa-authentication-top;
+      uses aaa-servergroup-common-top;
+
+    }
+  }
+
+  uses aaa-top;
+}

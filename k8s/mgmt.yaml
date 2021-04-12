@@ -8,15 +8,59 @@ data:
 ---
 
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: goldstone-version
+data:
+  versions.json: |
+      {"PRODUCT_ID_VERSION": "0.0.8"}
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: usonic-config
+data:
+  lanemap.ini: |
+    vEthernet1:1,2,3,4
+    vEthernet2:5,6,7,8
+  lanemap.ini.j2: "# name lanes\n{% for i in interfaces -%}\n{{ i['name'] }}:{{ i['lanes'] }}\n{% endfor %}"
+  port_config.ini: |
+    Ethernet1 1,2,3,4
+    Ethernet2 5,6,7,8
+  port_config.ini.j2: "# name lanes alias index speed\n
+{% for i in interfaces -%}\n
+{{ '%-15s' | format(i['name']) }} {{ '%-15s' | format(i['lanes']) }} {{ '%-15s' | format(i['alias']) }} {{ '%-5s' | format(i['index']) }} {{ i['speed'] }}\n
+{% endfor %}"
+  config.bcm: |
+    # dummy
+  config.bcm.j2: |
+    # dummy
+  interfaces.json: |
+    [
+    {"port": 1, "first_lane": 1, "lane_num": 4, "alias_prefix": "QSFP1", "index": 1, "speed": 100000},
+    {"port": 2, "first_lane": 5, "lane_num": 4, "alias_prefix": "QSFP2", "index": 5, "speed": 100000}
+    ]
+  sai.profile: |
+    SAI_VS_SWITCH_TYPE=SAI_VS_SWITCH_TYPE_BCM56850
+    SAI_VS_INTERFACE_LANE_MAP_FILE=/etc/sonic/lanemap.ini
+
+---
+
+apiVersion: v1
 kind: Service
 metadata:
     name: netopeer2
 spec:
-    selector:
-        app: gs-mgmt
-    ports:
-    - protocol: TCP
-      port: 830
+  type: LoadBalancer
+  ports:
+  - protocol: TCP
+    port: 830
+    targetPort: 830
+    name: netconf
+  selector:
+      app: gs-mgmt
 
 ---
 
@@ -42,6 +86,46 @@ subjects:
   namespace: default
 
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: gs-mgmt-sonic-svc
+    namespace: default
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+    name: gs-mgmt-sonic-svc
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: usonic-manage
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+ - kind: ServiceAccount
+   name: gs-mgmt-sonic-svc
+   namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    name: usonic-manage
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get","update","patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get","list","watch"]
+- apiGroups: ["extensions", "apps"]
+  resources: ["deployments"]
+  verbs: ["*"]
+- apiGroups: ["batch", "extensions"]
+  resources: ["jobs"]
+  verbs: ["*"]
+
+---
 
 apiVersion: batch/v1
 kind: Job
@@ -50,15 +134,12 @@ metadata:
 spec:
     template:
         spec:
-            hostPID: true
             restartPolicy: Never
-            containers:
+            initContainers: # run prep-sysrepo and prep-np sequentially
             - name: prep-sysrepo
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt:latest
               imagePullPolicy: IfNotPresent
-              command: ["/bin/sh","-c", "sysrepoctl -s/var/lib/goldstone/yang/gs --install /var/lib/goldstone/yang/gs/goldstone-tai.yang,/var/lib/goldstone/yang/gs/goldstone-onlp.yang && \
-                 sysrepoctl -s /var/lib/goldstone/yang/sonic/common --install /var/lib/goldstone/yang/sonic/common/sonic-common.yang && \
-                 sysrepoctl -s /var/lib/goldstone/yang/sonic --install /var/lib/goldstone/yang/sonic/sonic-interface.yang,/var/lib/goldstone/yang/sonic/sonic-port.yang,/var/lib/goldstone/yang/sonic/sonic-portchannel.yang,/var/lib/goldstone/yang/sonic/sonic-vlan.yang "]
+              command: ["reload.sh"]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -79,6 +160,16 @@ spec:
                 value: "600"
               - name: NP2_MODULE_DIR
                 value: /usr/local/share/yang/modules/netopeer2
+              volumeMounts:
+              - mountPath: /dev/shm
+                name: shm
+              - mountPath: /var/lib/sysrepo
+                name: sysrepo
+            containers:
+            - name: job-done
+              image: docker.io/microsonic/gs-mgmt:latest
+              imagePullPolicy: IfNotPresent
+              command: ["sysrepoctl", "-l"]
               volumeMounts:
               - mountPath: /dev/shm
                 name: shm
@@ -109,7 +200,6 @@ spec:
             labels:
                 app: gs-mgmt-cli
         spec:
-            hostPID: true
             serviceAccountName: gs-mgmt
             initContainers:
             - name: wait-prep
@@ -118,7 +208,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: cli
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-north-cli:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'while true; do gscli -c "transponder; show"; sleep 2; done']
               volumeMounts:
@@ -151,7 +241,6 @@ spec:
             labels:
                 app: gs-mgmt-np2
         spec:
-            hostPID: true
             serviceAccountName: gs-mgmt
             initContainers:
             - name: wait-prep
@@ -193,18 +282,22 @@ spec:
             labels:
                 app: gs-mgmt-tai
         spec:
-            hostPID: true
             serviceAccountName: gs-mgmt
             initContainers:
             - name: wait-prep
               image: docker.io/bitnami/kubectl:latest
               imagePullPolicy: IfNotPresent
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            - name: wait-onlp
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['sh', '-c', "kubectl wait --for=condition=ready pods/$(kubectl get pods -l app=gs-mgmt-onlp -o jsonpath='{.items[0].metadata.name}')"]
             containers:
             - name: tai
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-south-tai:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'sleep 10 && gssouthd-tai -v']
+              command: ['gssouthd-tai']
+              args: ['--taish-server', "127.0.0.1:50051", "--verbose"]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -239,7 +332,6 @@ spec:
             labels:
                 app: gs-mgmt-onlp
         spec:
-            hostPID: true
             serviceAccountName: gs-mgmt
             initContainers:
             - name: wait-prep
@@ -248,9 +340,9 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: onlp
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-south-onlp:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'ln -sf /lib/platform-config/x86-64-kvm-x86-64-r0/onl/lib/libonlp-x86-64-kvm-x86-64.so /lib/x86_64-linux-gnu/libonlp-platform.so.1 && gssouthd-onlp']
+              command: ['sh', '-c', 'ln -sf /lib/platform-config/x86-64-kvm-x86-64-r0/onl/lib/libonlp-x86-64-kvm-x86-64.so /lib/x86_64-linux-gnu/libonlp-platform.so.1 && gssouthd-onlp -v']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
@@ -275,7 +367,6 @@ spec:
                 name: onl-platform
 
 ---
-
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -291,8 +382,7 @@ spec:
             labels:
                 app: gs-mgmt-sonic
         spec:
-            hostPID: true
-            serviceAccountName: gs-mgmt
+            serviceAccountName: gs-mgmt-sonic-svc
             initContainers:
             - name: wait-prep
               image: docker.io/bitnami/kubectl:latest
@@ -300,14 +390,21 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: sonic
-              image: docker.io/microsonic/gs-mgmt-debug:latest
+              image: docker.io/microsonic/gs-mgmt-south-sonic:latest
               imagePullPolicy: IfNotPresent
-              command: ['sh', '-c', 'sleep 10 && /usr/bin/gssouthd-sonic -s $SONIC_MGMT_PORT_80_TCP_ADDR -p http']
+              command: ['gssouthd-sonic', '-v']
+              env:
+              - name: USONIC_TEMPLATE_DIR
+                value: "/var/lib/usonic"
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+              - name: sonic-db-config
+                mountPath: /var/run/redis/sonic-db/
+              - name: usonic-config
+                mountPath: /var/lib/usonic
             volumes:
             - name: shm
               hostPath:
@@ -315,3 +412,54 @@ spec:
             - name: sysrepo
               hostPath:
                   path: /var/lib/sysrepo
+            - name: sonic-db-config
+              configMap:
+                  name: sonic-db-config
+            - name: usonic-config
+              configMap:
+                  name: usonic-config
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: gs-mgmt-system
+    labels:
+        app: gs-mgmt
+spec:
+    selector:
+        matchLabels:
+            app: gs-mgmt-system
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt-system
+        spec:
+            serviceAccountName: gs-mgmt
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            containers:
+            - name: south-system
+              image: docker.io/microsonic/gs-mgmt-south-system:latest
+              imagePullPolicy: IfNotPresent
+              command: ['gssouthd-system', '-v']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+              - name: goldstone-version
+                mountPath: /etc/goldstone/loader
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo
+            - name: goldstone-version
+              configMap:
+                  name: goldstone-version

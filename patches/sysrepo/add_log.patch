@@ -1,0 +1,38 @@
+Index: goldstone-mgmt/sm/sysrepo/src/modinfo.c
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo/src/modinfo.c
++++ goldstone-mgmt/sm/sysrepo/src/modinfo.c
+@@ -1633,11 +1633,13 @@ sr_modinfo_add_modules(struct sr_mod_inf
+     if (mod_lock) {
+         if (mod_lock == SR_LOCK_READ) {
+             /* MODULES READ LOCK */
++            SR_LOG_DBG("sr_modinfo_add_modules mod_lock == SR_LOCK_READ: %u", sid);
+             if ((err_info = sr_shmmod_modinfo_rdlock(mod_info, mi_opts & SR_MI_LOCK_UPGRADEABLE, sid))) {
+                 return err_info;
+             }
+         } else {
+             /* MODULES WRITE LOCK */
++            SR_LOG_DBG("sr_modinfo_add_modules mod_lock == SR_LOCK_WRITE: %u", sid);
+             if ((err_info = sr_shmmod_modinfo_wrlock(mod_info, sid))) {
+                 return err_info;
+             }
+Index: goldstone-mgmt/sm/sysrepo/src/sysrepo.c
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo/src/sysrepo.c
++++ goldstone-mgmt/sm/sysrepo/src/sysrepo.c
+@@ -2385,6 +2385,7 @@ sr_changes_notify_store(struct sr_mod_in
+     }
+ 
+     /* MODULES WRITE LOCK (upgrade) */
++    SR_LOG_DBG("sr_changes_notify_store: %u", session->sid);
+     if ((err_info = sr_shmmod_modinfo_rdlock_upgrade(mod_info, session->sid))) {
+         goto cleanup;
+     }
+@@ -2849,6 +2850,7 @@ _sr_un_lock(sr_session_ctx_t *session, c
+     /* candidate datastore unlocked, reset its state */
+     if (!lock && (mod_info.ds == SR_DS_CANDIDATE)) {
+         /* MODULES WRITE LOCK (upgrade) */
++        SR_LOG_DBG("_sr_un_lock: %u", session->sid);
+         if ((err_info = sr_shmmod_modinfo_rdlock_upgrade(&mod_info, session->sid))) {
+             goto cleanup_mods_unlock;
+         }

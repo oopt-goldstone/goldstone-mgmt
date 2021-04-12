@@ -15,7 +15,7 @@
 	url = https://github.com/Telecominfraproject/oopt-tai.git
 [submodule "sm/OpenNetworkLinux"]
 	path = sm/OpenNetworkLinux
-	url = git@github.com:microsonic/OpenNetworkLinux.git
+	url = https://github.com/microsonic/OpenNetworkLinux.git
 [submodule "sm/netopeer2"]
 	path = sm/netopeer2
 	url = https://github.com/CESNET/netopeer2.git
@@ -31,3 +31,12 @@
 [submodule "sm/sysrepo-python"]
 	path = sm/sysrepo-python
 	url = https://github.com/sysrepo/sysrepo-python.git
+[submodule "sm/libnss-tacplus"]
+	path = sm/libnss-tacplus
+	url = https://github.com/daveolson53/libnss-tacplus.git
+[submodule "sm/pam_tacplus"]
+	path = sm/pam_tacplus
+	url = https://github.com/jeroennijhof/pam_tacplus.git
+[submodule "sm/sonic-py-swsssdk"]
+	path = sm/sonic-py-swsssdk
+	url = https://github.com/Azure/sonic-py-swsssdk.git

@@ -1,0 +1,104 @@
+module goldstone-system {
+  yang-version 1.1;
+  namespace "http://goldstone.net/yang/system";
+  prefix gs-sys;
+
+  revision 2020-11-23 {
+    reference
+      "0.1.0";
+  }
+
+  grouping system-netconf-config {
+    leaf enabled {
+      type boolean;
+      description
+        "When the value of this leaf is set to true, netconf server is
+        enabled on the local system.";
+    }
+  }
+
+  grouping system-netconf-state {
+  }
+
+  grouping system-netconf-top {
+    container netconf {
+      container config {
+        uses system-netconf-config;
+      }
+
+      container state {
+        uses system-netconf-config;
+        uses system-netconf-state;
+      }
+    }
+  }
+
+  grouping system-global-config {
+    description "system-wide configuration parameters";
+  }
+
+  grouping system-global-state {
+    description "system-wide configuration parameters";
+
+    leaf software-version {
+      type string;
+      description
+        "The version of the currently running operating system";
+    }
+  }
+
+  grouping system-top {
+    description
+      "Top level system data containers";
+
+    container system {
+      description
+        "Enclosing container for system-related configuration and
+        operational state data";
+
+      container config {
+        description "Global configuration data for the system";
+
+        uses system-global-config;
+
+      }
+
+      container state {
+        config false;
+        description "Global operational state data for the system";
+
+        uses system-global-config;
+        uses system-global-state;
+      }
+
+      uses system-netconf-top;
+    }
+  }
+
+  // data definition statements
+
+  uses system-top;
+
+  rpc reboot {
+      output {
+          leaf status {
+              type enumeration {
+                  enum failure;
+                  enum success;
+              }
+          }
+      }
+  }
+
+  rpc shutdown {
+      output {
+          leaf status {
+              type enumeration {
+                  enum failure;
+                  enum success;
+              }
+          }
+      }
+  }
+
+}

@@ -48,12 +48,18 @@ module goldstone-onlp {
           }
       }
 
-      leaf-list status {
+      leaf fan-state {
           type enumeration {
               enum PRESENT;
+              enum NOT-PRESENT;
+              
+          }
+      }
+
+      leaf status {
+          type enumeration {
+              enum RUNNING;
               enum FAILED;
-              enum B2F;
-              enum F2B;
           }
       }
   }
@@ -267,13 +273,19 @@ module goldstone-onlp {
       }
     }
 
-    leaf-list status {
+    leaf psu-state {
       type enumeration {
         enum PRESENT;
-        enum FAILED;
-        enum UNPLUGGED;
+	enum NOT-PRESENT;
       }
     }
+
+    leaf status {
+     type enumeration {
+       enum UNPLUGGED-OR-FAILED;
+       enum RUNNING;
+     }
+   }
 
     leaf model {
       type string;
@@ -330,6 +342,103 @@ module goldstone-onlp {
     }
   }
 
+  grouping platform-piu-top-config {
+  }
+
+  grouping platform-piu-top-state {
+
+    leaf-list status {
+      type enumeration {
+        enum PRESENT;
+        enum FAILED;
+        enum UNPLUGGED;
+      }
+    }
+
+    leaf piu-type {
+      type enumeration {
+          enum ACO;
+          enum DCO;
+          enum QSFP;
+          enum UNKNOWN;
+      }
+    }
+
+    leaf model {
+      type string;
+    }
+
+    leaf serial {
+      type string;
+    }
+
+    leaf cfp2-presence {
+      type enumeration {
+        enum PRESENT;
+        enum UNPLUGGED;
+      }
+    }
+
+  }
+
+  grouping platform-piu-top {
+
+    container piu {
+      container config {
+        uses platform-piu-top-config;
+      }
+  
+      container state {
+        config false;
+  
+        uses platform-piu-top-config;
+        uses platform-piu-top-state;
+      }
+    }
+  }
+
+  grouping platform-sfp-top-config {
+  }
+
+  grouping platform-sfp-top-state {
+
+    leaf presence {
+      type enumeration {
+        enum PRESENT;
+        enum UNPLUGGED;
+      }
+    }
+
+    leaf model {
+      type string;
+    }
+
+    leaf serial {
+      type string;
+    }
+
+    leaf vendor {
+      type string;
+    }
+
+  }
+
+  grouping platform-sfp-top {
+
+    container sfp {
+      container config {
+        uses platform-sfp-top-config;
+      }
+
+      container state {
+        config false;
+
+        uses platform-sfp-top-config;
+        uses platform-sfp-top-state;
+      }
+    }
+  }
+
   grouping platform-component-config {
     description
       "Configuration data for components";
@@ -357,6 +466,8 @@ module goldstone-onlp {
           enum LED;
           enum MODULE;
           enum RTC;
+          enum PIU;
+          enum SFP;
       }
       description
         "Type of component as identified by the system";
@@ -440,10 +551,23 @@ module goldstone-onlp {
         uses platform-led-top;
         uses platform-sys-top;
         uses platform-psu-top;
+        uses platform-piu-top;
+        uses platform-sfp-top;
       }
     }
   }
 
   uses platform-component-top;
 
+  notification piu-notify-event {
+    uses platform-component-config;
+    uses platform-piu-top-state;
+  }
+
+  notification sfp-notify-event {
+    uses platform-component-config;
+    uses platform-sfp-top-state;
+  }
 }
+
+
