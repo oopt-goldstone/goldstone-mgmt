@@ -243,7 +243,7 @@ class ManagementInterfaceServer:
             logger.debug("********** update oper for routing **************")
 
             xpath = "/goldstone-routing:routing/static-routes/ipv4/route"
-            for route in ndb.interfaces[MGMT_INTF_NAME].routes.summary():
+            for route in ndb.interfaces[MGMT_INTF_NAME].routes:
                 destination_prefix = ""
                 if (
                     ":" not in route["dst"]
