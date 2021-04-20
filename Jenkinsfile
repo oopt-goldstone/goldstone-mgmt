@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   parameters {
-    string(name: 'DEVICE', defaultValue: '10.10.10.113', description: 'IP address of the test device')
+    string(name: 'DEVICE', defaultValue: '10.10.10.115', description: 'IP address of the test device')
     booleanParam(name: 'FORCE_BUILD_BUILDER', defaultValue: false, description: 'build builder image forcibly')
   }
 
@@ -39,9 +39,20 @@ pipeline {
         environment name: 'SKIP', value: '0'
       }
       steps {
-          sh 'make tester'
-          sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test bash -c 'exit \$(black -q --diff --exclude src/north/snmp/src src | wc -l)'"
-          sh "docker run -t -v `pwd`:`pwd` -w `pwd`/yang gs-mgmt-test bash -c 'pyang *.yang'"
+        sh 'apk add --update docker make python2'
+
+        withCredentials([usernamePassword(credentialsId: 'github', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+            sh '''
+                git config --global credential.username $GIT_USERNAME
+                git config --global credential.helper "!echo password=$GIT_PASSWORD; echo"
+                git submodule update --init
+            '''
+        }
+
+        sh 'if [ $BUILD_BUILDER -eq 1 ] ; then make builder np2; fi'
+        sh 'make tester'
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test bash -c 'exit \$(black -q --diff --exclude src/north/snmp/src src | wc -l)'"
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd`/yang gs-mgmt-test bash -c 'pyang *.yang'"
       }
     }
 
@@ -50,9 +61,6 @@ pipeline {
         environment name: 'SKIP', value: '0'
       }
       steps {
-          sh 'apk add --update docker make python2'
-          sh 'git submodule update --init'
-          sh 'if [ $BUILD_BUILDER -eq 1 ] ; then make builder np2; fi'
           sh 'make snmpd'
           sh 'make base-image'
           sh 'make images'

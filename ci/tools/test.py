@@ -840,7 +840,7 @@ def main(host, username, password):
         try:
             test_system(cli)
             test_logging(cli)
-            test_tacacs(host, cli)
+        #    test_tacacs(host, cli)
             test_mgmt_intf(cli)
             test_mgmt_if_cmds(cli)
             test_system_reconcile(cli)
