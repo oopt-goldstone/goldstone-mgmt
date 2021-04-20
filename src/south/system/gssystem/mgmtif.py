@@ -55,9 +55,9 @@ class ManagementInterfaceServer:
                         "/goldstone-routing:routing/static-routes/ipv4/route[destination-prefix='"
                     ) and xpath.endswith("']"):
                         destination_prefix = xpath.split("'")[1]
-                        logger.debug(destination_prefix)
+                        dst, dst_len = destination_prefix.split("/")
                         ndb.routes[
-                            {"oif": intf["index"], "dst": destination_prefix}
+                            {"oif": intf["index"], "dst": dst, "dst_len": dst_len}
                         ].remove().commit()
                     if xpath.startswith(
                         "/goldstone-routing:routing/static-routes/ipv4/"
