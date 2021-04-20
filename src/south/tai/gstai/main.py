@@ -668,7 +668,10 @@ class Server(object):
                                     v = "true" if v else "false"
                             except taish.TAIException:
                                 continue
-                            await netif.set(k, v)
+                            ret = await netif.set(k, v)
+                            logger.debug(
+                                f"module({key})/netif({index}) {k}:{v}, ret: {ret}"
+                            )
 
                 hconfig = {
                     n["name"]: n.get("config", {})
