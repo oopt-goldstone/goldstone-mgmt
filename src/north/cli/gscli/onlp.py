@@ -6,6 +6,8 @@ import sysrepo as sr
 from .common import sysrepo_wrap
 from tabulate import tabulate
 
+from natsort import natsorted
+
 
 def to_human(d):
     for key, val in d.items():
@@ -74,7 +76,6 @@ class Component(object):
         self.component = self.sr_op.get_data(self.XPATH, "operational")
         if option == "all":
             types = ["fan", "psu", "led", "piu", "sfp", "thermal", "sys"]
-            components = self.get_components(option)
             for type_ in types:
                 print("\n")
                 t = type_.upper()
@@ -90,20 +91,17 @@ class Component(object):
 
         elif option == "transceiver":
             components = self.get_components("piu")
-            components.sort()
             for component in components:
                 table = self.get_state_attr("piu", component)
                 print(component)
                 print(tabulate(table))
             components = self.get_components("sfp")
-            components.sort()
             for component in components:
                 table = self.get_state_attr("sfp", component)
                 print(component)
                 print(tabulate(table))
         elif option == "system":
             components = self.get_components("sys")
-            components.sort()
             for component in components:
                 table = self.get_state_attr("sys", component)
                 print(component)
@@ -111,7 +109,6 @@ class Component(object):
 
         else:
             components = self.get_components(option)
-            components.sort()
             for component in components:
                 table = self.get_state_attr(option, component)
                 print(component)
@@ -119,16 +116,8 @@ class Component(object):
             print("Note: Values with the symbol '-' are unsupported")
 
     def get_components(self, type_):
-        if type_ != "all":
-            return [
-                v["name"]
-                for v in self.component.get("components", {}).get("component", [])
-                if v["state"]["type"] == type_.upper()
-            ]
-        else:
-            return [
-                v for v in self.component.get("components", {}).get("component", [])
-            ]
+        c = self.component.get("components", {}).get("component", [])
+        return natsorted([v["name"] for v in c if v["state"]["type"] == type_.upper()])
 
     def tech_support(self):
         print("\n Show Onlp details")
