@@ -52,7 +52,7 @@ pipeline {
         sh 'if [ $BUILD_BUILDER -eq 1 ] ; then make builder np2; fi'
         sh 'make tester'
         sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test bash -c 'exit \$(black -q --diff --exclude src/north/snmp/src src | wc -l)'"
-        sh "docker run -t -v `pwd`:`pwd` -w `pwd`/yang gs-mgmt-test bash -c 'pyang *.yang'"
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd`/yang gs-mgmt-test bash -c 'pyang -p /usr/local/share/yang/modules/ietf *.yang'"
       }
     }
 
