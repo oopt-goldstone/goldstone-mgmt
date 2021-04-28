@@ -8,6 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 class Mgmtif(object):
 
@@ -291,7 +292,7 @@ class System(object):
         try:
             aaa_data = self.sr_op.get_data("/goldstone-aaa:aaa/authentication")
         except sr.SysrepoNotFoundError as e:
-            stdout.info(e)
+            stderr.info(e)
         try:
             conf_data = aaa_data["aaa"]["authentication"]["config"]
             auth_method_list = conf_data.get("authentication-method")

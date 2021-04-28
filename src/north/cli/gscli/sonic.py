@@ -15,6 +15,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 
 class sonic_defaults:
@@ -95,7 +96,7 @@ class Vlan(object):
             self.sr_op.set_data("{}/name".format(self.xpath_vlan(vid)), vlan_name)
         except sr.errors.SysrepoValidationFailedError as error:
             msg = str(error)
-            stdout.info(msg)
+            stderr.info(msg)
 
     def create_vlan(self, vid):
         vlan_name = "Vlan" + vid

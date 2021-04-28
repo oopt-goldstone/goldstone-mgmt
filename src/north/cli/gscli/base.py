@@ -16,7 +16,7 @@ import subprocess
 import logging
 
 stdout = logging.getLogger("stdout")
-
+stderr = logging.getLogger("stderr")
 
 class CLIException(Exception):
     pass
@@ -371,7 +371,7 @@ class Object(object):
         except CLIException as e:
             if not no_fail:
                 raise e
-            stdout.info(str(e))
+            stderr.info(str(e))
         return self
 
     def exec(self, cmd, no_fail=True):
@@ -386,7 +386,7 @@ class Object(object):
         except CLIException as e:
             if not no_fail:
                 raise e
-            stdout.info(str(e))
+            stderr.info(str(e))
         return self
 
     def __getattr__(self, name):

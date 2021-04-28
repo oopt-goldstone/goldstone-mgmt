@@ -11,6 +11,7 @@ from .base import InvalidInput, LockedError
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 TIMEOUT_MS = 10000
 

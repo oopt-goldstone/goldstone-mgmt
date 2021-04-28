@@ -14,6 +14,7 @@ from .sonic import Sonic, sonic_defaults
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 
 class Interface_CLI(Object):
@@ -179,7 +180,7 @@ class Interface_CLI(Object):
 
     def no_usage(self):
         no_keys = list(self.no_dict.keys())
-        stdout.info(f'usage: no [{"|".join(no_keys)}]')
+        stderr.info(f'usage: no [{"|".join(no_keys)}]')
 
     def __str__(self):
         return "interface({})".format(self.name)

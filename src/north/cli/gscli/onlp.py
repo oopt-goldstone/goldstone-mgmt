@@ -11,6 +11,7 @@ from natsort import natsorted
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 def to_human(d):
     for key, val in d.items():
@@ -71,7 +72,7 @@ class Component(object):
                         v = "-"
                     table.append([k, v])
         except (sr.errors.SysrepoNotFoundError, KeyError) as error:
-            stdout.info(error)
+            stderr.info(error)
         return table
 
     def show_onlp(self, option="all"):

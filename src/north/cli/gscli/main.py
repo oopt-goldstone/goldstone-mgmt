@@ -32,6 +32,7 @@ from .system import AAA, TACACS, Mgmtif
 logger = logging.getLogger(__name__)
 
 stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 
 class NotificationCommand(Command):
@@ -126,7 +127,7 @@ class Root(Object):
             except KeyboardInterrupt:
                 stdout.info("")
             except:
-                stdout.info("Unexpected error:", sys.exc_info()[0])
+                stderr.info("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
         def traceroute(line):
@@ -134,7 +135,7 @@ class Root(Object):
                 trct = " ".join(["traceroute"] + line)
                 subprocess.call(trct, shell=True)
             except:
-                stdout.info("Unexpected error:", sys.exc_info()[0])
+                stderr.info("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
         def hostname(line):
@@ -142,7 +143,7 @@ class Root(Object):
                 hst_name = " ".join(["hostname"] + line)
                 subprocess.call(hst_name, shell=True)
             except:
-                stdout.info("Unexpected error:", sys.exc_info()[0])
+                stderr.info("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
         def system(line):
@@ -157,7 +158,7 @@ class Root(Object):
             elif line[0] in self.get_modules():
                 return Transponder(conn, self, line[0])
             else:
-                stdout.info(f"There is no device of name {line[0]}")
+                stderr.info(f"There is no device of name {line[0]}")
                 return
 
         @self.command(
@@ -205,7 +206,7 @@ class Root(Object):
             if line[0].isdigit():
                 return Vlan_CLI(conn, self, line[0])
             else:
-                stdout.info("The vlan-id entered must be numbers and not letters")
+                stderr.info("The vlan-id entered must be numbers and not letters")
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
         def no(line):
@@ -216,9 +217,9 @@ class Root(Object):
                         if line[1] in vlan_list:
                             self.sonic.vlan.delete_vlan(line[1])
                         else:
-                            stdout.info("The vlan-id provided doesn't exist")
+                            stderr.info("The vlan-id provided doesn't exist")
                     else:
-                        stdout.info("The vlan-id entered must be numbers and not letters")
+                        stderr.info("The vlan-id entered must be numbers and not letters")
                 else:
                     raise InvalidInput(self.no_usage())
             elif len(line) == 3:
@@ -226,12 +227,12 @@ class Root(Object):
                     if line[1] == "authentication" and line[2] == "login":
                         self.aaa_sys.set_no_aaa()
                     else:
-                        stdout.info("Enter the valid no command for aaa")
+                        stderr.info("Enter the valid no command for aaa")
                 elif line[0] == "tacacs-server":
                     if line[1] == "host":
                         self.tacacs_sys.set_no_tacacs(line[2])
                     else:
-                        stdout.info("Enter valid no command for tacacs-server")
+                        stderr.info("Enter valid no command for tacacs-server")
                 else:
                     raise InvalidInput(self.no_usage())
             else:
@@ -335,7 +336,7 @@ class GoldstoneShell(object):
                 else:
                     break
             else:
-                stdout.error("failed to establish sysrepo connection")
+                stderr.error("failed to establish sysrepo connection")
                 sys.exit(1)
 
         sess = conn.start_session()
@@ -407,7 +408,7 @@ async def loop_async(shell):
                     p, completer=c, key_bindings=b, default=shell.default_input
                 )
             except KeyboardInterrupt:
-                stdout.info("Execute 'exit' to exit")
+                stderr.info("Execute 'exit' to exit")
                 continue
 
             if len(line) > 0:
@@ -445,6 +446,13 @@ def main():
     stdout.setLevel(logging.DEBUG)
     stdout.addHandler(sh)
 
+    sh2 = logging.StreamHandler()
+    sh2.setLevel(logging.DEBUG)
+    sh2.setFormatter(shf)
+
+    stderr.setLevel(logging.DEBUG)
+    stderr.addHandler(sh2)
+
     shell = GoldstoneShell()
 
     async def _main():
@@ -455,8 +463,8 @@ def main():
                 try:
                     await shell.exec(line, no_fail=False)
                 except CLIException as e:
-                    stdout.info("failed to execute: {}".format(line))
-                    stdout.info(e)
+                    stderr.info("failed to execute: {}".format(line))
+                    stderr.info(e)
                     sys.exit(1)
             if not args.keep_open:
                 return
