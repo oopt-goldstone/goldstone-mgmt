@@ -32,12 +32,12 @@ def test_vlan(cli):
 
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
-    lines = [line for line in output.split() if "/dev" in line]
+    lines = [line for line in output.split() if "piu" in line]
 
     if len(lines) == 0:
         raise Exception("no transponder found on this device")
 
-    elems = [elem for elem in lines[0].split("|") if "/dev" in elem]
+    elems = [elem for elem in lines[0].split("|") if "piu" in elem]
     if len(elems) == 0:
         raise Exception(f"invalid output: {output}")
 
@@ -818,12 +818,12 @@ def test_system_reconcile(cli):
 
 def test_subcommands(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
-    lines = [line for line in output.split() if "/dev" in line]
+    lines = [line for line in output.split() if "piu" in line]
 
     if len(lines) == 0:
         raise Exception("no transponder found on this device")
 
-    elems = [elem for elem in lines[0].split("|") if "/dev" in elem]
+    elems = [elem for elem in lines[0].split("|") if "piu" in elem]
     if len(elems) == 0:
         raise Exception(f"invalid output: {output}")
     output = ssh(cli, 'gscli -c "show interface counters Ethernet1_1"')

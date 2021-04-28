@@ -104,7 +104,6 @@ class Transponder(object):
         state_data = []
         try:
             attrs = [
-                "location",
                 "vendor-name",
                 "vendor-part-number",
                 "vendor-serial-number",
@@ -114,7 +113,7 @@ class Transponder(object):
             rows = []
             for module in modules:
                 xpath = self.xpath(module)
-                data = []
+                data = [module]
                 for attr in attrs:
                     try:
                         v = self.sr_op.get_data(f"{xpath}/state/{attr}", "operational")
@@ -123,8 +122,8 @@ class Transponder(object):
                         data.append("N/A")
                 rows.append(data)
 
-            # change "location" to "transponder" for the header use
-            attrs[0] = "transponder"
+            # insert "transponder" for the header use
+            attrs.insert(0, "transponder")
 
             print(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
         except Exception as e:
