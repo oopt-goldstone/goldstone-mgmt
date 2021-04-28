@@ -94,7 +94,6 @@ class AAAServer:
             logger.debug("Not able to fetch data from database")
             return
 
-        print(auth_method)
         if auth_method == "tacacs":
             self.auth["login"] = auth_method
             self.auth["failthrough"] = True
@@ -187,15 +186,12 @@ class AAAServer:
         else:
             raise InvalidXPath()
         logger.debug(f"configured data: {self.data}")
-        print(self.data)
         self.modify_common_auth_gs_file()
         return None
 
     def config_aaa_auth(self, xpath, value):
         prefix = "/goldstone-aaa:aaa/authentication/config/authentication-method"
         if xpath.startswith(prefix):
-            print("value = ", value)
-
             self.auth["login"] = value
             self.auth["failthrough"] = True
 
@@ -321,7 +317,6 @@ class AAAServer:
                 isinstance(change, cls)
                 for cls in [sysrepo.ChangeCreated, sysrepo.ChangeModified]
             ):
-                print(change.xpath, change.value)
                 await self.parse_change_req(change.xpath, change.value, "false")
             elif any(isinstance(change, cls) for cls in [sysrepo.ChangeDeleted]):
                 await self.parse_change_req(change.xpath, "ignore", "true")

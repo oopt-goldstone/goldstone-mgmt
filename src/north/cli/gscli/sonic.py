@@ -14,6 +14,8 @@ from natsort import natsorted
 import logging
 
 logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 
 class sonic_defaults:
@@ -59,7 +61,7 @@ class Vlan(object):
             pass
 
         if dl1 == {}:
-            print(tabulate([], ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
+            stdout.info(tabulate([], ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
         else:
             try:
                 dl1 = dl1["goldstone-vlan:vlan"]["VLAN"]["VLAN_LIST"]
@@ -81,7 +83,7 @@ class Vlan(object):
                         dln.append([dl1[i]["vlanid"], dl1[i]["members"][j], tg])
                 else:
                     dln.append([dl1[i]["vlanid"], "-", "-"])
-            print(tabulate(dln, ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
+            stdout.info(tabulate(dln, ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
         self.session.switch_datastore("running")
 
     def _vlan_components(self):
@@ -94,7 +96,7 @@ class Vlan(object):
             self.sr_op.set_data("{}/name".format(self.xpath_vlan(vid)), vlan_name)
         except sr.errors.SysrepoValidationFailedError as error:
             msg = str(error)
-            print(msg)
+            stderr.info(msg)
 
     def create_vlan(self, vid):
         vlan_name = "Vlan" + vid
@@ -148,9 +150,9 @@ class Vlan(object):
         except (sr.errors.SysrepoNotFoundError, KeyError):
             return
         for data in d_list:
-            print("vlan {}".format(data["vlanid"]))
-            print("  quit")
-        print("!")
+            stdout.info("vlan {}".format(data["vlanid"]))
+            stdout.info("  quit")
+        stdout.info("!")
 
 
 class Port(object):
@@ -195,7 +197,7 @@ class Port(object):
         else:
             raise InvalidInput(f"unsupported format: {details}")
 
-        print(tabulate(rows, headers, tablefmt="pretty"))
+        stdout.info(tabulate(rows, headers, tablefmt="pretty"))
 
     def show_counters(self, ifname_list):
         intf_list = self.get_interface_list("operational")
@@ -219,7 +221,7 @@ class Port(object):
                 else:
                     lines.append(f"No statistics for: {intf['name']}")
 
-        print("\n".join(lines))
+        stdout.info("\n".join(lines))
 
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
@@ -232,12 +234,12 @@ class Port(object):
             return
 
         for data in interface_list:
-            print("interface {}".format(data.get("name")))
+            stdout.info("interface {}".format(data.get("name")))
             for v in runn_conf_list:
                 v_dict = {v: data.get(v, None) for v in runn_conf_list}
                 if v == "admin-status":
                     if v_dict["admin-status"] == "down":
-                        print("  shutdown ")
+                        stdout.info("  shutdown ")
                     elif v_dict["admin-status"] == None:
                         pass
 
@@ -248,7 +250,7 @@ class Port(object):
                         mtu = None
 
                     if mtu:
-                        print("  {} {}".format("mtu", mtu))
+                        stdout.info("  {} {}".format("mtu", mtu))
 
                 elif v == "speed":
                     if (v_dict["speed"] == sonic_defaults.SPEED) or (
@@ -256,7 +258,7 @@ class Port(object):
                     ):
                         pass
                     else:
-                        print("  {} {}".format(v, v_dict[v]))
+                        stdout.info("  {} {}".format(v, v_dict[v]))
 
                 elif v == "breakout":
                     if v_dict["breakout"] == None:
@@ -266,7 +268,7 @@ class Port(object):
                         channel_speed = v_dict["breakout"]["channel-speed"]
                         channel_speed = channel_speed.split("_")
                         channel_speed = channel_speed[1].split("B")
-                        print("  {} {}X{}".format(v, num_of_channels, channel_speed[0]))
+                        stdout.info("  {} {}X{}".format(v, num_of_channels, channel_speed[0]))
 
                 elif v == "name":
                     try:
@@ -285,20 +287,20 @@ class Port(object):
                         if vlan_memlist[vlan]["ifname"] == v_dict["name"]:
                             vlanId = (vlan_memlist[vlan]["name"]).split("Vlan", 1)[1]
                             if vlan_memlist[vlan]["tagging_mode"] == "tagged":
-                                print(
+                                stdout.info(
                                     "  switchport mode trunk vlan {}".format(
                                         str(vlanId)
                                     )
                                 )
                             else:
-                                print(
+                                stdout.info(
                                     "  switchport mode access vlan {}".format(
                                         str(vlanId)
                                     )
                                 )
 
-            print("  quit")
-        print("!")
+            stdout.info("  quit")
+        stdout.info("!")
 
     def _ifname_components(self):
         d = self._ifname_map
@@ -459,7 +461,7 @@ class Port(object):
                 # If no configuration exists, no need to return error
                 return
 
-            print("Sub Interfaces will be deleted")
+            stdout.info("Sub Interfaces will be deleted")
 
             data = self.sr_op.get_data(self.XPATH, ds="operational", no_subs=True)
             for intf in data["interfaces"]["interface"]:
@@ -468,7 +470,7 @@ class Port(object):
                     remove_intf_from_all_vlans(intf["name"])
                     self.sr_op.delete_data(self.xpath(intf["name"]))
 
-        print("Existing configurations on parent interfaces will be flushed")
+        stdout.info("Existing configurations on parent interfaces will be flushed")
         remove_intf_from_all_vlans(ifname)
         xpath = self.xpath(ifname)
         self.sr_op.delete_data(xpath)
@@ -531,14 +533,14 @@ class Sonic(object):
         self.vlan.run_conf()
 
     def run_conf(self):
-        print("!")
+        stdout.info("!")
         self.vlan_run_conf()
         self.port_run_conf()
 
     def tech_support(self):
-        print("\nshow vlan details:\n")
+        stdout.info("\nshow vlan details:\n")
         self.vlan.show_vlan()
-        print("\nshow interface description:\n")
+        stdout.info("\nshow interface description:\n")
         self.port.show_interface()
 
 
