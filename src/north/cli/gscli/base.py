@@ -343,7 +343,7 @@ class Object(object):
             try:
                 subprocess.run(" ".join(line), shell=True)
             except KeyboardInterrupt:
-                print()
+                stdout.info("")
             return None, None
         cmd = self.complete_input(line[:1])
         cmd = self._commands[cmd[0]]

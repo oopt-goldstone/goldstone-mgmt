@@ -1,6 +1,7 @@
 import sys
 import os
 import re
+import logging
 
 from .base import InvalidInput, Completer
 from .cli import GSObject as Object
@@ -10,6 +11,9 @@ import sysrepo as sr
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
 from .sonic import Sonic, sonic_defaults
+
+logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
 
 
 class Interface_CLI(Object):
@@ -28,13 +32,13 @@ class Interface_CLI(Object):
         if len(self.ifnames) == 0:
             raise InvalidInput(f"no interface found: {ifname}")
         elif len(self.ifnames) > 1:
-            print(f"Selected interfaces: {self.ifnames}")
+            stdout.info(f"Selected interfaces: {self.ifnames}")
 
             @self.command()
             def selected(args):
                 if len(args) != 0:
                     raise InvalidInput("usage: selected[cr]")
-                print(", ".join(self.ifnames))
+                stdout.info(", ".join(self.ifnames))
 
         self.switchprt_dict = {
             "mode": {
@@ -170,12 +174,12 @@ class Interface_CLI(Object):
                 return parent.show(args)
             for ifname in self.ifnames:
                 if len(self.ifnames) > 1:
-                    print(f"Interface {ifname}:")
+                    stdout.info(f"Interface {ifname}:")
                 self.sonic.port.show(ifname)
 
     def no_usage(self):
         no_keys = list(self.no_dict.keys())
-        print(f'usage: no [{"|".join(no_keys)}]')
+        stdout.info(f'usage: no [{"|".join(no_keys)}]')
 
     def __str__(self):
         return "interface({})".format(self.name)

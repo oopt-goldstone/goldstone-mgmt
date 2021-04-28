@@ -5,9 +5,12 @@ import libyang as ly
 import sysrepo as sr
 from .common import sysrepo_wrap
 from tabulate import tabulate
+import logging
 
 from natsort import natsorted
 
+logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
 
 def to_human(d):
     for key, val in d.items():
@@ -68,7 +71,7 @@ class Component(object):
                         v = "-"
                     table.append([k, v])
         except (sr.errors.SysrepoNotFoundError, KeyError) as error:
-            print(error)
+            stdout.info(error)
         return table
 
     def show_onlp(self, option="all"):
@@ -77,48 +80,48 @@ class Component(object):
         if option == "all":
             types = ["fan", "psu", "led", "piu", "sfp", "thermal", "sys"]
             for type_ in types:
-                print("\n")
+                stdout.info("\n")
                 t = type_.upper()
-                print("-------------------------------")
-                print(f"{t} INFORMATION")
-                print("-------------------------------")
+                stdout.info("-------------------------------")
+                stdout.info(f"{t} INFORMATION")
+                stdout.info("-------------------------------")
                 components = self.get_components(type_)
                 for component in components:
                     table = self.get_state_attr(type_, component)
-                    print(component)
-                    print(tabulate(table))
-            print("Note: Values with the symbol '-' are unsupported")
+                    stdout.info(component)
+                    stdout.info(tabulate(table))
+            stdout.info("Note: Values with the symbol '-' are unsupported")
 
         elif option == "transceiver":
             components = self.get_components("piu")
             for component in components:
                 table = self.get_state_attr("piu", component)
-                print(component)
-                print(tabulate(table))
+                stdout.info(component)
+                stdout.info(tabulate(table))
             components = self.get_components("sfp")
             for component in components:
                 table = self.get_state_attr("sfp", component)
-                print(component)
-                print(tabulate(table))
+                stdout.info(component)
+                stdout.info(tabulate(table))
         elif option == "system":
             components = self.get_components("sys")
             for component in components:
                 table = self.get_state_attr("sys", component)
-                print(component)
-                print(tabulate(table))
+                stdout.info(component)
+                stdout.info(tabulate(table))
 
         else:
             components = self.get_components(option)
             for component in components:
                 table = self.get_state_attr(option, component)
-                print(component)
-                print(tabulate(table))
-            print("Note: Values with the symbol '-' are unsupported")
+                stdout.info(component)
+                stdout.info(tabulate(table))
+            stdout.info("Note: Values with the symbol '-' are unsupported")
 
     def get_components(self, type_):
         c = self.component.get("components", {}).get("component", [])
         return natsorted([v["name"] for v in c if v["state"]["type"] == type_.upper()])
 
     def tech_support(self):
-        print("\n Show Onlp details")
+        stdout.info("\n Show Onlp details")
         self.show_onlp()
