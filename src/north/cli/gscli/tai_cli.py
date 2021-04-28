@@ -9,6 +9,7 @@ import logging
 from tabulate import tabulate
 
 logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
 
 
 class TAICommand(Command):
@@ -132,7 +133,7 @@ class TAIShowCommand(ShowCommand):
         try:
             data = ctx.sr_op.get_data(xpath, "operational")
         except sr.SysrepoNotFoundError as e:
-            print("Not able to fetch data from operational database")
+            stdout.info("Not able to fetch data from operational database")
             return
         try:
             data = data["modules"]["module"]
@@ -151,9 +152,9 @@ class TAIShowCommand(ShowCommand):
                     continue
 
                 table.append([k, v])
-            print(tabulate(table))
+            stdout.info(tabulate(table))
         except KeyError as e:
-            print(f"Error while fetching values from operational database: {e}")
+            stdout.info(f"Error while fetching values from operational database: {e}")
             return
 
 

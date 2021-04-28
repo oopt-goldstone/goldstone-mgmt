@@ -124,9 +124,9 @@ class Root(Object):
                 png = " ".join(["ping"] + line)
                 subprocess.call(png, shell=True)
             except KeyboardInterrupt:
-                print("")
+                stdout.info("")
             except:
-                print("Unexpected error:", sys.exc_info()[0])
+                stdout.info("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
         def traceroute(line):
@@ -134,7 +134,7 @@ class Root(Object):
                 trct = " ".join(["traceroute"] + line)
                 subprocess.call(trct, shell=True)
             except:
-                print("Unexpected error:", sys.exc_info()[0])
+                stdout.info("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
         def hostname(line):
@@ -142,7 +142,7 @@ class Root(Object):
                 hst_name = " ".join(["hostname"] + line)
                 subprocess.call(hst_name, shell=True)
             except:
-                print("Unexpected error:", sys.exc_info()[0])
+                stdout.info("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
         def system(line):
@@ -157,7 +157,7 @@ class Root(Object):
             elif line[0] in self.get_modules():
                 return Transponder(conn, self, line[0])
             else:
-                print(f"There is no device of name {line[0]}")
+                stdout.info(f"There is no device of name {line[0]}")
                 return
 
         @self.command(
@@ -190,11 +190,11 @@ class Root(Object):
 
         @self.command()
         def reboot(line):
-            print(self.session.rpc_send("/goldstone-system:reboot", {}))
+            stdout.info(self.session.rpc_send("/goldstone-system:reboot", {}))
 
         @self.command()
         def shutdown(line):
-            print(self.session.rpc_send("/goldstone-system:shutdown", {}))
+            stdout.info(self.session.rpc_send("/goldstone-system:shutdown", {}))
 
         # SYSTEM CLIs  -- END
 
@@ -205,7 +205,7 @@ class Root(Object):
             if line[0].isdigit():
                 return Vlan_CLI(conn, self, line[0])
             else:
-                print("The vlan-id entered must be numbers and not letters")
+                stdout.info("The vlan-id entered must be numbers and not letters")
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
         def no(line):
@@ -216,9 +216,9 @@ class Root(Object):
                         if line[1] in vlan_list:
                             self.sonic.vlan.delete_vlan(line[1])
                         else:
-                            print("The vlan-id provided doesn't exist")
+                            stdout.info("The vlan-id provided doesn't exist")
                     else:
-                        print("The vlan-id entered must be numbers and not letters")
+                        stdout.info("The vlan-id entered must be numbers and not letters")
                 else:
                     raise InvalidInput(self.no_usage())
             elif len(line) == 3:
@@ -226,12 +226,12 @@ class Root(Object):
                     if line[1] == "authentication" and line[2] == "login":
                         self.aaa_sys.set_no_aaa()
                     else:
-                        print("Enter the valid no command for aaa")
+                        stdout.info("Enter the valid no command for aaa")
                 elif line[0] == "tacacs-server":
                     if line[1] == "host":
                         self.tacacs_sys.set_no_tacacs(line[2])
                     else:
-                        print("Enter valid no command for tacacs-server")
+                        stdout.info("Enter valid no command for tacacs-server")
                 else:
                     raise InvalidInput(self.no_usage())
             else:
@@ -307,7 +307,7 @@ class Root(Object):
         self.notif_session = None
 
     def notification_cb(self, a, b, c, d):
-        print(b.print_dict())
+        stdout.info(b.print_dict())
 
     def __str__(self):
         return ""
@@ -407,7 +407,7 @@ async def loop_async(shell):
                     p, completer=c, key_bindings=b, default=shell.default_input
                 )
             except KeyboardInterrupt:
-                print("Execute 'exit' to exit")
+                stdout.info("Execute 'exit' to exit")
                 continue
 
             if len(line) > 0:
@@ -437,7 +437,7 @@ def main():
 
     console.setFormatter(formatter)
 
-    sh = logging.StreamHandler()
+    sh = logging.StreamHandler(sys.stdout)
     sh.setLevel(logging.DEBUG)
     shf = logging.Formatter("%(message)s")
     sh.setFormatter(shf)

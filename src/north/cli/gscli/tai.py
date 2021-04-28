@@ -3,11 +3,15 @@ import base64
 import struct
 import sysrepo as sr
 import libyang as ly
+import logging
 from tabulate import tabulate
 from .common import sysrepo_wrap, print_tabular
 from .base import InvalidInput
 
 _FREQ_RE = re.compile(r".+[kmgt]?hz$")
+
+logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
 
 
 def human_freq(item):
@@ -66,7 +70,7 @@ class Transponder(object):
 
     def show_transponder(self, name):
         if name not in self.get_modules():
-            print(
+            stdout.info(
                 f"Enter the correct transponder name. {name} is not a valid transponder name"
             )
             return
@@ -74,7 +78,7 @@ class Transponder(object):
         try:
             v = self.sr_op.get_data(xpath, "operational")
         except (sr.SysrepoNotFoundError, sr.SysrepoCallbackFailedError) as e:
-            print(e)
+            stdout.info(e)
             return
 
         try:
@@ -92,7 +96,7 @@ class Transponder(object):
                 print_tabular(to_human(d), f"Host Interface {hostif}")
 
         except KeyError as e:
-            print(f"Error while fetching values from operational database: {e}")
+            stdout.info(f"Error while fetching values from operational database: {e}")
             return
 
     def show_transponder_summary(self):
@@ -125,9 +129,9 @@ class Transponder(object):
             # insert "transponder" for the header use
             attrs.insert(0, "transponder")
 
-            print(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
+            stdout.info(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
         except Exception as e:
-            print(e)
+            stdout.info(e)
 
     def run_conf(self):
         transponder_run_conf_list = ["admin-status"]
@@ -144,16 +148,16 @@ class Transponder(object):
         try:
             tree = self.sr_op.get_data(self.XPATH)
         except sr.errors.SysrepoNotFoundError as e:
-            print("!")
+            stdout.info("!")
             return
 
         modules = list(tree.get("modules", {}).get("module", []))
         if len(modules) == 0:
-            print("!")
+            stdout.info("!")
             return
 
         for module in modules:
-            print("transponder {}".format(module.get("name")))
+            stdout.info("transponder {}".format(module.get("name")))
 
             m = to_human(module.get("config", {}))
             for attr in transponder_run_conf_list:
@@ -161,34 +165,34 @@ class Transponder(object):
                 if value:
                     if attr == "admin-status":
                         v = "shutdown" if value == "down" else "no shutdown"
-                        print(f" {v}")
+                        stdout.info(f" {v}")
                     else:
-                        print(f" {attr} {value}")
+                        stdout.info(f" {attr} {value}")
 
             for netif in module.get("network-interface", []):
-                print(f" netif {netif['name']}")
+                stdout.info(f" netif {netif['name']}")
                 n = to_human(netif.get("config", {}), runconf=True)
                 for attr in netif_run_conf_list:
                     value = n.get(attr, None)
                     if value:
-                        print(f"  {attr} {value}")
-                print(" quit")
+                        stdout.info(f"  {attr} {value}")
+                stdout.info(" quit")
 
             for hostif in module.get("host-interface", []):
-                print(f" hostif {hostif['name']}")
+                stdout.info(f" hostif {hostif['name']}")
                 n = to_human(hostif.get("config", {}), runconf=True)
                 for attr in hostif_run_conf_list:
                     value = n.get(attr, None)
                     if value:
-                        print(f"  {attr} {value}")
-                print(" quit")
+                        stdout.info(f"  {attr} {value}")
+                stdout.info(" quit")
 
-            print("quit")
+            stdout.info("quit")
 
-        print("!")
+        stdout.info("!")
 
     def tech_support(self):
-        print("\nshow transponder details:\n")
+        stdout.info("\nshow transponder details:\n")
         modules = self.get_modules()
         for module in modules:
             self.show_transponder(module)

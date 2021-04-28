@@ -1,19 +1,23 @@
 import sys
 import os
 import json
+import logging
+
 import libyang as ly
 import sysrepo as sr
 from sysrepo.session import DATASTORE_VALUES
 from tabulate import tabulate
 from .base import InvalidInput, LockedError
 
+logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
 
 TIMEOUT_MS = 10000
 
 # Function to print data from show command with tabulate library
 def print_tabular(h, table_title=""):
     if table_title != "":
-        print(f"\n{table_title}")
+        stdout.info(f"\n{table_title}")
 
     table = []
     skip_attrs = ["index", "location"]
@@ -22,7 +26,7 @@ def print_tabular(h, table_title=""):
             continue
         table.append([k, v])
 
-    print(tabulate(table))
+    stdout.info(tabulate(table))
 
 
 class sysrepo_wrap(object):
