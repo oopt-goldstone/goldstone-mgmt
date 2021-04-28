@@ -27,6 +27,10 @@ class NoOp(Exception):
 logger = logging.getLogger(__name__)
 
 
+def location2name(loc):
+    return loc.split("/")[-1]
+
+
 def attr_tai2yang(attr, meta, schema):
     if meta.usage != "<float>":
         return json.loads(attr)
@@ -161,6 +165,33 @@ class Server(object):
         logger.warning(f"no default value for {obj} {attr}")
         return None
 
+    async def _get_module_from_xpath(self, xpath):
+        prefix = "/goldstone-tai:modules"
+        if not xpath.startswith(prefix):
+            raise InvalidXPath()
+        xpath = xpath[len(prefix) :]
+        if xpath == "" or xpath == "/module":
+            return xpath, None
+
+        m = re.search(r"/module\[name\=\'(?P<name>.+?)\'\]", xpath)
+        if not m:
+            raise InvalidXPath()
+        name = m.group("name")
+
+        try:
+            self.sess.switch_datastore("operational")
+            d = self.sess.get_data(
+                f"/goldstone-tai:modules/module[name='{name}']/state/location",
+                no_subs=True,
+            )
+            location = d["modules"]["module"][name]["state"]["location"]
+            module = await self.taish.get_module(location)
+        except Exception as e:
+            logger.error(str(e))
+            raise InvalidXPath()
+
+        return xpath[m.end() :], module
+
     async def parse_change_req(self, xpath, value):
         """
         Helper method to parse sysrepo ChangeCreated, ChangeModified and ChangeDeleted.
@@ -176,25 +207,8 @@ class Server(object):
         :raises InvalidXPath:
             If xpath can't be handled
         """
-        prefix = "/goldstone-tai:modules"
-        if not xpath.startswith(prefix):
-            raise InvalidXPath()
-        xpath = xpath[len(prefix) :]
-        if xpath == "" or xpath == "/module":
-            raise InvalidXPath()
 
-        m = re.search(r"/module\[name\=\'(?P<name>.+?)\'\]", xpath)
-        if not m:
-            raise InvalidXPath()
-        name = m.group("name")
-
-        try:
-            module = await self.taish.get_module(name)
-        except Exception as e:
-            logger.error(str(e))
-            raise InvalidXPath()
-
-        xpath = xpath[m.end() :]
+        xpath, module = await self._get_module_from_xpath(xpath)
 
         if xpath.startswith("/config/"):
             xpath = xpath[len("/config/") :]
@@ -260,25 +274,7 @@ class Server(object):
         if xpath == "/goldstone-tai:*":
             return None, None, None
 
-        prefix = "/goldstone-tai:modules"
-        if not xpath.startswith(prefix):
-            raise InvalidXPath()
-        xpath = xpath[len(prefix) :]
-        if xpath == "" or xpath == "/module":
-            return None, None, None
-
-        m = re.search(r"/module\[name\=\'(?P<name>.+?)\'\]", xpath)
-        if not m:
-            raise InvalidXPath()
-        name = m.group("name")
-
-        try:
-            module = await self.taish.get_module(name)
-        except Exception as e:
-            logger.error(str(e))
-            raise InvalidXPath()
-
-        xpath = xpath[m.end() :]
+        xpath, module = await self._get_module_from_xpath(xpath)
 
         if xpath == "":
             return module, None, None
@@ -437,7 +433,10 @@ class Server(object):
                     )
                     continue
 
-                v = {"name": location, "config": {"name": location}}
+                v = {
+                    "name": location2name(location),
+                    "config": {"name": location2name(location)},
+                }
 
                 if intf:
                     index = await intf.get("index")
@@ -553,15 +552,20 @@ class Server(object):
 
             modules = await self.taish.list()
             notifiers = []
-            for key, m in modules.items():
+            for location, m in modules.items():
                 try:
-                    module = await self.taish.get_module(key)
+                    module = await self.taish.get_module(location)
                 except Exception as e:
-                    logger.warning(f"failed to get module location: {key}. err: {e}")
+                    logger.warning(
+                        f"failed to get module location: {location}. err: {e}"
+                    )
                     continue
+
+                key = location2name(location)
 
                 xpath = f"/goldstone-tai:modules/module[name='{key}']"
                 sess.set_item(f"{xpath}/config/name", key)
+                sess.set_item(f"{xpath}/state/location", location)
 
                 for i in range(len(m.netifs)):
                     sess.set_item(
