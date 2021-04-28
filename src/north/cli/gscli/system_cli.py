@@ -9,6 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 class Mgmt_CLI(Object):
     def __init__(self, conn, parent, ifname):
@@ -82,7 +83,7 @@ class Mgmt_CLI(Object):
 
     def no_usage(self):
         no_keys = list(self.no_dict.keys())
-        stdout.info(f'usage: no [{"|".join(no_keys)}]')
+        stderr.info(f'usage: no [{"|".join(no_keys)}]')
 
     def usage(self):
         return "usage:\n ip address A.B.C.D/<mask>\n ip route <dst_prefix>\n"

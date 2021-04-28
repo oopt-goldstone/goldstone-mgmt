@@ -12,6 +12,7 @@ _FREQ_RE = re.compile(r".+[kmgt]?hz$")
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 
 def human_freq(item):
@@ -70,7 +71,7 @@ class Transponder(object):
 
     def show_transponder(self, name):
         if name not in self.get_modules():
-            stdout.info(
+            stderr.info(
                 f"Enter the correct transponder name. {name} is not a valid transponder name"
             )
             return
@@ -78,7 +79,7 @@ class Transponder(object):
         try:
             v = self.sr_op.get_data(xpath, "operational")
         except (sr.SysrepoNotFoundError, sr.SysrepoCallbackFailedError) as e:
-            stdout.info(e)
+            stderr.info(e)
             return
 
         try:
@@ -96,7 +97,7 @@ class Transponder(object):
                 print_tabular(to_human(d), f"Host Interface {hostif}")
 
         except KeyError as e:
-            stdout.info(f"Error while fetching values from operational database: {e}")
+            stderr.info(f"Error while fetching values from operational database: {e}")
             return
 
     def show_transponder_summary(self):
@@ -131,7 +132,7 @@ class Transponder(object):
 
             stdout.info(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
         except Exception as e:
-            stdout.info(e)
+            stderr.info(e)
 
     def run_conf(self):
         transponder_run_conf_list = ["admin-status"]
