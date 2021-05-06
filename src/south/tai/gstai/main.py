@@ -10,6 +10,7 @@ import base64
 import re
 import libyang
 import traceback
+from aiohttp import web
 
 # TODO improve taish library
 TAI_STATUS_ITEM_ALREADY_EXISTS = -6
@@ -146,8 +147,20 @@ class Server(object):
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
 
-    def stop(self):
+        routes = web.RouteTableDef()
+
+        @routes.get("/healthz")
+        async def probe(request):
+            return web.Response()
+
+        app = web.Application()
+        app.add_routes(routes)
+
+        self.runner = web.AppRunner(app)
+
+    async def stop(self):
         logger.info(f"stop server")
+        await self.runner.cleanup()
         self.sess.stop()
         self.conn.disconnect()
         self.taish.close()
@@ -724,6 +737,10 @@ class Server(object):
                 return await coroutine
             except BaseException as e:
                 logger.error(e)
+
+        await self.runner.setup()
+        site = web.TCPSite(self.runner, "0.0.0.0", 8080)
+        await site.start()
 
         return [catch_exception(n) for n in notifiers]
 
