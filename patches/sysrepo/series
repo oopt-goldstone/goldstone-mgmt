@@ -1,4 +1,5 @@
-sysrepoctl-install.patch
 skip_test.patch
-add_debug_log_in_locking_methods.patch
-add_log.patch
+#add_debug_log_in_locking_methods.patch
+#add_log.patch
+sysrepoctl_install.patch
+revert_packages_bugfix_exact_main_package_version_dependency.patch
