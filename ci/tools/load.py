@@ -70,35 +70,11 @@ def main(host, username, password):
         ssh(cli, "rm -rf /var/lib/sysrepo/*")
         ssh(cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt")
 
-        def check_pod(name):
-            max_iteration = 4
-            for i in range(max_iteration):
-                time.sleep(5)
-                status = ssh(
-                    cli,
-                    f"kubectl get pod -l app={name} -o jsonpath='{{.items[0].status.phase}}'",
-                )
-                if status == "Running":
-                    return
-                print(
-                    f"{name} not running yet. status = {status}. waiting.. {i}/{max_iteration}"
-                )
-            else:
-                print("timeout")
-                ssh(cli, "kubectl get pods -A")
-                ssh(cli, f"kubectl describe pods -l app={name}")
-                ssh(cli, f"kubectl logs ds/{name}")
-                sys.exit(1)
-
-        # FIXME: Wait for additional 30 seconds for usonic to come
-        # up in case if its restarted
-        time.sleep(60)
-
-        check_pod("gs-mgmt-sonic")
-        check_pod("gs-mgmt-onlp")
-        check_pod("gs-mgmt-tai")
-        check_pod("gs-mgmt-snmp")
-        check_pod("gs-mgmt-openconfig")
+        check_pod(cli, "gs-mgmt-sonic")
+        check_pod(cli, "gs-mgmt-onlp")
+        check_pod(cli, "gs-mgmt-tai")
+        check_pod(cli, "gs-mgmt-snmp")
+        check_pod(cli, "gs-mgmt-openconfig")
 
         def restart_gssouth_system():
             max_iteration = 3

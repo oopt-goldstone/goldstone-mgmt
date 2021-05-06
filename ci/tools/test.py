@@ -102,14 +102,7 @@ def test_tai(cli):
     ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
 
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-tai")
-    time.sleep(15)
-    pod = ssh(
-        cli,
-        "kubectl get pod -l app=gs-mgmt-tai -o jsonpath='{.items[0].metadata.name}'",
-    )
-    ssh(cli, f"kubectl wait --timeout=90s --for=condition=ready pod/{pod}")
-    ssh(cli, "kubectl get pods")
-    time.sleep(20)
+    check_pod(cli, 'gs-mgmt-tai')
 
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
     assert "0.9" in output

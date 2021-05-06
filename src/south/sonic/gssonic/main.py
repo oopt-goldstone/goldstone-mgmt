@@ -12,6 +12,7 @@ import re
 import redis
 import os
 from .k8s_api import incluster_apis
+from aiohttp import web
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,19 @@ class Server(object):
         self.mtu_default = self.get_default_from_yang("mtu")
         self.speed_default = "100000"
 
-    def stop(self):
+        routes = web.RouteTableDef()
+
+        @routes.get("/healthz")
+        async def probe(request):
+            return web.Response()
+
+        app = web.Application()
+        app.add_routes(routes)
+
+        self.runner = web.AppRunner(app)
+
+    async def stop(self):
+        await self.runner.cleanup()
         self.sess.stop()
         self.conn.disconnect()
 
@@ -1190,6 +1203,9 @@ class Server(object):
                 )
                 pubsub.run_in_thread(sleep_time=2)
 
+        await self.runner.setup()
+        site = web.TCPSite(self.runner, "0.0.0.0", 8080)
+        await site.start()
         return []
 
 
@@ -1214,7 +1230,7 @@ def main():
                 if e:
                     raise e
         finally:
-            server.stop()
+            await server.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
