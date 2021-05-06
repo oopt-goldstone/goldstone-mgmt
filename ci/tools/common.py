@@ -1,6 +1,7 @@
 import subprocess
 import os
 import sys
+import time
 
 
 class SSHException(Exception):
@@ -41,3 +42,22 @@ def run(cmd):
         check=True,
         env=os.environ,
     )
+
+def check_pod(cli, name, max_iteration=24, sleep=5):
+    for i in range(max_iteration):
+        time.sleep(sleep)
+        status = ssh(
+            cli,
+            f"kubectl get pod -l app={name} -o jsonpath='{{.items[0].status.conditions}}' | jq -r '.[] | select ( .type | test(\"^Ready$\")) | .status'",
+        )
+        if status.strip() == "True":
+            return
+        print(
+            f"{name} not running yet. status = {status}. waiting.. {i}/{max_iteration}"
+        )
+    else:
+        print("timeout")
+        ssh(cli, "kubectl get pods -A")
+        ssh(cli, f"kubectl describe pods -l app={name}")
+        ssh(cli, f"kubectl logs ds/{name}")
+        sys.exit(1)

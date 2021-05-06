@@ -303,6 +303,21 @@ spec:
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 1
+                periodSeconds: 10
+              startupProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 30
+                periodSeconds: 10
+              ports:
+              - name: liveness-port
+                containerPort: 8080
             - name: taish-server
               image: docker.io/microsonic/tai:latest
               imagePullPolicy: IfNotPresent
@@ -405,6 +420,21 @@ spec:
                 mountPath: /var/run/redis/sonic-db/
               - name: usonic-config
                 mountPath: /var/lib/usonic
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 1
+                periodSeconds: 10
+              startupProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 30
+                periodSeconds: 10
+              ports:
+              - name: liveness-port
+                containerPort: 8080
             volumes:
             - name: shm
               hostPath:
