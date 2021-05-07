@@ -43,3 +43,6 @@ nss/0006-fix-compiling-warning-about-token-dereference.patch
 sonic-py-swsssdk/comment_out_getting_lag_name_map.patch
 sysrepo/add_debug_log_in_locking_methods.patch
 sysrepo/add_log.patch
+libyang/revert_a_fix_not_working_for_debian10.patch
+sysrepo/sysrepoctl_install.patch
+sysrepo/revert_packages_bugfix_exact_main_package_version_dependency.patch
