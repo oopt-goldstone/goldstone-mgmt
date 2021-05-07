@@ -555,7 +555,7 @@ def test_mgmt_intf(cli):
 def test_select_intf(cli):
     output = ssh(cli, 'gscli -c "interface .*; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
-    assert len(line.split(",")) == 20  # all interfaces should be selected
+    assert len(line.split(",")) == 22  # all interfaces should be selected
 
     output = ssh(cli, 'gscli -c "interface Ethernet[1-4]_1; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
