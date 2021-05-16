@@ -341,6 +341,7 @@ spec:
                 app: gs-mgmt-sonic
         spec:
             serviceAccountName: gs-mgmt-sonic-svc
+            hostNetwork: true
             initContainers:
             - name: wait-prep
               image: docker.io/bitnami/kubectl:latest
