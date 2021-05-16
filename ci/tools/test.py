@@ -225,7 +225,7 @@ def test_port_breakout(cli):
     assert "Ethernet5_1" in output
     assert "Ethernet5_2" not in output
 
-    for i in range(90):
+    for i in range(180):
         try:
             ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
         except SSHException as e:
@@ -238,7 +238,7 @@ def test_port_breakout(cli):
 
     # Validating if 'syncd' has come up properly
     validate_str = "sending switch_shutdown_request notification to OA"
-    output = ssh(cli, "kubectl logs deploy/usonic syncd")
+    output = ssh(cli, "kubectl logs deploy/usonic-core syncd")
     if output.find(validate_str) == -1:
         print("Syncd in usonic has come up properly")
     else:
@@ -290,7 +290,7 @@ def test_port_breakout(cli):
 
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
-    for i in range(90):
+    for i in range(180):
         try:
             ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
         except SSHException as e:
@@ -302,7 +302,7 @@ def test_port_breakout(cli):
         raise Exception("Ethernet5_2 didn't disappear")
 
     # Validating if 'syncd' has come up properly
-    output = ssh(cli, "kubectl logs deploy/usonic syncd")
+    output = ssh(cli, "kubectl logs deploy/usonic-core syncd")
     if output.find(validate_str) == -1:
         print("Syncd in usonic has come up properly")
     else:
@@ -555,7 +555,7 @@ def test_mgmt_intf(cli):
 def test_select_intf(cli):
     output = ssh(cli, 'gscli -c "interface .*; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
-    assert len(line.split(",")) == 22  # all interfaces should be selected
+    assert len(line.split(",")) == 20  # all interfaces should be selected
 
     output = ssh(cli, 'gscli -c "interface Ethernet[1-4]_1; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
