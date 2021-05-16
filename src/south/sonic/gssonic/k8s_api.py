@@ -9,7 +9,10 @@ import json
 from kubernetes_asyncio import config, client, watch
 from jinja2 import Template
 
-USONIC_DEPLOYMENT = os.getenv("USONIC_DEPLOYMENT", "usonic")
+USONIC_DEPLOYMENTS = os.getenv(
+    "USONIC_DEPLOYMENTS",
+    "usonic-core,usonic-bcm,usonic-port,usonic-neighbor,usonic-mgrd",
+)
 USONIC_NAMESPACE = os.getenv("USONIC_NAMESPACE", "default")
 USONIC_CONFIGMAP = os.getenv("USONIC_CONFIGMAP", "usonic-config")
 USONIC_TEMPLATE_DIR = os.getenv("USONIC_TEMPLATE_DIR", "/var/lib/usonic")
@@ -184,28 +187,29 @@ class incluster_apis(object):
 
     async def restart_usonic(self):
 
-        deployment = await self.deploy_api.read_namespaced_deployment(
-            name=USONIC_DEPLOYMENT,
-            namespace=USONIC_NAMESPACE,
-        )
-
-        # Update annotation, to restart the deployment
-        annotations = deployment.spec.template.metadata.annotations
-        if annotations:
-            annotations["kubectl.kubernetes.io/restartedAt"] = str(
-                datetime.datetime.now()
+        for dname in USONIC_DEPLOYMENTS.split(","):
+            deployment = await self.deploy_api.read_namespaced_deployment(
+                name=dname,
+                namespace=USONIC_NAMESPACE,
             )
-        else:
-            annotations = {
-                "kubectl.kubernetes.io/restartedAt": str(datetime.datetime.now())
-            }
-        deployment.spec.template.metadata.annotations = annotations
 
-        # Update the deployment
-        await self.deploy_api.patch_namespaced_deployment(
-            name=USONIC_DEPLOYMENT, namespace=USONIC_NAMESPACE, body=deployment
-        )
-        logger.info("Deployment updated")
+            # Update annotation, to restart the deployment
+            annotations = deployment.spec.template.metadata.annotations
+            if annotations:
+                annotations["kubectl.kubernetes.io/restartedAt"] = str(
+                    datetime.datetime.now()
+                )
+            else:
+                annotations = {
+                    "kubectl.kubernetes.io/restartedAt": str(datetime.datetime.now())
+                }
+            deployment.spec.template.metadata.annotations = annotations
+
+            # Update the deployment
+            await self.deploy_api.patch_namespaced_deployment(
+                name=dname, namespace=USONIC_NAMESPACE, body=deployment
+            )
+            logger.info("Deployment updated")
 
     async def watch_pods(self):
         w = watch.Watch()
@@ -214,7 +218,8 @@ class incluster_apis(object):
                 name = event["object"].metadata.name
                 phase = event["object"].status.phase
 
-                if ("usonic" not in name) or name == "usonic-cli":
+                #TODO make this configurable
+                if "usonic-mgrd" not in name:
                     continue
 
                 logger.debug(
