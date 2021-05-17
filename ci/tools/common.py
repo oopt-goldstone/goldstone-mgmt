@@ -43,7 +43,7 @@ def run(cmd):
         env=os.environ,
     )
 
-def check_pod(cli, name, max_iteration=24, sleep=5):
+def check_pod(cli, name, max_iteration=48, sleep=10):
     for i in range(max_iteration):
         time.sleep(sleep)
         status = ssh(
