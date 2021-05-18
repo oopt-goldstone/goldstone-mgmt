@@ -605,9 +605,6 @@ class Server(object):
 
     async def start(self):
         # get hardware configuration from ONLP datastore ( ONLP south must be running )
-        # TODO check if the module is present by a status flag
-        # we are abusing the description field to embed TAI module information.
-        # the description must be in JSON format
         # TODO hot-plugin is not implemented for now
         # this can be implemented by subscribing to ONLP operational datastore
         # and create/remove TAI modules according to hardware configuration changes
