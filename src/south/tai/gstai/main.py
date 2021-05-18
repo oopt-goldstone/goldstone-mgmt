@@ -763,7 +763,7 @@ def main():
                 if e:
                     raise e
         finally:
-            server.stop()
+            await server.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
