@@ -127,10 +127,6 @@ class Server(object):
         # Enable counters in SONiC
         self.enable_counters()
 
-        # After usonic is UP , its taking approximately
-        # 15 seconds to populate counter data
-        logger.debug("waiting another 15 seconds for counters")
-        await asyncio.sleep(15)
         # Caching base values of counters
         self.cache_counters()
 
