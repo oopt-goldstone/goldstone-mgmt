@@ -53,7 +53,9 @@ class Interface_CLI(Object):
             "mtu": None,
             "switchport": self.switchprt_dict,
             "breakout": None,
+            "fec": None,
         }
+        self.fec_list = ["fc", "rs"]
         self.breakout_list = ["2X50G", "4X25G", "4X10G"]
         self.tagging_mode_list = ["trunk", "access"]
 
@@ -94,8 +96,19 @@ class Interface_CLI(Object):
             elif args[0] == "breakout":
                 for ifname in self.ifnames:
                     self.sonic.port.set_breakout(ifname, None, None)
+            elif args[0] == "fec" and len(args) == 1:
+                for ifname in self.ifnames:
+                    self.sonic.port.set_fec(ifname, None)
             else:
                 self.no_usage()
+
+        @self.command(WordCompleter(self.fec_list))
+        def fec(args):
+            if len(args) != 1:
+                raise InvalidInput("usages: fec <fc|rs>")
+            else:
+                if args[0] in ["fc", "rs"]:
+                    self.sonic.port.set_fec(ifname, args[0])
 
         @self.command()
         def shutdown(args):

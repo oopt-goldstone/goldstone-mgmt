@@ -416,6 +416,19 @@ def test_logging(cli):
     else:
         raise Exception("failed to fail with an invalid command: show logging h01")
 
+def test_fec(cli):
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; fec fc; show" | grep fec')
+    assert "fc" in output
+
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; fec fc; show" | grep fec')
+    assert "fc" in output
+
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; fec ff"')
+    except SSHException as e:
+        assert "usages: fec <fc|rs>" in e.stderr
+    else:
+        raise Exception("failed to fail with an invalid command: fec ff")
 
 def test_mtu(cli):
     try:
