@@ -110,7 +110,7 @@ class Root(Object):
             }
         }
         self.no_dict = {
-            "vlan": FuzzyWordCompleter(lambda: self.get_vid(), WORD=True),
+            "vlan": FuzzyWordCompleter(lambda: ["range"] + self.get_vid(), WORD=True),
             "aaa": {"authentication": {"login": None}},
             "tacacs-server": {"host": None},
         }
@@ -199,12 +199,35 @@ class Root(Object):
 
         # SYSTEM CLIs  -- END
 
-        @self.command(FuzzyWordCompleter(lambda: self.get_vid(), WORD=True))
+        def isValidVlanRange(Range):
+            for vlans in Range.split(","):
+                vlan_limits = vlans.split("-")
+                if vlans.isdigit() or (
+                    len(vlan_limits) == 2
+                    and vlan_limits[0].isdigit()
+                    and vlan_limits[1].isdigit()
+                ):
+                    pass
+                else:
+                    return False
+            return True
+
+        @self.command(
+            FuzzyWordCompleter(lambda: (["range"] + self.get_vid()), WORD=True)
+        )
         def vlan(line):
-            if len(line) != 1:
+            if len(line) not in [1, 2]:
                 raise InvalidInput("usage: vlan <vlan-id>")
-            if line[0].isdigit():
+            if len(line) == 1 and line[0].isdigit():
                 return Vlan_CLI(conn, self, line[0])
+            elif line[0] == "range" and isValidVlanRange(line[1]):
+                for vlans in line[1].split(","):
+                    if vlans.isdigit():
+                        self.sonic.vlan.create_vlan(vlans)
+                    else:
+                        vlan_limits = vlans.split("-")
+                        for vid in range(int(vlan_limits[0]), int(vlan_limits[1]) + 1):
+                            self.sonic.vlan.create_vlan(str(vid))
             else:
                 stderr.info("The vlan-id entered must be numbers and not letters")
 
@@ -219,7 +242,9 @@ class Root(Object):
                         else:
                             stderr.info("The vlan-id provided doesn't exist")
                     else:
-                        stderr.info("The vlan-id entered must be numbers and not letters")
+                        stderr.info(
+                            "The vlan-id entered must be numbers and not letters"
+                        )
                 else:
                     raise InvalidInput(self.no_usage())
             elif len(line) == 3:
@@ -233,6 +258,23 @@ class Root(Object):
                         self.tacacs_sys.set_no_tacacs(line[2])
                     else:
                         stderr.info("Enter valid no command for tacacs-server")
+                elif line[0] == "vlan" and line[1] == "range":
+                    if isValidVlanRange(line[2]):
+                        vlan_list = self.get_vid()
+                        for vlans in line[2].split(","):
+                            if vlans.isdigit():
+                                if vlans in vlan_list:
+                                    self.sonic.vlan.delete_vlan(vlans)
+                            else:
+                                vlan_limits = vlans.split("-")
+                                for vid in range(
+                                    int(vlan_limits[0]), int(vlan_limits[1]) + 1
+                                ):
+                                    if str(vid) in vlan_list:
+                                        self.sonic.vlan.delete_vlan(str(vid))
+                    else:
+                        stderr.info("Enter a valid range for vlan")
+
                 else:
                     raise InvalidInput(self.no_usage())
             else:
@@ -272,6 +314,7 @@ class Root(Object):
         return (
             "usage:\n"
             "no vlan <vid>\n"
+            "no vlan range <range>\n"
             "no aaa authentication login\n"
             "no tacacs-server host <address>"
         )
