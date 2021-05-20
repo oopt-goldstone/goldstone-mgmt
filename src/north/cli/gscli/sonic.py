@@ -61,7 +61,9 @@ class Vlan(object):
             pass
 
         if dl1 == {}:
-            stdout.info(tabulate([], ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
+            stdout.info(
+                tabulate([], ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty")
+            )
         else:
             try:
                 dl1 = dl1["goldstone-vlan:vlan"]["VLAN"]["VLAN_LIST"]
@@ -83,7 +85,9 @@ class Vlan(object):
                         dln.append([dl1[i]["vlanid"], dl1[i]["members"][j], tg])
                 else:
                     dln.append([dl1[i]["vlanid"], "-", "-"])
-            stdout.info(tabulate(dln, ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty"))
+            stdout.info(
+                tabulate(dln, ["VLAN ID", "Port", "Port Tagging"], tablefmt="pretty")
+            )
         self.session.switch_datastore("running")
 
     def _vlan_components(self):
@@ -226,7 +230,7 @@ class Port(object):
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
 
-        runn_conf_list = ["admin-status", "ipv4", "speed", "name", "breakout"]
+        runn_conf_list = ["admin-status", "ipv4", "fec",  "speed", "name", "breakout"]
         v_dict = {}
 
         interface_list = self.get_interface_list("running", False)
@@ -252,6 +256,17 @@ class Port(object):
                     if mtu:
                         stdout.info("  {} {}".format("mtu", mtu))
 
+                elif v == "fec":
+                    try:
+                        fec = v_dict["fec"]
+                        if fec == "none":
+                            fec = None
+                    except:
+                        fec = None
+
+                    if fec:
+                        stdout.info("  {} {}".format("fec", fec))
+
                 elif v == "speed":
                     if (v_dict["speed"] == sonic_defaults.SPEED) or (
                         v_dict["speed"] == None
@@ -268,7 +283,9 @@ class Port(object):
                         channel_speed = v_dict["breakout"]["channel-speed"]
                         channel_speed = channel_speed.split("_")
                         channel_speed = channel_speed[1].split("B")
-                        stdout.info("  {} {}X{}".format(v, num_of_channels, channel_speed[0]))
+                        stdout.info(
+                            "  {} {}X{}".format(v, num_of_channels, channel_speed[0])
+                        )
 
                 elif v == "name":
                     try:
@@ -309,6 +326,13 @@ class Port(object):
     def set_admin_status(self, ifname, value):
         xpath = self.xpath(ifname)
         set_attribute(self.sr_op, xpath, "interface", ifname, "admin-status", value)
+
+    def set_fec(self, ifname, value):
+        xpath = self.xpath(ifname)
+        if value:
+            set_attribute(self.sr_op, xpath, "interface", ifname, "fec", value)
+        else:
+            set_attribute(self.sr_op, xpath, "interface", ifname, "fec", "none")
 
     def set_mtu(self, ifname, value):
         xpath = self.xpath(ifname)

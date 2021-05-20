@@ -276,6 +276,20 @@ module goldstone-interfaces {
           "RFC 2863: The Interfaces Group MIB - ifAlias";
       }
 
+      leaf fec {
+        type enumeration {
+          enum fc {
+            value 1;
+          }
+          enum rs {
+            value 2;
+          }
+          enum none {
+            value 3;
+          }
+        }
+      }
+
       leaf admin-status {
         type enumeration {
           enum up {
