@@ -18,6 +18,12 @@ def test_vlan(cli):
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "vlan 2000"')
     ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "vlan range 1000-1010"')
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "vlan range 200-205,250,295-300"')
+    ssh(cli, 'gscli -c "show vlan details"')
+    ssh(cli, 'gscli -c "no vlan range 200-205,250"')
+    ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "no vlan 2000"')
     ssh(cli, 'gscli -c "show vlan details"')
     ssh(cli, 'gscli -c "no vlan 1000"')
@@ -66,11 +72,13 @@ def test_tai(cli):
     assert "0.00 dBm" in output
 
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx'
+        cli,
+        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx',
     )
     assert "0.9" in output
     output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx'
+        cli,
+        f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx',
     )
     assert "0.0" in output
 
@@ -102,7 +110,7 @@ def test_tai(cli):
     ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
 
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-tai")
-    check_pod(cli, 'gs-mgmt-tai')
+    check_pod(cli, "gs-mgmt-tai")
 
     output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
     assert "0.9" in output
@@ -846,7 +854,7 @@ def main(host, username, password):
         try:
             test_system(cli)
             test_logging(cli)
-        #    test_tacacs(host, cli)
+            #    test_tacacs(host, cli)
             test_mgmt_intf(cli)
             test_mgmt_if_cmds(cli)
             test_system_reconcile(cli)
