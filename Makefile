@@ -195,12 +195,3 @@ lint:
 	exit $(black -q --diff --exclude src/north/snmp/src src | wc -l)
 	pyang -p /usr/local/share/yang/modules/ietf yang/*.yang
 	grep -rnI 'print(' src || exit 0 && exit 1
-
-init:
-	$(RM) -r `sysrepoctl -l | head -n 1 | cut -d ':' -f 2`/* /dev/shm/sr*
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-onlp.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-tai.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-interfaces.yang
-	sysrepoctl -s $(GS_YANG_REPO) --install $(GS_YANG_REPO)/goldstone-vlan.yang
-	sysrepoctl -s $(OC_YANG_REPO) --install $(OC_YANG_REPO)/platform/openconfig-platform.yang
-	sysrepoctl -s $(OC_YANG_REPO):$(OC_YANG_REPO)/../../third_party/ietf --install $(OC_YANG_REPO)/interfaces/openconfig-interfaces.yang
