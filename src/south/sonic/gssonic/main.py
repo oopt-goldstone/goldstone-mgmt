@@ -114,7 +114,7 @@ class Server(object):
         if event != "done":
             return
         return self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
-
+    
     async def restart_usonic(self):
         self.is_usonic_rebooting = True
         await self.k8s.restart_usonic()
@@ -211,7 +211,7 @@ class Server(object):
 
                 await self.watch_pods()
 
-                self.reconcile()
+                await self.reconcile()
                 self.update_oper_db()
                 self.is_usonic_rebooting = False
 
@@ -383,8 +383,21 @@ class Server(object):
                 if type(change.value) != type({}) and key != "name" and key != "ifname":
                     if key == "description" or key == "alias":
                         self.set_config_db(event, _hash, key, change.value)
+
                     elif key == "admin-status":
                         self.set_config_db(event, _hash, "admin_status", change.value)
+
+                    elif key == "interface-type":
+                        #if event == "change":
+                        #    Validation of Interface Type with respect to configured Speed to be done
+                        if event == "done":
+                            status_bcm = await self.k8s.run_bcmcmd_usonic(key, ifname, change.value)
+                    elif key == "auto-nego":
+                        #if event == "change":
+                        #   Validation with respect to Port Breakout to be done
+                        if event == "done":
+                            status_bcm = await self.k8s.run_bcmcmd_usonic(key, ifname, change.value)
+
                     elif key == "speed":
 
                         if event == "change":
@@ -482,6 +495,8 @@ class Server(object):
                     self.set_config_db(event, _hash, key, change.value)
                 elif key == "admin-status":
                     self.set_config_db(event, _hash, "admin_status", change.value)
+                elif key == "interface-type" or key == "auto-nego":
+                    status_bcm = await self.k8s.run_bcmcmd_usonic(key, ifname, change.value)
                 elif key == "forwarding" or key == "enabled":
                     logger.debug("This key:{} should not be set in redis ".format(key))
 
@@ -828,7 +843,7 @@ class Server(object):
                 self.speed_default,
             )
 
-    def reconcile(self):
+    async def reconcile(self):
         self.sess.switch_datastore("running")
         intf_data = self.sess.get_data("/goldstone-interfaces:interfaces")
         if "interfaces" in intf_data:
@@ -853,6 +868,9 @@ class Server(object):
                             "description",
                             str(intf[key]),
                         )
+                    elif key == "auto-nego" or key == "interface-type":
+                        logger.debug("Reconcile for bcmcmd")
+                        status_bcm = await self.k8s.run_bcmcmd_usonic(key, name, intf[key])
                     elif key == "alias":
                         self.sonic_db.set(
                             self.sonic_db.CONFIG_DB,
@@ -1162,7 +1180,7 @@ class Server(object):
                 else:
                     self.cache_counters()
 
-                self.reconcile()
+                await self.reconcile()
                 self.update_oper_db()
                 self.is_usonic_rebooting = False
 
@@ -1248,3 +1266,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

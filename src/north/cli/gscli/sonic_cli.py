@@ -53,10 +53,13 @@ class Interface_CLI(Object):
             "mtu": None,
             "switchport": self.switchprt_dict,
             "breakout": None,
+            "interface-type": None,
             "fec": None,
         }
         self.fec_list = ["fc", "rs"]
         self.breakout_list = ["2X50G", "4X25G", "4X10G"]
+        self.interface_type_list = ["SR", "SR4", "CR", "CR4", "LR", "LR4", "KR", "KR4"]
+        self.auto_nego_list = ["enable", "disable"]
         self.tagging_mode_list = ["trunk", "access"]
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
@@ -160,6 +163,31 @@ class Interface_CLI(Object):
 
             for ifname in self.ifnames:
                 self.sonic.port.set_vlan_mem(ifname, args[1], args[3])
+
+        @self.command(WordCompleter(self.interface_type_list))
+        def interface_type(args):
+            valid_args = ["SR", "SR4", "CR", "CR4", "LR", "LR4", "KR", "KR4"]
+            invalid_input_str = (
+                f'usage: interface-type [{"|".join(self.interface_type_list)}]'
+            )
+            if len(args) != 1:
+                raise InvalidInput(invalid_input_str)
+            if args[0] not in valid_args:
+                raise InvalidInput(invalid_input_str)
+            for ifname in self.ifnames:
+                self.sonic.port.set_interface_type(ifname, args[0])
+
+        @self.command(WordCompleter(self.auto_nego_list))
+        def auto_nego(args):
+            invalid_input_str = f'usage: auto_nego [{"|".join(self.auto_nego_list)}]'
+            if len(args) != 1 or args[0] not in self.auto_nego_list:
+                raise InvalidInput(invalid_input_str)
+            else:
+                for ifname in self.ifnames:
+                    if args[0] == "enable":
+                        self.sonic.port.set_auto_nego(ifname, "yes")
+                    if args[0] == "disable":
+                        self.sonic.port.set_auto_nego(ifname, "no")
 
         @self.command(WordCompleter(self.breakout_list))
         def breakout(args):

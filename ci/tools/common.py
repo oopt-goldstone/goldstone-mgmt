@@ -43,14 +43,19 @@ def run(cmd):
         env=os.environ,
     )
 
+
 def check_pod(cli, name, max_iteration=48, sleep=10):
     for i in range(max_iteration):
         time.sleep(sleep)
-        status = ssh(
+        condition = ssh(
             cli,
             f"kubectl get pod -l app={name} -o jsonpath='{{.items[0].status.conditions}}' | jq -r '.[] | select ( .type | test(\"^Ready$\")) | .status'",
         )
-        if status.strip() == "True":
+        status = ssh(
+            cli,
+            f"kubectl get pod -l app={name} -o jsonpath='{{.items[0].status.phase}}'",
+        )
+        if condition.strip() == "True" and status.strip() == "Running":
             return
         print(
             f"{name} not running yet. status = {status}. waiting.. {i}/{max_iteration}"

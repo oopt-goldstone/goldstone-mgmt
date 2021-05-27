@@ -36,6 +36,28 @@ def test_vlan(cli):
     ssh(cli, 'gscli -c "show running-config vlan"')
 
 
+def test_auto_nego(cli):
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego disable"')
+
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
+    ssh(cli, "kubectl rollout restart ds/gs-mgmt-sonic")
+    check_pod(cli, "gs-mgmt-sonic")
+    time.sleep(90)
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "auto-nego enable" in output
+
+def test_intf_type(cli):
+    ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type SR4"')
+    ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type KR4"')
+
+    ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type CR4"')
+    ssh(cli, "kubectl rollout restart ds/gs-mgmt-sonic")
+    check_pod(cli, "gs-mgmt-sonic")
+    time.sleep(90)
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "interface-type CR4" in output
+
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
     lines = [line for line in output.split() if "piu" in line]
@@ -424,6 +446,7 @@ def test_logging(cli):
     else:
         raise Exception("failed to fail with an invalid command: show logging h01")
 
+
 def test_fec(cli):
     output = ssh(cli, 'gscli -c "interface Ethernet1_1; fec fc; show" | grep fec')
     assert "fc" in output
@@ -437,6 +460,7 @@ def test_fec(cli):
         assert "usages: fec <fc|rs>" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: fec ff")
+
 
 def test_mtu(cli):
     try:
@@ -576,7 +600,7 @@ def test_mgmt_intf(cli):
 def test_select_intf(cli):
     output = ssh(cli, 'gscli -c "interface .*; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
-    assert len(line.split(",")) == 20  # all interfaces should be selected
+    assert len(line.split(",")) == 22  # all interfaces should be selected
 
     output = ssh(cli, 'gscli -c "interface Ethernet[1-4]_1; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
@@ -883,6 +907,8 @@ def main(host, username, password):
             test_select_intf(cli)
             test_statistics(cli)
             test_vlan_member_add_delete(cli)
+            test_auto_nego(cli)
+            test_intf_type(cli)
             test_port_breakout(cli)
         except Exception as e:
             ssh(cli, "kubectl get pods -A")

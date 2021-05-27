@@ -230,7 +230,7 @@ class Port(object):
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
 
-        runn_conf_list = ["admin-status", "ipv4", "fec",  "speed", "name", "breakout"]
+        runn_conf_list = ["admin-status", "ipv4", "fec", "speed", "name", "breakout", "interface-type", "auto-nego"]
         v_dict = {}
 
         interface_list = self.get_interface_list("running", False)
@@ -266,6 +266,26 @@ class Port(object):
 
                     if fec:
                         stdout.info("  {} {}".format("fec", fec))
+
+                elif v == "auto-nego":
+                    try:
+                        auto_nego = v_dict["auto-nego"]
+                    except:
+                        auto_nego = None
+
+                    if auto_nego == "yes":
+                        stdout.info("  {} {}".format("auto-nego", "enable"))
+                    if auto_nego == "no":
+                        stdout.info("  {} {}".format("auto-nego", "disable"))
+
+                elif v == "interface-type":
+                    try:
+                        intf_type = v_dict["interface-type"]
+                    except:
+                        intf_type = None
+
+                    if intf_type:
+                        stdout.info("  {} {}".format("interface-type", intf_type))
 
                 elif v == "speed":
                     if (v_dict["speed"] == sonic_defaults.SPEED) or (
@@ -333,6 +353,21 @@ class Port(object):
             set_attribute(self.sr_op, xpath, "interface", ifname, "fec", value)
         else:
             set_attribute(self.sr_op, xpath, "interface", ifname, "fec", "none")
+
+    def set_auto_nego(self, ifname, mode):
+        xpath = self.xpath(ifname)
+        set_attribute(self.sr_op, xpath, "interface", ifname, "auto-nego", mode)
+
+    def set_interface_type(self, ifname, value):
+        xpath = self.xpath(ifname)
+        if value == None:
+            set_attribute(
+                self.sr_op, xpath, "interface", ifname, "interface-type", "NONE"
+            )
+        else:
+            set_attribute(
+                self.sr_op, xpath, "interface", ifname, "interface-type", value
+            )
 
     def set_mtu(self, ifname, value):
         xpath = self.xpath(ifname)
