@@ -6,6 +6,11 @@ import logging
 import asyncio
 import json
 
+from kubernetes import config as Config
+from kubernetes.client import Configuration
+from kubernetes.client.api import core_v1_api
+from kubernetes import watch as Watch
+from kubernetes.stream import stream
 from kubernetes_asyncio import config, client, watch
 from jinja2 import Template
 
@@ -23,11 +28,49 @@ logger = logging.getLogger(__name__)
 
 class incluster_apis(object):
     def __init__(self):
+        Config.load_incluster_config()
         config.load_incluster_config()
         self.v1_api = client.CoreV1Api()
         self.deploy_api = client.AppsV1Api()
         self.v1_ext = client.AppsV1beta2Api()
         self.usonic_deleted = 0
+        self.core_v1 = core_v1_api.CoreV1Api()
+
+    async def run_bcmcmd_usonic(self, attr, port_name, value):
+        with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
+            interface_config = json.loads(f.read())
+        x = re.findall('[0-9]+', port_name)
+        intf_no = int(x[0])
+        port_no = ''
+        for i, interface in enumerate(interface_config):
+            if i == (intf_no - 1):
+                port_no = str(interface["port"])
+
+        for dname in USONIC_DEPLOYMENTS.split(","):
+            deployment = await self.deploy_api.read_namespaced_deployment(
+                    name=dname,
+                    namespace=USONIC_NAMESPACE,
+                    )
+
+        if attr == "interface-type":
+            cmd = f'port {port_no} if={value}'
+        elif attr == "auto-nego":
+            cmd = f'port {port_no} an={value}'
+
+        pod = ''
+        if deployment:
+            w = Watch.Watch()
+            for event in w.stream(self.core_v1.list_pod_for_all_namespaces):
+                name = event["object"].metadata.name
+                if "usonic-core" in name:
+                    pod = name
+                    logger.debug(f"pod_name: {pod}")
+                    w.stop()
+            exec_command = ['bcmcmd', cmd]
+            logger.debug(f"exec command : {exec_command}")
+            resp = stream(self.core_v1.connect_get_namespaced_pod_exec,pod,USONIC_NAMESPACE,command=exec_command,container = 'syncd',stderr=True, stdin=False,stdout=True, tty=False)
+            
+            logger.debug(f"Response: {resp}")
 
     def create_usonic_config_bcm(self, interface_list):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
@@ -241,3 +284,4 @@ class incluster_apis(object):
                     return
                 if self.usonic_deleted != 1 and event["type"] == "DELETED":
                     self.usonic_deleted = 1
+
