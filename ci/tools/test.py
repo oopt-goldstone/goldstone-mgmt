@@ -38,14 +38,16 @@ def test_vlan(cli):
 
 def test_auto_nego(cli):
     ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego disable"')
 
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-sonic")
     check_pod(cli, "gs-mgmt-sonic")
     time.sleep(90)
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "auto-nego enable" in output
+    ssh(cli, 'gscli -c "interface Ethernet3_1; no auto-nego"')
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "auto-nego" not in output
+
 
 def test_intf_type(cli):
     ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type SR4"')
@@ -57,6 +59,10 @@ def test_intf_type(cli):
     time.sleep(90)
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "interface-type CR4" in output
+    ssh(cli, 'gscli -c "interface Ethernet1_1; no interface-type"')
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "interface-type" not in output
+
 
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
