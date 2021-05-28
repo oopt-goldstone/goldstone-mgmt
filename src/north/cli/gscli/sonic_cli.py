@@ -60,7 +60,7 @@ class Interface_CLI(Object):
         self.fec_list = ["fc", "rs"]
         self.breakout_list = ["2X50G", "4X25G", "4X10G"]
         self.interface_type_list = ["SR", "SR4", "CR", "CR4", "LR", "LR4", "KR", "KR4"]
-        self.auto_nego_list = ["enable"]
+        self.auto_nego_list = ["enable", "disable"]
         self.tagging_mode_list = ["trunk", "access"]
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
@@ -195,6 +195,8 @@ class Interface_CLI(Object):
                 for ifname in self.ifnames:
                     if args[0] == "enable":
                         self.sonic.port.set_auto_nego(ifname, "yes")
+                    if args[0] == "disable":
+                        self.sonic.port.set_auto_nego(ifname, "no")
 
         @self.command(WordCompleter(self.breakout_list))
         def breakout(args):
