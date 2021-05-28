@@ -1,0 +1,104 @@
+module goldstone-uplink-failure-detection {
+
+  yang-version "1.1";
+
+  // namespace
+  namespace "http://goldstone.net/yang/goldstone-uplink-failure-detection";
+
+  prefix "gs-ufd";
+
+  // import some basic types
+  import goldstone-interfaces {
+    prefix gs-if;
+  }
+
+  // meta
+  organization
+    "Goldstone";
+
+  description
+    "Goldstone uplink failure detection";
+
+  revision 2021-05-28 {
+    description
+      "Initial revision.";
+  }
+
+
+  // grouping statements
+
+  grouping ufd-config {
+    description "uplink failure detection configuration container.";
+
+    leaf ufd-id {
+      type string{
+        pattern "ufd(6[0-4]|[1-5][0-9]|[1-9])" {
+          error-message "Invalid ufd name pattern [supported pattern : ufd<0-64>]";
+          error-app-tag ufd-id-invalid;
+        }
+      }
+      description "UFD group id.";
+    }
+
+    leaf-list uplink {
+      type leafref {
+        path "/gs-if:interfaces/gs-if:interface/gs-if:name";
+      }
+      description "List of uplink interfaces to be monitored";
+    }
+
+    leaf-list downlink {
+      type leafref {
+        path "/gs-if:interfaces/gs-if:interface/gs-if:name";
+      }
+      description "List of downlink interfaces to be disabled";
+    }
+  }
+
+
+  grouping ufd-state {
+    description "uplink failure detection State variables container.";
+
+    // placeholder
+  }
+
+
+  grouping ufd-top {
+    description "Top-level grouping for uplink failure detection configuration";
+
+    container ufd-groups {
+      description "Container for uplink failure detection configuration and
+      state variables";
+
+      list ufd-group {
+        key "ufd-id";
+
+        description "Configured UFD groups keyed by ufd-id";
+
+        leaf ufd-id {
+          type leafref {
+            path "../config/ufd-id";
+          }
+          description "references the configured ufd-id";
+        }
+
+        container config {
+          description "Configuration parameters for uplink failure detection";
+
+          uses ufd-config;
+        }
+
+        container state {
+          config false;
+          description "State variables for uplink failure detection";
+
+          uses ufd-state;
+        }
+      }
+    }
+  }
+
+  uses ufd-top;
+
+}
+       
