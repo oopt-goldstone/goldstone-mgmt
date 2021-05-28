@@ -38,7 +38,9 @@ def test_vlan(cli):
 
 def test_auto_nego(cli):
     ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego disable"')
 
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-sonic")
     check_pod(cli, "gs-mgmt-sonic")
     time.sleep(90)

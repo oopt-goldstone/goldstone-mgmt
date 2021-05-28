@@ -285,6 +285,8 @@ class Port(object):
 
                     if auto_nego == "yes":
                         stdout.info("  {} {}".format("auto-nego", "enable"))
+                    if auto_nego == "no":
+                        stdout.info("  {} {}".format("auto-nego", "disable"))
 
                 elif v == "interface-type":
                     try:
