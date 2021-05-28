@@ -724,6 +724,7 @@ module goldstone-tai {
   notification module-notify-event {
     leaf-list keys {
       type string;
+      default "false";
       description
         "list of valid attribute name stored in the event";
     }
@@ -734,6 +735,7 @@ module goldstone-tai {
   notification host-interface-notify-event {
     leaf-list keys {
       type string;
+      default "false";
       description
         "list of valid attribute name stored in the event";
     }
@@ -744,6 +746,7 @@ module goldstone-tai {
   notification host-interface-alarm-notification-event {
     leaf-list keys {
       type string;
+      default "false";
       description
         "list of valid attribute name stored in the event";
     }
@@ -754,6 +757,7 @@ module goldstone-tai {
   notification network-interface-notify-event {
     leaf-list keys {
       type string;
+      default "false";
       description
         "list of valid attribute name stored in the event";
     }
@@ -764,6 +768,7 @@ module goldstone-tai {
   notification network-interface-alarm-notification-event {
     leaf-list keys {
       type string;
+      default "false";
       description
         "list of valid attribute name stored in the event";
     }
