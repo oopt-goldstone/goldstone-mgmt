@@ -76,8 +76,9 @@ class ManagementInterfaceServer:
                             ].remove().commit()
 
     async def ip_change_cb(self, event, req_id, changes, priv):
-        if event != "change":
-            return
+
+        update_operds = False
+
         with pyroute2.NDB() as ndb:
             intf = ndb.interfaces[MGMT_INTF_NAME]
             for change in changes:
@@ -101,19 +102,22 @@ class ManagementInterfaceServer:
                             raise sysrepo.SysrepoInvalArgError(
                                 "interface name is not the management interface"
                             )
+
                         try:
-                            ndb.interfaces[intf_name].add_ip(
-                                ip + "/" + str(change.value)
-                            ).commit()
+                            v = ndb.interfaces[intf_name].add_ip(f"{ip}/{change.value}")
+                            if event == "done":
+                                v.commit()
                         except KeyError as error:
                             raise sysrepo.SysrepoInvalArgError(
                                 f"Object exists: {str(error)}"
                             )
+
                 if isinstance(change, sysrepo.ChangeModified):
                     raise sysrepo.SysrepoUnsupportedError(
                         "Modification is not supported"
                     )
                 if isinstance(change, sysrepo.ChangeDeleted):
+                    update_operds = True
                     logger.debug("Change delete")
                     if xpath.endswith("prefix-length"):
                         intf_name = ""
@@ -137,9 +141,14 @@ class ManagementInterfaceServer:
                             .filter(address=ip)[0]["prefixlen"]
                         )
 
-                        ndb.interfaces[intf_name].del_ip(
+                        v = ndb.interfaces[intf_name].del_ip(
                             ip + "/" + str(prefix_length)
-                        ).commit()
+                        )
+                        if event == "done":
+                            v.commit()
+
+        if update_operds:
+            self.update_oper_db()
 
     def get_neighbor(self):
         intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAME)
