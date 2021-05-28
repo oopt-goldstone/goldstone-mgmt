@@ -143,8 +143,9 @@ class Transponder(object):
             "voa-rx",
             "tx-dis",
             "differential-encoding",
+            "loopback-type",
         ]
-        hostif_run_conf_list = ["fec-type"]
+        hostif_run_conf_list = ["fec-type", "loopback-type"]
 
         try:
             tree = self.sr_op.get_data(self.XPATH)
