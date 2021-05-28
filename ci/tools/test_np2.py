@@ -23,6 +23,9 @@ def run_np2_cli(cli, host, commands):
         f.write(
             f"""#!/bin/sh
 netopeer2-cli <<EOF
+auth keys remove 0
+EOF || true # this can fail
+netopeer2-cli <<EOF
 auth pref publickey 4
 auth keys add id_rsa.pub id_rsa
 auth hostkey-check disable

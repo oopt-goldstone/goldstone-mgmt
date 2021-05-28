@@ -54,6 +54,7 @@ class Interface_CLI(Object):
             "switchport": self.switchprt_dict,
             "breakout": None,
             "interface-type": None,
+            "auto-nego": None,
             "fec": None,
         }
         self.fec_list = ["fc", "rs"]
@@ -74,6 +75,14 @@ class Interface_CLI(Object):
                     self.sonic.port.set_speed(
                         ifname, sonic_defaults.SPEED, config=False
                     )
+            elif args[0] == "interface-type":
+                for ifname in self.ifnames:
+                    self.sonic.port.set_interface_type(
+                        ifname, sonic_defaults.INTF_TYPE, config=False
+                    )
+            elif args[0] == "auto-nego":
+                for ifname in self.ifnames:
+                    self.sonic.port.set_auto_nego(ifname, "no", config=False)
             elif args[0] == "mtu":
                 for ifname in self.ifnames:
                     self.sonic.port.set_mtu(ifname, None)

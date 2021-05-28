@@ -30,6 +30,8 @@ def main(host, username, password):
         # stop SNMP service
         ssh(cli, "systemctl stop gs-snmp || true")  # can fail
 
+        ssh(cli, "kubectl delete -f /var/lib/rancher/k3s/server/manifests/mgmt || true") # can fail
+
         run(
             "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-north-snmp gs-test/gs-mgmt-xlate-openconfig"
         )

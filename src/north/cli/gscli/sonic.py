@@ -20,6 +20,7 @@ stderr = logging.getLogger("stderr")
 
 class sonic_defaults:
     SPEED = "100000"
+    INTF_TYPE = "KR4"
 
 
 class Vlan(object):
@@ -230,7 +231,16 @@ class Port(object):
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
 
-        runn_conf_list = ["admin-status", "ipv4", "fec", "speed", "name", "breakout", "interface-type", "auto-nego"]
+        runn_conf_list = [
+            "admin-status",
+            "ipv4",
+            "fec",
+            "speed",
+            "name",
+            "breakout",
+            "interface-type",
+            "auto-nego",
+        ]
         v_dict = {}
 
         interface_list = self.get_interface_list("running", False)
@@ -354,11 +364,13 @@ class Port(object):
         else:
             set_attribute(self.sr_op, xpath, "interface", ifname, "fec", "none")
 
-    def set_auto_nego(self, ifname, mode):
+    def set_auto_nego(self, ifname, mode, config=True):
         xpath = self.xpath(ifname)
         set_attribute(self.sr_op, xpath, "interface", ifname, "auto-nego", mode)
+        if config == False:
+            self.sr_op.delete_data("{}/auto-nego".format(xpath))
 
-    def set_interface_type(self, ifname, value):
+    def set_interface_type(self, ifname, value, config=True):
         xpath = self.xpath(ifname)
         if value == None:
             set_attribute(
@@ -368,6 +380,8 @@ class Port(object):
             set_attribute(
                 self.sr_op, xpath, "interface", ifname, "interface-type", value
             )
+        if config == False:
+            self.sr_op.delete_data("{}/interface-type".format(xpath))
 
     def set_mtu(self, ifname, value):
         xpath = self.xpath(ifname)
