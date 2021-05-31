@@ -66,6 +66,49 @@ def test_intf_type(cli):
     assert "interface-type" not in output
 
 
+def test_ufd(cli):
+    ssh(cli, 'gscli -c "ufd ufd1; uplink Ethernet1_1;"')
+    ssh(
+        cli,
+        'gscli -c "ufd ufd1; downlink Ethernet2_1,Ethernet5_1,Ethernet3_1,Ethernet14_1,Ethernet11_1;"',
+    )
+    output = ssh(cli, 'gscli -c "show running-config ufd"')
+    assert "uplink Ethernet1_1" in output
+    assert (
+        "downlink Ethernet2_1,Ethernet3_1,Ethernet5_1,Ethernet11_1,Ethernet14_1"
+        in output
+    )
+
+    ssh(cli, 'gscli -c "ufd ufd2; uplink Ethernet1_1;"')
+    try:
+        ssh(cli, 'gscli -c "ufd ufd2; uplink Ethernet2_1;"')
+    except SSHException as e:
+        assert "uplink already configured" in e.stderr
+
+    ssh(cli, 'gscli -c "ufd ufd2; downlink Ethernet3_1,Ethernet8_1;"')
+    try:
+        ssh(cli, 'gscli -c "ufd ufd2; downlink Ethernet4_1;"')
+    except SSHException as e:
+        assert "downlink already configured" in e.stderr
+
+    ssh(cli, 'gscli -c "ufd ufd3; uplink Ethernet6_1;"')
+    try:
+        ssh(cli, 'gscli -c "ufd ufd3; downlink Ethernet2_1,Ethernet3_1,Ethernet6_1;"')
+    except SSHException as e:
+        assert "Ethernet6_1:Already configured in uplink" in e.stderr
+
+    ssh(cli, 'gscli -c "ufd ufd4; downlink Ethernet11_1;"')
+    try:
+        ssh(cli, 'gscli -c "ufd ufd4; downlink Ethernet11_1;"')
+    except SSHException as e:
+        assert "Ethernet11_1:Already configured in downlink" in e.stderr
+
+    try:
+        ssh(cli, 'gscli -c "ufd ufd5; uplink 1eth;"')
+    except SSHException as e:
+        assert "no port found: 1eth" in e.stderr
+
+
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
     lines = [line for line in output.split() if "piu" in line]

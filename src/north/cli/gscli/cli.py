@@ -73,6 +73,22 @@ class VlanGroupCommand(Command):
         return "usage:\n" f" {self.parent.name} {self.name} details"
 
 
+class UfdGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.sonic = Sonic(context.conn)
+        self.ufd = self.sonic.ufd
+
+    def exec(self, line):
+        if len(line) == 0:
+            return self.ufd.show_ufd()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return " >> usage:\n" f" {self.parent.name} {self.name} "
+
+
 class ArpGroupCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
@@ -248,6 +264,7 @@ class RunningConfigCommand(Command):
         "interface": Command,
         "aaa": Command,
         "mgmt-if": Command,
+        "ufd": Command,
     }
 
     def exec(self, line):
@@ -275,6 +292,10 @@ class RunningConfigCommand(Command):
             stdout.info("!")
             sonic.port_run_conf()
 
+        elif module == "ufd":
+            stdout.info("!")
+            sonic.ufd_run_conf()
+
         elif module == "vlan":
             stdout.info("!")
             sonic.vlan_run_conf()
@@ -285,6 +306,7 @@ class GlobalShowCommand(Command):
         "interface": InterfaceGroupCommand,
         "vlan": VlanGroupCommand,
         "arp": ArpGroupCommand,
+        "ufd": UfdGroupCommand,
         "ip": IPGroupCommand,
         "datastore": Command,
         "tech-support": Command,
@@ -442,6 +464,7 @@ class GlobalShowCommand(Command):
             "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST",
             "/goldstone-interfaces:interfaces/interface",
             "/goldstone-mgmt-interfaces:interfaces/interface",
+            "/goldstone-uplink-failure-detection:/ufd-groups/ufd-group",
             "/goldstone-routing:routing/static-routes/ipv4/route",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",
@@ -481,6 +504,7 @@ class GlobalShowCommand(Command):
             f" {self.name} ip route\n"
             f" {self.name} transponder (<transponder_name>|summary)\n"
             f" {self.name} chassis-hardware (fan|psu|led|transceiver|thermal|system|all)\n"
+            f" {self.name} ufd \n"
             f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"
             f" {self.name} version \n"
             f" {self.name} aaa \n"

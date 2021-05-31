@@ -24,7 +24,7 @@ import time
 from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
 from .tai_cli import Transponder
-from .sonic_cli import Interface_CLI, Vlan_CLI
+from .sonic_cli import Interface_CLI, Vlan_CLI, Ufd_CLI
 from .sonic import Sonic
 from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI, System
 from .system import AAA, TACACS, Mgmtif
@@ -113,6 +113,7 @@ class Root(Object):
             "vlan": FuzzyWordCompleter(lambda: ["range"] + self.get_vid(), WORD=True),
             "aaa": {"authentication": {"login": None}},
             "tacacs-server": {"host": None},
+            "ufd": {},
         }
         # TODO:add timer for inactive user
 
@@ -173,6 +174,12 @@ class Root(Object):
                 return Mgmt_CLI(conn, self, line[0])
             else:
                 return Interface_CLI(conn, self, line[0])
+
+        @self.command(FuzzyWordCompleter(lambda: self.get_ufd_id(), WORD=True))
+        def ufd(line):
+            if len(line) != 1:
+                raise InvalidInput("usage: ufd <ufd-id>")
+            return Ufd_CLI(conn, self, line[0])
 
         @self.command()
         def date(line):
@@ -245,6 +252,12 @@ class Root(Object):
                         stderr.info(
                             "The vlan-id entered must be numbers and not letters"
                         )
+                elif line[0] == "ufd":
+                    ufd_list = self.get_ufd_id()
+                    if line[1] in ufd_list:
+                        self.sonic.ufd.delete_ufd(line[1])
+                    else:
+                        stderr.info("UFD id provided doesn't match")
                 else:
                     raise InvalidInput(self.no_usage())
             elif len(line) == 3:
@@ -306,6 +319,12 @@ class Root(Object):
         d = self.session.get_data(path, no_subs=True)
         return [v["name"] for v in d.get("modules", {}).get("module", {})]
 
+    def get_ufd_id(self):
+        path = "/goldstone-uplink-failure-detection:ufd-groups"
+        self.session.switch_datastore("running")
+        d = self.session.get_data(path)
+        return [v["ufd-id"] for v in d.get("ufd-groups", {}).get("ufd-group", {})]
+
     def date(self, line):
         date = " ".join(["date"] + line)
         subprocess.call(date, shell=True)
@@ -316,7 +335,8 @@ class Root(Object):
             "no vlan <vid>\n"
             "no vlan range <range>\n"
             "no aaa authentication login\n"
-            "no tacacs-server host <address>"
+            "no tacacs-server host <address>\n"
+            "no ufd <ufd-id>"
         )
 
     def enable_notification(self):
