@@ -510,7 +510,6 @@ class Server(object):
         return r
 
     async def tai_cb(self, obj, attr_meta, msg):
-        logger.info("tai_cb")
         self.sess.switch_datastore("running")
         ly_ctx = self.sess.get_ly_ctx()
 
@@ -520,11 +519,14 @@ class Server(object):
             location = obj.get("location")
             key = location2name(location)
             xpath = f"/goldstone-tai:modules/module[name='{key}']/enable-notify"
-            data = self.sess.get_data(
-                xpath,
-                include_implicit_defaults=True,
-            )
-            enable_notify = data["modules"]["module"][key]["enable-notify"]
+            try:
+                data = self.sess.get_data(
+                    xpath,
+                    include_implicit_defaults=True,
+                )
+                enable_notify = data["modules"]["module"][key]["enable-notify"]
+            except sysrepo.errors.SysrepoNotFoundError as e:
+                enable_notify = False
 
             if not enable_notify:
                 return
@@ -542,13 +544,16 @@ class Server(object):
             key = location2name(module_location)
             index = await obj.get("index")
             xpath = f"/goldstone-tai:modules/module[name='{key}']/network-interface[name='{index}']/config/enable-{attr_meta.short_name}"
-            notify_data = self.sess.get_data(
-                xpath,
-                include_implicit_defaults=True,
-            )
-            enable_notify = notify_data["modules"]["module"][key]["network-interface"][
-                index
-            ]["config"][f"enable-{attr_meta.short_name}"]
+            try:
+                notify_data = self.sess.get_data(
+                    xpath,
+                    include_implicit_defaults=True,
+                )
+                enable_notify = notify_data["modules"]["module"][key]["network-interface"][
+                    index
+                ]["config"][f"enable-{attr_meta.short_name}"]
+            except sysrepo.errors.SysrepoNotFoundError as e:
+                enable_notify = False
 
             if not enable_notify:
                 return
@@ -566,13 +571,16 @@ class Server(object):
             key = location2name(module_location)
             index = await obj.get("index")
             xpath = f"/goldstone-tai:modules/module[name='{key}']/host-interface[name='{index}']/config/enable-{attr_meta.short_name}"
-            notifiy_data = self.sess.get_data(
-                xpath,
-                include_implicit_defaults=True,
-            )
-            enable_notify = notify_data["modules"]["module"][key]["host-interface"][
-                index
-            ]["config"][f"enable-{attr_meta.short_name}"]
+            try:
+                notifiy_data = self.sess.get_data(
+                    xpath,
+                    include_implicit_defaults=True,
+                )
+                enable_notify = notify_data["modules"]["module"][key]["host-interface"][
+                    index
+                ]["config"][f"enable-{attr_meta.short_name}"]
+            except sysrepo.errors.SysrepoNotFoundError as e:
+                enable_notify = False
 
             if not enable_notify:
                 return
