@@ -594,10 +594,235 @@ class Port(object):
         print_tabular(data, "")
 
 
+class UFD(object):
+
+    XPATH = "/goldstone-uplink-failure-detection:ufd-groups"
+
+    def xpath_ufd(self, ufd_id):
+        return "{}/ufd-group[ufd-id='{}']".format(self.XPATH, ufd_id)
+
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
+        self.sr_op = sysrepo_wrap(self.session)
+        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
+
+    def create_ufd(self, ufd_id):
+        xpath = "/goldstone-uplink-failure-detection:ufd-groups/ufd-group[ufd-id='{}']".format(
+            ufd_id
+        )
+
+        try:
+            self.sr_op.get_data(xpath, "running")
+        except sr.SysrepoNotFoundError as e:
+            self.sr_op.set_data(f"{xpath}/config/ufd-id", ufd_id)
+
+    def delete_ufd(self, ufd_id):
+        self.sr_op.delete_data(self.xpath_ufd(ufd_id))
+        return
+
+    def add_uplink(self, ufd_id, port):
+        try:
+            _ = self.sr_op.get_data(
+                "{}/config/uplink".format(self.xpath_ufd(ufd_id)), "running"
+            )
+            stdout.info("uplink already configured")
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+
+            try:
+                self.tree = self.sr_op.get_data(
+                    "{}/ufd-group".format(self.XPATH), "running"
+                )
+                downlink_ports = self.tree["ufd-groups"]["ufd-group"][ufd_id]["config"][
+                    "downlink"
+                ]
+                if port in downlink_ports:
+                    raise InvalidInput(f"{port}:Already configured in downlink")
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                pass
+
+            try:
+                self.sr_op.set_data(
+                    "{}/config/uplink".format(self.xpath_ufd(ufd_id)), port
+                )
+            except sr.errors.SysrepoValidationFailedError as error:
+                msg = str(error)
+                stderr.info(msg)
+
+    def remove_uplink(self, ufd_id):
+        xpath = self.xpath_ufd(ufd_id)
+        self.sr_op.delete_data(f"{xpath}/config/uplink")
+
+    def add_downlink(self, ufd_id, downlink_ports):
+        try:
+            _ = self.sr_op.get_data(
+                "{}/config/downlink".format(self.xpath_ufd(ufd_id)), "running"
+            )
+            stdout.info("downlink already configured")
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+
+            try:
+                self.tree = self.sr_op.get_data(
+                    "{}/ufd-group".format(self.XPATH), "running"
+                )
+                uplink_ports = self.tree["ufd-groups"]["ufd-group"][ufd_id]["config"][
+                    "uplink"
+                ]
+                for i in downlink_ports:
+                    if i in uplink_ports:
+                        raise InvalidInput(f"{i}:Already configured in uplink")
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                pass
+
+            try:
+                for i in downlink_ports:
+                    self.sr_op.set_data(
+                        ("{}/config/downlink".format(self.xpath_ufd(ufd_id))), i
+                    )
+            except sr.errors.SysrepoValidationFailedError as error:
+                msg = str(error)
+                stderr.info(msg)
+
+    def remove_downlink(self, ufd_id):
+        xpath = self.xpath_ufd(ufd_id)
+        self.sr_op.delete_data(f"{xpath}/config/downlink")
+
+    def sort_ufd_ids(self, ufd_ids):
+        self.ufd_ids = ufd_ids
+
+        sorted_ufd_ids = []
+        for ufd_id in self.ufd_ids:
+            sorted_ufd_ids.append(int(ufd_id[3:]))
+
+        sorted_ufd_ids.sort()
+
+        self.ufd_ids = []
+        for ufd_id in sorted_ufd_ids:
+            self.ufd_ids.append("ufd" + str(ufd_id))
+
+        return self.ufd_ids
+
+    def show_ufd(self, UFD_id=None):
+        try:
+            #Fecting from running DS since south is not implemented
+            self.tree = self.sr_op.get_data(
+                "{}/ufd-group".format(self.XPATH), "running"
+            )
+            ufd_id_list = self.tree["ufd-groups"]["ufd-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return
+
+        if ufd_id_list == {}:
+            stdout.info(
+                tabulate(
+                    [], ["UFD-ID", "Uplink-Ports", "Downlink-Ports"], tablefmt="pretty"
+                )
+            )
+        else:
+            data_tabulate = []
+            uplink_ports = []
+            downlink_ports = []
+            ufd_ids = []
+
+            if UFD_id != None:
+                ufd_ids.append(UFD_id)
+            else:
+                for data in ufd_id_list:
+                    ufd_ids.append(data["ufd-id"])
+
+                ufd_ids = self.sort_ufd_ids(ufd_ids)
+
+            for ufd_id in ufd_ids:
+                data = ufd_id_list[ufd_id]
+                try:
+                    uplink_ports.append(list(data["config"]["uplink"]))
+                except (sr.errors.SysrepoNotFoundError, KeyError):
+                    uplink_ports.append([])
+                try:
+                    downlink_ports.append(list(data["config"]["downlink"]))
+                except (sr.errors.SysrepoNotFoundError, KeyError):
+                    downlink_ports.append([])
+
+            for i in range(len(ufd_ids)):
+
+                if len(uplink_ports[i]) > 0:
+                    if len(downlink_ports[i]) > 0:
+                        data_tabulate.append(
+                            [ufd_ids[i], uplink_ports[i][0], downlink_ports[i][0]]
+                        )
+                    else:
+                        data_tabulate.append([ufd_ids[i], uplink_ports[i][0], "-"])
+                elif len(downlink_ports[i]) > 0:
+                    data_tabulate.append([ufd_ids[i], "-", downlink_ports[i][0]])
+                else:
+                    data_tabulate.append([ufd_ids[i], "-", "-"])
+
+                if len(uplink_ports[i]) > len(downlink_ports[i]):
+                    for j in range(1, len(uplink_ports[i])):
+                        if j < len(downlink_ports[i]):
+                            data_tabulate.append(
+                                ["", uplink_ports[i][j], downlink_ports[i][j]]
+                            )
+                        else:
+                            data_tabulate.append(["", uplink_ports[i][j], ""])
+                else:
+                    for j in range(1, len(downlink_ports[i])):
+                        if j < len(uplink_ports[i]):
+                            data_tabulate.append(
+                                ["", uplink_ports[i][j], downlink_ports[i][j]]
+                            )
+                        else:
+                            data_tabulate.append(["", "", downlink_ports[i][j]])
+
+                data_tabulate.append(["", "", ""])
+
+            stdout.info(
+                tabulate(
+                    data_tabulate,
+                    ["UFD-ID", "Uplink Ports", "Downlink Ports"],
+                    tablefmt="pretty",
+                    colalign=("left",),
+                )
+            )
+
+    def run_conf(self):
+        try:
+            self.tree = self.sr_op.get_data(
+                "{}/ufd-group".format(self.XPATH), "running"
+            )
+            d_list = self.tree["ufd-groups"]["ufd-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return
+        for data in d_list:
+            stdout.info("ufd {}".format(data["config"]["ufd-id"]))
+            try:
+                uplink_ports = data["config"]["uplink"]
+                uplink_ports_string = ""
+                for port in uplink_ports:
+                    uplink_ports_string += port + ","
+                uplink_ports_string = uplink_ports_string[:-1]
+                stdout.info(f"  uplink {uplink_ports_string}")
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                pass
+
+            try:
+                downlink_ports = data["config"]["downlink"]
+                downlink_ports_string = ""
+                for port in downlink_ports:
+                    downlink_ports_string += port + ","
+                downlink_ports_string = downlink_ports_string[:-1]
+                stdout.info(f"\n  downlink {downlink_ports_string}")
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                pass
+
+            stdout.info("  quit")
+            stdout.info("!")
+
+
 class Sonic(object):
     def __init__(self, conn):
         self.port = Port(conn, self)
         self.vlan = Vlan(conn, self)
+        self.ufd = UFD(conn, self)
 
     def port_run_conf(self):
         self.port.run_conf()
@@ -605,16 +830,22 @@ class Sonic(object):
     def vlan_run_conf(self):
         self.vlan.run_conf()
 
+    def ufd_run_conf(self):
+        self.ufd.run_conf()
+
     def run_conf(self):
         stdout.info("!")
         self.vlan_run_conf()
         self.port_run_conf()
+        self.ufd_run_conf()
 
     def tech_support(self):
         stdout.info("\nshow vlan details:\n")
         self.vlan.show_vlan()
         stdout.info("\nshow interface description:\n")
         self.port.show_interface()
+        stdout.info("\nshow ufd:\n")
+        self.ufd.show_ufd()
 
 
 def set_attribute(sr_op, path, module, name, attr, value):
