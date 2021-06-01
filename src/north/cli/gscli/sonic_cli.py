@@ -310,7 +310,6 @@ class Ufd_CLI(Object):
             if len(downlink_ports) != len(port_names):
                 invalid_ports = [i for i in port_names if i not in self.downlink_ports]
                 raise InvalidInput(f"no ports found: {invalid_ports}")
-            downlink_ports = self.sort_ports(downlink_ports)
             self.sonic.ufd.add_downlink(self.ufd_id, downlink_ports)
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
@@ -337,26 +336,6 @@ class Ufd_CLI(Object):
             if len(args) != 0:
                 return parent.show(args)
             self.sonic.ufd.show_ufd(self.ufd_id)
-
-    def sort_ports(self, intfs):
-
-        intf_index = 8
-
-        intf_id_list = []
-        intf_list = []
-        for intf in intfs:
-            temp_intf = intf.split("_")
-            intf_id = temp_intf[0][intf_index:] + "." + temp_intf[1]
-            intf_id_list.append(float(intf_id))
-
-        intf_id_list.sort()
-
-        for intf_id in intf_id_list:
-            intf_name = "Ethernet" + str(intf_id)
-            intf_name = intf_name.replace(".", "_")
-            intf_list.append(intf_name)
-
-        return intf_list
 
     def get_ifnames(self):
         return [v["name"] for v in self.sonic.port.get_interface_list("operational")]

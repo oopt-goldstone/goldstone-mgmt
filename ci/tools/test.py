@@ -79,30 +79,6 @@ def test_ufd(cli):
         in output
     )
 
-    ssh(cli, 'gscli -c "ufd ufd2; uplink Ethernet1_1;"')
-    try:
-        ssh(cli, 'gscli -c "ufd ufd2; uplink Ethernet2_1;"')
-    except SSHException as e:
-        assert "uplink already configured" in e.stderr
-
-    ssh(cli, 'gscli -c "ufd ufd2; downlink Ethernet3_1,Ethernet8_1;"')
-    try:
-        ssh(cli, 'gscli -c "ufd ufd2; downlink Ethernet4_1;"')
-    except SSHException as e:
-        assert "downlink already configured" in e.stderr
-
-    ssh(cli, 'gscli -c "ufd ufd3; uplink Ethernet6_1;"')
-    try:
-        ssh(cli, 'gscli -c "ufd ufd3; downlink Ethernet2_1,Ethernet3_1,Ethernet6_1;"')
-    except SSHException as e:
-        assert "Ethernet6_1:Already configured in uplink" in e.stderr
-
-    ssh(cli, 'gscli -c "ufd ufd4; downlink Ethernet11_1;"')
-    try:
-        ssh(cli, 'gscli -c "ufd ufd4; downlink Ethernet11_1;"')
-    except SSHException as e:
-        assert "Ethernet11_1:Already configured in downlink" in e.stderr
-
     try:
         ssh(cli, 'gscli -c "ufd ufd5; uplink 1eth;"')
     except SSHException as e:

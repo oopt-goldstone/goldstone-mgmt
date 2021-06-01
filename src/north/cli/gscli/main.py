@@ -28,6 +28,7 @@ from .sonic_cli import Interface_CLI, Vlan_CLI, Ufd_CLI
 from .sonic import Sonic
 from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI, System
 from .system import AAA, TACACS, Mgmtif
+from natsort import natsorted
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +324,9 @@ class Root(Object):
         path = "/goldstone-uplink-failure-detection:ufd-groups"
         self.session.switch_datastore("running")
         d = self.session.get_data(path)
-        return [v["ufd-id"] for v in d.get("ufd-groups", {}).get("ufd-group", {})]
+        return natsorted(
+            [v["ufd-id"] for v in d.get("ufd-groups", {}).get("ufd-group", {})]
+        )
 
     def date(self, line):
         date = " ".join(["date"] + line)
