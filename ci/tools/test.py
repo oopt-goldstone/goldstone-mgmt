@@ -67,10 +67,10 @@ def test_intf_type(cli):
 
 
 def test_ufd(cli):
-    ssh(cli, 'gscli -c "ufd ufd1; uplink Ethernet1_1;"')
+    ssh(cli, 'gscli -c "ufd ufd1; uplink Ethernet1_1"')
     ssh(
         cli,
-        'gscli -c "ufd ufd1; downlink Ethernet2_1,Ethernet5_1,Ethernet3_1,Ethernet14_1,Ethernet11_1;"',
+        'gscli -c "ufd ufd1; downlink Ethernet2_1,Ethernet5_1,Ethernet3_1,Ethernet14_1,Ethernet11_1"',
     )
     output = ssh(cli, 'gscli -c "show running-config ufd"')
     assert "uplink Ethernet1_1" in output
@@ -80,7 +80,7 @@ def test_ufd(cli):
     )
 
     try:
-        ssh(cli, 'gscli -c "ufd ufd5; uplink 1eth;"')
+        ssh(cli, 'gscli -c "ufd ufd5; uplink 1eth"')
     except SSHException as e:
         assert "no port found: 1eth" in e.stderr
 
