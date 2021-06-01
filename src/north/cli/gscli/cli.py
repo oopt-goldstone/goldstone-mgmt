@@ -464,7 +464,7 @@ class GlobalShowCommand(Command):
             "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST",
             "/goldstone-interfaces:interfaces/interface",
             "/goldstone-mgmt-interfaces:interfaces/interface",
-            "/goldstone-uplink-failure-detection:/ufd-groups/ufd-group",
+            "/goldstone-uplink-failure-detection:ufd-groups/ufd-group",
             "/goldstone-routing:routing/static-routes/ipv4/route",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",
@@ -510,7 +510,7 @@ class GlobalShowCommand(Command):
             f" {self.name} aaa \n"
             f" {self.name} tacacs \n"
             f" {self.name} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
-            f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|]\n"
+            f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|ufd]\n"
             f" {self.name} tech-support"
         )
 
