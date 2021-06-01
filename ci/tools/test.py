@@ -936,6 +936,7 @@ def main(host, username, password):
             test_vlan_member_add_delete(cli)
             test_auto_nego(cli)
             test_intf_type(cli)
+            test_ufd(cli)
             test_port_breakout(cli)
         except Exception as e:
             ssh(cli, "kubectl get pods -A")
