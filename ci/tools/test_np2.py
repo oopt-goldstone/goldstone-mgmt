@@ -22,6 +22,9 @@ def run_np2_cli(cli, host, commands):
     with open("/tmp/check_np2.sh", "w") as f:
         f.write(
             f"""#!/bin/sh
+
+set -eux
+
 netopeer2-cli <<EOF
 auth keys remove 0
 EOF || true # this can fail
