@@ -7,7 +7,6 @@ module goldstone-uplink-failure-detection {
 
   prefix "gs-ufd";
 
-  }
 
   // meta
   organization
