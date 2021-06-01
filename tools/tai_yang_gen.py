@@ -165,6 +165,7 @@ if __name__ == "__main__":
                 shorttypename = "enable-" + shorttypename
                 keys = Statement("leaf-list", "keys")
                 keys.add(Statement("type", "string"))
+                keys.add(Statement("default", "'false'"))
                 keys.add(
                     Statement(
                         "description",

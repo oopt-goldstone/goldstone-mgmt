@@ -514,12 +514,76 @@ class Server(object):
         ly_ctx = self.sess.get_ly_ctx()
 
         objname = None
-        if isinstance(obj, taish.NetIf):
+        if isinstance(obj, taish.Module):
+            objname = "module"
+            location = obj.get("location")
+            key = location2name(location)
+            xpath = f"/goldstone-tai:modules/module[name='{key}']/enable-notify"
+            try:
+                data = self.sess.get_data(
+                    xpath,
+                    include_implicit_defaults=True,
+                )
+                enable_notify = data["modules"]["module"][key]["enable-notify"]
+            except sysrepo.errors.SysrepoNotFoundError as e:
+                enable_notify = False
+
+            if not enable_notify:
+                return
+
+        elif isinstance(obj, taish.NetIf):
             objname = "network-interface"
+            module = obj.obj.module_oid
+            modules = await self.taish.list()
+            for location, m in modules.items():
+                if m.oid:
+                    if m.oid == module:
+                        module_location = location
+                else:
+                    continue
+            key = location2name(module_location)
+            index = await obj.get("index")
+            xpath = f"/goldstone-tai:modules/module[name='{key}']/network-interface[name='{index}']/config/enable-{attr_meta.short_name}"
+            try:
+                notify_data = self.sess.get_data(
+                    xpath,
+                    include_implicit_defaults=True,
+                )
+                enable_notify = notify_data["modules"]["module"][key]["network-interface"][
+                    index
+                ]["config"][f"enable-{attr_meta.short_name}"]
+            except sysrepo.errors.SysrepoNotFoundError as e:
+                enable_notify = False
+
+            if not enable_notify:
+                return
+
         elif isinstance(obj, taish.HostIf):
             objname = "host-interface"
-        elif isinstance(obj, taish.Module):
-            objname = "module"
+            module = obj.obj.module_oid
+            modules = await self.taish.list()
+            for location, m in modules.items():
+                if m.oid:
+                    if m.oid == module:
+                        module_location = location
+                else:
+                    continue
+            key = location2name(module_location)
+            index = await obj.get("index")
+            xpath = f"/goldstone-tai:modules/module[name='{key}']/host-interface[name='{index}']/config/enable-{attr_meta.short_name}"
+            try:
+                notifiy_data = self.sess.get_data(
+                    xpath,
+                    include_implicit_defaults=True,
+                )
+                enable_notify = notify_data["modules"]["module"][key]["host-interface"][
+                    index
+                ]["config"][f"enable-{attr_meta.short_name}"]
+            except sysrepo.errors.SysrepoNotFoundError as e:
+                enable_notify = False
+
+            if not enable_notify:
+                return
 
         if not objname:
             logger.error(f"invalid object: {obj}")
