@@ -120,16 +120,16 @@ def test_tai(cli):
     )
     assert "0.00 dBm" in output
 
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx',
-    )
-    assert "0.9" in output
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx',
-    )
-    assert "0.0" in output
+#    output = ssh(
+#        cli,
+#        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx',
+#    )
+#    assert "0.9" in output
+#    output = ssh(
+#        cli,
+#        f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx',
+#    )
+#    assert "0.0" in output
 
     output = ssh(
         cli,
@@ -153,7 +153,7 @@ def test_tai(cli):
     )
     assert "dp-16-qam" in output
 
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
+#    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -1.2"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
@@ -161,8 +161,8 @@ def test_tai(cli):
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-tai")
     check_pod(cli, "gs-mgmt-tai")
 
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
-    assert "0.9" in output
+#    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
+#    assert "0.9" in output
     output = ssh(
         cli, f'gscli -c "transponder {device}; netif 0; show" | grep output-power'
     )
