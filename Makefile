@@ -52,6 +52,10 @@ ifndef GS_MGMT_OC_IMAGE
     GS_MGMT_OC_IMAGE := gs-mgmt-xlate-openconfig
 endif
 
+ifndef GS_MGMT_NOTIF_IMAGE
+    GS_MGMT_NOTIF_IMAGE := gs-mgmt-south-notif
+endif
+
 ifndef GS_MGMT_IMAGE_TAG
     GS_MGMT_IMAGE_TAG := latest
 endif
@@ -110,7 +114,7 @@ base-image:
 
 images: south-images north-images xlate-images
 
-south-images: south-sonic south-tai south-onlp south-system
+south-images: south-sonic south-tai south-onlp south-system south-notif
 
 north-images: north-cli north-snmp
 
@@ -139,7 +143,11 @@ south-system:
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_SYSTEM_IMAGE):$(GS_MGMT_IMAGE_TAG) .
-
+south-notif:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-notif.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_NOTIF_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 north-cli:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/north-cli.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
