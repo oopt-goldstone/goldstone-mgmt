@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
+
 def to_human(d):
     for key, val in d.items():
         if val == 0xFFFF:
@@ -45,14 +46,10 @@ class Component(object):
     def get_state_attr(self, details, component):
         table = []
         try:
-            data = self.component["components"]["component"][component][details][
-                "state"
-            ]
+            data = component[details]["state"]
             data = to_human(data)
             if details != "piu" and details != "sfp":
-                desc = self.component["components"]["component"][component]["state"][
-                    "description"
-                ]
+                desc = component["state"]["description"]
                 table.append(["description", desc])
             for k, v in data.items():
                 subnode = data[k]
@@ -77,7 +74,6 @@ class Component(object):
 
     def show_onlp(self, option="all"):
 
-        self.component = self.sr_op.get_data(self.XPATH, "operational")
         if option == "all":
             types = ["fan", "psu", "led", "piu", "sfp", "thermal", "sys"]
             for type_ in types:
@@ -120,8 +116,11 @@ class Component(object):
             stdout.info("Note: Values with the symbol '-' are unsupported")
 
     def get_components(self, type_):
-        c = self.component.get("components", {}).get("component", [])
-        return natsorted([v["name"] for v in c if v["state"]["type"] == type_.upper()])
+        c = self.sr_op.get_data(
+            f"{self.XPATH}/component[state/type='{type_.upper()}']", "operational"
+        )
+        c = c.get("components", {}).get("component", [])
+        return natsorted(c, key=lambda v: v["name"])
 
     def tech_support(self):
         stdout.info("\n Show Onlp details")
