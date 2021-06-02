@@ -625,9 +625,10 @@ def test_mgmt_intf(cli):
 
 
 def test_select_intf(cli):
+    port_num = ssh(cli, 'jq ". | length" /var/lib/goldstone/device/current/usonic/interfaces.json')
     output = ssh(cli, 'gscli -c "interface .*; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
-    assert len(line.split(",")) == 22  # all interfaces should be selected
+    assert len(line.split(",")) == int(port_num) # all interfaces should be selected
 
     output = ssh(cli, 'gscli -c "interface Ethernet[1-4]_1; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
