@@ -32,7 +32,7 @@ def main(host, username, password):
         ssh(cli, "gs-snmp.sh stop || true")  # can fail
 
         run(
-            "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-north-snmp gs-test/gs-mgmt-xlate-openconfig"
+            "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-south-notif gs-test/gs-mgmt-north-snmp gs-test/gs-mgmt-xlate-openconfig"
         )
 
         # clean up sysrepo files
@@ -88,6 +88,7 @@ def main(host, username, password):
         check_pod(cli, "gs-mgmt-tai")
         check_pod(cli, "gs-mgmt-snmp")
         check_pod(cli, "gs-mgmt-openconfig")
+        check_pod(cli, "gs-mgmt-notif")
 
         def restart_gssouth_system():
             max_iteration = 3

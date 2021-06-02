@@ -337,3 +337,61 @@ spec:
             - name: sonic-db-config
               configMap:
                   name: sonic-db-config
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: gs-mgmt-notif
+    labels:
+        app: gs-mgmt
+spec:
+    selector:
+        matchLabels:
+            app: gs-mgmt-notif
+    template:
+        metadata:
+            labels:
+                app: gs-mgmt-notif
+        spec:
+            serviceAccountName: gs-mgmt
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            containers:
+            - name: notif
+              image: docker.io/gs-test/gs-mgmt-south-notif:latest
+              imagePullPolicy: IfNotPresent
+              command: ['gssouthd-notif']
+              args: ['--verbose']
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 1
+                periodSeconds: 10
+              startupProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 30
+                periodSeconds: 10
+              ports:
+              - name: liveness-port
+                containerPort: 8080
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo
+
