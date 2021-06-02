@@ -18,33 +18,48 @@ def main(host, username, password):
             cli, "kubectl delete -f /var/lib/rancher/k3s/server/manifests/mgmt || true"
         )  # can fail
         ssh(cli, "rm -rf /var/lib/rancher/k3s/server/manifests/mgmt")
+        ssh(cli, "mkdir -p /var/lib/rancher/k3s/server/manifests/mgmt")
 
-        ssh(cli, "systemctl restart usonic")
+        ssh(cli, "systemctl start usonic")
 
         # stop South system service
         ssh(cli, "systemctl stop gs-south-system || true")  # can fail
         # stop Goldstone Management service
-        ssh(cli, "systemctl stop gs-mgmt || true")  # can fail
+        ssh(cli, "gs-mgmt.sh stop || true")  # can fail
         # stop NETOPEER2 service
-        ssh(cli, "systemctl stop netopeer2 || true")  # can fail
+        ssh(cli, "netopeer2.sh stop || true")  # can fail
         # stop SNMP service
-        ssh(cli, "systemctl stop gs-snmp || true")  # can fail
-
-        ssh(cli, "kubectl delete -f /var/lib/rancher/k3s/server/manifests/mgmt || true") # can fail
+        ssh(cli, "gs-snmp.sh stop || true")  # can fail
 
         run(
             "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-north-snmp gs-test/gs-mgmt-xlate-openconfig"
         )
+
+        # clean up sysrepo files
+        ssh(cli, "rm -rf /dev/shm/sr_*")
+        ssh(cli, "rm -rf /var/lib/sysrepo/*")
 
         scp = SCPClient(cli.get_transport())
         scp.put("/tmp/gs-mgmt.tar", "/tmp")
         ssh(cli, "ctr images import /tmp/gs-mgmt.tar")
 
         scp.put(
-            "./ci/k8s",
-            recursive=True,
-            remote_path="/var/lib/rancher/k3s/server/manifests/mgmt",
+            "./ci/k8s/prep.yaml",
+            remote_path="/var/lib/rancher/k3s/server/manifests/mgmt/prep.yaml",
         )
+
+        ssh(cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/prep.yaml")
+
+        ssh(cli, "kubectl wait --for=condition=complete job/prep-gs-mgmt")
+
+        ssh(cli, "sysrepoctl -l | grep goldstone") # goldstone models must be loaded
+
+        for app in ['mgmt', 'snmp', 'xlate']:
+            scp.put(
+                f"./ci/k8s/{app}.yaml",
+                remote_path=f"/var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml",
+            )
+            ssh(cli, f"kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml")
 
         run("rm -rf deb && mkdir -p deb")
         run(
@@ -67,10 +82,6 @@ def main(host, username, password):
         ssh(cli, "pip3 install /tmp/wheels/system/dist/*.whl")
 
         # ssh(cli, 'gscli -c "show version"')
-
-        ssh(cli, "rm -rf /dev/shm/sr_*")
-        ssh(cli, "rm -rf /var/lib/sysrepo/*")
-        ssh(cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt")
 
         check_pod(cli, "gs-mgmt-sonic")
         check_pod(cli, "gs-mgmt-onlp")

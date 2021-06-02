@@ -66,6 +66,25 @@ def test_intf_type(cli):
     assert "interface-type" not in output
 
 
+def test_ufd(cli):
+    ssh(cli, 'gscli -c "ufd ufd1; uplink Ethernet1_1"')
+    ssh(
+        cli,
+        'gscli -c "ufd ufd1; downlink Ethernet2_1,Ethernet5_1,Ethernet3_1,Ethernet14_1,Ethernet11_1"',
+    )
+    output = ssh(cli, 'gscli -c "show running-config ufd"')
+    assert "uplink Ethernet1_1" in output
+    assert (
+        "downlink Ethernet2_1,Ethernet3_1,Ethernet5_1,Ethernet11_1,Ethernet14_1"
+        in output
+    )
+
+    try:
+        ssh(cli, 'gscli -c "ufd ufd5; uplink 1eth"')
+    except SSHException as e:
+        assert "no port found: 1eth" in e.stderr
+
+
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
     lines = [line for line in output.split() if "piu" in line]
@@ -101,16 +120,16 @@ def test_tai(cli):
     )
     assert "0.00 dBm" in output
 
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx',
-    )
-    assert "0.9" in output
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx',
-    )
-    assert "0.0" in output
+#    output = ssh(
+#        cli,
+#        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx',
+#    )
+#    assert "0.9" in output
+#    output = ssh(
+#        cli,
+#        f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx',
+#    )
+#    assert "0.0" in output
 
     output = ssh(
         cli,
@@ -134,7 +153,7 @@ def test_tai(cli):
     )
     assert "dp-16-qam" in output
 
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
+#    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -1.2"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
@@ -142,8 +161,8 @@ def test_tai(cli):
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-tai")
     check_pod(cli, "gs-mgmt-tai")
 
-    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
-    assert "0.9" in output
+#    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
+#    assert "0.9" in output
     output = ssh(
         cli, f'gscli -c "transponder {device}; netif 0; show" | grep output-power'
     )
@@ -606,9 +625,10 @@ def test_mgmt_intf(cli):
 
 
 def test_select_intf(cli):
+    port_num = ssh(cli, 'jq ". | length" /var/lib/goldstone/device/current/usonic/interfaces.json')
     output = ssh(cli, 'gscli -c "interface .*; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
-    assert len(line.split(",")) == 22  # all interfaces should be selected
+    assert len(line.split(",")) == int(port_num) # all interfaces should be selected
 
     output = ssh(cli, 'gscli -c "interface Ethernet[1-4]_1; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
@@ -917,6 +937,7 @@ def main(host, username, password):
             test_vlan_member_add_delete(cli)
             test_auto_nego(cli)
             test_intf_type(cli)
+            test_ufd(cli)
             test_port_breakout(cli)
         except Exception as e:
             ssh(cli, "kubectl get pods -A")
