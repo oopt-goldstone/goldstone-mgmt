@@ -9,6 +9,7 @@ import struct
 import base64
 import os
 from aiohttp import web
+from libyang import SNode
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class Server(object):
         self.loop = asyncio.get_event_loop()
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
+        self.ctx = self.conn.get_ly_ctx()
 
         routes = web.RouteTableDef()
 
@@ -51,9 +53,12 @@ class Server(object):
 
         self.sess.switch_datastore("running")
         # Subscribe to the notification tree of the modules below
-        for model in ['tai', 'onlp', 'interfaces']:
-            model = f'goldstone-{model}'
-            self.sess.subscribe_notification_tree(model, f'/{model}:*', 0, 0, self.notification_cb)
+        for model in self.ctx:
+            if "goldstone" in model.name():
+                module = self.ctx.get_module(model.name())
+                notif = list(module.children(types=(SNode.NOTIF,)))
+                if len(notif) > 0:
+                    self.sess.subscribe_notification_tree(model.name(), f'/{model.name()}:*', 0, 0, self.notification_cb)
         
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
@@ -104,5 +109,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
