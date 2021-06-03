@@ -1,5 +1,6 @@
 get_searchdirs.patch
 notification.patch
+notif2.patch
 dup.patch
 add_get()_method_to_keyed_list.patch
 add_sgrouping.patch
