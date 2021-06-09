@@ -49,7 +49,25 @@ def test_auto_nego(cli):
     ssh(cli, 'gscli -c "interface Ethernet3_1; no auto-nego"')
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "auto-nego" not in output
-
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet3_1; interface_type SR4"')
+    except SSHException as e:
+        assert "(../auto-nego = 'yes')" in e.stderr
+    else:
+        raise Exception("Failed to stop configuring interface type when auto-nego is enabled")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet3_1; fec rs"')
+    except SSHException as e:
+        assert "(../auto-nego = 'yes')" in e.stderr
+    else:
+        raise Exception("Failed to stop configuring FEC when auto-nego is enabled")
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet3_1; speed 40000"')
+    except SSHException as e:
+        assert "(../auto-nego = 'yes')" in e.stderr
+    else:
+        raise Exception("Failed to stop configuring speed when auto-nego is enabled")
 
 def test_intf_type(cli):
     ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type SR4"')
