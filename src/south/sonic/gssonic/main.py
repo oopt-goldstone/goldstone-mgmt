@@ -37,6 +37,8 @@ def speed_to_yang_val(speed):
     # Considering only speeds supported in CLI
     if speed == b"25000":
         return "SPEED_25GB"
+    elif speed == b"20000":
+        return "SPEED_20GB"
     elif speed == b"50000":
         return "SPEED_50GB"
     elif speed == b"100000":
@@ -114,7 +116,7 @@ class Server(object):
         if event != "done":
             return
         return self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
-    
+
     async def restart_usonic(self):
         self.is_usonic_rebooting = True
         await self.k8s.restart_usonic()
@@ -268,15 +270,24 @@ class Server(object):
         self.sess.switch_datastore("running")
         return self.sess.get_data(xpath)
 
-    def is_breakout_port(self, ifname):
+    def get_operational_data(self, xpath):
+        self.sess.switch_datastore("operational")
+        return self.sess.get_data(xpath)
+
+    def get_breakout_detail(self, ifname):
         xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
         self.sess.switch_datastore("operational")
         data = self.sess.get_data(xpath, no_subs=True)
         try:
             logger.debug(f"data: {data}")
             data = data["interfaces"]["interface"][ifname]["breakout"]
-            if data.get("num-channels", 1) > 1 or "parent" in data:
-                return True
+            if data.get("num-channels", 1) > 1:
+                return {
+                    "num-channels": data["num-channels"],
+                    "channel-speed": data["channel-speed"],
+                }
+            if "parent" in data:
+                return self.get_breakout_detail(data["parent"])
         except KeyError:
             return False
 
@@ -366,6 +377,11 @@ class Server(object):
             logger.warn("unsupported event: {event}")
             return
 
+        single_lane_intf_type = ["CR", "LR", "SR", "KR"]
+        double_lane_intf_type = ["CR2", "LR2", "SR2", "KR2"]
+        quad_lane_intf_type = ["CR4", "LR4", "SR4", "KR4"]
+
+        default_intf_type = "KR"
         valid_speeds = [40000, 100000]
         breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
 
@@ -388,21 +404,63 @@ class Server(object):
                         self.set_config_db(event, _hash, "admin_status", change.value)
 
                     elif key == "interface-type":
-                        #if event == "change":
-                        #    Validation of Interface Type with respect to configured Speed to be done
+                        if event == "change":
+                            tmp_xpath = (change.xpath).replace("/interface-type", "")
+                            running_data = self.get_running_data(tmp_xpath)
+                            try:
+                                for intf in running_data["interfaces"]["interface"]:
+                                    breakout_details = self.get_breakout_detail(ifname)
+                                    if not breakout_details:
+                                        raise KeyError
+                                    if int(breakout_details["num-channels"]) == 4:
+                                        if breakout_details["channel-speed"].endswith(
+                                            "10GB"
+                                        ):
+                                            if change.value == "SR":
+                                                raise sysrepo.SysrepoInvalArgError(
+                                                    "Unsupported interface type"
+                                                )
+                                        if change.value in single_lane_intf_type:
+                                            pass
+                                        else:
+                                            raise sysrepo.SysrepoInvalArgError(
+                                                "Unsupported interface type"
+                                            )
+                                    elif int(breakout_details["num-channels"]) == 2:
+                                        if change.value in double_lane_intf_type:
+                                            pass
+                                        else:
+                                            raise sysrepo.SysrepoInvalArgError(
+                                                "Unsupported interface type"
+                                            )
+                                    else:
+                                        raise sysrepo.SysrepoInvalArgError(
+                                            "Unsupported interface type"
+                                        )
+                            except KeyError:
+                                if change.value in quad_lane_intf_type:
+                                    pass
+                                else:
+                                    raise sysrepo.SysrepoInvalArgError(
+                                        "Unsupported interface type"
+                                    )
                         if event == "done":
-                            status_bcm = await self.k8s.run_bcmcmd_usonic(key, ifname, change.value)
+                            status_bcm = await self.k8s.run_bcmcmd_usonic(
+                                key, ifname, change.value
+                            )
                     elif key == "auto-nego":
-                        #if event == "change":
+                        # if event == "change":
                         #   Validation with respect to Port Breakout to be done
                         if event == "done":
-                            status_bcm = await self.k8s.run_bcmcmd_usonic(key, ifname, change.value)
+                            status_bcm = await self.k8s.run_bcmcmd_usonic(
+                                key, ifname, change.value
+                            )
 
                     elif key == "speed":
 
                         if event == "change":
                             ifname = attr_dict["ifname"]
-                            if self.is_breakout_port(ifname):
+                            if self.get_breakout_detail(ifname):
                                 valids = breakout_valid_speeds
                             else:
                                 valids = valid_speeds
@@ -495,15 +553,67 @@ class Server(object):
                     self.set_config_db(event, _hash, key, change.value)
                 elif key == "admin-status":
                     self.set_config_db(event, _hash, "admin_status", change.value)
-                elif key == "interface-type" or key == "auto-nego":
-                    status_bcm = await self.k8s.run_bcmcmd_usonic(key, ifname, change.value)
+                elif key == "interface-type":
+                    if event == "change":
+                        logger.debug("......inside interface type change event......")
+                        #    Validation of Interface Type with respect to configured Speed to be done
+                        tmp_xpath = (change.xpath).replace("/interface-type", "")
+                        running_data = self.get_running_data(tmp_xpath)
+                        try:
+                            for intf in running_data["interfaces"]["interface"]:
+                                breakout_details = self.get_breakout_detail(ifname)
+                                if not breakout_details:
+                                    raise KeyError
+                                if int(breakout_details["num-channels"]) == 4:
+                                    if breakout_details["channel-speed"].endswith(
+                                        "10GB"
+                                    ):
+                                        if change.value == "SR":
+                                            raise sysrepo.SysrepoInvalArgError(
+                                                "Unsupported interface type"
+                                            )
+                                    if change.value in single_lane_intf_type:
+                                        pass
+                                    else:
+                                        raise sysrepo.SysrepoInvalArgError(
+                                            "Unsupported interface type"
+                                        )
+                                elif int(breakout_details["num-channels"]) == 2:
+                                    if change.value in double_lane_intf_type:
+                                        pass
+                                    else:
+                                        raise sysrepo.SysrepoInvalArgError(
+                                            "Unsupported interface type"
+                                        )
+                                else:
+                                    raise sysrepo.SysrepoInvalArgError(
+                                        "Unsupported interface type"
+                                    )
+                        except KeyError:
+                            if change.value in quad_lane_intf_type:
+                                pass
+                            else:
+                                raise sysrepo.SysrepoInvalArgError(
+                                    "Unsupported interface type"
+                                )
+                    if event == "done":
+                        status_bcm = await self.k8s.run_bcmcmd_usonic(
+                            key, ifname, change.value
+                        )
+                elif key == "auto-nego":
+                    # if event == "change":
+                    #   Validation with respect to Port Breakout to be done
+                    if event == "done":
+                        status_bcm = await self.k8s.run_bcmcmd_usonic(
+                            key, ifname, change.value
+                        )
                 elif key == "forwarding" or key == "enabled":
                     logger.debug("This key:{} should not be set in redis ".format(key))
 
                 elif key == "speed":
 
                     if event == "change":
-                        if self.is_breakout_port(ifname):
+                        if self.get_breakout_detail(ifname):
                             valids = breakout_valid_speeds
                         else:
                             valids = valid_speeds
@@ -525,6 +635,7 @@ class Server(object):
             if isinstance(change, sysrepo.ChangeDeleted):
                 logger.debug("......change deleted......")
                 if key in ["channel-speed", "num-channels"]:
+
                     if event == "change":
                         if len(self.get_configured_breakout_ports(ifname)):
                             raise sysrepo.SysrepoInvalArgError(
@@ -581,6 +692,31 @@ class Server(object):
                         logger.debug(f"adding default value of {key} to redis")
                         self.pack_defaults_to_redis(ifname=ifname, leaf_node=key)
                         self.update_oper_db()
+
+                elif key == "interface-type":
+                    if event == "change":
+                        pass
+                    if event == "done":
+                        tmp_xpath = (change.xpath).replace("/interface-type", "")
+                        try:
+                            running_data = self.get_running_data(tmp_xpath)
+                            for intf in running_data["interfaces"]["interface"]:
+                                if int(intf["breakout"]["num-channels"]) == 4:
+                                    status_bcm = await self.k8s.run_bcmcmd_usonic(
+                                        key, ifname, default_intf_type
+                                    )
+                                elif int(intf["breakout"]["num-channels"]) == 2:
+                                    status_bcm = await self.k8s.run_bcmcmd_usonic(
+                                        key, ifname, default_intf_type + "2"
+                                    )
+                                else:
+                                    raise sysrepo.SysrepoInvalArgError(
+                                        "Unsupported interface type"
+                                    )
+                        except (sysrepo.errors.SysrepoNotFoundError, KeyError):
+                            status_bcm = await self.k8s.run_bcmcmd_usonic(
+                                key, ifname, default_intf_type + "4"
+                            )
 
                 elif "PORT|" in _hash and key == "":
                     if event == "done":
@@ -835,7 +971,7 @@ class Server(object):
                 "mtu",
                 str(self.mtu_default),
             )
-        elif leaf_node == "speed" and not self.is_breakout_port(ifname):
+        elif leaf_node == "speed" and not self.get_breakout_detail(ifname):
             self.sonic_db.set(
                 self.sonic_db.CONFIG_DB,
                 "PORT|" + ifname,
@@ -870,7 +1006,9 @@ class Server(object):
                         )
                     elif key == "auto-nego" or key == "interface-type":
                         logger.debug("Reconcile for bcmcmd")
-                        status_bcm = await self.k8s.run_bcmcmd_usonic(key, name, intf[key])
+                        status_bcm = await self.k8s.run_bcmcmd_usonic(
+                            key, name, intf[key]
+                        )
                     elif key == "alias":
                         self.sonic_db.set(
                             self.sonic_db.CONFIG_DB,
@@ -1266,4 +1404,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -55,7 +55,9 @@ def test_auto_nego(cli):
     except SSHException as e:
         assert "(../auto-nego = 'yes')" in e.stderr
     else:
-        raise Exception("Failed to stop configuring interface type when auto-nego is enabled")
+        raise Exception(
+            "Failed to stop configuring interface type when auto-nego is enabled"
+        )
     try:
         ssh(cli, 'gscli -c "interface Ethernet3_1; fec rs"')
     except SSHException as e:
@@ -68,6 +70,7 @@ def test_auto_nego(cli):
         assert "(../auto-nego = 'yes')" in e.stderr
     else:
         raise Exception("Failed to stop configuring speed when auto-nego is enabled")
+
 
 def test_intf_type(cli):
     ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type SR4"')
@@ -82,6 +85,17 @@ def test_intf_type(cli):
     ssh(cli, 'gscli -c "interface Ethernet1_1; no interface-type"')
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "interface-type" not in output
+
+
+def test_speed_intftype(cli):
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet4_1; speed 10000"')
+    except SSHException as e:
+        assert "Invalid argument: User callback failed" in e.stderr
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet4_1; interface_type SR"')
+    except SSHException as e:
+        assert "Invalid argument: User callback failed" in e.stderr
 
 
 def test_ufd(cli):
@@ -138,16 +152,16 @@ def test_tai(cli):
     )
     assert "0.00 dBm" in output
 
-#    output = ssh(
-#        cli,
-#        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx',
-#    )
-#    assert "0.9" in output
-#    output = ssh(
-#        cli,
-#        f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx',
-#    )
-#    assert "0.0" in output
+    #    output = ssh(
+    #        cli,
+    #        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx',
+    #    )
+    #    assert "0.9" in output
+    #    output = ssh(
+    #        cli,
+    #        f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx',
+    #    )
+    #    assert "0.0" in output
 
     output = ssh(
         cli,
@@ -171,7 +185,7 @@ def test_tai(cli):
     )
     assert "dp-16-qam" in output
 
-#    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
+    #    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -1.2"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
@@ -179,8 +193,8 @@ def test_tai(cli):
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-tai")
     check_pod(cli, "gs-mgmt-tai")
 
-#    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
-#    assert "0.9" in output
+    #    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
+    #    assert "0.9" in output
     output = ssh(
         cli, f'gscli -c "transponder {device}; netif 0; show" | grep output-power'
     )
@@ -643,10 +657,12 @@ def test_mgmt_intf(cli):
 
 
 def test_select_intf(cli):
-    port_num = ssh(cli, 'jq ". | length" /var/lib/goldstone/device/current/usonic/interfaces.json')
+    port_num = ssh(
+        cli, 'jq ". | length" /var/lib/goldstone/device/current/usonic/interfaces.json'
+    )
     output = ssh(cli, 'gscli -c "interface .*; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
-    assert len(line.split(",")) == int(port_num) # all interfaces should be selected
+    assert len(line.split(",")) == int(port_num)  # all interfaces should be selected
 
     output = ssh(cli, 'gscli -c "interface Ethernet[1-4]_1; selected"')
     line = output.strip().split("\n")[-1]  # get the last line
@@ -955,6 +971,7 @@ def main(host, username, password):
             test_vlan_member_add_delete(cli)
             test_auto_nego(cli)
             test_intf_type(cli)
+            test_speed_intftype(cli)
             test_ufd(cli)
             test_port_breakout(cli)
         except Exception as e:
