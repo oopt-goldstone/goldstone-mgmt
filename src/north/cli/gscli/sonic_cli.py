@@ -63,8 +63,21 @@ class Interface_CLI(Object):
             "fec": None,
         }
         self.fec_list = ["fc", "rs"]
-        self.breakout_list = ["2X50G", "4X25G", "4X10G"]
-        self.interface_type_list = ["SR", "SR4", "CR", "CR4", "LR", "LR4", "KR", "KR4"]
+        self.breakout_list = ["2X50G", "2X20G", "4X25G", "4X10G"]
+        self.interface_type_list = [
+            "SR",
+            "SR2",
+            "SR4",
+            "CR",
+            "CR2",
+            "CR4",
+            "LR",
+            "LR2",
+            "LR4",
+            "KR",
+            "KR2",
+            "KR4",
+        ]
         self.auto_nego_list = ["enable", "disable"]
         self.tagging_mode_list = ["trunk", "access"]
 
@@ -180,7 +193,7 @@ class Interface_CLI(Object):
 
         @self.command(WordCompleter(self.interface_type_list))
         def interface_type(args):
-            valid_args = ["SR", "SR4", "CR", "CR4", "LR", "LR4", "KR", "KR4"]
+            valid_args = self.interface_type_list
             invalid_input_str = (
                 f'usage: interface-type [{"|".join(self.interface_type_list)}]'
             )
@@ -205,12 +218,12 @@ class Interface_CLI(Object):
 
         @self.command(WordCompleter(self.breakout_list))
         def breakout(args):
-            valid_speed = ["50G", "10G", "25G"]
+            valid_speed = ["50G", "20G", "10G", "25G"]
             invalid_input_str = f'usage: breakout [{"|".join(self.breakout_list)}]'
             if len(args) != 1:
                 raise InvalidInput(invalid_input_str)
             try:
-                # Split values '2X50G', '4X25G', '4X10G' and validate
+                # Split values '2X50G', '2X20G', '4X25G', '4X10G' and validate
                 input_values = args[0].split("X")
                 if len(input_values) != 2 and (
                     input_values[0] != "2" or input_values[0] != "4"

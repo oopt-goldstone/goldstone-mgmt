@@ -372,15 +372,11 @@ class Port(object):
 
     def set_interface_type(self, ifname, value, config=True):
         xpath = self.xpath(ifname)
-        if value == None:
-            set_attribute(
-                self.sr_op, xpath, "interface", ifname, "interface-type", "NONE"
-            )
-        else:
+        if config:
             set_attribute(
                 self.sr_op, xpath, "interface", ifname, "interface-type", value
             )
-        if config == False:
+        else:
             self.sr_op.delete_data("{}/interface-type".format(xpath))
 
     def set_mtu(self, ifname, value):
@@ -413,8 +409,9 @@ class Port(object):
 
     def set_speed(self, ifname, value, config=True):
         xpath = self.xpath(ifname)
-        set_attribute(self.sr_op, xpath, "interface", ifname, "speed", value)
-        if config == False:
+        if config:
+            set_attribute(self.sr_op, xpath, "interface", ifname, "speed", value)
+        else:
             self.sr_op.delete_data("{}/speed".format(xpath))
 
     def set_vlan_mem(self, ifname, mode, vid, config=True):
@@ -496,6 +493,8 @@ class Port(object):
             return "SPEED_50GB"
         if speed == "10G":
             return "SPEED_10GB"
+        if speed == "20G":
+            return "SPEED_20GB"
 
     def set_breakout(self, ifname, number_of_channels, speed):
 
