@@ -114,7 +114,7 @@ class Root(Object):
             "vlan": FuzzyWordCompleter(lambda: ["range"] + self.get_vid(), WORD=True),
             "aaa": {"authentication": {"login": None}},
             "tacacs-server": {"host": None},
-            "ufd": {},
+            "ufd": FuzzyWordCompleter(lambda: self.sonic.ufd.get_ufd_id(), WORD=True),
         }
         # TODO:add timer for inactive user
 
@@ -176,7 +176,9 @@ class Root(Object):
             else:
                 return Interface_CLI(conn, self, line[0])
 
-        @self.command(FuzzyWordCompleter(lambda: self.get_ufd_id(), WORD=True))
+        @self.command(
+            FuzzyWordCompleter(lambda: self.sonic.ufd.get_ufd_id(), WORD=True)
+        )
         def ufd(line):
             if len(line) != 1:
                 raise InvalidInput("usage: ufd <ufd-id>")
@@ -254,11 +256,7 @@ class Root(Object):
                             "The vlan-id entered must be numbers and not letters"
                         )
                 elif line[0] == "ufd":
-                    ufd_list = self.get_ufd_id()
-                    if line[1] in ufd_list:
-                        self.sonic.ufd.delete_ufd(line[1])
-                    else:
-                        stderr.info("UFD id provided doesn't match")
+                    self.sonic.ufd.delete_ufd(line[1])
                 else:
                     raise InvalidInput(self.no_usage())
             elif len(line) == 3:
@@ -319,14 +317,6 @@ class Root(Object):
         self.session.switch_datastore("operational")
         d = self.session.get_data(path, no_subs=True)
         return [v["name"] for v in d.get("modules", {}).get("module", {})]
-
-    def get_ufd_id(self):
-        path = "/goldstone-uplink-failure-detection:ufd-groups"
-        self.session.switch_datastore("running")
-        d = self.session.get_data(path)
-        return natsorted(
-            [v["ufd-id"] for v in d.get("ufd-groups", {}).get("ufd-group", {})]
-        )
 
     def date(self, line):
         date = " ".join(["date"] + line)

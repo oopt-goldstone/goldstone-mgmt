@@ -99,23 +99,30 @@ def test_speed_intftype(cli):
 
 
 def test_ufd(cli):
-    ssh(cli, 'gscli -c "ufd ufd1; uplink Ethernet1_1"')
-    ssh(
-        cli,
-        'gscli -c "ufd ufd1; downlink Ethernet2_1,Ethernet5_1,Ethernet3_1,Ethernet14_1,Ethernet11_1"',
-    )
-    output = ssh(cli, 'gscli -c "show running-config ufd"')
-    assert "uplink Ethernet1_1" in output
-    assert (
-        "downlink Ethernet2_1,Ethernet3_1,Ethernet5_1,Ethernet11_1,Ethernet14_1"
-        in output
-    )
+    ssh(cli, 'gscli -c "ufd ufd1"')
+    ssh(cli, 'gscli -c "interface Ethernet1_1; ufd ufd1 uplink"')
+    ssh(cli, 'gscli -c "interface Ethernet2_1; ufd ufd1 downlink"')
+    ssh(cli, 'gscli -c "interface Ethernet4_1; ufd ufd1 downlink"')
+    output = ssh(cli, 'gscli -c "ufd ufd1; show"')
+    assert "Ethernet1_1" in output
+    assert "Ethernet2_1" in output
+    assert "Ethernet4_1" in output
 
     try:
-        ssh(cli, 'gscli -c "ufd ufd5; uplink 1eth"')
+        ssh(cli, 'gscli -c "interface Ethernet5_1; ufd ufd1 uplink"')
     except SSHException as e:
-        assert "no port found: 1eth" in e.stderr
+        assert "Validation failed: User callback failed" in e.stderr
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; ufd ufd1 downlink"')
+    except SSHException as e:
+        assert "Invalid argument: User callback failed" in e.stderr
 
+    ssh(cli, 'gscli -c "ufd 10"')
+    ssh(cli, 'gscli -c "interface Ethernet6_1; ufd 10 uplink"')
+    ssh(cli, 'gscli -c "interface Ethernet7_1; ufd 10 downlink"')
+    ssh(cli, 'gscli -c "interface Ethernet6_1; shutdown"')
+    output = ssh(cli, 'gscli -c "show interface brief"')
+    assert "Ethernet7_1  |   dormant  " in output
 
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
