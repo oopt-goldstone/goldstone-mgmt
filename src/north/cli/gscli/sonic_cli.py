@@ -16,6 +16,7 @@ from prompt_toolkit.completion import (
     FuzzyWordCompleter,
 )
 from .sonic import Sonic, sonic_defaults
+from natsort import natsorted
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
@@ -25,6 +26,8 @@ stderr = logging.getLogger("stderr")
 class Interface_CLI(Object):
     def __init__(self, conn, parent, ifname):
         super().__init__(parent)
+        self.conn = conn
+        self.session = conn.start_session()
         self.name = ifname
         try:
             ptn = re.compile(ifname)
@@ -52,6 +55,12 @@ class Interface_CLI(Object):
                 "access": {"vlan": WordCompleter(lambda: parent.get_vid())},
             }
         }
+
+        self.ufd_dict = {}
+
+        for ufd_id in self.sonic.ufd.get_ufd_id():
+            self.ufd_dict[ufd_id] = {"uplink": None, "downlink": None}
+
         self.no_dict = {
             "shutdown": None,
             "speed": None,
@@ -61,6 +70,7 @@ class Interface_CLI(Object):
             "interface-type": None,
             "auto-nego": None,
             "fec": None,
+            "ufd": None,
         }
         self.fec_list = ["fc", "rs"]
         self.breakout_list = ["2X50G", "2X20G", "4X25G", "4X10G"]
@@ -101,6 +111,8 @@ class Interface_CLI(Object):
             elif args[0] == "auto-nego":
                 for ifname in self.ifnames:
                     self.sonic.port.set_auto_nego(ifname, "no", config=False)
+            elif args[0] == "ufd":
+                self.sonic.ufd.check_port(self.name)
             elif args[0] == "mtu":
                 for ifname in self.ifnames:
                     self.sonic.port.set_mtu(ifname, None)
@@ -237,6 +249,12 @@ class Interface_CLI(Object):
             for ifname in self.ifnames:
                 self.sonic.port.set_breakout(ifname, input_values[0], input_values[1])
 
+        @self.command(NestedCompleter.from_nested_dict(self.ufd_dict))
+        def ufd(args):
+            if len(args) != 2 or (args[1] != "uplink" and args[1] != "downlink"):
+                raise InvalidInput("usage: ufd <ufdid> <uplink|downlink>")
+            self.sonic.ufd.add_ufd_port(args[0], self.name, args[1])
+
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
@@ -278,84 +296,11 @@ class Ufd_CLI(Object):
         self.sonic = Sonic(conn)
         self.sonic.ufd.create_ufd(self.ufd_id)
 
-        self.no_dict = {
-            "uplink": None,
-            "downlink": None,
-        }
-
-        self.downlink_dict = {}
-
-        for intf in self.get_ifnames():
-            self.downlink_dict[intf] = None
-
-        @self.command(FuzzyWordCompleter(lambda: self.get_ifnames(), WORD=True))
-        def uplink(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: uplink <port>")
-
-            portlist = [
-                v["name"] for v in self.sonic.port.get_interface_list("operational")
-            ]
-
-            uplink_port = [i for i in portlist if args[0] in portlist]
-
-            if len(uplink_port) == 0:
-                raise InvalidInput(f"no port found: {args[0]}")
-
-            self.sonic.ufd.add_uplink(self.ufd_id, args[0])
-
-        @self.command(NestedCompleter.from_nested_dict(self.downlink_dict))
-        def downlink(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: downlink <port-list>")
-
-            portlist = [
-                v["name"] for v in self.sonic.port.get_interface_list("operational")
-            ]
-
-            port_names = set(args[0].split(","))
-
-            downlink_ports = [i for i in portlist if [j for j in port_names if i == j]]
-
-            if len(downlink_ports) == 0:
-                raise InvalidInput(f"no port found: {port_names}")
-
-            if len(downlink_ports) != len(port_names):
-                invalid_ports = [i for i in port_names if i not in self.downlink_ports]
-                raise InvalidInput(f"no ports found: {invalid_ports}")
-            self.sonic.ufd.add_downlink(self.ufd_id, downlink_ports)
-
-        @self.command(NestedCompleter.from_nested_dict(self.no_dict))
-        def no(args):
-            if len(args) < 1:
-                raise InvalidInput(self.no_usage())
-            else:
-                try:
-                    ptn = re.compile(args[0])
-                except re.error:
-                    raise InvalidInput(
-                        f"failed to compile {args[0]} as a regular expression"
-                    )
-
-                if ptn.match("uplink"):
-                    self.sonic.ufd.remove_uplink(self.ufd_id)
-                elif ptn.match("downlink"):
-                    self.sonic.ufd.remove_downlink(self.ufd_id)
-                else:
-                    raise InvalidInput(self.no_usage())
-
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
                 return parent.show(args)
             self.sonic.ufd.show_ufd(self.ufd_id)
-
-    def get_ifnames(self):
-        return [v["name"] for v in self.sonic.port.get_interface_list("operational")]
-
-    def no_usage(self):
-        no_keys = list(self.no_dict.keys())
-        return f'usage: no [{"|".join(no_keys)}]'
 
     def __str__(self):
         return "ufd({})".format(self.ufd_id)

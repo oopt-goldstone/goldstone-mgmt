@@ -215,6 +215,7 @@ class Server(object):
 
                 await self.reconcile()
                 self.update_oper_db()
+
                 self.is_usonic_rebooting = False
 
                 self.sess.switch_datastore("running")
@@ -292,6 +293,30 @@ class Server(object):
             return False
 
         return False
+
+    def get_ufd_configured_ports(self, ifname):
+        ufd_list = self.get_ufd()
+        breakout_ports = []
+        for ufd_data in ufd_list:
+            try:
+                uplink_port = list(ufd_data["config"]["uplink"])
+                if uplink_port[0].find(ifname[:-1]) == 0:
+                    breakout_ports.append(uplink_port[0])
+            except:
+                pass
+
+            try:
+                downlink_ports = ufd_data["config"]["downlink"]
+                for port in downlink_ports:
+                    if port.find(ifname[:-1]) == 0:
+                        breakout_ports.append(port)
+            except:
+                pass
+
+        if len(breakout_ports) > 0:
+            return breakout_ports
+
+        return []
 
     def get_configured_breakout_ports(self, ifname):
         xpath = f"/goldstone-interfaces:interfaces/interface"
@@ -489,6 +514,12 @@ class Server(object):
                                 "breakout cannot be configured on a sub-interface"
                             )
 
+                        ufd_list = self.get_ufd()
+                        if self.is_ufd_port(ifname, ufd_list):
+                            raise sysrepo.SysrepoInvalArgError(
+                                "Breakout cannot be configured on the interface that is part of UFD"
+                            )
+
                         paired_key = (
                             "num-channels"
                             if key == "channel-speed"
@@ -638,6 +669,11 @@ class Server(object):
 
                     if event == "change":
                         if len(self.get_configured_breakout_ports(ifname)):
+                            raise sysrepo.SysrepoInvalArgError(
+                                "Breakout can't be removed due to the dependencies"
+                            )
+
+                        if len(self.get_ufd_configured_ports(ifname)):
                             raise sysrepo.SysrepoInvalArgError(
                                 "Breakout can't be removed due to the dependencies"
                             )
@@ -831,6 +867,17 @@ class Server(object):
             ifname = req_xpath.replace("']/statistics/out-errors", "")
             return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_ERRORS")
 
+    def is_downlink_port(self, ifname):
+        ufd_list = self.get_ufd()
+        for data in ufd_list:
+            try:
+                if ifname in data["config"]["downlink"]:
+                    return True, list(data["config"]["uplink"])
+            except:
+                pass
+
+        return False, None
+
     def interface_oper_cb(self, req_xpath):
         # Changing to operational datastore to fetch data
         # for the unconfigurable params in the xpath, data will
@@ -868,7 +915,25 @@ class Server(object):
                         f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
                     )
                     oper_status = self.get_oper_data(xpath + "/oper-status")
-                    if oper_status != None:
+
+                    downlink_port, uplink_port = self.is_downlink_port(ifname)
+
+                    if downlink_port:
+                        _hash = "PORT_TABLE:" + uplink_port[0]
+                        uplink_oper_status = _decode(
+                            self.sonic_db.get(
+                                self.sonic_db.APPL_DB, _hash, "oper_status"
+                            )
+                        )
+
+                        if uplink_oper_status == "down":
+                            value = "dormant"
+                            intf["oper-status"] = value
+                        else:
+                            if oper_status != None:
+                                intf["oper-status"] = oper_status
+
+                    elif oper_status != None:
                         intf["oper-status"] = oper_status
                     xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/statistics"
                     intf["statistics"] = {}
@@ -1256,6 +1321,192 @@ class Server(object):
                 logger.warn(f"update oper ds timeout: {e}")
                 sess.apply_changes(timeout_ms=5000, wait=True)
 
+    def is_ufd_port(self, port, ufd_list):
+
+        for ufd_id in ufd_list:
+            try:
+                if port in ufd_id.get("config", {}).get("uplink"):
+                    return True
+            except:
+                pass
+            try:
+                if port in ufd_id.get("config", {}).get("downlink"):
+                    return True
+            except:
+                pass
+
+        return False
+
+    def get_ufd(self):
+        xpath = "/goldstone-uplink-failure-detection:ufd-groups"
+        self.sess.switch_datastore("operational")
+        d = self.sess.get_data(xpath, no_subs=True)
+        ufd_list = [v for v in d.get("ufd-groups", {}).get("ufd-group", {})]
+        return ufd_list
+
+    def parse_ufd_req(self, xpath):
+        ufd_id = xpath.split("'")
+        if len(ufd_id) > 1:
+            ufd_id = ufd_id[1]
+        xpath = xpath.split("/")
+        attribute = ""
+        for i in range(len(xpath)):
+            node = xpath[i]
+            if node.find("uplink") == 0:
+                attribute = "uplink"
+                break
+            if node.find("downlink") == 0:
+                attribute = "downlink"
+                break
+
+        return ufd_id, attribute
+
+    def ufd_change_cb(self, event, req_id, changes, priv):
+        logger.debug(f"event: {event}, changes: {changes}")
+
+        if event not in ["change", "done"]:
+            logger.warn("unsupported event: {event}")
+            return
+
+        if event == "change":
+            for change in changes:
+                logger.debug(f"event: {event}; change_cb:{change}")
+                ufd_list = self.get_ufd()
+                ufd_id, attribute = self.parse_ufd_req(change.xpath)
+                if isinstance(change, sysrepo.ChangeCreated):
+                    if attribute == "uplink":
+                        for data in ufd_list:
+                            if data["ufd-id"] == ufd_id:
+                                ufd_data = data
+                                break
+                        try:
+                            uplink_port = ufd_data["config"]["uplink"]
+                            raise sysrepo.SysrepoValidationFailedError(
+                                "Uplink Already configured"
+                            )
+
+                        except KeyError:
+                            if self.is_ufd_port(change.value, ufd_list):
+                                raise sysrepo.SysrepoInvalArgError(
+                                    f"{change.value}:Port Already configured"
+                                )
+                            else:
+                                pass
+                    elif attribute == "downlink":
+                        if self.is_ufd_port(change.value, ufd_list):
+                            raise sysrepo.SysrepoInvalArgError(
+                                f"{change.value}:Port Already configured"
+                            )
+                        else:
+                            pass
+
+        elif event == "done":
+            for change in changes:
+                logger.debug(f"event: {event}; change_cb:{change}")
+                ufd_id, attribute = self.parse_ufd_req(change.xpath)
+
+                if len(attribute) > 0:
+                    if isinstance(change, sysrepo.ChangeCreated):
+                        if attribute == "uplink":
+                            # check if the port is part of ufd already
+                            # if so return error
+                            # if uplink port's oper_status is down in redis
+                            # config admin status of downlink ports to down in redis
+                            ufd_list = self.get_ufd()
+                            _hash = "PORT_TABLE:" + change.value
+
+                            oper_status = _decode(
+                                self.sonic_db.get(
+                                    self.sonic_db.APPL_DB, _hash, "oper_status"
+                                )
+                            )
+                            if oper_status == "down":
+                                for data in ufd_list:
+                                    if data["ufd-id"] == ufd_id:
+                                        break
+
+                                try:
+                                    downlink_ports = data["config"]["downlink"]
+                                    for port in downlink_ports:
+                                        _hash = "PORT|" + port
+                                        self.set_config_db(
+                                            event, _hash, "admin_status", "down"
+                                        )
+                                except:
+                                    pass
+
+                        elif attribute == "downlink":
+                            # check if the port is part of ufd already
+                            # if so return error
+
+                            # if uplink is already configured
+                            # anf if uplink operstatus is down in redis
+                            # config admin status of downlink ports to down in redis
+                            ufd_list = self.get_ufd()
+                            for data in ufd_list:
+                                if data["ufd-id"] == ufd_id:
+                                    break
+                            try:
+                                uplink_port = list(data["config"]["uplink"])
+                                _hash = "PORT_TABLE:" + uplink_port[0]
+                                oper_status = _decode(
+                                    self.sonic_db.get(
+                                        self.sonic_db.APPL_DB, _hash, "oper_status"
+                                    )
+                                )
+                                if oper_status == "down":
+                                    _hash = "PORT|" + change.value
+                                    self.set_config_db(
+                                        "done", _hash, "admin_status", "down"
+                                    )
+                            except:
+                                pass
+
+                    if isinstance(change, sysrepo.ChangeDeleted):
+                        if attribute == "uplink":
+                            # configure downlink ports admin status in redis as per sysrepo running db values
+                            ufd_list = self.get_ufd()
+                            for data in ufd_list:
+                                if data["ufd-id"] == ufd_id:
+                                    break
+                            try:
+                                downlink_ports = data["config"]["downlink"]
+                                self.sess.switch_datastore("running")
+                                for port in downlink_ports:
+                                    try:
+                                        tmp_xpath = f"/goldstone-interfaces:interfaces/interface[name = '{port}']/admin-status"
+                                        running_data = self.get_running_data(tmp_xpath)
+                                        for intf in running_data["interfaces"][
+                                            "interface"
+                                        ]:
+                                            admin_status = intf["admin-status"]
+                                            _hash = "PORT|" + port
+                                            self.set_config_db(
+                                                "done",
+                                                _hash,
+                                                "admin_status",
+                                                admin_status,
+                                            )
+                                    except KeyError:
+                                        pass
+                            except:
+                                pass
+
+                        if attribute == "downlink":
+                            # configure downlink ports admin status in redis as per sysrepo running db values
+                            try:
+                                port = str(change).split("'")[3]
+                                tmp_xpath = f"/goldstone-interfaces:interfaces/interface[name = '{port}']/admin-status"
+                                running_data = self.get_running_data(tmp_xpath)
+                                for intf in running_data["interfaces"]["interface"]:
+                                    admin_status = intf["admin-status"]
+                                    _hash = "PORT|" + port
+                                    self.set_config_db(
+                                        "done", _hash, "admin_status", admin_status
+                                    )
+                            except KeyError:
+                                pass
+
     def event_handler(self, msg):
         try:
             key = _decode(msg["channel"])
@@ -1273,6 +1524,30 @@ class Server(object):
             if curr_oper_status == oper_status:
                 return
 
+            if oper_status == "down":
+                ufd_list = self.get_ufd()
+                for ufd_id in ufd_list:
+                    try:
+                        if name in ufd_id["config"]["uplink"]:
+                            for port in ufd_id["config"]["downlink"]:
+                                _hash = "PORT|" + port
+                                self.set_config_db(
+                                    "done", _hash, "admin_status", "down"
+                                )
+
+                        elif name in ufd_id["config"]["downlink"]:
+                            uplink_port = list(ufd_id["config"]["uplink"])
+                            _hash = "PORT_TABLE:" + uplink_port[0]
+                            uplink_oper_status = _decode(
+                                self.sonic_db.get(
+                                    self.sonic_db.APPL_DB, _hash, "oper_status"
+                                )
+                            )
+                            if uplink_oper_status == "down":
+                                oper_status = "dormant"
+                    except:
+                        pass
+
             eventname = "goldstone-interfaces:interface-link-state-notify-event"
             notif = {
                 eventname: {
@@ -1286,6 +1561,8 @@ class Server(object):
                 logger.info(f"Notification: {n}")
                 dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
                 sess.notification_send_ly(dnode)
+                if oper_status == "dormant":
+                    oper_status = "down"
                 self.notif_if[name] = oper_status
         except Exception as exp:
             logger.error(exp)
@@ -1332,6 +1609,11 @@ class Server(object):
                 )
                 self.sess.subscribe_module_change(
                     "goldstone-vlan", None, self.vlan_change_cb
+                )
+                self.sess.subscribe_module_change(
+                    "goldstone-uplink-failure-detection",
+                    None,
+                    self.ufd_change_cb,
                 )
                 logger.debug(
                     "**************************after subscribe module change****************************"

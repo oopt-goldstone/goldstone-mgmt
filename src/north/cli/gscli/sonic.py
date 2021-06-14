@@ -619,42 +619,61 @@ class UFD(object):
         self.sr_op.delete_data(self.xpath_ufd(ufd_id))
         return
 
-    def add_uplink(self, ufd_id, port):
-        try:
-            self.sr_op.set_data("{}/config/uplink".format(self.xpath_ufd(ufd_id)), port)
-        except sr.errors.SysrepoValidationFailedError as error:
-            msg = str(error)
-            stderr.info(msg)
+    def add_ufd_port(self, ufd_id, port, role):
+        self.sr_op.set_data("{}/config/{}".format(self.xpath_ufd(ufd_id), role), port)
 
-    def remove_uplink(self, ufd_id):
+    def remove_ufd_port(self, ufd_id, role, port):
         xpath = self.xpath_ufd(ufd_id)
-        self.sr_op.delete_data(f"{xpath}/config/uplink")
+        self.sr_op.delete_data(f"{xpath}/config/{role}[.='{port}']")
 
-    def add_downlink(self, ufd_id, downlink_ports):
+    def get_ufd_id(self):
+        path = "/goldstone-uplink-failure-detection:ufd-groups"
+        self.session.switch_datastore("operational")
+        d = self.session.get_data(path, no_subs=True)
+        return natsorted(
+            [v["ufd-id"] for v in d.get("ufd-groups", {}).get("ufd-group", {})]
+        )
+
+    def check_port(self, port):
         try:
-            for i in downlink_ports:
-                self.sr_op.set_data(
-                    ("{}/config/downlink".format(self.xpath_ufd(ufd_id))), i
-                )
-        except sr.errors.SysrepoValidationFailedError as error:
-            msg = str(error)
-            stderr.info(msg)
-
-    def remove_downlink(self, ufd_id):
-        xpath = self.xpath_ufd(ufd_id)
-        self.sr_op.delete_data(f"{xpath}/config/downlink")
-
-    def show_ufd(self, UFD_id=None):
-        try:
-            # Fecting from running DS since south is not implemented
             self.tree = self.sr_op.get_data(
                 "{}/ufd-group".format(self.XPATH), "running"
             )
             ufd_id_list = self.tree["ufd-groups"]["ufd-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
-            return
+            raise InvalidInput("ufd not configured for this interface")
 
-        if ufd_id_list == {}:
+        port_found = False
+        for data in ufd_id_list:
+            try:
+                uplink_port = data["config"]["uplink"]
+                if port in uplink_port:
+                    port_found = True
+                    self.remove_ufd_port(data["ufd-id"], "uplink", port)
+            except KeyError:
+                pass
+            try:
+                downlink_ports = data["config"]["downlink"]
+                if port in downlink_ports:
+                    port_found = True
+                    self.remove_ufd_port(data["ufd-id"], "downlink", port)
+            except KeyError:
+                pass
+
+        if port_found == False:
+            raise InvalidInput("ufd not configured for this interface")
+
+    def show_ufd(self, UFD_id=None):
+        try:
+            # Fecting from running DS since south is not implemented
+            self.tree = self.sr_op.get_data(
+                "{}/ufd-group".format(self.XPATH), "operational"
+            )
+            ufd_id_list = self.tree["ufd-groups"]["ufd-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            ufd_id_list = []
+
+        if len(ufd_id_list) == 0:
             stdout.info(
                 tabulate(
                     [], ["UFD-ID", "Uplink-Ports", "Downlink-Ports"], tablefmt="pretty"
@@ -746,28 +765,28 @@ class UFD(object):
         for ufd_id in ufd_ids:
             data = d_list[ufd_id]
             stdout.info("ufd {}".format(data["config"]["ufd-id"]))
+            stdout.info("  quit")
+            stdout.info("!")
             try:
                 uplink_ports = data["config"]["uplink"]
-                uplink_ports_string = ""
                 for port in uplink_ports:
-                    uplink_ports_string += port + ","
-                uplink_ports_string = uplink_ports_string[:-1]
-                stdout.info(f"  uplink {uplink_ports_string}")
+                    stdout.info(f"interface {port}")
+                    stdout.info(f"  ufd {ufd_id} uplink")
+                    stdout.info("  quit")
+                    stdout.info("!")
             except (sr.errors.SysrepoNotFoundError, KeyError):
                 pass
 
             try:
-                downlink_ports = data["config"]["downlink"]
-                downlink_ports_string = ""
-                downlink_ports = natsorted(downlink_ports)
+                downlink_ports = natsorted(data["config"]["downlink"])
                 for port in downlink_ports:
-                    downlink_ports_string += port + ","
-                downlink_ports_string = downlink_ports_string[:-1]
-                stdout.info(f"\n  downlink {downlink_ports_string}")
+                    stdout.info(f"interface {port}")
+                    stdout.info(f"  ufd {ufd_id} downlink")
+                    stdout.info("  quit")
+                    stdout.info("!")
             except (sr.errors.SysrepoNotFoundError, KeyError):
                 pass
 
-            stdout.info("  quit")
             stdout.info("!")
 
 
