@@ -16,6 +16,7 @@ from aiohttp import web
 TAI_STATUS_ITEM_ALREADY_EXISTS = -6
 TAI_STATUS_FAILURE = -1
 
+notify_obj = {}
 
 class InvalidXPath(Exception):
     pass
@@ -87,56 +88,40 @@ HOSTIF_DEFAULT_VALUES = {
 class Server(object):
     """
     The TAI south server implementation.
-
     The TAI south server is responsible for reconciling hardware configuration, sysrepo running configuration and TAI configuration.
-
     The main YANG model to interact is 'goldstone-tai'.
     The TAI south server doesn't modify the running configuration of goldstone-tai.
     The running configuration is always given by user and it might be empty if a user doesn't give any configuration.
     When the user doesn't give any configuration for the TAI module, TAI south server creates the module with the default configuration.
     To disable the module, the user needs to explicitly set the module admin-status to 'down'
-
     1. start-up process
-
     In the beginning of the start-up process, the TAI south server gets the hardware configuration from the ONLP operational configuration.
     In order to get this information, the ONLP south server must be always running.
     If ONLP south server is not running, TAI south server fails to get the hardware configuraion and exit. The restarting of the server is k8s's responsibility.
-
     After getting the hardware configuration, the TAI south server checks if taish-server has created all the TAI objects corresponds to the hardware.
     If not, it will create the TAI objects.
-
     When creating the TAI objects, the TAI south server uses sysrepo TAI running configuration if any. If the user doesn't give any configuration, TAI library's default values will be used.
     If taish-server has already created TAI objects, the TAI south server checks if those TAI objects have the same configuration as the sysrepo running configuration.
     This reconcilation process only runs in the start-up process.
     Since the configuration between taish-server and sysrepo running configuration will become inconsistent, it is not recommended to change the TAI configuration directly by the taish command
     when the TAI south server is running.
-
     2. operational datastore
-
     The sysrepo TAI operational datastore is represented to the north daemons by layering three layers.
-
     The bottom layer is running datastore. The second layer is the operational information which is **pushed** to the datastore.
     The top layer is the operational information which is **pulled** from the taish-server.
-
     To enable layering the running datastore, we need to subscribe to the whole goldstone-tai. For this reason, we are passing
     'None' to the 2nd argument of subscribe_module_change().
-
     To enable layering the push and pull information, oper_merge=True option is passed to subscribe_oper_data_request().
-
     The TAI south server doesn't modify the running datastore as mentioned earlier.
     Basic information such as created modules, netifs and hostifs' name will be **pushed** in the start-up process.
-
     The pull information is collected in Server::oper_cb().
     This operation takes time since it actually invokes hardware access to get the latest information.
     To mitigate the time as much as possible, we don't want to retrieve unnecessary information.
-
     For example, if the north daemon is requesting the current modulation formation by the XPATH
     "/goldstone-tai:modules/module[name='/dev/piu1']/network-interface[name='0']/state/modulation-format",
     we don't need to retrieve other attributes of the netif or the attributes of the parent module.
-
     Even if we return unnecessary information, sysrepo drops them before returning to the caller based on the
     requested XPATH.
-
     In Server::oper_cb(), Server::parse_oper_req() is called to limit the call to taish-server by examining the
     requested XPATH.
     """
@@ -209,12 +194,10 @@ class Server(object):
         """
         Helper method to parse sysrepo ChangeCreated, ChangeModified and ChangeDeleted.
         This returns a TAI object and a dict of attributes to be set
-
         :arg xpath:
             The xpath for the change
         :arg value:
             The value of the change. None if the xpath leaf needs is deleted
-
         :returns:
             TAI object and a dict of attributes to be set
         :raises InvalidXPath:
@@ -268,15 +251,12 @@ class Server(object):
         """
         Helper method to parse a xpath of an operational datastore pull request
         and return objects and an attribute which is requested
-
         :arg xpath:
             The request xpath
-
         :returns (module, intf, item):
             module: TAI module object which is requested
             intf: TAI network-interface or host-interface object which is requested
             item: an attribute which is requested
-
         :raises InvalidXPath:
             If xpath can't be handled
         :raises NoOp:
@@ -594,16 +574,186 @@ class Server(object):
         dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
         self.sess.notification_send_ly(dnode)
 
-    async def update_operds(self, return_notifiers=False):
+    async def tai_notifier(self, location):
+
+        notifiers = []
+        modules = await self.taish.list()
+        for l, m in modules.items():
+            if l == location:
+                try:
+                    module = await self.taish.get_module(location)
+                except Exception as e:
+                    logger.warning(
+                            f"failed to get module location: {location}. err: {e}"
+                    )
+                    return
+                try:
+                    await module.get("notify")
+                except taish.TAIException:
+                    logger.warning(f"monitoring {attr} is not supported for module({key})")
+                else:
+                    notifiers.append(module.monitor("notify", self.tai_cb, json=True))
+                for i in range(len(m.netifs)):
+                    n = module.get_netif(i)
+                    for attr in ["notify", "alarm-notification"]:
+                        try:
+                            await n.get(attr)
+                        except taish.TAIException:
+                            logger.warning(f"monitoring {attr} is not supported for netif({i})")
+                        else:
+                            notifiers.append(n.monitor(attr, self.tai_cb, json=True))
+
+                for i in range(len(m.hostifs)):
+                    h = module.get_hostif(i)
+                    for attr in ["notify", "alarm-notification"]:
+                        try:
+                            await h.get(attr)
+                        except taish.TAIException:
+                            logger.warning(f"monitoring {attr} is not supported for hostif({i})")
+                        else:
+                            notifiers.append(h.monitor(attr, self.tai_cb, json=True))
+                break
+
+        return notifiers
+
+    async def initialize_piu(self, config, key):
+
+        mconfig = config.get(key, {})
+        # 'name' is not a valid TAI attribute. we need to exclude it
+        # we might want to invent a cleaner way by using an annotation in the YANG model
+        attrs = [
+            (k, v) for k, v in mconfig.get("config", {}).items() if k != "name"
+        ]
+        try:
+            module = await self.taish.create_module(key, attrs=attrs)
+        except taish.TAIException as e:
+            if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
+                if e.code == TAI_STATUS_FAILURE:
+                    logger.debug(f"Failed to intialize module {key}")
+                    return
+                raise e
+            module = await self.taish.get_module(key)
+            # reconcile with the sysrepo configuration
+            logger.debug(f"module({key}) already exists. updating attributes..")
+            for k, v in attrs:
+                await module.set(k, v)
+
+        nconfig = {
+            n["name"]: n.get("config", {})
+            for n in mconfig.get("network-interface", [])
+        }
+        for index in range(int(await module.get("num-network-interfaces"))):
+            attrs = [
+                (k, v)
+                for k, v in nconfig.get(str(index), {}).items()
+                if k != "name"
+            ]
+            try:
+                netif = await module.create_netif(index)
+                for k, v in attrs:
+                    try:
+                        meta = await netif.get_attribute_metadata(k)
+                        if meta.usage == "<bool>":
+                            v = "true" if v else "false"
+                    except taish.TAIException:
+                        continue
+                    await netif.set(k, v)
+
+            except taish.TAIException as e:
+                if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
+                    raise e
+                netif = module.get_netif(index)
+                # reconcile with the sysrepo configuration
+                logger.debug(
+                    f"module({key})/netif({index}) already exists. updating attributes.."
+                    )
+                for k, v in attrs:
+                    try:
+                        meta = await netif.get_attribute_metadata(k)
+                        if meta.usage == "<bool>":
+                            v = "true" if v else "false"
+                    except taish.TAIException:
+                        continue
+                    ret = await netif.set(k, v)
+                    logger.debug(
+                        f"module({key})/netif({index}) {k}:{v}, ret: {ret}"
+                    )
+
+        hconfig = {
+            n["name"]: n.get("config", {})
+            for n in mconfig.get("host-interface", [])
+        }
+        for index in range(int(await module.get("num-host-interfaces"))):
+            attrs = [
+                (k, v)
+                for k, v in hconfig.get(str(index), {}).items()
+                if k != "name"
+            ]
+            try:
+                hostif = await module.create_hostif(index, attrs=attrs)
+            except taish.TAIException as e:
+                if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
+                    raise e
+                hostif = module.get_hostif(index)
+                # reconcile with the sysrepo configuration
+                logger.debug(
+                    f"module({key})/hostif({index}) already exists. updating attributes.."
+                )
+                for k, v in attrs:
+                    await hostif.set(k, v)
+
+    async def cleanup_piu(self, module):
+        list_ = await self.taish.list()
+        for k, m in list_.items():
+            if k == module:
+                for v in m.hostifs:
+                    logger.info("removing hostif oid")
+                    await self.taish.remove(v.oid)
+                for v in m.netifs:
+                    logger.info("removing netif oid")
+                    await self.taish.remove(v.oid)
+                logger.info("removing module oid")
+                await self.taish.remove(m.oid)
+
+    async def notification_cb(self, a, b, c, d):
+        logger.info(b.print_dict())
+        notify_data = b.print_dict()
+        if 'piu-notify-event' not in notify_data:
+            return
+        else:
+            notify_data = notify_data['piu-notify-event']
+            piu = notify_data['name']
+            status = [v for v in notify_data.get("status", {})]
+            if status[0] == "PRESENT":
+                self.sess.switch_datastore("running")
+                config = self.sess.get_data("/goldstone-tai:*")
+                config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
+                logger.debug(f"sysrepo running configuration: {config}")
+
+                await self.initialize_piu(config, piu)
+                notifiers = await self.tai_notifier(piu)
+                await self.update_operds()
+                notify_obj[piu] = notifiers
+                task =  [self.catch_exception(n) for n in notifiers]
+                await self.notif_handler(task)
+            
+            elif status[0] == "UNPLUGGED":
+                #for obj in notify_obj[piu]:
+                    #await self.catch_exception(obj, plugout=True)
+                logger.info("Calling Cleanup")
+                await self.cleanup_piu(piu)
+                await self.update_operds()
+
+    async def update_operds(self):
 
         logger.info("updating operds")
 
         with self.conn.start_session() as sess:
 
             sess.switch_datastore("operational")
+            notifiers = []
 
             modules = await self.taish.list()
-            notifiers = []
             for location, m in modules.items():
                 try:
                     module = await self.taish.get_module(location)
@@ -611,57 +761,39 @@ class Server(object):
                     logger.warning(
                         f"failed to get module location: {location}. err: {e}"
                     )
-                    continue
-
+                    return
                 key = location2name(location)
 
                 xpath = f"/goldstone-tai:modules/module[name='{key}']"
                 sess.set_item(f"{xpath}/config/name", key)
                 sess.set_item(f"{xpath}/state/location", location)
-                if return_notifiers:
-                    try:
-                        await module.get("notify")
-                    except taish.TAIException:
-                        logger.warning(f"monitoring {attr} is not supported for module({key})")
-                    else:
-                        notifiers.append(module.monitor("notify", self.tai_cb, json=True))
 
                 for i in range(len(m.netifs)):
                     sess.set_item(
                         f"{xpath}/network-interface[name='{i}']/config/name", i
                     )
-                    if return_notifiers:
-                        n = module.get_netif(i)
-                        for attr in ["notify", "alarm-notification"]:
-                            try:
-                                await n.get(attr)
-                            except taish.TAIException:
-                                logger.warning(f"monitoring {attr} is not supported for netif({i})")
-                            else:
-                                notifiers.append(n.monitor(attr, self.tai_cb, json=True))
-
                 for i in range(len(m.hostifs)):
                     sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
-                    if return_notifiers:
-                        h = module.get_hostif(i)
-                        for attr in ["notify", "alarm-notification"]:
-                            try:
-                                await h.get(attr)
-                            except taish.TAIException:
-                                logger.warning(f"monitoring {attr} is not supported for hostif({i})")
-                            else:
-                                notifiers.append(h.monitor(attr, self.tai_cb, json=True))
 
-            sess.apply_changes()
+                sess.apply_changes()
 
-        if return_notifiers:
-            return notifiers
+    async def catch_exception(self, coroutine, plugout=False):
+        try:
+            return await coroutine
+        except taish.TAIException and BaseException as e:
+            logger.error(e)
+
+    async def notif_handler(self, task):
+        event = asyncio.Event()
+        tasks = task
+        tasks.append(event.wait())
+        done, pending = await asyncio.wait(
+            tasks, return_when=asyncio.ALL_COMPLETED
+        )
+        logger.debug(f"done: {done}, pending: {pending}")
 
     async def start(self):
         # get hardware configuration from ONLP datastore ( ONLP south must be running )
-        # TODO hot-plugin is not implemented for now
-        # this can be implemented by subscribing to ONLP operational datastore
-        # and create/remove TAI modules according to hardware configuration changes
         self.sess.switch_datastore("operational")
         d = self.sess.get_data("/goldstone-onlp:components/component", no_subs=True)
         modules = [
@@ -670,101 +802,26 @@ class Server(object):
             if c["state"]["type"] == "PIU"
             and c["piu"]["state"]["status"] == ["PRESENT"]
         ]
+
+
         self.sess.switch_datastore("running")
-
         with self.sess.lock("goldstone-tai"):
-
             config = self.sess.get_data("/goldstone-tai:*")
             config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
             logger.debug(f"sysrepo running configuration: {config}")
-
+            notify = []
             for module in modules:
-                key = module["location"]
-                mconfig = config.get(key, {})
-                # 'name' is not a valid TAI attribute. we need to exclude it
-                # we might want to invent a cleaner way by using an annotation in the YANG model
-                attrs = [
-                    (k, v) for k, v in mconfig.get("config", {}).items() if k != "name"
-                ]
-                try:
-                    module = await self.taish.create_module(key, attrs=attrs)
-                except taish.TAIException as e:
-                    if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
-                        if e.code == TAI_STATUS_FAILURE:
-                            logger.debug(f"Failed to intialize module {key}")
-                            continue
-                        raise e
-                    module = await self.taish.get_module(key)
-                    # reconcile with the sysrepo configuration
-                    logger.debug(f"module({key}) already exists. updating attributes..")
-                    for k, v in attrs:
-                        await module.set(k, v)
+                key = module['location']
+                await self.initialize_piu(config, key)
+                notifiers = await self.tai_notifier(key)
+                if notifiers is not None:
+                    notify_obj[key] = notifiers
+                    for i in notifiers:
+                        notify.append(i)
+                else:
+                    continue
+            await self.update_operds()
 
-                nconfig = {
-                    n["name"]: n.get("config", {})
-                    for n in mconfig.get("network-interface", [])
-                }
-                for index in range(int(await module.get("num-network-interfaces"))):
-                    attrs = [
-                        (k, v)
-                        for k, v in nconfig.get(str(index), {}).items()
-                        if k != "name"
-                    ]
-                    try:
-                        netif = await module.create_netif(index)
-                        for k, v in attrs:
-                            try:
-                                meta = await netif.get_attribute_metadata(k)
-                                if meta.usage == "<bool>":
-                                    v = "true" if v else "false"
-                            except taish.TAIException:
-                                continue
-                            await netif.set(k, v)
-
-                    except taish.TAIException as e:
-                        if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
-                            raise e
-                        netif = module.get_netif(index)
-                        # reconcile with the sysrepo configuration
-                        logger.debug(
-                            f"module({key})/netif({index}) already exists. updating attributes.."
-                        )
-                        for k, v in attrs:
-                            try:
-                                meta = await netif.get_attribute_metadata(k)
-                                if meta.usage == "<bool>":
-                                    v = "true" if v else "false"
-                            except taish.TAIException:
-                                continue
-                            ret = await netif.set(k, v)
-                            logger.debug(
-                                f"module({key})/netif({index}) {k}:{v}, ret: {ret}"
-                            )
-
-                hconfig = {
-                    n["name"]: n.get("config", {})
-                    for n in mconfig.get("host-interface", [])
-                }
-                for index in range(int(await module.get("num-host-interfaces"))):
-                    attrs = [
-                        (k, v)
-                        for k, v in hconfig.get(str(index), {}).items()
-                        if k != "name"
-                    ]
-                    try:
-                        hostif = await module.create_hostif(index, attrs=attrs)
-                    except taish.TAIException as e:
-                        if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
-                            raise e
-                        hostif = module.get_hostif(index)
-                        # reconcile with the sysrepo configuration
-                        logger.debug(
-                            f"module({key})/hostif({index}) already exists. updating attributes.."
-                        )
-                        for k, v in attrs:
-                            await hostif.set(k, v)
-
-            notifiers = await self.update_operds(return_notifiers=True)
 
             self.sess.switch_datastore("running")
 
@@ -783,17 +840,18 @@ class Server(object):
                 asyncio_register=True,
             )
 
-        async def catch_exception(coroutine):
-            try:
-                return await coroutine
-            except BaseException as e:
-                logger.error(e)
+            self.sess.subscribe_notification_tree('goldstone-onlp', f'/goldstone-onlp:*', 0, 0, self.notification_cb, asyncio_register=True)
+
 
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
         await site.start()
+        
+        
+        task = [self.catch_exception(obj) for obj in notify]
+        await self.notif_handler(task)
 
-        return [catch_exception(n) for n in notifiers]
+        return []
 
 
 def main():
@@ -840,3 +898,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
