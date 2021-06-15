@@ -1,0 +1,87 @@
+module goldstone-portchannel {
+
+  yang-version "1.1";
+
+  // namespace
+  namespace "http://goldstone.net/yang/goldstone-portchannel";
+
+  prefix "gs-lag";
+
+  // import some basic types
+  import goldstone-interfaces {
+    prefix gs-if;
+  }
+
+  // meta
+  organization
+    "Goldstone";
+
+  description
+    "Goldstone portchannel";
+
+  revision 2021-05-30 {
+    description
+      "Initial revision.";
+  }
+
+
+  // grouping statements
+
+  grouping portchannel-config {
+    description "portchannel configuration container.";
+
+    leaf portchannel-id {
+      type string;
+      description "portchannel group id.";
+    } 
+  
+    leaf-list interface {
+      type string;
+      description "List of interfaces to be combined";
+    }
+  }
+
+  grouping portchannel-state {
+    description "portchannel State variables container.";
+
+    // placeholder
+  }
+
+  grouping portchannel-top {
+    description "container for portchannel configuration.";
+
+     container portchannel {
+                description "Container for portchannel configuration and
+      state variables";
+
+      list portchannel-group {
+        key "portchannel-id";
+
+        description "Configured porcthannel keyed by portchannel-id";
+
+        leaf portchannel-id {
+          type leafref {
+            path "../config/portchannel-id";
+          }
+          description "references the configured portchannel-id";
+        }
+
+        container config {
+          description "Configuration parameters for portchannel";
+
+          uses portchannel-config;
+        }
+
+        container state {
+          config false;
+          description "State variables for portchannel";
+
+          uses portchannel-state;
+        }
+      }
+    }
+  }
+ uses portchannel-top;
+}
+
+             

@@ -71,6 +71,7 @@ class Interface_CLI(Object):
             "auto-nego": None,
             "fec": None,
             "ufd": None,
+            "portchannel": None,
         }
         self.fec_list = ["fc", "rs"]
         self.breakout_list = ["2X50G", "2X20G", "4X25G", "4X10G"]
@@ -141,6 +142,10 @@ class Interface_CLI(Object):
             elif args[0] == "fec" and len(args) == 1:
                 for ifname in self.ifnames:
                     self.sonic.port.set_fec(ifname, None)
+
+            elif args[0] == "portchannel":
+                self.sonic.pc.remove_interface(self.name)
+
             else:
                 self.no_usage()
 
@@ -255,6 +260,12 @@ class Interface_CLI(Object):
                 raise InvalidInput("usage: ufd <ufdid> <uplink|downlink>")
             self.sonic.ufd.add_ufd_port(args[0], self.name, args[1])
 
+        @self.command()
+        def portchannel(args):
+            if len(args) != 1:
+                raise InvalidInput("usage: portchannel <portchannel_id>")
+            self.sonic.pc.add_interface(args[0], self.name)
+
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
@@ -304,3 +315,20 @@ class Ufd_CLI(Object):
 
     def __str__(self):
         return "ufd({})".format(self.ufd_id)
+
+
+class Portchannel_CLI(Object):
+    def __init__(self, conn, parent, id):
+        self.id = id
+        super().__init__(parent)
+        self.sonic = Sonic(conn)
+        self.sonic.pc.create(self.id)
+
+        @self.command(parent.get_completer("show"))
+        def show(args):
+            if len(args) != 0:
+                return parent.show(args)
+            self.sonic.pc.show(self.id)
+
+    def __str__(self):
+        return "portchannel({})".format(self.id)
