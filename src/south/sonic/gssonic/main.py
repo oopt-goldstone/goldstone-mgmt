@@ -1366,10 +1366,10 @@ class Server(object):
 
         if event not in ["change", "done"]:
             logger.warn("unsupported event: {event}")
-            return
 
         if event == "change":
             for change in changes:
+
                 logger.debug(f"event: {event}; change_cb:{change}")
                 ufd_list = self.get_ufd()
                 ufd_id, attribute = self.parse_ufd_req(change.xpath)
@@ -1507,6 +1507,65 @@ class Server(object):
                             except KeyError:
                                 pass
 
+
+    def get_portchannel(self):
+        xpath = "/goldstone-portchannel:portchannel"
+        self.sess.switch_datastore("operational")
+        d = self.sess.get_data(xpath, no_subs=True)
+        portchannel_list = [
+            v for v in d.get("portchannel", {}).get("portchannel-group", {})
+        ]
+        return portchannel_list
+
+    def is_portchannel_intf(self, intf):
+        portchannel_list = self.get_portchannel()
+        for portchannel_id in portchannel_list:
+            try:
+                if intf in portchannel_id.get("config", {}).get("interface"):
+                    return True
+            except:
+                pass
+        return False
+
+    def parse_portchannel_req(self, xpath):
+        portchannel_id = xpath.split("'")
+        if len(portchannel_id) > 1:
+            portchannel_id = portchannel_id[1]
+        xpath = xpath.split("/")
+        attr = ""
+        for i in range(len(xpath)):
+            node = xpath[i]
+            if node.find("interface") == 0:
+                attr = "interface"
+                break
+
+        return portchannel_id, attr
+
+    def portchannel_change_cb(self, event, req_id, changes, priv):
+        logger.debug(f"event: {event}, changes: {changes}")
+
+        if event not in ["change", "done"]:
+            logger.warn(f"unsupported event: {event}")
+            return
+
+        if event == "change":
+            for change in changes:
+                logger.debug(f"event: {event}; change_cb: {change}")
+                portchannel_id, attr = self.parse_portchannel_req(change.xpath)
+                if isinstance(change, sysrepo.ChangeCreated):
+                    if attr == "interface":
+                        if self.is_portchannel_intf(change.value):
+                            raise sysrepo.SysrepoInvalArgError(
+                                f"{change.value}:Interface is already part of LAG"
+                            )
+                        else:
+                            pass
+        elif event == "done":
+            for change in changes:
+                logger.debug(f"event: {event}; change_cb: {change}")
+                if isinstance(change, sysrepo.ChangeCreated):
+                    logger.debug("change created")
+
     def event_handler(self, msg):
         try:
             key = _decode(msg["channel"])
@@ -1613,7 +1672,10 @@ class Server(object):
                 self.sess.subscribe_module_change(
                     "goldstone-uplink-failure-detection",
                     None,
-                    self.ufd_change_cb,
+                    self.ufd_change_cb
+                )
+                self.sess.subscribe_module_change(
+                    "goldstone-portchannel", None, self.portchannel_change_cb
                 )
                 logger.debug(
                     "**************************after subscribe module change****************************"

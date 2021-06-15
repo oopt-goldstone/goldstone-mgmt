@@ -124,6 +124,21 @@ def test_ufd(cli):
     output = ssh(cli, 'gscli -c "show interface brief"')
     assert "Ethernet7_1  |   dormant  " in output
 
+def test_portchannel(cli):
+    ssh(cli, 'gscli -c "portchannel 10"')
+    ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel 10"')
+    ssh(cli, 'gscli -c "interface Ethernet2_1; portchannel 10"')
+    ssh(cli, 'gscli -c "interface Ethernet4_1; portchannel 10"')
+    output = ssh(cli, 'gscli -c "portchannel 10; show"')
+    assert "Ethernet1_1" in output
+    assert "Ethernet2_1" in output
+    assert "Ethernet4_1" in output
+    ssh(cli, 'gscli -c "portchannel 20"')
+    try:
+        ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel 10"')
+    except SSHException as e:
+        assert "Invalid argument: User callback failed" in e.stderr
+
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
     lines = [line for line in output.split() if "piu" in line]
@@ -980,6 +995,7 @@ def main(host, username, password):
             test_intf_type(cli)
             test_speed_intftype(cli)
             test_ufd(cli)
+            test_portchannel(cli)
             test_port_breakout(cli)
         except Exception as e:
             ssh(cli, "kubectl get pods -A")

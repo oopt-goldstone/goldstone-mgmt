@@ -24,7 +24,7 @@ import time
 from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
 from .tai_cli import Transponder
-from .sonic_cli import Interface_CLI, Vlan_CLI, Ufd_CLI
+from .sonic_cli import Interface_CLI, Vlan_CLI, Ufd_CLI, Portchannel_CLI
 from .sonic import Sonic
 from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI, System
 from .system import AAA, TACACS, Mgmtif
@@ -115,6 +115,7 @@ class Root(Object):
             "aaa": {"authentication": {"login": None}},
             "tacacs-server": {"host": None},
             "ufd": FuzzyWordCompleter(lambda: self.sonic.ufd.get_ufd_id(), WORD=True),
+            "portchannel": {},
         }
         # TODO:add timer for inactive user
 
@@ -183,6 +184,12 @@ class Root(Object):
             if len(line) != 1:
                 raise InvalidInput("usage: ufd <ufd-id>")
             return Ufd_CLI(conn, self, line[0])
+
+        @self.command()
+        def portchannel(line):
+            if len(line) != 1:
+                raise InvalidInput("usage: portchannel <portchannel_id>")
+            return Portchannel_CLI(conn, self, line[0])
 
         @self.command()
         def date(line):
@@ -257,6 +264,10 @@ class Root(Object):
                         )
                 elif line[0] == "ufd":
                     self.sonic.ufd.delete_ufd(line[1])
+
+                elif line[0] == "portchannel":
+                    self.sonic.pc.delete(line[1])
+
                 else:
                     raise InvalidInput(self.no_usage())
             elif len(line) == 3:
@@ -329,7 +340,8 @@ class Root(Object):
             "no vlan range <range>\n"
             "no aaa authentication login\n"
             "no tacacs-server host <address>\n"
-            "no ufd <ufd-id>"
+            "no ufd <ufd-id>\n"
+            "no portchannel <portchannel-id>"
         )
 
     def enable_notification(self):

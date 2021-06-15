@@ -89,6 +89,22 @@ class UfdGroupCommand(Command):
         return " >> usage:\n" f" {self.parent.name} {self.name} "
 
 
+class PortchannelGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.sonic = Sonic(context.conn)
+        self.pc = self.sonic.pc
+
+    def exec(self, line):
+        if len(line) == 0:
+            return self.pc.show()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return " >> usage:\n" f" {self.parent.name} {self.name} "
+
+
 class ArpGroupCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
@@ -265,6 +281,7 @@ class RunningConfigCommand(Command):
         "aaa": Command,
         "mgmt-if": Command,
         "ufd": Command,
+        "portchannel": Command,
     }
 
     def exec(self, line):
@@ -296,6 +313,10 @@ class RunningConfigCommand(Command):
             stdout.info("!")
             sonic.ufd_run_conf()
 
+        elif module == "portchannel":
+            stdout.info("!")
+            sonic.portchannel_run_conf()
+
         elif module == "vlan":
             stdout.info("!")
             sonic.vlan_run_conf()
@@ -307,6 +328,7 @@ class GlobalShowCommand(Command):
         "vlan": VlanGroupCommand,
         "arp": ArpGroupCommand,
         "ufd": UfdGroupCommand,
+        "portchannel": PortchannelGroupCommand,
         "ip": IPGroupCommand,
         "datastore": Command,
         "tech-support": Command,
@@ -465,6 +487,7 @@ class GlobalShowCommand(Command):
             "/goldstone-interfaces:interfaces/interface",
             "/goldstone-mgmt-interfaces:interfaces/interface",
             "/goldstone-uplink-failure-detection:ufd-groups/ufd-group",
+            "/goldstone-portchannel:portchannel/portchannel-group",
             "/goldstone-routing:routing/static-routes/ipv4/route",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",
@@ -505,12 +528,13 @@ class GlobalShowCommand(Command):
             f" {self.name} transponder (<transponder_name>|summary)\n"
             f" {self.name} chassis-hardware (fan|psu|led|transceiver|thermal|system|all)\n"
             f" {self.name} ufd \n"
+            f" {self.name} portchannel \n"
             f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"
             f" {self.name} version \n"
             f" {self.name} aaa \n"
             f" {self.name} tacacs \n"
             f" {self.name} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
-            f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|ufd]\n"
+            f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|ufd|portchannel]\n"
             f" {self.name} tech-support"
         )
 

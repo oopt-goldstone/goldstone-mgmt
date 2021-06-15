@@ -795,6 +795,7 @@ class Sonic(object):
         self.port = Port(conn, self)
         self.vlan = Vlan(conn, self)
         self.ufd = UFD(conn, self)
+        self.pc = Portchannel(conn, self)
 
     def port_run_conf(self):
         self.port.run_conf()
@@ -805,11 +806,15 @@ class Sonic(object):
     def ufd_run_conf(self):
         self.ufd.run_conf()
 
+    def portchannel_run_conf(self):
+        self.pc.run_conf()
+
     def run_conf(self):
         stdout.info("!")
         self.vlan_run_conf()
         self.port_run_conf()
         self.ufd_run_conf()
+        self.portchannel_run_conf()
 
     def tech_support(self):
         stdout.info("\nshow vlan details:\n")
@@ -818,6 +823,7 @@ class Sonic(object):
         self.port.show_interface()
         stdout.info("\nshow ufd:\n")
         self.ufd.show_ufd()
+        self.pc.show()
 
 
 def set_attribute(sr_op, path, module, name, attr, value):
@@ -835,3 +841,154 @@ def set_attribute(sr_op, path, module, name, attr, value):
         sr_op.set_data("{}/breakout/{}".format(path, attr), value)
     else:
         sr_op.set_data(f"{path}/{attr}", value)
+
+
+class Portchannel(object):
+
+    XPATH = "/goldstone-portchannel:portchannel"
+
+    def xpath(self, id):
+        return "{}/portchannel-group[portchannel-id='{}']".format(
+            self.XPATH, id
+        )
+
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
+        self.sr_op = sysrepo_wrap(self.session)
+        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
+
+    def create(self, id):
+        try:
+            self.sr_op.get_data(
+                "{}".format(self.xpath(id)), "running"
+            )
+        except sr.SysrepoNotFoundError as e:
+            self.sr_op.set_data(
+                "{}/config/portchannel-id".format(
+                    self.xpath(id)
+                ),
+                id,
+            )
+
+    def delete(self, id):
+        self.sr_op.delete_data(self.xpath(id))
+        return
+
+    def add_interface(self, id, intf):
+        self.sr_op.set_data(
+            "{}/config/interface".format(self.xpath(id)), intf
+        )
+
+    def get_id(self):
+        path = "/goldstone-portchannel:portchannel"
+        self.session.switch_datastore("operational")
+        d = self.session.get_data(path)
+        return natsorted(
+            [
+                v["portchannel-id"]
+                for v in d.get("portchannel-group", {}).get("portchannel", {})
+            ]
+        )
+
+    def remove_interface(self, intf):
+        try:
+            self.tree = self.sr_op.get_data(
+                "{}/portchannel-group".format(self.XPATH), "running"
+            )
+            id_list = self.tree["portchannel"]["portchannel-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            raise InvalidInput("portchannel not configured for this interface")
+
+        for data in id_list:
+            try:
+                if intf in data["config"]["interface"]:
+                    xpath = self.xpath(data["portchannel-id"])
+                    self.sr_op.delete_data(f"{xpath}/config/interface[.='{intf}']")
+                    return
+            except KeyError:
+                pass
+        raise InvalidInput("portchannel not configured for this interface")
+
+    def run_conf(self):
+        try:
+            self.tree = self.sr_op.get_data(
+                "{}/portchannel-group".format(self.XPATH), "running"
+            )
+            id_list = self.tree["portchannel"]["portchannel-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return
+
+        ids = []
+
+        for data in id_list:
+            ids.append(data["portchannel-id"])
+
+        ids = natsorted(ids)
+
+        for id in ids:
+            data = id_list[id]
+            stdout.info("portchannel {}".format(data["config"]["portchannel-id"]))
+            stdout.info("  quit")
+            stdout.info("!")
+            try:
+                intf = data["config"]["interface"]
+                for interface in intf:
+                    stdout.info(f"interface {interface}")
+                    stdout.info(f"  portchannel {id}")
+                    stdout.info("  quit")
+                    stdout.info("!")
+            except (sr.errors.SysrepoNotFoundError, KeyError):
+                pass
+
+    def show(self, id=None):
+        try:
+            # Fecting from running DS since south is not implemented
+            self.tree = self.sr_op.get_data(
+                "{}/portchannel-group".format(self.XPATH), "running"
+            )
+            id_list = self.tree["portchannel"]["portchannel-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            id_list = []
+
+        if len(id_list) == 0:
+            stdout.info(
+                tabulate([], ["Portchannel-ID", "Interface"], tablefmt="pretty")
+            )
+        else:
+            data_tabulate = []
+            interface = []
+            ids = []
+
+            if id != None:
+                ids.append(id)
+            else:
+                for data in id_list:
+                    ids.append(data["portchannel-id"])
+
+                ids = natsorted(ids)
+
+            for id in ids:
+                data = id_list[id]
+                try:
+                    interface.append(natsorted(list(data["config"]["interface"])))
+                except (sr.errors.SysrepoNotFoundError, KeyError):
+                    interface.append([])
+
+            for i in range(len(ids)):
+
+                if len(interface[i]) > 0:
+                    data_tabulate.append([ids[i], interface[i][0]])
+                else:
+                    data_tabulate.append([ids[i], "-"])
+
+                for j in range(1, len(interface[i])):
+                    data_tabulate.append(["", interface[i][j]])
+
+            stdout.info(
+                tabulate(
+                    data_tabulate,
+                    ["Portchannel-ID", "Interface"],
+                    tablefmt="pretty",
+                    colalign=("left",),
+                )
+            )
