@@ -114,7 +114,7 @@ class Root(Object):
             "vlan": FuzzyWordCompleter(lambda: ["range"] + self.get_vid(), WORD=True),
             "aaa": {"authentication": {"login": None}},
             "tacacs-server": {"host": None},
-            "ufd": FuzzyWordCompleter(lambda: self.sonic.ufd.get_ufd_id(), WORD=True),
+            "ufd": FuzzyWordCompleter(lambda: self.sonic.ufd.get_id(), WORD=True),
             "portchannel": {},
         }
         # TODO:add timer for inactive user
@@ -177,9 +177,7 @@ class Root(Object):
             else:
                 return Interface_CLI(conn, self, line[0])
 
-        @self.command(
-            FuzzyWordCompleter(lambda: self.sonic.ufd.get_ufd_id(), WORD=True)
-        )
+        @self.command(FuzzyWordCompleter(lambda: self.sonic.ufd.get_id(), WORD=True))
         def ufd(line):
             if len(line) != 1:
                 raise InvalidInput("usage: ufd <ufd-id>")
@@ -263,7 +261,7 @@ class Root(Object):
                             "The vlan-id entered must be numbers and not letters"
                         )
                 elif line[0] == "ufd":
-                    self.sonic.ufd.delete_ufd(line[1])
+                    self.sonic.ufd.delete(line[1])
 
                 elif line[0] == "portchannel":
                     self.sonic.pc.delete(line[1])

@@ -242,7 +242,6 @@ class Port(object):
             "auto-nego",
         ]
         v_dict = {}
-
         interface_list = self.get_interface_list("running", False)
         if not interface_list:
             return
@@ -597,36 +596,36 @@ class UFD(object):
 
     XPATH = "/goldstone-uplink-failure-detection:ufd-groups"
 
-    def xpath_ufd(self, ufd_id):
-        return "{}/ufd-group[ufd-id='{}']".format(self.XPATH, ufd_id)
+    def xpath(self, id):
+        return "{}/ufd-group[ufd-id='{}']".format(self.XPATH, id)
 
     def __init__(self, conn, parent):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
         self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
 
-    def create_ufd(self, ufd_id):
+    def create(self, id):
         xpath = "/goldstone-uplink-failure-detection:ufd-groups/ufd-group[ufd-id='{}']".format(
-            ufd_id
+            id
         )
 
         try:
             self.sr_op.get_data(xpath, "running")
         except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data(f"{xpath}/config/ufd-id", ufd_id)
+            self.sr_op.set_data(f"{xpath}/config/ufd-id", id)
 
-    def delete_ufd(self, ufd_id):
-        self.sr_op.delete_data(self.xpath_ufd(ufd_id))
+    def delete(self, id):
+        self.sr_op.delete_data(self.xpath(id))
         return
 
-    def add_ufd_port(self, ufd_id, port, role):
-        self.sr_op.set_data("{}/config/{}".format(self.xpath_ufd(ufd_id), role), port)
+    def add_port(self, id, port, role):
+        self.sr_op.set_data("{}/config/{}".format(self.xpath(id), role), port)
 
-    def remove_ufd_port(self, ufd_id, role, port):
-        xpath = self.xpath_ufd(ufd_id)
+    def remove_port(self, id, role, port):
+        xpath = self.xpath(id)
         self.sr_op.delete_data(f"{xpath}/config/{role}[.='{port}']")
 
-    def get_ufd_id(self):
+    def get_id(self):
         path = "/goldstone-uplink-failure-detection:ufd-groups"
         self.session.switch_datastore("operational")
         d = self.session.get_data(path, no_subs=True)
@@ -639,41 +638,40 @@ class UFD(object):
             self.tree = self.sr_op.get_data(
                 "{}/ufd-group".format(self.XPATH), "running"
             )
-            ufd_id_list = self.tree["ufd-groups"]["ufd-group"]
+            id_list = self.tree["ufd-groups"]["ufd-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
             raise InvalidInput("ufd not configured for this interface")
 
         port_found = False
-        for data in ufd_id_list:
+        for data in id_list:
             try:
                 uplink_port = data["config"]["uplink"]
                 if port in uplink_port:
                     port_found = True
-                    self.remove_ufd_port(data["ufd-id"], "uplink", port)
+                    self.remove_port(data["ufd-id"], "uplink", port)
             except KeyError:
                 pass
             try:
                 downlink_ports = data["config"]["downlink"]
                 if port in downlink_ports:
                     port_found = True
-                    self.remove_ufd_port(data["ufd-id"], "downlink", port)
+                    self.remove_port(data["ufd-id"], "downlink", port)
             except KeyError:
                 pass
 
         if port_found == False:
             raise InvalidInput("ufd not configured for this interface")
 
-    def show_ufd(self, UFD_id=None):
+    def show(self, id=None):
         try:
-            # Fecting from running DS since south is not implemented
             self.tree = self.sr_op.get_data(
                 "{}/ufd-group".format(self.XPATH), "operational"
             )
-            ufd_id_list = self.tree["ufd-groups"]["ufd-group"]
+            id_list = self.tree["ufd-groups"]["ufd-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
-            ufd_id_list = []
+            id_list = []
 
-        if len(ufd_id_list) == 0:
+        if len(id_list) == 0:
             stdout.info(
                 tabulate(
                     [], ["UFD-ID", "Uplink-Ports", "Downlink-Ports"], tablefmt="pretty"
@@ -683,18 +681,18 @@ class UFD(object):
             data_tabulate = []
             uplink_ports = []
             downlink_ports = []
-            ufd_ids = []
+            ids = []
 
-            if UFD_id != None:
-                ufd_ids.append(UFD_id)
+            if id != None:
+                ids.append(id)
             else:
-                for data in ufd_id_list:
-                    ufd_ids.append(data["ufd-id"])
+                for data in id_list:
+                    ids.append(data["ufd-id"])
 
-                ufd_ids = natsorted(ufd_ids)
+                ids = natsorted(ids)
 
-            for ufd_id in ufd_ids:
-                data = ufd_id_list[ufd_id]
+            for id in ids:
+                data = id_list[id]
                 try:
                     uplink_ports.append(natsorted(list(data["config"]["uplink"])))
                 except (sr.errors.SysrepoNotFoundError, KeyError):
@@ -704,19 +702,19 @@ class UFD(object):
                 except (sr.errors.SysrepoNotFoundError, KeyError):
                     downlink_ports.append([])
 
-            for i in range(len(ufd_ids)):
+            for i in range(len(ids)):
 
                 if len(uplink_ports[i]) > 0:
                     if len(downlink_ports[i]) > 0:
                         data_tabulate.append(
-                            [ufd_ids[i], uplink_ports[i][0], downlink_ports[i][0]]
+                            [ids[i], uplink_ports[i][0], downlink_ports[i][0]]
                         )
                     else:
-                        data_tabulate.append([ufd_ids[i], uplink_ports[i][0], "-"])
+                        data_tabulate.append([ids[i], uplink_ports[i][0], "-"])
                 elif len(downlink_ports[i]) > 0:
-                    data_tabulate.append([ufd_ids[i], "-", downlink_ports[i][0]])
+                    data_tabulate.append([ids[i], "-", downlink_ports[i][0]])
                 else:
-                    data_tabulate.append([ufd_ids[i], "-", "-"])
+                    data_tabulate.append([ids[i], "-", "-"])
 
                 if len(uplink_ports[i]) > len(downlink_ports[i]):
                     for j in range(1, len(uplink_ports[i])):
@@ -755,15 +753,15 @@ class UFD(object):
         except (sr.errors.SysrepoNotFoundError, KeyError):
             return
 
-        ufd_ids = []
+        ids = []
 
         for data in d_list:
-            ufd_ids.append(data["ufd-id"])
+            ids.append(data["ufd-id"])
 
-        ufd_ids = natsorted(ufd_ids)
+        ids = natsorted(ids)
 
-        for ufd_id in ufd_ids:
-            data = d_list[ufd_id]
+        for id in ids:
+            data = d_list[id]
             stdout.info("ufd {}".format(data["config"]["ufd-id"]))
             stdout.info("  quit")
             stdout.info("!")
@@ -771,7 +769,7 @@ class UFD(object):
                 uplink_ports = data["config"]["uplink"]
                 for port in uplink_ports:
                     stdout.info(f"interface {port}")
-                    stdout.info(f"  ufd {ufd_id} uplink")
+                    stdout.info(f"  ufd {id} uplink")
                     stdout.info("  quit")
                     stdout.info("!")
             except (sr.errors.SysrepoNotFoundError, KeyError):
@@ -781,7 +779,7 @@ class UFD(object):
                 downlink_ports = natsorted(data["config"]["downlink"])
                 for port in downlink_ports:
                     stdout.info(f"interface {port}")
-                    stdout.info(f"  ufd {ufd_id} downlink")
+                    stdout.info(f"  ufd {id} downlink")
                     stdout.info("  quit")
                     stdout.info("!")
             except (sr.errors.SysrepoNotFoundError, KeyError):
@@ -822,7 +820,7 @@ class Sonic(object):
         stdout.info("\nshow interface description:\n")
         self.port.show_interface()
         stdout.info("\nshow ufd:\n")
-        self.ufd.show_ufd()
+        self.ufd.show()
         self.pc.show()
 
 
@@ -848,9 +846,7 @@ class Portchannel(object):
     XPATH = "/goldstone-portchannel:portchannel"
 
     def xpath(self, id):
-        return "{}/portchannel-group[portchannel-id='{}']".format(
-            self.XPATH, id
-        )
+        return "{}/portchannel-group[portchannel-id='{}']".format(self.XPATH, id)
 
     def __init__(self, conn, parent):
         self.session = conn.start_session()
@@ -859,14 +855,10 @@ class Portchannel(object):
 
     def create(self, id):
         try:
-            self.sr_op.get_data(
-                "{}".format(self.xpath(id)), "running"
-            )
+            self.sr_op.get_data("{}".format(self.xpath(id)), "running")
         except sr.SysrepoNotFoundError as e:
             self.sr_op.set_data(
-                "{}/config/portchannel-id".format(
-                    self.xpath(id)
-                ),
+                "{}/config/portchannel-id".format(self.xpath(id)),
                 id,
             )
 
@@ -875,9 +867,7 @@ class Portchannel(object):
         return
 
     def add_interface(self, id, intf):
-        self.sr_op.set_data(
-            "{}/config/interface".format(self.xpath(id)), intf
-        )
+        self.sr_op.set_data("{}/config/interface".format(self.xpath(id)), intf)
 
     def get_id(self):
         path = "/goldstone-portchannel:portchannel"

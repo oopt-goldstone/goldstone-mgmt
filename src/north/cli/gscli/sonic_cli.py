@@ -58,8 +58,8 @@ class Interface_CLI(Object):
 
         self.ufd_dict = {}
 
-        for ufd_id in self.sonic.ufd.get_ufd_id():
-            self.ufd_dict[ufd_id] = {"uplink": None, "downlink": None}
+        for id in self.sonic.ufd.get_id():
+            self.ufd_dict[id] = {"uplink": None, "downlink": None}
 
         self.no_dict = {
             "shutdown": None,
@@ -258,7 +258,7 @@ class Interface_CLI(Object):
         def ufd(args):
             if len(args) != 2 or (args[1] != "uplink" and args[1] != "downlink"):
                 raise InvalidInput("usage: ufd <ufdid> <uplink|downlink>")
-            self.sonic.ufd.add_ufd_port(args[0], self.name, args[1])
+            self.sonic.ufd.add_port(args[0], self.name, args[1])
 
         @self.command()
         def portchannel(args):
@@ -301,20 +301,20 @@ class Vlan_CLI(Object):
 
 
 class Ufd_CLI(Object):
-    def __init__(self, conn, parent, ufd_id):
-        self.ufd_id = ufd_id
+    def __init__(self, conn, parent, id):
+        self.id = id
         super().__init__(parent)
         self.sonic = Sonic(conn)
-        self.sonic.ufd.create_ufd(self.ufd_id)
+        self.sonic.ufd.create(self.id)
 
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
                 return parent.show(args)
-            self.sonic.ufd.show_ufd(self.ufd_id)
+            self.sonic.ufd.show(self.id)
 
     def __str__(self):
-        return "ufd({})".format(self.ufd_id)
+        return "ufd({})".format(self.id)
 
 
 class Portchannel_CLI(Object):
