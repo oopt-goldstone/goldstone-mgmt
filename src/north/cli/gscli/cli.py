@@ -81,7 +81,7 @@ class UfdGroupCommand(Command):
 
     def exec(self, line):
         if len(line) == 0:
-            return self.ufd.show_ufd()
+            return self.ufd.show()
         else:
             stderr.info(self.usage())
 
