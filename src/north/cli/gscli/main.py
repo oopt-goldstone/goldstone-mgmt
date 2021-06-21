@@ -24,7 +24,7 @@ import time
 from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
 from .tai_cli import Transponder
-from .sonic_cli import Interface_CLI, Vlan_CLI, Ufd_CLI, Portchannel_CLI
+from .sonic_cli import Interface, Vlan, Ufd, Portchannel
 from .sonic import Sonic
 from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI, System
 from .system import AAA, TACACS, Mgmtif
@@ -175,19 +175,19 @@ class Root(Object):
             if line[0] in self.get_mgmt_ifname():
                 return Mgmt_CLI(conn, self, line[0])
             else:
-                return Interface_CLI(conn, self, line[0])
+                return Interface(conn, self, line[0])
 
         @self.command(FuzzyWordCompleter(lambda: self.sonic.ufd.get_id(), WORD=True))
         def ufd(line):
             if len(line) != 1:
                 raise InvalidInput("usage: ufd <ufd-id>")
-            return Ufd_CLI(conn, self, line[0])
+            return Ufd(conn, self, line[0])
 
         @self.command()
         def portchannel(line):
             if len(line) != 1:
                 raise InvalidInput("usage: portchannel <portchannel_id>")
-            return Portchannel_CLI(conn, self, line[0])
+            return Portchannel(conn, self, line[0])
 
         @self.command()
         def date(line):
@@ -234,15 +234,20 @@ class Root(Object):
             if len(line) not in [1, 2]:
                 raise InvalidInput("usage: vlan <vlan-id>")
             if len(line) == 1 and line[0].isdigit():
-                return Vlan_CLI(conn, self, line[0])
-            elif line[0] == "range" and isValidVlanRange(line[1]):
-                for vlans in line[1].split(","):
-                    if vlans.isdigit():
-                        self.sonic.vlan.create_vlan(vlans)
-                    else:
-                        vlan_limits = vlans.split("-")
-                        for vid in range(int(vlan_limits[0]), int(vlan_limits[1]) + 1):
-                            self.sonic.vlan.create_vlan(str(vid))
+                return Vlan(conn, self, line[0])
+            elif line[0] == "range":
+                if len(line) != 2:
+                    raise InvalidInput("usage: vlan range <range-list>")
+                elif isValidVlanRange(line[1]):
+                    for vlans in line[1].split(","):
+                        if vlans.isdigit():
+                            self.sonic.vlan.create(vlans)
+                        else:
+                            vlan_limits = vlans.split("-")
+                            for vid in range(int(vlan_limits[0]), int(vlan_limits[1]) + 1):
+                                self.sonic.vlan.create(str(vid))
+                else:
+                    stderr.info("The vlan-range entered must be numbers and not letters")
             else:
                 stderr.info("The vlan-id entered must be numbers and not letters")
 
@@ -253,7 +258,7 @@ class Root(Object):
                     vlan_list = self.get_vid()
                     if line[1].isdigit():
                         if line[1] in vlan_list:
-                            self.sonic.vlan.delete_vlan(line[1])
+                            self.sonic.vlan.delete(line[1])
                         else:
                             stderr.info("The vlan-id provided doesn't exist")
                     else:
@@ -285,14 +290,14 @@ class Root(Object):
                         for vlans in line[2].split(","):
                             if vlans.isdigit():
                                 if vlans in vlan_list:
-                                    self.sonic.vlan.delete_vlan(vlans)
+                                    self.sonic.vlan.delete(vlans)
                             else:
                                 vlan_limits = vlans.split("-")
                                 for vid in range(
                                     int(vlan_limits[0]), int(vlan_limits[1]) + 1
                                 ):
                                     if str(vid) in vlan_list:
-                                        self.sonic.vlan.delete_vlan(str(vid))
+                                        self.sonic.vlan.delete(str(vid))
                     else:
                         stderr.info("Enter a valid range for vlan")
 

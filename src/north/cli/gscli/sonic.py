@@ -95,16 +95,16 @@ class Vlan(object):
         d = self._vlan_map
         return [str(v["vlanid"]) for v in d]
 
-    def set_name(self, vlan_name):
-        vid = vlan_name[4:]
+    def set_name(self, name):
+        vid = name[4:]
         try:
-            self.sr_op.set_data("{}/name".format(self.xpath_vlan(vid)), vlan_name)
+            self.sr_op.set_data("{}/name".format(self.xpath_vlan(vid)), name)
         except sr.errors.SysrepoValidationFailedError as error:
             msg = str(error)
             stderr.info(msg)
 
-    def create_vlan(self, vid):
-        vlan_name = "Vlan" + vid
+    def create(self, vid):
+        name = "Vlan" + vid
         try:
             data_tree = self.session.get_data_ly(self.XPATH)
             vlan_map = json.loads(data_tree.print_mem("json"))["goldstone-vlan:vlan"][
@@ -113,12 +113,12 @@ class Vlan(object):
         except (sr.errors.SysrepoNotFoundError, KeyError) as error:
             logger.warning(error)
         else:
-            if vlan_name in vlan_map:
+            if name in vlan_map:
                 return
         self.sr_op.set_data("{}/vlanid".format(self.xpath_vlan(vid)), vid)
 
-    def delete_vlan(self, vid):
-        vlan_name = "Vlan" + vid
+    def delete(self, vid):
+        name = "Vlan" + vid
         try:
             mem_dict = self.sr_op.get_data("{}/members".format(self.xpath_vlan(vid)))
             mem_dict = list(mem_dict["vlan"]["VLAN"]["VLAN_LIST"])[0]
@@ -418,10 +418,10 @@ class Port(object):
         xpath_mem_mode = "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST"
         mode_map = {"tagged": "trunk", "untagged": "access"}
 
-        vlan_name = "Vlan" + vid
-        xpath_mem_list = xpath_mem_list + "[name='{}']".format(vlan_name)
+        name = "Vlan" + vid
+        xpath_mem_list = xpath_mem_list + "[name='{}']".format(name)
         xpath_mem_mode = xpath_mem_mode + "[name='{}'][ifname='{}']".format(
-            vlan_name, ifname
+            name, ifname
         )
 
         # in order to create the interface node if it doesn't exist in running DS
@@ -433,14 +433,14 @@ class Port(object):
 
         if config == True:
             set_attribute(
-                self.sr_op, xpath_mem_list, "vlan", vlan_name, "members", ifname
+                self.sr_op, xpath_mem_list, "vlan", name, "members", ifname
             )
             if mode == "trunk":
                 set_attribute(
                     self.sr_op,
                     xpath_mem_mode,
                     "vlan",
-                    vlan_name,
+                    name,
                     "tagging_mode",
                     "tagged",
                 )
@@ -449,7 +449,7 @@ class Port(object):
                     self.sr_op,
                     xpath_mem_mode,
                     "vlan",
-                    vlan_name,
+                    name,
                     "tagging_mode",
                     "untagged",
                 )
@@ -477,7 +477,7 @@ class Port(object):
                         self.sr_op,
                         xpath_mem_list,
                         "vlan",
-                        vlan_name,
+                        name,
                         "members",
                         mem_intf,
                     )
