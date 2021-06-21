@@ -23,7 +23,7 @@ stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 
-class Interface_CLI(Object):
+class Interface(Object):
     def __init__(self, conn, parent, ifname):
         super().__init__(parent)
         self.conn = conn
@@ -283,12 +283,12 @@ class Interface_CLI(Object):
         return "interface({})".format(self.name)
 
 
-class Vlan_CLI(Object):
+class Vlan(Object):
     def __init__(self, conn, parent, vid):
         self.vid = vid
         super().__init__(parent)
         self.sonic = Sonic(conn)
-        self.sonic.vlan.create_vlan(self.vid)
+        self.sonic.vlan.create(self.vid)
 
         @self.command(parent.get_completer("show"))
         def show(args):
@@ -300,7 +300,7 @@ class Vlan_CLI(Object):
         return "vlan({})".format(self.vid)
 
 
-class Ufd_CLI(Object):
+class Ufd(Object):
     def __init__(self, conn, parent, id):
         self.id = id
         super().__init__(parent)
@@ -317,7 +317,7 @@ class Ufd_CLI(Object):
         return "ufd({})".format(self.id)
 
 
-class Portchannel_CLI(Object):
+class Portchannel(Object):
     def __init__(self, conn, parent, id):
         self.id = id
         super().__init__(parent)
