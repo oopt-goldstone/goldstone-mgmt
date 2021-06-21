@@ -321,7 +321,7 @@ class Server(object):
     def get_configured_breakout_ports(self, ifname):
         xpath = f"/goldstone-interfaces:interfaces/interface"
         self.sess.switch_datastore("operational")
-        data = self.sess.get_data(xpath, no_subs=True)
+        data = self.sess.get_data(xpath)
         logger.debug(f"get_configured_breakout_ports: {ifname}, {data}")
         ports = []
         for intf in data.get("interfaces", {}).get("interface", []):
@@ -335,7 +335,6 @@ class Server(object):
                 pass
 
         logger.debug(f"get_configured_breakout_ports: ports: {ports}")
-
         return ports
 
     def vlan_change_cb(self, event, req_id, changes, priv):
@@ -737,11 +736,15 @@ class Server(object):
                         try:
                             running_data = self.get_running_data(tmp_xpath)
                             for intf in running_data["interfaces"]["interface"]:
-                                if int(intf["breakout"]["num-channels"]) == 4:
+                                breakout_details = self.get_breakout_detail(ifname)
+                                logger.debug(f"Breakout Details :: {breakout_details}")
+                                if not breakout_details:
+                                    raise KeyError
+                                if int(breakout_details["num-channels"]) == 4:
                                     status_bcm = await self.k8s.run_bcmcmd_usonic(
                                         key, ifname, default_intf_type
                                     )
-                                elif int(intf["breakout"]["num-channels"]) == 2:
+                                elif int(breakout_details["num-channels"]) == 2:
                                     status_bcm = await self.k8s.run_bcmcmd_usonic(
                                         key, ifname, default_intf_type + "2"
                                     )
