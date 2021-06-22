@@ -240,9 +240,39 @@ class Port(object):
             "breakout",
             "interface-type",
             "auto-nego",
+            "ufd-id",
+            "portchannel-id",
         ]
         v_dict = {}
         interface_list = self.get_interface_list("running", False)
+
+        ufd_ports = self.get_ufd()
+        non_run_intf = []
+
+        for ufd_data in ufd_ports:
+            for intf_data in interface_list:
+                if intf_data.get("name") == ufd_data.get("name"):
+                    intf_data["ufd-id"] = ufd_data.get("ufd-id")
+                    intf_data["role"] = ufd_data.get("role")
+                    break
+            else:
+                non_run_intf.append(ufd_data)
+        interface_list = interface_list + non_run_intf
+
+        non_run_intf = []
+        portchannel_ids = self.get_portchannel()
+
+        for portchannel_data in portchannel_ids:
+            for intf_data in interface_list:
+                if intf_data.get("name") == portchannel_data.get("name"):
+                    intf_data["portchannel-id"] = portchannel_data.get("portchannel-id")
+                    break
+            else:
+                non_run_intf.append(portchannel_data)
+        interface_list = interface_list + non_run_intf
+
+        interface_list = natsorted(interface_list, key=lambda x: x["name"])
+
         if not interface_list:
             return
 
@@ -345,8 +375,69 @@ class Port(object):
                                     )
                                 )
 
+                elif v == "ufd-id":
+                    if v_dict["ufd-id"] != None:
+                        stdout.info(
+                            "  ufd {} {}".format(data.get("ufd-id"), data.get("role"))
+                        )
+
+                elif v == "portchannel-id":
+                    if v_dict["portchannel-id"] != None:
+                        stdout.info(
+                            "  portchannel {}".format(data.get("portchannel-id"))
+                        )
+
             stdout.info("  quit")
+            stdout.info("!")
         stdout.info("!")
+
+    def get_ufd(self):
+        xpath = "/goldstone-uplink-failure-detection:ufd-groups"
+        ufd_ports = []
+        try:
+            tree = self.sr_op.get_data("{}/ufd-group".format(xpath), "running")
+            ufd_list = tree["ufd-groups"]["ufd-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return {}
+
+        for data in ufd_list:
+            try:
+                for intf in data["config"]["uplink"]:
+                    ufd_ports.append(
+                        {"name": intf, "ufd-id": data["ufd-id"], "role": "uplink"}
+                    )
+            except:
+                pass
+
+            try:
+                for intf in data["config"]["downlink"]:
+                    ufd_ports.append(
+                        {"name": intf, "ufd-id": data["ufd-id"], "role": "downlink"}
+                    )
+            except:
+                pass
+
+        return ufd_ports
+
+    def get_portchannel(self):
+        XPATH = "/goldstone-portchannel:portchannel"
+        portchannel_ids = []
+        try:
+            tree = self.sr_op.get_data("{}/portchannel-group".format(XPATH), "running")
+            portchannel_list = tree["portchannel"]["portchannel-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return {}
+
+        for data in portchannel_list:
+            try:
+                for intf in data["config"]["interface"]:
+                    portchannel_ids.append(
+                        {"name": intf, "portchannel-id": data["portchannel-id"]}
+                    )
+            except:
+                pass
+
+        return portchannel_ids
 
     def _ifname_components(self):
         d = self._ifname_map
@@ -432,9 +523,7 @@ class Port(object):
             self.sr_op.set_data("{}/admin-status".format(self.xpath(ifname)), "down")
 
         if config == True:
-            set_attribute(
-                self.sr_op, xpath_mem_list, "vlan", name, "members", ifname
-            )
+            set_attribute(self.sr_op, xpath_mem_list, "vlan", name, "members", ifname)
             if mode == "trunk":
                 set_attribute(
                     self.sr_op,
@@ -765,27 +854,6 @@ class UFD(object):
             stdout.info("ufd {}".format(data["config"]["ufd-id"]))
             stdout.info("  quit")
             stdout.info("!")
-            try:
-                uplink_ports = data["config"]["uplink"]
-                for port in uplink_ports:
-                    stdout.info(f"interface {port}")
-                    stdout.info(f"  ufd {id} uplink")
-                    stdout.info("  quit")
-                    stdout.info("!")
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                pass
-
-            try:
-                downlink_ports = natsorted(data["config"]["downlink"])
-                for port in downlink_ports:
-                    stdout.info(f"interface {port}")
-                    stdout.info(f"  ufd {id} downlink")
-                    stdout.info("  quit")
-                    stdout.info("!")
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                pass
-
-            stdout.info("!")
 
 
 class Sonic(object):
@@ -920,15 +988,6 @@ class Portchannel(object):
             stdout.info("portchannel {}".format(data["config"]["portchannel-id"]))
             stdout.info("  quit")
             stdout.info("!")
-            try:
-                intf = data["config"]["interface"]
-                for interface in intf:
-                    stdout.info(f"interface {interface}")
-                    stdout.info(f"  portchannel {id}")
-                    stdout.info("  quit")
-                    stdout.info("!")
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                pass
 
     def show(self, id=None):
         try:
