@@ -389,6 +389,8 @@ class Server(object):
                             await obj.set(k, v)
                         except taish.TAIException as e:
                             raise sysrepo.SysrepoUnsupportedError(str(e))
+                else:
+                    logger.warning(f"unsupported xpath: {change.xpath}, value: {value}")
 
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f"oper get callback requested xpath: {req_xpath}")
@@ -557,7 +559,11 @@ class Server(object):
 
         eventname = f"goldstone-tai:{type_}-{attr_meta.short_name}-event"
 
-        v = {}
+        v = {"module-name": key}
+        if type_ != "module":
+            v["index"] = index
+
+        keys = []
 
         for attr in msg.attrs:
             meta = await obj.get_attribute_metadata(attr.attr_id)
@@ -565,6 +571,7 @@ class Server(object):
                 xpath = f"/{eventname}/goldstone-tai:{meta.short_name}"
                 schema = list(ly_ctx.find_path(xpath))[0]
                 data = attr_tai2yang(attr.value, meta, schema)
+                keys.append(meta.short_name)
                 if type(data) == list and len(data) == 0:
                     logger.warning(f"empty leaf-list is not supported for notification")
                     continue
@@ -573,9 +580,11 @@ class Server(object):
                 logger.warning(f"{xpath}: {e}")
                 continue
 
-        if len(v) == 0:
+        if len(keys) == 0:
             logger.warning(f"nothing to notify")
             return
+
+        v["keys"] = keys
 
         notif = {eventname: v}
 
@@ -610,7 +619,12 @@ class Server(object):
                 sess.set_item(f"{xpath}/config/name", key)
                 sess.set_item(f"{xpath}/state/location", location)
                 if return_notifiers:
-                    notifiers.append(module.monitor("notify", self.tai_cb, json=True))
+                    try:
+                        await module.get("notify")
+                    except taish.TAIException:
+                        logger.warning(f"monitoring {attr} is not supported for module({key})")
+                    else:
+                        notifiers.append(module.monitor("notify", self.tai_cb, json=True))
 
                 for i in range(len(m.netifs)):
                     sess.set_item(
@@ -619,14 +633,24 @@ class Server(object):
                     if return_notifiers:
                         n = module.get_netif(i)
                         for attr in ["notify", "alarm-notification"]:
-                            notifiers.append(n.monitor(attr, self.tai_cb, json=True))
+                            try:
+                                await n.get(attr)
+                            except taish.TAIException:
+                                logger.warning(f"monitoring {attr} is not supported for netif({i})")
+                            else:
+                                notifiers.append(n.monitor(attr, self.tai_cb, json=True))
 
                 for i in range(len(m.hostifs)):
                     sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
                     if return_notifiers:
                         h = module.get_hostif(i)
                         for attr in ["notify", "alarm-notification"]:
-                            notifiers.append(h.monitor(attr, self.tai_cb, json=True))
+                            try:
+                                await h.get(attr)
+                            except taish.TAIException:
+                                logger.warning(f"monitoring {attr} is not supported for hostif({i})")
+                            else:
+                                notifiers.append(h.monitor(attr, self.tai_cb, json=True))
 
             sess.apply_changes()
 
@@ -807,7 +831,7 @@ def main():
         # hpack debug log is too verbose. change it INFO level
         hpack = logging.getLogger("hpack")
         hpack.setLevel(logging.INFO)
-#        sysrepo.configure_logging(py_logging=True)
+    #        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO)
 
