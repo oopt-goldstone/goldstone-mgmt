@@ -513,83 +513,49 @@ class Server(object):
         self.sess.switch_datastore("running")
         ly_ctx = self.sess.get_ly_ctx()
 
-        objname = None
+        logger.debug(f"attr: {attr_meta.name}, msg: {msg}")
+
         if isinstance(obj, taish.Module):
-            objname = "module"
-            location = obj.get("location")
-            key = location2name(location)
-            xpath = f"/goldstone-tai:modules/module[name='{key}']/enable-notify"
-            try:
-                data = self.sess.get_data(
-                    xpath,
-                    include_implicit_defaults=True,
-                )
-                enable_notify = data["modules"]["module"][key]["enable-notify"]
-            except sysrepo.errors.SysrepoNotFoundError as e:
-                enable_notify = False
-
-            if not enable_notify:
-                return
-
+            type_ = "module"
         elif isinstance(obj, taish.NetIf):
-            objname = "network-interface"
-            module = obj.obj.module_oid
-            modules = await self.taish.list()
-            for location, m in modules.items():
-                if m.oid:
-                    if m.oid == module:
-                        module_location = location
-                else:
-                    continue
-            key = location2name(module_location)
-            index = await obj.get("index")
-            xpath = f"/goldstone-tai:modules/module[name='{key}']/network-interface[name='{index}']/config/enable-{attr_meta.short_name}"
-            try:
-                notify_data = self.sess.get_data(
-                    xpath,
-                    include_implicit_defaults=True,
-                )
-                enable_notify = notify_data["modules"]["module"][key]["network-interface"][
-                    index
-                ]["config"][f"enable-{attr_meta.short_name}"]
-            except sysrepo.errors.SysrepoNotFoundError as e:
-                enable_notify = False
-
-            if not enable_notify:
-                return
-
+            type_ = "network"
         elif isinstance(obj, taish.HostIf):
-            objname = "host-interface"
-            module = obj.obj.module_oid
-            modules = await self.taish.list()
-            for location, m in modules.items():
-                if m.oid:
-                    if m.oid == module:
-                        module_location = location
-                else:
-                    continue
-            key = location2name(module_location)
-            index = await obj.get("index")
-            xpath = f"/goldstone-tai:modules/module[name='{key}']/host-interface[name='{index}']/config/enable-{attr_meta.short_name}"
-            try:
-                notify_data = self.sess.get_data(
-                    xpath,
-                    include_implicit_defaults=True,
-                )
-                enable_notify = notify_data["modules"]["module"][key]["host-interface"][
-                    index
-                ]["config"][f"enable-{attr_meta.short_name}"]
-            except sysrepo.errors.SysrepoNotFoundError as e:
-                enable_notify = False
-
-            if not enable_notify:
-                return
-
-        if not objname:
+            type_ = "host"
+        else:
             logger.error(f"invalid object: {obj}")
             return
 
-        eventname = f"goldstone-tai:{objname}-{attr_meta.short_name}-event"
+        if type_ == "module":
+            location = await obj.get("location")
+            key = location2name(location)
+            xpath = f"/goldstone-tai:modules/module[name='{key}']/config/enable-{attr_meta.short_name}"
+        else:
+            type_ = type_ + "-interface"
+            m_oid = obj.obj.module_oid
+            modules = await self.taish.list()
+
+            for location, m in modules.items():
+                if m.oid == m_oid:
+                    module_location = location
+                    break
+            else:
+                logger.error(f"module not found: {m_oid}")
+                return
+
+            key = location2name(module_location)
+            index = await obj.get("index")
+            xpath = f"/goldstone-tai:modules/module[name='{key}']/{type_}[name='{index}']/config/enable-{attr_meta.short_name}"
+
+        try:
+            data = self.sess.get_data(xpath, include_implicit_defaults=True)
+        except sysrepo.errors.SysrepoNotFoundError as e:
+            return
+
+        notify = libyang.xpath_get(data, xpath)
+        if not notify:
+            return
+
+        eventname = f"goldstone-tai:{type_}-{attr_meta.short_name}-event"
 
         v = {}
 
@@ -643,6 +609,8 @@ class Server(object):
                 xpath = f"/goldstone-tai:modules/module[name='{key}']"
                 sess.set_item(f"{xpath}/config/name", key)
                 sess.set_item(f"{xpath}/state/location", location)
+                if return_notifiers:
+                    notifiers.append(module.monitor("notify", self.tai_cb, json=True))
 
                 for i in range(len(m.netifs)):
                     sess.set_item(
@@ -650,17 +618,15 @@ class Server(object):
                     )
                     if return_notifiers:
                         n = module.get_netif(i)
-                        notifiers.append(
-                            n.monitor("alarm-notification", self.tai_cb, json=True)
-                        )
+                        for attr in ["notify", "alarm-notification"]:
+                            notifiers.append(n.monitor(attr, self.tai_cb, json=True))
 
                 for i in range(len(m.hostifs)):
                     sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
                     if return_notifiers:
                         h = module.get_hostif(i)
-                        notifiers.append(
-                            h.monitor("alarm-notification", self.tai_cb, json=True)
-                        )
+                        for attr in ["notify", "alarm-notification"]:
+                            notifiers.append(h.monitor(attr, self.tai_cb, json=True))
 
             sess.apply_changes()
 
@@ -841,7 +807,7 @@ def main():
         # hpack debug log is too verbose. change it INFO level
         hpack = logging.getLogger("hpack")
         hpack.setLevel(logging.INFO)
-        sysrepo.configure_logging(py_logging=True)
+#        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO)
 
