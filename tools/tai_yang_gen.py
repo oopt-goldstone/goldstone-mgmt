@@ -165,7 +165,6 @@ if __name__ == "__main__":
                 shorttypename = "enable-" + shorttypename
                 keys = Statement("leaf-list", "keys")
                 keys.add(Statement("type", "string"))
-                keys.add(Statement("default", "'false'"))
                 keys.add(
                     Statement(
                         "description",
@@ -173,6 +172,7 @@ if __name__ == "__main__":
                     )
                 )
                 n.add(keys)
+                n.add(Statement("leaf", "module-name", Statement("type", "string")))
                 n.add(Statement("uses", config.name))
                 n.add(Statement("uses", state.name))
                 notifications.append(n)
