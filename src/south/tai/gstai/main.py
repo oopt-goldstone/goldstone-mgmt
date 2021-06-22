@@ -572,7 +572,7 @@ class Server(object):
             index = await obj.get("index")
             xpath = f"/goldstone-tai:modules/module[name='{key}']/host-interface[name='{index}']/config/enable-{attr_meta.short_name}"
             try:
-                notifiy_data = self.sess.get_data(
+                notify_data = self.sess.get_data(
                     xpath,
                     include_implicit_defaults=True,
                 )
