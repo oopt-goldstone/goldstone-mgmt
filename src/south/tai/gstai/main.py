@@ -16,7 +16,6 @@ from aiohttp import web
 TAI_STATUS_ITEM_ALREADY_EXISTS = -6
 TAI_STATUS_FAILURE = -1
 
-event_obj = {}
 
 class InvalidXPath(Exception):
     pass
@@ -158,6 +157,7 @@ class Server(object):
         app.add_routes(routes)
 
         self.runner = web.AppRunner(app)
+        self.event_obj = {}
 
     async def stop(self):
         logger.info(f"stop server")
@@ -595,48 +595,45 @@ class Server(object):
         dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
         self.sess.notification_send_ly(dnode)
 
-    async def tai_notifier(self, location):
-        modules = await self.taish.list()
-        for l, m in modules.items():
-            if l == location:
-                event = asyncio.Event()
-                event_obj[location] = event
-                tasks = []
+    async def get_tai_notification_tasks(self, location):
+        event = asyncio.Event()
+        self.event_obj[location] = event
+        tasks = []
 
+        try:
+            module = await self.taish.get_module(location)
+        except Exception as e:
+            logger.warning(
+                    f"failed to get module location: {location}. err: {e}"
+            )
+            return
+        try:
+            await module.get("notify")
+        except taish.TAIException:
+            logger.warning(f"monitoring {attr} is not supported for module({key})")
+        else:
+            tasks.append(module.monitor("notify", self.tai_cb, json=True))
+        for i in range(int(await module.get("num-network-interfaces"))):
+            n = module.get_netif(i)
+            for attr in ["notify", "alarm-notification"]:
                 try:
-                    module = await self.taish.get_module(location)
-                except Exception as e:
-                    logger.warning(
-                            f"failed to get module location: {location}. err: {e}"
-                    )
-                    return
-                try:
-                    await module.get("notify")
+                    await n.get(attr)
                 except taish.TAIException:
-                    logger.warning(f"monitoring {attr} is not supported for module({key})")
+                    logger.warning(f"monitoring {attr} is not supported for netif({i})")
                 else:
-                    tasks.append(module.monitor("notify", self.tai_cb, json=True))
-                for i in range(len(m.netifs)):
-                    n = module.get_netif(i)
-                    for attr in ["notify", "alarm-notification"]:
-                        try:
-                            await n.get(attr)
-                        except taish.TAIException:
-                            logger.warning(f"monitoring {attr} is not supported for netif({i})")
-                        else:
-                            tasks.append(n.monitor(attr, self.tai_cb, json=True))
+                    tasks.append(n.monitor(attr, self.tai_cb, json=True))
 
-                for i in range(len(m.hostifs)):
-                    h = module.get_hostif(i)
-                    for attr in ["notify", "alarm-notification"]:
-                        try:
-                            await h.get(attr)
-                        except taish.TAIException:
-                            logger.warning(f"monitoring {attr} is not supported for hostif({i})")
-                        else:
-                            tasks.append(h.monitor(attr, self.tai_cb, json=True))
-                tasks.append(event.wait())
-                return tasks
+        for i in range(int(await module.get("num-host-interfaces"))):
+            h = module.get_hostif(i)
+            for attr in ["notify", "alarm-notification"]:
+                try:
+                    await h.get(attr)
+                except taish.TAIException:
+                    logger.warning(f"monitoring {attr} is not supported for hostif({i})")
+                else:
+                    tasks.append(h.monitor(attr, self.tai_cb, json=True))
+        tasks.append(event.wait())
+        return tasks
 
     async def initialize_piu(self, config, key):
 
@@ -752,12 +749,12 @@ class Server(object):
                 config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
                 logger.debug(f"sysrepo running configuration: {config}")
                 await self.initialize_piu(config, piu)
-                tasks = await self.tai_notifier(piu)
+                tasks = await self.get_tai_notification_tasks(piu)
                 t = asyncio.create_task(self.notif_handler(tasks))
                 await self.update_operds()
             
             elif status[0] == "UNPLUGGED":
-                event_obj[piu].set()
+                self.event_obj[piu].set()
                 await self.cleanup_piu(piu)
                 await self.update_operds()
 
@@ -824,11 +821,9 @@ class Server(object):
             for module in modules:
                 key = module['location']
                 await self.initialize_piu(config, key)
-                tasks =  await self.tai_notifier(key)
-                if tasks is not None:
-                    t = asyncio.create_task(self.notif_handler(tasks))
-                else:
-                    continue
+                tasks =  await self.get_tai_notification_tasks(key)
+                if tasks:
+                    asyncio.create_task(self.notif_handler(tasks))
             await self.update_operds()
 
 
@@ -849,7 +844,7 @@ class Server(object):
                 asyncio_register=True,
             )
 
-            self.sess.subscribe_notification_tree('goldstone-onlp', f'/goldstone-onlp:*', 0, 0, self.notification_cb, asyncio_register=True)
+            self.sess.subscribe_notification_tree('goldstone-onlp', f'/goldstone-onlp:piu-notify-event', 0, 0, self.notification_cb, asyncio_register=True)
 
 
         await self.runner.setup()
