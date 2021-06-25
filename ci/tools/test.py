@@ -378,6 +378,8 @@ def test_port_breakout(cli):
     else:
         raise Exception("failed to fail with an invalid command: speed 1000")
 
+    ssh(cli, 'gscli -c "interface Ethernet5_3; mtu 9000"')
+
     ssh(
         cli, 'gscli -c "interface Ethernet5_1; no shutdown"'
     )  # add configuration to a sub-interface
