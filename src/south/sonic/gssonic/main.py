@@ -128,7 +128,7 @@ class Server(object):
 
         # Enable counters in SONiC
         self.enable_counters()
-
+        await asyncio.sleep(15)
         # Caching base values of counters
         self.cache_counters()
 
@@ -321,7 +321,7 @@ class Server(object):
     def get_configured_breakout_ports(self, ifname):
         xpath = f"/goldstone-interfaces:interfaces/interface"
         self.sess.switch_datastore("operational")
-        data = self.sess.get_data(xpath)
+        data = self.sess.get_data(xpath, no_subs=True)
         logger.debug(f"get_configured_breakout_ports: {ifname}, {data}")
         ports = []
         for intf in data.get("interfaces", {}).get("interface", []):
