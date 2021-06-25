@@ -128,7 +128,7 @@ class Server(object):
 
         # Enable counters in SONiC
         self.enable_counters()
-        await asyncio.sleep(15)
+        await asyncio.sleep(15) # TODO investigate why this is needed
         # Caching base values of counters
         self.cache_counters()
 
