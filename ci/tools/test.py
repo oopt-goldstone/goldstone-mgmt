@@ -123,6 +123,8 @@ def test_ufd(cli):
     ssh(cli, 'gscli -c "interface Ethernet6_1; shutdown"')
     output = ssh(cli, 'gscli -c "show interface brief"')
     assert "Ethernet7_1  |   dormant  " in output
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "ufd 10 downlink" in output
 
 def test_portchannel(cli):
     ssh(cli, 'gscli -c "portchannel 10"')
@@ -133,6 +135,8 @@ def test_portchannel(cli):
     assert "Ethernet1_1" in output
     assert "Ethernet2_1" in output
     assert "Ethernet4_1" in output
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "portchannel 10" in output
     ssh(cli, 'gscli -c "portchannel 20"')
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel 10"')
