@@ -673,12 +673,13 @@ class UFD(object):
 
     def add_port(self, id, port, role):
         xpath_intf = f"/goldstone-interfaces:interfaces/interface[name = '{port}']"
-        self.sr_op.set_data("{}/config/{}".format(self.xpath(id), role), port)
         # in order to create the interface node if it doesn't exist in running DS
         try:
             self.sr_op.get_data(xpath_intf, "running")
         except sr.SysrepoNotFoundError as e:
             self.sr_op.set_data("{}/admin-status".format(xpath_intf), "down")
+
+        self.sr_op.set_data("{}/config/{}".format(self.xpath(id), role), port)
 
     def remove_port(self, id, role, port):
         xpath = self.xpath(id)
@@ -907,13 +908,13 @@ class Portchannel(object):
     def add_interface(self, id, intf):
         xpath_intf = f"/goldstone-interfaces:interfaces/interface[name = '{intf}']"
 
-        self.sr_op.set_data("{}/config/interface".format(self.xpath(id)), intf)
-
         # in order to create the interface node if it doesn't exist in running DS
         try:
             self.sr_op.get_data(xpath_intf, "running")
         except sr.SysrepoNotFoundError as e:
             self.sr_op.set_data("{}/admin-status".format(xpath_intf), "down")
+
+        self.sr_op.set_data("{}/config/interface".format(self.xpath(id)), intf)
 
     def get_id(self):
         path = "/goldstone-portchannel:portchannel"

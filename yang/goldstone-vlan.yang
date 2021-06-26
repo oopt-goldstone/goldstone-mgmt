@@ -59,9 +59,7 @@ module goldstone-vlan {
         }
 
         leaf-list members {
-          type leafref {
-            path "/gs-if:interfaces/gs-if:interface/gs-if:name";
-          }
+          type gs-if:interface-ref;
         }
       }
     }
