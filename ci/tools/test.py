@@ -123,6 +123,8 @@ def test_ufd(cli):
     ssh(cli, 'gscli -c "interface Ethernet6_1; shutdown"')
     output = ssh(cli, 'gscli -c "show interface brief"')
     assert "Ethernet7_1  |   dormant  " in output
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "ufd 10 downlink" in output
 
 def test_portchannel(cli):
     ssh(cli, 'gscli -c "portchannel 10"')
@@ -133,6 +135,8 @@ def test_portchannel(cli):
     assert "Ethernet1_1" in output
     assert "Ethernet2_1" in output
     assert "Ethernet4_1" in output
+    output = ssh(cli, 'gscli -c "show running-config interface"')
+    assert "portchannel 10" in output
     ssh(cli, 'gscli -c "portchannel 20"')
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel 10"')
@@ -165,9 +169,9 @@ def test_tai(cli):
 
     output = ssh(
         cli,
-        f'gscli -c "transponder {device}; netif 0; output-power -1; !sleep 1; show" | grep output-power',
+        f'gscli -c "transponder {device}; netif 0; output-power -4; !sleep 1; show" | grep output-power',
     )
-    assert "-1.00 dBm" in output
+    assert "-4.00 dBm" in output
     output = ssh(
         cli,
         f'gscli -c "transponder {device}; netif 0; no output-power; !sleep 1; show" | grep output-power',
@@ -208,7 +212,7 @@ def test_tai(cli):
     assert "dp-16-qam" in output
 
     #    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -1.2"')
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -3.2"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
 
@@ -220,7 +224,7 @@ def test_tai(cli):
     output = ssh(
         cli, f'gscli -c "transponder {device}; netif 0; show" | grep output-power'
     )
-    assert "-1.20 dBm" in output
+    assert "-3.20 dBm" in output
     output = ssh(
         cli, f'gscli -c "transponder {device}; netif 0; show" | grep tx-laser-freq'
     )

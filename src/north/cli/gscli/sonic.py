@@ -246,8 +246,12 @@ class Port(object):
         if not interface_list:
             return
 
+        ufd = self.get_ufd()
+        pc = self.get_portchannel()
+
         for data in interface_list:
-            stdout.info("interface {}".format(data.get("name")))
+            ifname = data.get("name")
+            stdout.info("interface {}".format(ifname))
             for v in runn_conf_list:
                 v_dict = {v: data.get(v, None) for v in runn_conf_list}
                 if v == "admin-status":
@@ -345,8 +349,59 @@ class Port(object):
                                     )
                                 )
 
+            if ifname in ufd:
+                stdout.info(
+                    "  ufd {} {}".format(ufd[ifname]["ufd-id"], ufd[ifname]["role"])
+                )
+
+            if ifname in pc:
+                stdout.info("  portchannel {}".format(pc[ifname]["pc-id"]))
+
             stdout.info("  quit")
+            stdout.info("!")
         stdout.info("!")
+
+    def get_ufd(self):
+        xpath = "/goldstone-uplink-failure-detection:ufd-groups"
+        ufd = {}
+        try:
+            tree = self.sr_op.get_data("{}/ufd-group".format(xpath), "running")
+            ufd_list = tree["ufd-groups"]["ufd-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return {}
+
+        for data in ufd_list:
+            try:
+                for intf in data["config"]["uplink"]:
+                    ufd[intf] = {"ufd-id": data["ufd-id"], "role": "uplink"}
+            except:
+                pass
+
+            try:
+                for intf in data["config"]["downlink"]:
+                    ufd[intf] = {"ufd-id": data["ufd-id"], "role": "downlink"}
+            except:
+                pass
+
+        return ufd
+
+    def get_portchannel(self):
+        xpath = "/goldstone-portchannel:portchannel"
+        pc = {}
+        try:
+            tree = self.sr_op.get_data("{}/portchannel-group".format(xpath), "running")
+            pc_list = tree["portchannel"]["portchannel-group"]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return {}
+
+        for data in pc_list:
+            try:
+                for intf in data["config"]["interface"]:
+                    pc[intf] = {"pc-id": data["portchannel-id"]}
+            except:
+                pass
+
+        return pc
 
     def _ifname_components(self):
         d = self._ifname_map
@@ -432,9 +487,7 @@ class Port(object):
             self.sr_op.set_data("{}/admin-status".format(self.xpath(ifname)), "down")
 
         if config == True:
-            set_attribute(
-                self.sr_op, xpath_mem_list, "vlan", name, "members", ifname
-            )
+            set_attribute(self.sr_op, xpath_mem_list, "vlan", name, "members", ifname)
             if mode == "trunk":
                 set_attribute(
                     self.sr_op,
@@ -619,6 +672,13 @@ class UFD(object):
         return
 
     def add_port(self, id, port, role):
+        xpath_intf = f"/goldstone-interfaces:interfaces/interface[name = '{port}']"
+        # in order to create the interface node if it doesn't exist in running DS
+        try:
+            self.sr_op.get_data(xpath_intf, "running")
+        except sr.SysrepoNotFoundError as e:
+            self.sr_op.set_data("{}/admin-status".format(xpath_intf), "down")
+
         self.sr_op.set_data("{}/config/{}".format(self.xpath(id), role), port)
 
     def remove_port(self, id, role, port):
@@ -765,27 +825,6 @@ class UFD(object):
             stdout.info("ufd {}".format(data["config"]["ufd-id"]))
             stdout.info("  quit")
             stdout.info("!")
-            try:
-                uplink_ports = data["config"]["uplink"]
-                for port in uplink_ports:
-                    stdout.info(f"interface {port}")
-                    stdout.info(f"  ufd {id} uplink")
-                    stdout.info("  quit")
-                    stdout.info("!")
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                pass
-
-            try:
-                downlink_ports = natsorted(data["config"]["downlink"])
-                for port in downlink_ports:
-                    stdout.info(f"interface {port}")
-                    stdout.info(f"  ufd {id} downlink")
-                    stdout.info("  quit")
-                    stdout.info("!")
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                pass
-
-            stdout.info("!")
 
 
 class Sonic(object):
@@ -867,6 +906,14 @@ class Portchannel(object):
         return
 
     def add_interface(self, id, intf):
+        xpath_intf = f"/goldstone-interfaces:interfaces/interface[name = '{intf}']"
+
+        # in order to create the interface node if it doesn't exist in running DS
+        try:
+            self.sr_op.get_data(xpath_intf, "running")
+        except sr.SysrepoNotFoundError as e:
+            self.sr_op.set_data("{}/admin-status".format(xpath_intf), "down")
+
         self.sr_op.set_data("{}/config/interface".format(self.xpath(id)), intf)
 
     def get_id(self):
@@ -920,15 +967,6 @@ class Portchannel(object):
             stdout.info("portchannel {}".format(data["config"]["portchannel-id"]))
             stdout.info("  quit")
             stdout.info("!")
-            try:
-                intf = data["config"]["interface"]
-                for interface in intf:
-                    stdout.info(f"interface {interface}")
-                    stdout.info(f"  portchannel {id}")
-                    stdout.info("  quit")
-                    stdout.info("!")
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                pass
 
     def show(self, id=None):
         try:

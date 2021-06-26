@@ -36,7 +36,7 @@ module goldstone-portchannel {
     } 
   
     leaf-list interface {
-      type string;
+      type gs-if:interface-ref;
       description "List of interfaces to be combined";
     }
   }
