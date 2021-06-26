@@ -169,9 +169,9 @@ def test_tai(cli):
 
     output = ssh(
         cli,
-        f'gscli -c "transponder {device}; netif 0; output-power -1; !sleep 1; show" | grep output-power',
+        f'gscli -c "transponder {device}; netif 0; output-power -4; !sleep 1; show" | grep output-power',
     )
-    assert "-1.00 dBm" in output
+    assert "-4.00 dBm" in output
     output = ssh(
         cli,
         f'gscli -c "transponder {device}; netif 0; no output-power; !sleep 1; show" | grep output-power',
@@ -212,7 +212,7 @@ def test_tai(cli):
     assert "dp-16-qam" in output
 
     #    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -1.2"')
+    ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -3.2"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
 
@@ -224,7 +224,7 @@ def test_tai(cli):
     output = ssh(
         cli, f'gscli -c "transponder {device}; netif 0; show" | grep output-power'
     )
-    assert "-1.20 dBm" in output
+    assert "-3.20 dBm" in output
     output = ssh(
         cli, f'gscli -c "transponder {device}; netif 0; show" | grep tx-laser-freq'
     )
