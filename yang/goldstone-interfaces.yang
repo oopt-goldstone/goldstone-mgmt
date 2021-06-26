@@ -142,9 +142,7 @@ module goldstone-interfaces {
         must "not(../num-channels) and not(../channel-speed)" {
           error-message "Sub-interface should not have num-channels and channel-speed configured";
         }
-        type leafref {
-          path "/gs-if:interfaces/gs-if:interface/gs-if:name";
-        }
+        type interface-ref;
       }
     }
   }

@@ -7,6 +7,9 @@ module goldstone-uplink-failure-detection {
 
   prefix "gs-ufd";
 
+  import goldstone-interfaces {
+    prefix gs-if;
+  }
 
   // meta
   organization
@@ -32,12 +35,12 @@ module goldstone-uplink-failure-detection {
     }
 
     leaf-list uplink {
-      type string;
+      type gs-if:interface-ref;
       description "List of uplink interfaces to be monitored";
     }
 
     leaf-list downlink {
-      type string;
+      type gs-if:interface-ref;
       description "List of downlink interfaces to be disabled";
     }
   }
