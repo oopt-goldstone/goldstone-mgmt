@@ -604,6 +604,14 @@ class ClearDatastoreGroupCommand(Command):
                 if line[0] == "all":
                     ctx = root.conn.get_ly_ctx()
                     modules = [m.name() for m in ctx if "goldstone" in m.name()]
+                    # interface model may has dependency to other models (e.g. vlan, ufd )
+                    # we need to the clear interface model lastly
+                    # TODO invent cleaner way when we have more dependency among models
+                    try:
+                        modules.remove("goldstone-interfaces")
+                        modules.append("goldstone-interfaces")
+                    except ValueError:
+                        pass
                 else:
                     modules = [line[0]]
 
