@@ -48,7 +48,6 @@ def attr_tai2yang(attr, meta, schema):
     logger.warning(f"not supported float value: {attr}")
     raise taish.TAIException()
 
-
 MODULE_DEFAULT_VALUES = {"admin-status": "up", "enable-notify": False}
 
 NETIF_DEFAULT_VALUES = {
@@ -597,6 +596,19 @@ class Server(object):
 
     async def get_tai_notification_tasks(self, location):
         tasks = []
+        finalizers = []
+
+        async def finalizer(obj, attr):
+            while True:
+                await asyncio.sleep(.1)
+                v = await obj.get(attr)
+                logger.debug(v)
+                if '(nil)' in v:
+                    return
+
+        def add(obj, attr):
+            tasks.append(obj.monitor(attr, self.tai_cb, json=True))
+            finalizers.append(finalizer(obj, attr))
 
         try:
             module = await self.taish.get_module(location)
@@ -605,12 +617,14 @@ class Server(object):
                     f"failed to get module location: {location}. err: {e}"
             )
             return
+
         try:
             await module.get("notify")
         except taish.TAIException:
             logger.warning(f"monitoring {attr} is not supported for module({key})")
         else:
-            tasks.append(module.monitor("notify", self.tai_cb, json=True))
+            add(module, "notify")
+
         for i in range(int(await module.get("num-network-interfaces"))):
             n = module.get_netif(i)
             for attr in ["notify", "alarm-notification"]:
@@ -619,7 +633,7 @@ class Server(object):
                 except taish.TAIException:
                     logger.warning(f"monitoring {attr} is not supported for netif({i})")
                 else:
-                    tasks.append(n.monitor(attr, self.tai_cb, json=True))
+                    add(n, attr)
 
         for i in range(int(await module.get("num-host-interfaces"))):
             h = module.get_hostif(i)
@@ -629,9 +643,9 @@ class Server(object):
                 except taish.TAIException:
                     logger.warning(f"monitoring {attr} is not supported for hostif({i})")
                 else:
-                    tasks.append(h.monitor(attr, self.tai_cb, json=True))
+                    add(n, attr)
 
-        return tasks
+        return tasks, finalizers
 
     async def initialize_piu(self, config, location):
 
@@ -721,10 +735,10 @@ class Server(object):
                 for k, v in attrs:
                     await hostif.set(k, v)
 
-        tasks = await self.get_tai_notification_tasks(location)
+        tasks, finalizers = await self.get_tai_notification_tasks(location)
         event = asyncio.Event()
         tasks.append(event.wait())
-        task = asyncio.create_task(self.notif_handler(tasks))
+        task = asyncio.create_task(self.notif_handler(tasks, finalizers))
         self.event_obj[location] = {'event': event, 'task': task}
 
 
@@ -798,13 +812,13 @@ class Server(object):
                 sess.apply_changes()
 
 
-    async def notif_handler(self, tasks):
+    async def notif_handler(self, tasks, finalizers):
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         logger.debug(f"done: {done}, pending: {pending}")
         for task in pending:
             task.cancel()
-        logger.debug("waiting for pending tasks")
-        await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
+        logger.debug("waiting for finalizer tasks")
+        await asyncio.wait(finalizers, return_when=asyncio.ALL_COMPLETED)
         logger.debug("done")
 
     async def start(self):
