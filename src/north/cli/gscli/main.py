@@ -221,6 +221,7 @@ class Root(Object):
                     len(vlan_limits) == 2
                     and vlan_limits[0].isdigit()
                     and vlan_limits[1].isdigit()
+                    and vlan_limits[0] < vlan_limits[1]
                 ):
                     pass
                 else:
@@ -246,8 +247,9 @@ class Root(Object):
                             vlan_limits = vlans.split("-")
                             for vid in range(int(vlan_limits[0]), int(vlan_limits[1]) + 1):
                                 self.sonic.vlan.create(str(vid))
+
                 else:
-                    stderr.info("The vlan-range entered must be numbers and not letters")
+                    stderr.info("The vlan-range entered is invalid")
             else:
                 stderr.info("The vlan-id entered must be numbers and not letters")
 

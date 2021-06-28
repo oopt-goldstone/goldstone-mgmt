@@ -34,6 +34,10 @@ def test_vlan(cli):
     ssh(cli, 'gscli -c "show running-config"')
     ssh(cli, 'gscli -c "show running-config interface"')
     ssh(cli, 'gscli -c "show running-config vlan"')
+    try:
+        ssh(cli, 'gscli -c "vlan range 25-19"')
+    except SSHException as e:
+        assert "The vlan-range entered is invalid" in e.stderr
 
 
 def test_auto_nego(cli):
