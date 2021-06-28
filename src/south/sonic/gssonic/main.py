@@ -128,7 +128,6 @@ class Server(object):
 
         # Enable counters in SONiC
         self.enable_counters()
-
         # Caching base values of counters
         self.cache_counters()
 
@@ -335,7 +334,6 @@ class Server(object):
                 pass
 
         logger.debug(f"get_configured_breakout_ports: ports: {ports}")
-
         return ports
 
     def vlan_change_cb(self, event, req_id, changes, priv):
@@ -409,6 +407,8 @@ class Server(object):
         default_intf_type = "KR"
         valid_speeds = [40000, 100000]
         breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
+
+        update_oper_db = False
 
         for change in changes:
             logger.debug(f"change_cb: {change}")
@@ -705,7 +705,7 @@ class Server(object):
                     # remove the breakout config from uSONiC
                     if ch != None or speed != None:
                         logger.debug(
-                            "breakout config still exists: ch: {ch}, speed: {speed}"
+                            f"breakout config still exists: ch: {ch}, speed: {speed}"
                         )
                         continue
 
@@ -737,11 +737,15 @@ class Server(object):
                         try:
                             running_data = self.get_running_data(tmp_xpath)
                             for intf in running_data["interfaces"]["interface"]:
-                                if int(intf["breakout"]["num-channels"]) == 4:
+                                breakout_details = self.get_breakout_detail(ifname)
+                                logger.debug(f"Breakout Details :: {breakout_details}")
+                                if not breakout_details:
+                                    raise KeyError
+                                if int(breakout_details["num-channels"]) == 4:
                                     status_bcm = await self.k8s.run_bcmcmd_usonic(
                                         key, ifname, default_intf_type
                                     )
-                                elif int(intf["breakout"]["num-channels"]) == 2:
+                                elif int(breakout_details["num-channels"]) == 2:
                                     status_bcm = await self.k8s.run_bcmcmd_usonic(
                                         key, ifname, default_intf_type + "2"
                                     )
@@ -762,7 +766,10 @@ class Server(object):
                         #
                         # this behavior might change in the future
                         # https://github.com/sysrepo/sysrepo/issues/1937#issuecomment-742851607
-                        self.update_oper_db()
+                        update_oper_db = True
+
+        if update_oper_db:
+            self.update_oper_db()
 
     def get_counter(self, ifname, counter):
         if ifname not in self.counter_if_dict:
@@ -1739,7 +1746,7 @@ def main():
         hpack.setLevel(logging.INFO)
         k8s = logging.getLogger("kubernetes_asyncio.client.rest")
         k8s.setLevel(logging.INFO)
-        sysrepo.configure_logging(py_logging=True)
+#        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 
