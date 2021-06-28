@@ -1746,7 +1746,7 @@ def main():
         hpack.setLevel(logging.INFO)
         k8s = logging.getLogger("kubernetes_asyncio.client.rest")
         k8s.setLevel(logging.INFO)
-        sysrepo.configure_logging(py_logging=True)
+#        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 
