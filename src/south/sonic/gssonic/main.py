@@ -128,7 +128,6 @@ class Server(object):
 
         # Enable counters in SONiC
         self.enable_counters()
-        await asyncio.sleep(15) # TODO investigate why this is needed
         # Caching base values of counters
         self.cache_counters()
 
@@ -408,6 +407,8 @@ class Server(object):
         default_intf_type = "KR"
         valid_speeds = [40000, 100000]
         breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
+
+        update_oper_db = False
 
         for change in changes:
             logger.debug(f"change_cb: {change}")
@@ -704,7 +705,7 @@ class Server(object):
                     # remove the breakout config from uSONiC
                     if ch != None or speed != None:
                         logger.debug(
-                            "breakout config still exists: ch: {ch}, speed: {speed}"
+                            f"breakout config still exists: ch: {ch}, speed: {speed}"
                         )
                         continue
 
@@ -765,7 +766,10 @@ class Server(object):
                         #
                         # this behavior might change in the future
                         # https://github.com/sysrepo/sysrepo/issues/1937#issuecomment-742851607
-                        self.update_oper_db()
+                        update_oper_db = True
+
+        if update_oper_db:
+            self.update_oper_db()
 
     def get_counter(self, ifname, counter):
         if ifname not in self.counter_if_dict:
