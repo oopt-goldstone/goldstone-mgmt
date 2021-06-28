@@ -596,8 +596,6 @@ class Server(object):
         self.sess.notification_send_ly(dnode)
 
     async def get_tai_notification_tasks(self, location):
-        event = asyncio.Event()
-        self.event_obj[location] = event
         tasks = []
 
         try:
@@ -632,28 +630,30 @@ class Server(object):
                     logger.warning(f"monitoring {attr} is not supported for hostif({i})")
                 else:
                     tasks.append(h.monitor(attr, self.tai_cb, json=True))
-        tasks.append(event.wait())
+
         return tasks
 
-    async def initialize_piu(self, config, key):
+    async def initialize_piu(self, config, location):
 
-        mconfig = config.get(key, {})
+        logger.info(f"initializing module({location})")
+
+        mconfig = config.get(location, {})
         # 'name' is not a valid TAI attribute. we need to exclude it
         # we might want to invent a cleaner way by using an annotation in the YANG model
         attrs = [
             (k, v) for k, v in mconfig.get("config", {}).items() if k != "name"
         ]
         try:
-            module = await self.taish.create_module(key, attrs=attrs)
+            module = await self.taish.create_module(location, attrs=attrs)
         except taish.TAIException as e:
             if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
                 if e.code == TAI_STATUS_FAILURE:
-                    logger.debug(f"Failed to intialize module {key}")
+                    logger.debug(f"Failed to intialize module {location}")
                     return
                 raise e
-            module = await self.taish.get_module(key)
+            module = await self.taish.get_module(location)
             # reconcile with the sysrepo configuration
-            logger.debug(f"module({key}) already exists. updating attributes..")
+            logger.debug(f"module({location}) already exists. updating attributes..")
             for k, v in attrs:
                 await module.set(k, v)
 
@@ -684,7 +684,7 @@ class Server(object):
                 netif = module.get_netif(index)
                 # reconcile with the sysrepo configuration
                 logger.debug(
-                    f"module({key})/netif({index}) already exists. updating attributes.."
+                    f"module({location})/netif({index}) already exists. updating attributes.."
                     )
                 for k, v in attrs:
                     try:
@@ -695,7 +695,7 @@ class Server(object):
                         continue
                     ret = await netif.set(k, v)
                     logger.debug(
-                        f"module({key})/netif({index}) {k}:{v}, ret: {ret}"
+                        f"module({location})/netif({index}) {k}:{v}, ret: {ret}"
                     )
 
         hconfig = {
@@ -716,47 +716,54 @@ class Server(object):
                 hostif = module.get_hostif(index)
                 # reconcile with the sysrepo configuration
                 logger.debug(
-                    f"module({key})/hostif({index}) already exists. updating attributes.."
+                    f"module({location})/hostif({index}) already exists. updating attributes.."
                 )
                 for k, v in attrs:
                     await hostif.set(k, v)
 
-    async def cleanup_piu(self, module):
-        list_ = await self.taish.list()
-        for k, m in list_.items():
-            if k == module:
-                for v in m.hostifs:
-                    logger.debug("removing hostif oid")
-                    await self.taish.remove(v.oid)
-                for v in m.netifs:
-                    logger.debug("removing netif oid")
-                    await self.taish.remove(v.oid)
-                logger.debug("removing module oid")
-                await self.taish.remove(m.oid)
+        tasks = await self.get_tai_notification_tasks(location)
+        event = asyncio.Event()
+        tasks.append(event.wait())
+        task = asyncio.create_task(self.notif_handler(tasks))
+        self.event_obj[location] = {'event': event, 'task': task}
+
+
+    async def cleanup_piu(self, location):
+        self.event_obj[location]['event'].set()
+        await self.event_obj[location]['task']
+
+        m = await self.taish.get_module(location)
+        for v in m.obj.hostifs:
+            logger.debug("removing hostif oid")
+            await self.taish.remove(v.oid)
+        for v in m.obj.netifs:
+            logger.debug("removing netif oid")
+            await self.taish.remove(v.oid)
+        logger.debug("removing module oid")
+        await self.taish.remove(m.oid)
+
 
     async def notification_cb(self, a, b, c, d):
         logger.info(b.print_dict())
         notify_data = b.print_dict()
-        if 'piu-notify-event' not in notify_data:
-            return
-        else:
-            notify_data = notify_data['piu-notify-event']
-            piu = notify_data['name']
-            status = [v for v in notify_data.get("status", {})]
-            if status[0] == "PRESENT":
-                self.sess.switch_datastore("running")
-                config = self.sess.get_data("/goldstone-tai:*")
-                config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
-                logger.debug(f"sysrepo running configuration: {config}")
-                await self.initialize_piu(config, piu)
-                tasks = await self.get_tai_notification_tasks(piu)
-                t = asyncio.create_task(self.notif_handler(tasks))
-                await self.update_operds()
-            
-            elif status[0] == "UNPLUGGED":
-                self.event_obj[piu].set()
-                await self.cleanup_piu(piu)
-                await self.update_operds()
+        assert('piu-notify-event' in notify_data)
+
+        notify_data = notify_data['piu-notify-event']
+        location = notify_data['name']
+        status = [v for v in notify_data.get("status", {})]
+
+        if status[0] == "PRESENT":
+            self.sess.switch_datastore("running")
+            config = self.sess.get_data("/goldstone-tai:*")
+            config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
+            logger.debug(f"sysrepo running configuration: {config}")
+            await self.initialize_piu(config, location)
+            await self.update_operds()
+
+        elif status[0] == "UNPLUGGED":
+            await self.cleanup_piu(location)
+            await self.update_operds()
+
 
     async def update_operds(self):
 
@@ -792,13 +799,13 @@ class Server(object):
 
 
     async def notif_handler(self, tasks):
-
-        async def _monitor(tasks):
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-
-        await asyncio.wait([ _monitor(tasks)])
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        logger.debug(f"done: {done}, pending: {pending}")
+        for task in pending:
+            task.cancel()
+        logger.debug("waiting for pending tasks")
+        await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
+        logger.debug("done")
 
     async def start(self):
         # get hardware configuration from ONLP datastore ( ONLP south must be running )
@@ -817,15 +824,11 @@ class Server(object):
             config = self.sess.get_data("/goldstone-tai:*")
             config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
             logger.debug(f"sysrepo running configuration: {config}")
-            tasks = []
-            for module in modules:
-                key = module['location']
-                await self.initialize_piu(config, key)
-                tasks =  await self.get_tai_notification_tasks(key)
-                if tasks:
-                    asyncio.create_task(self.notif_handler(tasks))
-            await self.update_operds()
 
+            tasks = [self.initialize_piu(config, m['location']) for m in modules]
+            await asyncio.gather(*tasks)
+
+            await self.update_operds()
 
             self.sess.switch_datastore("running")
 
