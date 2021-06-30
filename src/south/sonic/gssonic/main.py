@@ -727,7 +727,7 @@ class Server(object):
 
                         logger.debug(f"adding default value of {key} to redis")
                         self.pack_defaults_to_redis(ifname=ifname, leaf_node=key)
-                        self.update_oper_db()
+                        update_oper_db = True
 
                 elif key == "interface-type":
                     if event == "change":
