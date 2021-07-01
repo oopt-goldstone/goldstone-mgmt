@@ -213,7 +213,7 @@ class Server(object):
                 await self.watch_pods()
 
                 await self.reconcile()
-                self.update_oper_db()
+                self.update_oper_ds()
 
                 self.is_usonic_rebooting = False
 
@@ -408,7 +408,7 @@ class Server(object):
         valid_speeds = [40000, 100000]
         breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
 
-        update_oper_db = False
+        update_oper_ds = False
 
         for change in changes:
             logger.debug(f"change_cb: {change}")
@@ -727,7 +727,7 @@ class Server(object):
 
                         logger.debug(f"adding default value of {key} to redis")
                         self.pack_defaults_to_redis(ifname=ifname, leaf_node=key)
-                        update_oper_db = True
+                        update_oper_ds = True
 
                 elif key == "interface-type":
                     if event == "change":
@@ -766,10 +766,10 @@ class Server(object):
                         #
                         # this behavior might change in the future
                         # https://github.com/sysrepo/sysrepo/issues/1937#issuecomment-742851607
-                        update_oper_db = True
+                        update_oper_ds = True
 
-        if update_oper_db:
-            self.update_oper_db()
+        if update_oper_ds:
+            self.update_oper_ds()
 
     def get_counter(self, ifname, counter):
         if ifname not in self.counter_if_dict:
@@ -1186,166 +1186,147 @@ class Server(object):
                     str(self.mtu_default),
                 )
 
-    def update_oper_db(self):
-        logger.debug("updating operational db")
+    def clean_oper_ds(self, sess):
+
+        try:
+            v = sess.get_data("/goldstone-vlan:*", no_subs=True)
+            logger.debug(f"VLAN oper ds before delete: {v}")
+            # clear the vlan operational ds and build it from scratch
+            sess.delete_item("/goldstone-vlan:vlan")
+        except Exception as e:
+            logger.debug(f"failed to clear vlan oper ds: {e}")
+
+        try:
+            v = sess.get_data("/goldstone-interfaces:*", no_subs=True)
+            logger.debug(f"interface oper ds before delete: {v}")
+            # clear the intf operational ds and build it from scratch
+            sess.delete_item("/goldstone-interfaces:interfaces")
+        except Exception as e:
+            logger.debug(f"failed to clear interface oper ds: {e}")
+
+    def update_vlan_oper_ds(self, sess):
+        logger.debug("updating vlan operational ds")
+
+        keys = self.sonic_db.keys(self.sonic_db.CONFIG_DB, pattern="VLAN|Vlan*")
+        keys = keys if keys else []
+
+        for key in keys:
+            _hash = _decode(key)
+            name = _hash.split("|")[1]
+            xpath = f"/goldstone-vlan:vlan/VLAN/VLAN_LIST[name='{name}']"
+            vlanDATA = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
+            for key in vlanDATA:
+                logger.debug(f"vlan config: {vlanDATA}")
+                value = _decode(vlanDATA[key])
+                key = _decode(key)
+                if key == "members@":
+                    member_list = value.split(",")
+                    for member in member_list:
+                        sess.set_item(f"{xpath}/members", member)
+                else:
+                    sess.set_item(f"{xpath}/{key}", value)
+
+        keys = self.sonic_db.keys(
+            self.sonic_db.CONFIG_DB, pattern="VLAN_MEMBER|Vlan*|Ethernet*"
+        )
+        keys = keys if keys else []
+
+        for key in keys:
+            _hash = _decode(key)
+            name, ifname = _hash.split("|")[1:]
+            xpath = f"/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST[name='{name}'][ifname='{ifname}']"
+            member_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
+            for key in member_data:
+                value = _decode(member_data[key])
+                key = _decode(key)
+                sess.set_item(f"{xpath}/{key}", value)
+
+    def update_interface_oper_ds(self, sess):
+        logger.debug("updating interface operational ds")
+
+        prefix = "/goldstone-interfaces:interfaces"
+
+        keys = self.sonic_db.keys(self.sonic_db.APPL_DB, pattern="PORT_TABLE:Ethernet*")
+        keys = keys if keys else []
+
+        for key in keys:
+            _hash = _decode(key)
+            name = _hash.split(":")[1]
+            xpath = f"{prefix}/interface[name='{name}']"
+            intf_data = self.sonic_db.get_all(self.sonic_db.APPL_DB, _hash)
+            logger.debug(f"key: {_hash}, value: {intf_data}")
+            for key in intf_data:
+                value = _decode(intf_data[key])
+                key = _decode(key)
+                if key == "alias" or key == "description":
+                    sess.set_item(f"{xpath}/{key}", value)
+                elif key == "admin_status":
+                    if value == None:
+                        value = "down"
+                    sess.set_item(f"{xpath}/admin-status", value)
+
+        parent_dict = {}
+        for key in self.get_config_db_keys("PORT|Ethernet*"):
+            name = key.split("|")[1]
+            intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
+            logger.debug(f"config db entry: key: {key}, value: {intf_data}")
+
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']"
+            xpath_subif_breakout = f"{xpath}/breakout"
+
+            # TODO use the parent leaf to detect if this is a sub-interface or not
+            # using "_1" is vulnerable to the interface nameing schema change
+            if not name.endswith("_1") and name.find("_") != -1:
+                _name = name.split("_")
+                parent = _name[0] + "_1"
+                if parent in parent_dict:
+                    parent_dict[parent] += 1
+                else:
+                    parent_dict[parent] = 1
+
+                logger.debug(
+                    f"parent: {parent}, parent_dict: {parent_dict}"
+                )
+
+                sess.set_item(f"{xpath_subif_breakout}/parent", parent)
+
+            for key in intf_data:
+                value = _decode(intf_data[key])
+                key = _decode(key)
+                if key == "mtu":
+                    sess.set_item(f"{xpath}/goldstone-ip:ipv4/{key}", value)
+                elif (
+                    key != "index"
+                    and key != "phys-address"
+                    and key != "admin_status"
+                    and key != "alias"
+                    and key != "description"
+                    and key != "breakout"
+                ):
+                    sess.set_item(f"{xpath}/{key}", value)
+
+        for key, value in parent_dict.items():
+            xpath = f"{prefix}/interface[name='{key}']/breakout"
+            speed = self.sonic_db.get(self.sonic_db.CONFIG_DB, "PORT|" + key, "speed")
+            logger.debug(f"key: {key}, speed: {speed}")
+
+            if speed != None:
+                sess.set_item(f"{xpath}/num-channels", value + 1)
+                sess.set_item(f"{xpath}/channel-speed", speed_to_yang_val(speed))
+            else:
+                logger.warn(
+                    f"Breakout interface:{key} doesnt has speed attribute in Redis"
+                )
+
+    def update_oper_ds(self):
         with self.conn.start_session() as sess:
             sess.switch_datastore("operational")
 
-            try:
-                v = sess.get_data("/goldstone-interfaces:*", no_subs=True)
-                logger.debug(f"interface oper ds before delete: {v}")
+            self.clean_oper_ds(sess)
+            self.update_vlan_oper_ds(sess)
+            self.update_interface_oper_ds(sess)
 
-                # clear the intf operational ds and build it from scratch
-                sess.delete_item("/goldstone-interfaces:interfaces")
-
-                v = sess.get_data("/goldstone-interfaces:*", no_subs=True)
-                logger.debug(f"interface oper ds after delete: {v}")
-            except Exception as e:
-                logger.debug(e)
-
-            hash_keys = self.sonic_db.keys(
-                self.sonic_db.APPL_DB, pattern="PORT_TABLE:Ethernet*"
-            )
-            if hash_keys != None:
-                hash_keys = map(_decode, hash_keys)
-
-                for _hash in hash_keys:
-                    ifname = _hash.split(":")[1]
-                    xpath = (
-                        f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-                    )
-                    intf_data = self.sonic_db.get_all(self.sonic_db.APPL_DB, _hash)
-                    logger.debug(f"key: {_hash}, value: {intf_data}")
-                    for key in intf_data:
-                        value = _decode(intf_data[key])
-                        key = _decode(key)
-                        if key == "alias" or key == "description":
-                            sess.set_item(f"{xpath}/{key}", value)
-                        elif key == "admin_status":
-                            if value == None:
-                                value = "down"
-                            sess.set_item(f"{xpath}/admin-status", value)
-
-            breakout_parent_dict = {}
-            for key in self.get_config_db_keys("PORT|Ethernet*"):
-                ifname = key.split("|")[1]
-                intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
-                logger.debug(f"config db entry: key: {key}, value: {intf_data}")
-
-                xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-                xpath_subif_breakout = f"{xpath}/breakout"
-
-                # TODO use the parent leaf to detect if this is a sub-interface or not
-                # using "_1" is vulnerable to the interface nameing schema change
-                if not ifname.endswith("_1") and ifname.find("_") != -1:
-                    _ifname = ifname.split("_")
-                    tmp_ifname = _ifname[0] + "_1"
-                    if tmp_ifname in breakout_parent_dict.keys():
-                        breakout_parent_dict[tmp_ifname] = (
-                            breakout_parent_dict[tmp_ifname] + 1
-                        )
-                    else:
-                        breakout_parent_dict[tmp_ifname] = 1
-
-                    logger.debug(
-                        f"ifname: {ifname}, breakout_parent_dict: {breakout_parent_dict}"
-                    )
-
-                    sess.set_item(f"{xpath_subif_breakout}/parent", tmp_ifname)
-
-                for key in intf_data:
-                    value = _decode(intf_data[key])
-                    key = _decode(key)
-                    if key == "mtu":
-                        sess.set_item(f"{xpath}/goldstone-ip:ipv4/{key}", value)
-                    elif (
-                        key != "index"
-                        and key != "phys-address"
-                        and key != "admin_status"
-                        and key != "alias"
-                        and key != "description"
-                        and key != "breakout"
-                    ):
-                        sess.set_item(f"{xpath}/{key}", value)
-
-            for key in breakout_parent_dict:
-                xpath_parent_breakout = (
-                    f"/goldstone-interfaces:interfaces/interface[name='{key}']/breakout"
-                )
-                speed = self.sonic_db.get(
-                    self.sonic_db.CONFIG_DB, "PORT|" + key, "speed"
-                )
-                logger.debug(f"key: {key}, speed: {speed}")
-                if speed != None:
-                    sess.set_item(
-                        f"{xpath_parent_breakout}/num-channels",
-                        breakout_parent_dict[key] + 1,
-                    )
-                    sess.set_item(
-                        f"{xpath_parent_breakout}/channel-speed",
-                        speed_to_yang_val(speed),
-                    )
-                else:
-                    logger.warn(
-                        f"Breakout interface:{key} doesnt has speed attribute in Redis"
-                    )
-
-            hash_keys = self.sonic_db.keys(
-                self.sonic_db.CONFIG_DB, pattern="VLAN|Vlan*"
-            )
-
-            # clear the VLAN operational ds and build it from scratch
-            try:
-                v = sess.get_data("/goldstone-vlan:*", no_subs=True)
-                logger.debug(f"VLAN oper ds before delete: {v}")
-
-                # clear the intf operational ds and build it from scratch
-                sess.delete_item("/goldstone-vlan:vlan")
-
-                v = sess.get_data("/goldstone-vlan:*", no_subs=True)
-                logger.debug(f"VLAN oper ds after delete: {v}")
-            except Exception as e:
-                logger.debug(e)
-
-            if hash_keys != None:
-                hash_keys = map(_decode, hash_keys)
-
-                for _hash in hash_keys:
-                    name = _hash.split("|")[1]
-                    xpath = f"/goldstone-vlan:vlan/VLAN/VLAN_LIST[name='{name}']"
-                    vlanDATA = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
-                    for key in vlanDATA:
-                        logger.debug(f"vlan config: {vlanDATA}")
-                        value = _decode(vlanDATA[key])
-                        key = _decode(key)
-                        if key == "members@":
-                            member_list = value.split(",")
-                            for member in member_list:
-                                sess.set_item(f"{xpath}/members", member)
-                        else:
-                            sess.set_item(f"{xpath}/{key}", value)
-
-            hash_keys = self.sonic_db.keys(
-                self.sonic_db.CONFIG_DB, pattern="VLAN_MEMBER|Vlan*|Ethernet*"
-            )
-
-            if hash_keys != None:
-                hash_keys = map(_decode, hash_keys)
-
-                for _hash in hash_keys:
-                    name, ifname = _hash.split("|")[1:]
-                    xpath = f"/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST[name='{name}'][ifname='{ifname}']"
-                    member_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, _hash)
-                    for key in member_data:
-                        value = _decode(member_data[key])
-                        key = _decode(key)
-                        sess.set_item(f"{xpath}/{key}", value)
-
-            try:
-                sess.apply_changes(timeout_ms=5000, wait=True)
-            except sysrepo.SysrepoTimeOutError as e:
-                logger.warn(f"update oper ds timeout: {e}")
-                sess.apply_changes(timeout_ms=5000, wait=True)
+            sess.apply_changes(wait=True)
 
     def is_ufd_port(self, port, ufd_list):
 
@@ -1533,7 +1514,6 @@ class Server(object):
                             except KeyError:
                                 pass
 
-
     def get_portchannel(self):
         xpath = "/goldstone-portchannel:portchannel"
         self.sess.switch_datastore("operational")
@@ -1713,7 +1693,7 @@ class Server(object):
                     self.cache_counters()
 
                 await self.reconcile()
-                self.update_oper_db()
+                self.update_oper_ds()
                 self.is_usonic_rebooting = False
 
                 self.sess.switch_datastore("running")
@@ -1728,9 +1708,7 @@ class Server(object):
                     "goldstone-vlan", None, self.vlan_change_cb
                 )
                 self.sess.subscribe_module_change(
-                    "goldstone-uplink-failure-detection",
-                    None,
-                    self.ufd_change_cb
+                    "goldstone-uplink-failure-detection", None, self.ufd_change_cb
                 )
                 self.sess.subscribe_module_change(
                     "goldstone-portchannel", None, self.portchannel_change_cb
@@ -1797,7 +1775,7 @@ def main():
         hpack.setLevel(logging.INFO)
         k8s = logging.getLogger("kubernetes_asyncio.client.rest")
         k8s.setLevel(logging.INFO)
-#        sysrepo.configure_logging(py_logging=True)
+    #        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 
