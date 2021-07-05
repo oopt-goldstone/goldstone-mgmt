@@ -95,6 +95,7 @@ class Server(object):
 
     async def stop(self):
         await self.runner.cleanup()
+        self.redis_thread.stop()
         self.sess.stop()
         self.conn.disconnect()
 
@@ -1733,7 +1734,7 @@ class Server(object):
                 pubsub.psubscribe(
                     **{"__keyspace@0__:PORT_TABLE:Ethernet*": self.event_handler}
                 )
-                pubsub.run_in_thread(sleep_time=2)
+                self.redis_thread = pubsub.run_in_thread(sleep_time=2)
 
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
