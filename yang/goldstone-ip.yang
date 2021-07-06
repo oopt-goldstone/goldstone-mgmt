@@ -13,6 +13,9 @@
     import goldstone-mgmt-interfaces {
       prefix gs-mgmt-if;
     }
+    import goldstone-portchannel {
+      prefix gs-pc;
+    }
     import ietf-inet-types {
       prefix inet;
     }
@@ -117,6 +120,12 @@
     }
 
     augment /gs-if:interfaces/gs-if:interface {
+      uses goldstone-ip;
+    }
+    augment /gs-pc:portchannel/gs-pc:portchannel-group/gs-pc:config {
+      uses goldstone-ip;
+    }
+    grouping goldstone-ip { 
       description
         "Parameters for configuring IP on interfaces.
 
