@@ -1008,7 +1008,7 @@ def main(host, username, password):
             test_intf_type(cli)
             test_speed_intftype(cli)
             test_ufd(cli)
-            test_portchannel(cli)
+            # test_portchannel(cli)
             test_port_breakout(cli)
         except Exception as e:
             ssh(cli, "kubectl get pods -A")
