@@ -331,6 +331,9 @@ def test_port_breakout(cli):
     # Wait for usonic to come up
     print("Waiting asychronosly for 'usonic' to come up ")
 
+    # FIXME the ds gets locked after few seconds.
+    time.sleep(3)
+
     # the ds is locked. this must fail
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_1; mtu 4000"')
