@@ -13,6 +13,7 @@ import redis
 import os
 from .k8s_api import incluster_apis
 from aiohttp import web
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class Server(object):
         self.sess = self.conn.start_session()
         self.is_usonic_rebooting = False
         self.k8s = incluster_apis()
+        self.task_queue = queue.Queue()
         self.counter_dict = {
             "SAI_PORT_STAT_IF_IN_UCAST_PKTS": 0,
             "SAI_PORT_STAT_IF_IN_ERRORS": 0,
@@ -394,7 +396,7 @@ class Server(object):
                     if event == "done":
                         self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
 
-    async def intf_change_cb(self, event, req_id, changes, priv):
+    def intf_change_cb(self, event, req_id, changes, priv):
         logger.debug(f"change_cb: event: {event}, changes: {changes}")
 
         if event not in ["change", "done"]:
@@ -410,6 +412,7 @@ class Server(object):
         breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
 
         update_oper_ds = False
+        update_usonic = False
 
         for change in changes:
             logger.debug(f"change_cb: {change}")
@@ -471,14 +474,14 @@ class Server(object):
                                         "Unsupported interface type"
                                     )
                         if event == "done":
-                            status_bcm = await self.k8s.run_bcmcmd_usonic(
+                            status_bcm = self.k8s.run_bcmcmd_usonic(
                                 key, ifname, change.value
                             )
                     elif key == "auto-nego":
                         # if event == "change":
                         #   Validation with respect to Port Breakout to be done
                         if event == "done":
-                            status_bcm = await self.k8s.run_bcmcmd_usonic(
+                            status_bcm = self.k8s.run_bcmcmd_usonic(
                                 key, ifname, change.value
                             )
 
@@ -570,12 +573,7 @@ class Server(object):
                         }
 
                         if event == "done":
-                            is_updated = await self.breakout_update_usonic(
-                                breakout_dict
-                            )
-                            if is_updated:
-                                asyncio.create_task(self.breakout_callback())
-
+                            update_usonic = True
                     else:
                         self.set_config_db(event, _hash, key, change.value)
 
@@ -629,14 +627,14 @@ class Server(object):
                                     "Unsupported interface type"
                                 )
                     if event == "done":
-                        status_bcm = await self.k8s.run_bcmcmd_usonic(
+                        status_bcm = self.k8s.run_bcmcmd_usonic(
                             key, ifname, change.value
                         )
                 elif key == "auto-nego":
                     # if event == "change":
                     #   Validation with respect to Port Breakout to be done
                     if event == "done":
-                        status_bcm = await self.k8s.run_bcmcmd_usonic(
+                        status_bcm = self.k8s.run_bcmcmd_usonic(
                             key, ifname, change.value
                         )
                 elif key == "forwarding" or key == "enabled":
@@ -710,13 +708,7 @@ class Server(object):
                         )
                         continue
 
-                    breakout_dict = {
-                        ifname: {"num-channels": None, "channel-speed": None}
-                    }
-
-                    is_updated = await self.breakout_update_usonic(breakout_dict)
-                    if is_updated:
-                        asyncio.create_task(self.breakout_callback())
+                    update_usonic = True
 
                 elif key in ["mtu", "speed"]:
 
@@ -743,11 +735,11 @@ class Server(object):
                                 if not breakout_details:
                                     raise KeyError
                                 if int(breakout_details["num-channels"]) == 4:
-                                    status_bcm = await self.k8s.run_bcmcmd_usonic(
+                                    status_bcm = self.k8s.run_bcmcmd_usonic(
                                         key, ifname, default_intf_type
                                     )
                                 elif int(breakout_details["num-channels"]) == 2:
-                                    status_bcm = await self.k8s.run_bcmcmd_usonic(
+                                    status_bcm = self.k8s.run_bcmcmd_usonic(
                                         key, ifname, default_intf_type + "2"
                                     )
                                 else:
@@ -755,7 +747,7 @@ class Server(object):
                                         "Unsupported interface type"
                                     )
                         except (sysrepo.errors.SysrepoNotFoundError, KeyError):
-                            status_bcm = await self.k8s.run_bcmcmd_usonic(
+                            status_bcm = self.k8s.run_bcmcmd_usonic(
                                 key, ifname, default_intf_type + "4"
                             )
 
@@ -771,6 +763,15 @@ class Server(object):
 
         if update_oper_ds:
             self.update_oper_ds()
+
+        if update_usonic:
+            async def f():
+                updated = await self.breakout_update_usonic({})
+                if updated:
+                    await self.breakout_callback()
+
+            logger.info("creating breakout task")
+            self.task_queue.put(f())
 
     def get_counter(self, ifname, counter):
         if ifname not in self.counter_if_dict:
@@ -1079,7 +1080,7 @@ class Server(object):
                         )
                     elif key == "auto-nego" or key == "interface-type":
                         logger.debug("Reconcile for bcmcmd")
-                        status_bcm = await self.k8s.run_bcmcmd_usonic(
+                        status_bcm = self.k8s.run_bcmcmd_usonic(
                             key, name, intf[key]
                         )
                     elif key == "alias":
@@ -1666,6 +1667,19 @@ class Server(object):
             logger.error(exp)
             pass
 
+    async def handle_tasks(self):
+        while True:
+            await asyncio.sleep(1)
+            try:
+                task = self.task_queue.get(False)
+                await task
+                self.task_queue.task_done()
+            except queue.Empty:
+                pass
+
+
+
+
     async def start(self):
 
         logger.debug(
@@ -1700,10 +1714,7 @@ class Server(object):
                 self.sess.switch_datastore("running")
 
                 self.sess.subscribe_module_change(
-                    "goldstone-interfaces",
-                    None,
-                    self.intf_change_cb,
-                    asyncio_register=True,
+                    "goldstone-interfaces", None, self.intf_change_cb,
                 )
                 self.sess.subscribe_module_change(
                     "goldstone-vlan", None, self.vlan_change_cb
@@ -1739,7 +1750,7 @@ class Server(object):
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
         await site.start()
-        return []
+        return [self.handle_tasks()]
 
 
 def main():

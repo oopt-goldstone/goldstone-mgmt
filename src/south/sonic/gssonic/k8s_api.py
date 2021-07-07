@@ -6,8 +6,9 @@ import logging
 import asyncio
 import json
 
+import kubernetes as k
+import kubernetes_asyncio as k_async
 from kubernetes import config as Config
-from kubernetes.client import Configuration
 from kubernetes.client.api import core_v1_api
 from kubernetes import watch as Watch
 from kubernetes.stream import stream
@@ -28,15 +29,16 @@ logger = logging.getLogger(__name__)
 
 class incluster_apis(object):
     def __init__(self):
-        Config.load_incluster_config()
-        config.load_incluster_config()
+        k.config.load_incluster_config()
+        k_async.config.load_incluster_config()
         self.v1_api = client.CoreV1Api()
         self.deploy_api = client.AppsV1Api()
         self.v1_ext = client.AppsV1beta2Api()
         self.usonic_deleted = 0
         self.core_v1 = core_v1_api.CoreV1Api()
+        self.deploy_v1 = k.client.AppsV1Api()
 
-    async def run_bcmcmd_usonic(self, attr, port_name, value):
+    def run_bcmcmd_usonic(self, attr, port_name, value):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             interface_config = json.loads(f.read())
         x = re.findall('[0-9]+', port_name)
@@ -47,7 +49,7 @@ class incluster_apis(object):
                 port_no = str(interface["port"])
 
         for dname in USONIC_DEPLOYMENTS.split(","):
-            deployment = await self.deploy_api.read_namespaced_deployment(
+            deployment = self.deploy_v1.read_namespaced_deployment(
                     name=dname,
                     namespace=USONIC_NAMESPACE,
                     )
