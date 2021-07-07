@@ -94,7 +94,7 @@ class sysrepo_wrap(object):
         self.session.switch_datastore("running")
 
     def get_leaf_data(self, xpath, attr, ds="running"):
-        self.session.switch_datastore("operational")
+        self.session.switch_datastore(ds)
         val_list = []
         try:
             items = self.session.get_items("{}/{}".format(xpath, attr))

@@ -52,15 +52,6 @@ def main(host, username, password):
 
         ssh(cli, "kubectl wait --for=condition=complete job/prep-gs-mgmt")
 
-        ssh(cli, "sysrepoctl -l | grep goldstone") # goldstone models must be loaded
-
-        for app in ['mgmt', 'snmp', 'xlate']:
-            scp.put(
-                f"./ci/k8s/{app}.yaml",
-                remote_path=f"/var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml",
-            )
-            ssh(cli, f"kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml")
-
         run("rm -rf deb && mkdir -p deb")
         run(
             'docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"'
@@ -69,6 +60,15 @@ def main(host, username, password):
         ssh(cli, "rm -rf /tmp/deb")
         scp.put("deb", recursive=True, remote_path="/tmp/deb")
         ssh(cli, "dpkg -i /tmp/deb/*.deb")
+
+        ssh(cli, "sysrepoctl -l | grep goldstone") # goldstone models must be loaded
+
+        for app in ['mgmt', 'snmp', 'xlate']:
+            scp.put(
+                f"./ci/k8s/{app}.yaml",
+                remote_path=f"/var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml",
+            )
+            ssh(cli, f"kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml")
 
         run("make docker")
         ssh(cli, "rm -rf /tmp/wheels")
