@@ -222,7 +222,7 @@ class Server(object):
 
                 self.sess.switch_datastore("running")
 
-    def breakout_update_usonic(self, breakout_dict):
+    def breakout_update_usonic(self):
 
         logger.debug("Starting to Update usonic's configMap and deployment")
 
@@ -235,31 +235,16 @@ class Server(object):
             intf_list = intf_data["interfaces"]["interface"]
             for intf in intf_list:
                 ifname = intf["name"]
-                # Prioirty for adding interfaces in interface_list:
-                #
-                # 1. Preference will be for the data received as arguments
-                #    as this data will not be commited in sysrepo yet.
-                # 2. Interfaces present in datastore with already configured
-                #    breakout data or without breakout data
-                if ifname in breakout_dict:
+                if "breakout" in intf:
+                    breakout_data = intf["breakout"]
                     speed = None
-                    breakout_data = breakout_dict[ifname]
                     if breakout_data["channel-speed"] != None:
                         speed = yang_val_to_speed(breakout_data["channel-speed"])
                     interface_list.append(
                         [ifname, breakout_data["num-channels"], speed]
                     )
                 else:
-                    if "breakout" in intf:
-                        breakout_data = intf["breakout"]
-                        speed = None
-                        if breakout_data["channel-speed"] != None:
-                            speed = yang_val_to_speed(breakout_data["channel-speed"])
-                        interface_list.append(
-                            [ifname, breakout_data["num-channels"], speed]
-                        )
-                    else:
-                        interface_list.append([ifname, None, None])
+                    interface_list.append([ifname, None, None])
 
         is_updated = self.k8s.update_usonic_config(interface_list)
 
@@ -769,7 +754,7 @@ class Server(object):
 
         if update_usonic:
             logger.info("creating breakout task")
-            updated = self.breakout_update_usonic({})
+            updated = self.breakout_update_usonic()
             if updated:
                 self.task_queue.put(self.breakout_callback())
 
@@ -1700,8 +1685,7 @@ class Server(object):
                 # Calling breakout_update_usonic() is mandatory before initial reconcile
                 # process, as gssouth-sonic will replace the interface names properly during
                 # init if they have been modified.
-                breakout_dict = {}
-                is_updated = self.breakout_update_usonic(breakout_dict)
+                is_updated = self.breakout_update_usonic()
                 if is_updated:
                     await self.watch_pods()
                 else:
