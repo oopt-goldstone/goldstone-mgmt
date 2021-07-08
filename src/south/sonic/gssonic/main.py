@@ -120,9 +120,9 @@ class Server(object):
             return
         return self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
 
-    async def restart_usonic(self):
+    def restart_usonic(self):
         self.is_usonic_rebooting = True
-        await self.k8s.restart_usonic()
+        self.k8s.restart_usonic()
 
     async def watch_pods(self):
         await self.k8s.watch_pods()
@@ -222,7 +222,7 @@ class Server(object):
 
                 self.sess.switch_datastore("running")
 
-    async def breakout_update_usonic(self, breakout_dict):
+    def breakout_update_usonic(self, breakout_dict):
 
         logger.debug("Starting to Update usonic's configMap and deployment")
 
@@ -261,11 +261,11 @@ class Server(object):
                     else:
                         interface_list.append([ifname, None, None])
 
-        is_updated = await self.k8s.update_usonic_config(interface_list)
+        is_updated = self.k8s.update_usonic_config(interface_list)
 
         # Restart deployment if configmap update is successful
         if is_updated:
-            await self.restart_usonic()
+            self.restart_usonic()
 
         return is_updated
 
@@ -402,6 +402,9 @@ class Server(object):
         if event not in ["change", "done"]:
             logger.warn("unsupported event: {event}")
             return
+
+        if self.is_usonic_rebooting:
+            raise SysrepoLockedError("uSONiC is rebooting")
 
         single_lane_intf_type = ["CR", "LR", "SR", "KR"]
         double_lane_intf_type = ["CR2", "LR2", "SR2", "KR2"]
@@ -765,13 +768,10 @@ class Server(object):
             self.update_oper_ds()
 
         if update_usonic:
-            async def f():
-                updated = await self.breakout_update_usonic({})
-                if updated:
-                    await self.breakout_callback()
-
             logger.info("creating breakout task")
-            self.task_queue.put(f())
+            updated = self.breakout_update_usonic({})
+            if updated:
+                self.task_queue.put(self.breakout_callback())
 
     def get_counter(self, ifname, counter):
         if ifname not in self.counter_if_dict:
@@ -1701,7 +1701,7 @@ class Server(object):
                 # process, as gssouth-sonic will replace the interface names properly during
                 # init if they have been modified.
                 breakout_dict = {}
-                is_updated = await self.breakout_update_usonic(breakout_dict)
+                is_updated = self.breakout_update_usonic(breakout_dict)
                 if is_updated:
                     await self.watch_pods()
                 else:
