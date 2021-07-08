@@ -1,19 +1,20 @@
 module goldstone-arp {
-  yang-version 1.1;
+
+  yang-version "1";
+
   namespace "http://goldstone.net/yang/goldstone-arp";
   prefix gs-arp;
 
   import ietf-yang-types {
     prefix yang;
-    reference "RFC 6991: Common YANG Data Types";
   }
+
   import goldstone-mgmt-interfaces {
     prefix gs-mgmt-if;
-    reference "RFC 8343: A Yang Data Model for Interface Management";
   }
+
   import goldstone-ip {
     prefix gs-ip;
-    reference "RFC 8344: A Yang Data Model for IP Management";
   }
 
   organization
