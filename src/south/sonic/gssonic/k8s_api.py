@@ -72,7 +72,7 @@ class incluster_apis(object):
         )
         logger.debug(f"Response: {resp}")
 
-    def create_usonic_config_bcm(self, interface_list):
+    def create_usonic_config_bcm(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = json.loads(f.read())
 
@@ -82,11 +82,10 @@ class incluster_apis(object):
             channel = 1
             speed = m["speed"] // 1000
 
-            for c in interface_list:
-                if c[0] == name and c[1] != None and c[2] != None:
-                    channel = c[1]
-                    speed = c[2]
-                    break
+            v = interface_map.get(name, (None, None))
+            if v[0] != None and v[1] != None:
+                channel = v[0]
+                speed = v[1]
 
             lane_num = m["lane_num"] // channel
 
@@ -101,7 +100,7 @@ class incluster_apis(object):
             t = Template(f.read())
             return t.render(interfaces=interfaces)
 
-    def create_usonic_vs_lanemap(self, interface_list):
+    def create_usonic_vs_lanemap(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = json.loads(f.read())
 
@@ -111,11 +110,10 @@ class incluster_apis(object):
             channel = 1
             speed = m["speed"]
 
-            for c in interface_list:
-                if c[0] == name and c[1] != None and c[2] != None:
-                    channel = c[1]
-                    speed = c[2] * 1000
-                    break
+            v = interface_map.get(name, (None, None))
+            if v[0] != None and v[1] != None:
+                channel = v[0]
+                speed = v[1] * 1000
 
             lane_num = m["lane_num"] // channel
 
@@ -135,7 +133,7 @@ class incluster_apis(object):
             t = Template(f.read())
             return t.render(interfaces=interfaces)
 
-    def create_usonic_port_config(self, interface_list):
+    def create_usonic_port_config(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = json.loads(f.read())
 
@@ -145,11 +143,10 @@ class incluster_apis(object):
             channel = 1
             speed = m["speed"]
 
-            for c in interface_list:
-                if c[0] == name and c[1] != None and c[2] != None:
-                    channel = c[1]
-                    speed = c[2] * 1000
-                    break
+            v = interface_map.get(name, (None, None))
+            if v[0] != None and v[1] != None:
+                channel = v[0]
+                speed = v[1] * 1000
 
             lane_num = m["lane_num"] // channel
 
@@ -169,15 +166,15 @@ class incluster_apis(object):
             t = Template(f.read())
             return t.render(interfaces=interfaces)
 
-    def update_usonic_config(self, interface_list):
-        logger.debug(f"interface list: {interface_list}")
+    def update_usonic_config(self, interface_map):
+        logger.debug(f"interface map: {interface_map}")
 
-        # 1. create complete port_config.ini and config.bcm from the interface_list argument
+        # 1. create complete port_config.ini and config.bcm from the interface_map argument
         #    without using the existing config_map data
         #    Using string.Template (https://docs.python.org/3/library/string.html#template-strings) or Jinja2
         #    might make the code easier to read.
-        config_bcm = self.create_usonic_config_bcm(interface_list)
-        port_config = self.create_usonic_port_config(interface_list)
+        config_bcm = self.create_usonic_config_bcm(interface_map)
+        port_config = self.create_usonic_port_config(interface_map)
 
         logger.debug(f"port_config.ini file after creating:\n {port_config}")
 
@@ -219,7 +216,7 @@ class incluster_apis(object):
 
         if "lanemap.ini" in config_map.data:
             logger.debug("lanemap.ini found in config map. update it as well")
-            v = self.create_usonic_vs_lanemap(interface_list)
+            v = self.create_usonic_vs_lanemap(interface_map)
             config_map.data["lanemap.ini"] = v
 
         api.patch_namespaced_config_map(
