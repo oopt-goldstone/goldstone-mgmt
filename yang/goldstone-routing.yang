@@ -1,5 +1,5 @@
 module goldstone-routing {
-  yang-version "1.1";
+  yang-version "1";
   namespace "http://goldstone.net/yang/goldstone-routing";
   prefix "gs-route";
 

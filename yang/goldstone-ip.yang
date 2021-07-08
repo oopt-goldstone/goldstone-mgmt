@@ -1,6 +1,6 @@
   module goldstone-ip {
 
-    yang-version 1;
+    yang-version "1";
 
     namespace
       "http://goldstone.net/yang/goldstone-ip";
