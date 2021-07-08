@@ -30,6 +30,8 @@ def _decode(string):
 
 
 def yang_val_to_speed(yang_val):
+    if not yang_val:
+        return None
     yang_val = yang_val.split("_")
     return int(yang_val[1].split("GB")[0])
 
@@ -226,27 +228,20 @@ class Server(object):
 
         logger.debug("Starting to Update usonic's configMap and deployment")
 
-        interface_list = []
+        intfs = {}
 
         self.sess.switch_datastore("running")
         # Frame interface_list with data available in sysrepo
-        intf_data = self.sess.get_data("/goldstone-interfaces:interfaces")
-        if "interfaces" in intf_data:
-            intf_list = intf_data["interfaces"]["interface"]
-            for intf in intf_list:
-                ifname = intf["name"]
-                if "breakout" in intf:
-                    breakout_data = intf["breakout"]
-                    speed = None
-                    if breakout_data["channel-speed"] != None:
-                        speed = yang_val_to_speed(breakout_data["channel-speed"])
-                    interface_list.append(
-                        [ifname, breakout_data["num-channels"], speed]
-                    )
-                else:
-                    interface_list.append([ifname, None, None])
+        data = self.sess.get_data("/goldstone-interfaces:interfaces")
 
-        is_updated = self.k8s.update_usonic_config(interface_list)
+        for i in data.get("interfaces", {}).get("interface", []):
+            name = i["name"]
+            b = i.get("breakout", {})
+            numch = b.get("num-channels", None)
+            speed = yang_val_to_speed(b.get("channel-speed", None))
+            intfs[name] = (numch, speed)
+
+        is_updated = self.k8s.update_usonic_config(intfs)
 
         # Restart deployment if configmap update is successful
         if is_updated:
