@@ -8,11 +8,7 @@ import json
 
 import kubernetes as k
 import kubernetes_asyncio as k_async
-from kubernetes import config as Config
-from kubernetes.client.api import core_v1_api
-from kubernetes import watch as Watch
-from kubernetes.stream import stream
-from kubernetes_asyncio import config, client, watch
+
 from jinja2 import Template
 
 USONIC_DEPLOYMENTS = os.getenv(
@@ -31,50 +27,52 @@ class incluster_apis(object):
     def __init__(self):
         k.config.load_incluster_config()
         k_async.config.load_incluster_config()
-        self.v1_api = client.CoreV1Api()
-        self.deploy_api = client.AppsV1Api()
-        self.v1_ext = client.AppsV1beta2Api()
         self.usonic_deleted = 0
-        self.core_v1 = core_v1_api.CoreV1Api()
-        self.deploy_v1 = k.client.AppsV1Api()
 
     def run_bcmcmd_usonic(self, attr, port_name, value):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             interface_config = json.loads(f.read())
-        x = re.findall('[0-9]+', port_name)
+        x = re.findall("[0-9]+", port_name)
         intf_no = int(x[0])
-        port_no = ''
+        port_no = ""
         for i, interface in enumerate(interface_config):
             if i == (intf_no - 1):
                 port_no = str(interface["port"])
 
-        for dname in USONIC_DEPLOYMENTS.split(","):
-            deployment = self.deploy_v1.read_namespaced_deployment(
-                    name=dname,
-                    namespace=USONIC_NAMESPACE,
-                    )
-
         if attr == "interface-type":
-            cmd = f'port {port_no} if={value}'
+            cmd = f"port {port_no} if={value}"
         elif attr == "auto-nego":
-            cmd = f'port {port_no} an={value}'
+            cmd = f"port {port_no} an={value}"
 
-        pod = ''
-        if deployment:
-            w = Watch.Watch()
-            for event in w.stream(self.core_v1.list_pod_for_all_namespaces):
-                name = event["object"].metadata.name
-                if "usonic-core" in name:
-                    pod = name
-                    logger.debug(f"pod_name: {pod}")
-                    w.stop()
-            exec_command = ['bcmcmd', cmd]
-            logger.debug(f"exec command : {exec_command}")
-            resp = stream(self.core_v1.connect_get_namespaced_pod_exec,pod,USONIC_NAMESPACE,command=exec_command,container = 'syncd',stderr=True, stdin=False,stdout=True, tty=False)
-            
-            logger.debug(f"Response: {resp}")
+        w = k.watch.Watch()
+        api = k.client.api.CoreV1Api()
 
-    def create_usonic_config_bcm(self, interface_list):
+        for event in w.stream(api.list_pod_for_all_namespaces):
+            name = event["object"].metadata.name
+            if "usonic-core" in name:
+                podname = name
+                logger.debug(f"podname: {podname}")
+                w.stop()
+                break
+        else:
+            raise Exception("usonic-core not found")
+
+        exec_command = ["bcmcmd", cmd]
+        logger.debug(f"exec command : {exec_command}")
+        resp = k.stream.stream(
+            api.connect_get_namespaced_pod_exec,
+            podname,
+            USONIC_NAMESPACE,
+            command=exec_command,
+            container="syncd",
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        logger.debug(f"Response: {resp}")
+
+    def create_usonic_config_bcm(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = json.loads(f.read())
 
@@ -84,11 +82,10 @@ class incluster_apis(object):
             channel = 1
             speed = m["speed"] // 1000
 
-            for c in interface_list:
-                if c[0] == name and c[1] != None and c[2] != None:
-                    channel = c[1]
-                    speed = c[2]
-                    break
+            v = interface_map.get(name, (None, None))
+            if v[0] != None and v[1] != None:
+                channel = v[0]
+                speed = v[1]
 
             lane_num = m["lane_num"] // channel
 
@@ -103,7 +100,7 @@ class incluster_apis(object):
             t = Template(f.read())
             return t.render(interfaces=interfaces)
 
-    def create_usonic_vs_lanemap(self, interface_list):
+    def create_usonic_vs_lanemap(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = json.loads(f.read())
 
@@ -113,11 +110,10 @@ class incluster_apis(object):
             channel = 1
             speed = m["speed"]
 
-            for c in interface_list:
-                if c[0] == name and c[1] != None and c[2] != None:
-                    channel = c[1]
-                    speed = c[2] * 1000
-                    break
+            v = interface_map.get(name, (None, None))
+            if v[0] != None and v[1] != None:
+                channel = v[0]
+                speed = v[1] * 1000
 
             lane_num = m["lane_num"] // channel
 
@@ -137,7 +133,7 @@ class incluster_apis(object):
             t = Template(f.read())
             return t.render(interfaces=interfaces)
 
-    def create_usonic_port_config(self, interface_list):
+    def create_usonic_port_config(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = json.loads(f.read())
 
@@ -147,11 +143,10 @@ class incluster_apis(object):
             channel = 1
             speed = m["speed"]
 
-            for c in interface_list:
-                if c[0] == name and c[1] != None and c[2] != None:
-                    channel = c[1]
-                    speed = c[2] * 1000
-                    break
+            v = interface_map.get(name, (None, None))
+            if v[0] != None and v[1] != None:
+                channel = v[0]
+                speed = v[1] * 1000
 
             lane_num = m["lane_num"] // channel
 
@@ -171,22 +166,24 @@ class incluster_apis(object):
             t = Template(f.read())
             return t.render(interfaces=interfaces)
 
-    async def update_usonic_config(self, interface_list):
-        logger.debug(f"interface list: {interface_list}")
+    def update_usonic_config(self, interface_map):
+        logger.debug(f"interface map: {interface_map}")
 
-        # 1. create complete port_config.ini and config.bcm from the interface_list argument
+        # 1. create complete port_config.ini and config.bcm from the interface_map argument
         #    without using the existing config_map data
         #    Using string.Template (https://docs.python.org/3/library/string.html#template-strings) or Jinja2
         #    might make the code easier to read.
-        config_bcm = self.create_usonic_config_bcm(interface_list)
-        port_config = self.create_usonic_port_config(interface_list)
+        config_bcm = self.create_usonic_config_bcm(interface_map)
+        port_config = self.create_usonic_port_config(interface_map)
 
         logger.debug(f"port_config.ini file after creating:\n {port_config}")
 
         logger.debug(f"config.bcm file after creating :\n {config_bcm}")
 
+        api = k.client.api.CoreV1Api()
+
         # 2. get the config_map using k8s API if it already exists
-        config_map = await self.v1_api.read_namespaced_config_map(
+        config_map = api.read_namespaced_config_map(
             name=USONIC_CONFIGMAP,
             namespace=USONIC_NAMESPACE,
         )
@@ -219,10 +216,10 @@ class incluster_apis(object):
 
         if "lanemap.ini" in config_map.data:
             logger.debug("lanemap.ini found in config map. update it as well")
-            v = self.create_usonic_vs_lanemap(interface_list)
+            v = self.create_usonic_vs_lanemap(interface_map)
             config_map.data["lanemap.ini"] = v
 
-        await self.v1_api.patch_namespaced_config_map(
+        api.patch_namespaced_config_map(
             name=USONIC_CONFIGMAP, namespace=USONIC_NAMESPACE, body=config_map
         )
 
@@ -230,10 +227,12 @@ class incluster_apis(object):
         logger.info(f"ConfigMap {USONIC_CONFIGMAP} updated")
         return True
 
-    async def restart_usonic(self):
+    def restart_usonic(self):
+
+        api = k.client.AppsV1Api()
 
         for dname in USONIC_DEPLOYMENTS.split(","):
-            deployment = await self.deploy_api.read_namespaced_deployment(
+            deployment = api.read_namespaced_deployment(
                 name=dname,
                 namespace=USONIC_NAMESPACE,
             )
@@ -251,19 +250,20 @@ class incluster_apis(object):
             deployment.spec.template.metadata.annotations = annotations
 
             # Update the deployment
-            await self.deploy_api.patch_namespaced_deployment(
+            api.patch_namespaced_deployment(
                 name=dname, namespace=USONIC_NAMESPACE, body=deployment
             )
             logger.info("Deployment updated")
 
     async def watch_pods(self):
-        w = watch.Watch()
-        async with w.stream(self.v1_api.list_pod_for_all_namespaces) as stream:
+        w = k_async.watch.Watch()
+        api = k_async.client.CoreV1Api()
+        async with w.stream(api.list_pod_for_all_namespaces) as stream:
             async for event in stream:
                 name = event["object"].metadata.name
                 phase = event["object"].status.phase
 
-                #TODO make this configurable
+                # TODO make this configurable
                 if "usonic-mgrd" not in name:
                     continue
 
@@ -286,4 +286,3 @@ class incluster_apis(object):
                     return
                 if self.usonic_deleted != 1 and event["type"] == "DELETED":
                     self.usonic_deleted = 1
-

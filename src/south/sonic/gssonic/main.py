@@ -30,6 +30,8 @@ def _decode(string):
 
 
 def yang_val_to_speed(yang_val):
+    if not yang_val:
+        return None
     yang_val = yang_val.split("_")
     return int(yang_val[1].split("GB")[0])
 
@@ -120,9 +122,9 @@ class Server(object):
             return
         return self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, value)
 
-    async def restart_usonic(self):
+    def restart_usonic(self):
         self.is_usonic_rebooting = True
-        await self.k8s.restart_usonic()
+        self.k8s.restart_usonic()
 
     async def watch_pods(self):
         await self.k8s.watch_pods()
@@ -222,50 +224,28 @@ class Server(object):
 
                 self.sess.switch_datastore("running")
 
-    async def breakout_update_usonic(self, breakout_dict):
+    def breakout_update_usonic(self):
 
         logger.debug("Starting to Update usonic's configMap and deployment")
 
-        interface_list = []
+        intfs = {}
 
         self.sess.switch_datastore("running")
         # Frame interface_list with data available in sysrepo
-        intf_data = self.sess.get_data("/goldstone-interfaces:interfaces")
-        if "interfaces" in intf_data:
-            intf_list = intf_data["interfaces"]["interface"]
-            for intf in intf_list:
-                ifname = intf["name"]
-                # Prioirty for adding interfaces in interface_list:
-                #
-                # 1. Preference will be for the data received as arguments
-                #    as this data will not be commited in sysrepo yet.
-                # 2. Interfaces present in datastore with already configured
-                #    breakout data or without breakout data
-                if ifname in breakout_dict:
-                    speed = None
-                    breakout_data = breakout_dict[ifname]
-                    if breakout_data["channel-speed"] != None:
-                        speed = yang_val_to_speed(breakout_data["channel-speed"])
-                    interface_list.append(
-                        [ifname, breakout_data["num-channels"], speed]
-                    )
-                else:
-                    if "breakout" in intf:
-                        breakout_data = intf["breakout"]
-                        speed = None
-                        if breakout_data["channel-speed"] != None:
-                            speed = yang_val_to_speed(breakout_data["channel-speed"])
-                        interface_list.append(
-                            [ifname, breakout_data["num-channels"], speed]
-                        )
-                    else:
-                        interface_list.append([ifname, None, None])
+        data = self.sess.get_data("/goldstone-interfaces:interfaces")
 
-        is_updated = await self.k8s.update_usonic_config(interface_list)
+        for i in data.get("interfaces", {}).get("interface", []):
+            name = i["name"]
+            b = i.get("breakout", {})
+            numch = b.get("num-channels", None)
+            speed = yang_val_to_speed(b.get("channel-speed", None))
+            intfs[name] = (numch, speed)
+
+        is_updated = self.k8s.update_usonic_config(intfs)
 
         # Restart deployment if configmap update is successful
         if is_updated:
-            await self.restart_usonic()
+            self.restart_usonic()
 
         return is_updated
 
@@ -402,6 +382,9 @@ class Server(object):
         if event not in ["change", "done"]:
             logger.warn("unsupported event: {event}")
             return
+
+        if self.is_usonic_rebooting:
+            raise SysrepoLockedError("uSONiC is rebooting")
 
         single_lane_intf_type = ["CR", "LR", "SR", "KR"]
         double_lane_intf_type = ["CR2", "LR2", "SR2", "KR2"]
@@ -765,13 +748,10 @@ class Server(object):
             self.update_oper_ds()
 
         if update_usonic:
-            async def f():
-                updated = await self.breakout_update_usonic({})
-                if updated:
-                    await self.breakout_callback()
-
             logger.info("creating breakout task")
-            self.task_queue.put(f())
+            updated = self.breakout_update_usonic()
+            if updated:
+                self.task_queue.put(self.breakout_callback())
 
     def get_counter(self, ifname, counter):
         if ifname not in self.counter_if_dict:
@@ -1700,8 +1680,7 @@ class Server(object):
                 # Calling breakout_update_usonic() is mandatory before initial reconcile
                 # process, as gssouth-sonic will replace the interface names properly during
                 # init if they have been modified.
-                breakout_dict = {}
-                is_updated = await self.breakout_update_usonic(breakout_dict)
+                is_updated = self.breakout_update_usonic()
                 if is_updated:
                     await self.watch_pods()
                 else:
