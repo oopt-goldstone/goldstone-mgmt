@@ -335,7 +335,7 @@ def test_port_breakout(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_1; mtu 4000"')
     except SSHException as e:
-        assert "is locked" in e.stderr
+        assert "locked" in e.stderr
     else:
         raise Exception("failed to fail mtu setting under ds locked")
 

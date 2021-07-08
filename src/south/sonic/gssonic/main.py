@@ -384,7 +384,7 @@ class Server(object):
             return
 
         if self.is_usonic_rebooting:
-            raise SysrepoLockedError("uSONiC is rebooting")
+            raise sysrepo.SysrepoLockedError("uSONiC is rebooting")
 
         single_lane_intf_type = ["CR", "LR", "SR", "KR"]
         double_lane_intf_type = ["CR2", "LR2", "SR2", "KR2"]
