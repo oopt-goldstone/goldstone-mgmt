@@ -67,8 +67,8 @@ class Vlan(object):
             )
         else:
             try:
-                dl1 = dl1["goldstone-vlan:vlan"]["VLAN"]["VLAN_LIST"]
-                dl2 = dl2["goldstone-vlan:vlan"]["VLAN_MEMBER"]["VLAN_MEMBER_LIST"]
+                dl1 = dl1["goldstone-vlan:vlan"].get("VLAN", {}).get("VLAN_LIST", [])
+                dl2 = dl2["goldstone-vlan:vlan"].get("VLAN_MEMBER", {}).get("VLAN_MEMBER_LIST", [])
             except KeyError as error:
                 pass
             dln = []
