@@ -1301,14 +1301,13 @@ class Server(object):
                 )
 
     def update_oper_ds(self):
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("operational")
+        self.sess.switch_datastore("operational")
 
-            self.clean_oper_ds(sess)
-            self.update_vlan_oper_ds(sess)
-            self.update_interface_oper_ds(sess)
+        self.clean_oper_ds(self.sess)
+        self.update_vlan_oper_ds(self.sess)
+        self.update_interface_oper_ds(self.sess)
 
-            sess.apply_changes(wait=True)
+        self.sess.apply_changes(wait=True)
 
     def is_ufd_port(self, port, ufd_list):
 
