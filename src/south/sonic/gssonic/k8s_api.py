@@ -13,7 +13,7 @@ from jinja2 import Template
 
 USONIC_DEPLOYMENTS = os.getenv(
     "USONIC_DEPLOYMENTS",
-    "usonic-core,usonic-bcm,usonic-port,usonic-neighbor,usonic-mgrd",
+    "usonic-core,usonic-bcm,usonic-port,usonic-neighbor,usonic-mgrd,usonic-teamd",
 )
 USONIC_NAMESPACE = os.getenv("USONIC_NAMESPACE", "default")
 USONIC_CONFIGMAP = os.getenv("USONIC_CONFIGMAP", "usonic-config")
