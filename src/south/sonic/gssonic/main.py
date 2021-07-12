@@ -1140,7 +1140,7 @@ class Server(object):
                     try:
                         self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL|" + key, "mtu", port_channel["config"]["goldstone-ip:ipv4"]["mtu"])
                     except KeyError:
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL|" + key, "mtu", "9100")
+                        self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL|" + key, "mtu", self.mtu_default)
                     try:
                         for intf in port_channel["config"]["interface"]:
                             self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL_MEMBER|" + key + "|" + intf, "NULL", "NULL")
@@ -1567,7 +1567,7 @@ class Server(object):
                 if isinstance(change, sysrepo.ChangeCreated) or isinstance(change, sysrepo.ChangeModified):
                     logger.debug("change created/modified")
                     if attr == "config":
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "mtu", change.value)
+                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "mtu", self.mtu_default)
                     if attr == "admin-status":
                         self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "admin-status", change.value)
                     if attr == "mtu":
@@ -1578,7 +1578,7 @@ class Server(object):
                     logger.debug(f"{change.xpath}")
                     logger.debug("change deleted")
                     if attr == "mtu":
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "mtu", "9100")
+                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "mtu", self.mtu_default)
                     if attr == "interface":
                         self.sonic_db.delete(self.sonic_db.CONFIG_DB, _mem_hash)
                     if attr == "config":
