@@ -130,22 +130,66 @@ def test_ufd(cli):
     output = ssh(cli, 'gscli -c "show running-config interface"')
     assert "ufd 10 downlink" in output
 
+
 def test_portchannel(cli):
-    ssh(cli, 'gscli -c "portchannel 10"')
-    ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel 10"')
-    ssh(cli, 'gscli -c "interface Ethernet2_1; portchannel 10"')
-    ssh(cli, 'gscli -c "interface Ethernet4_1; portchannel 10"')
-    output = ssh(cli, 'gscli -c "portchannel 10; show"')
+    ssh(cli, 'gscli -c "portchannel PortChannel10"')
+    ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel PortChannel10"')
+    ssh(cli, 'gscli -c "interface Ethernet2_1; portchannel PortChannel10"')
+    ssh(cli, 'gscli -c "interface Ethernet4_1; portchannel PortChannel10"')
+    output = ssh(cli, 'gscli -c "portchannel PortChannel10; show"')
     assert "Ethernet1_1" in output
     assert "Ethernet2_1" in output
     assert "Ethernet4_1" in output
     output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "portchannel 10" in output
-    ssh(cli, 'gscli -c "portchannel 20"')
+    assert "portchannel PortChannel10" in output
+    ssh(cli, 'gscli -c "portchannel PortChannel20"')
     try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel 10"')
+        ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel PortChannel10"')
     except SSHException as e:
         assert "Invalid argument: User callback failed" in e.stderr
+    ssh(cli, 'gscli -c "portchannel PortChannel9"')
+    ssh(cli, 'gscli -c "portchannel PortChannel99"')
+    ssh(cli, 'gscli -c "portchannel PortChannel999"')
+    ssh(cli, 'gscli -c "portchannel PortChannel9999"')
+    try:
+        ssh(cli, 'gscli -c "portchannel PortChannel10000"')
+    except SSHException as e:
+        assert (
+            'Value "PortChannel10000" does not satisfy the constraint "PortChannel[0-9]{1,4}"'
+            in e.stderr
+        )
+    try:
+        ssh(cli, 'gscli -c "portchannel Lag10"')
+    except SSHException as e:
+        assert (
+            'Value "Lag10" does not satisfy the constraint "PortChannel[0-9]{1,4}"'
+            in e.stderr
+        )
+    ssh(cli, 'gscli -c "interface Ethernet10_1; portchannel PortChannel9"')
+    output = ssh(cli, "ip link | grep -w PortChannel9")
+    assert "PortChannel9" in output
+    output = ssh(
+        cli, "kubectl exec -t usonic-cli -- show interface status|grep Ethernet10_1"
+    )
+    assert "PortChannel9" in output
+    ssh(cli, 'gscli -c "interface Ethernet10_1; no portchannel PortChannel9"')
+    output = ssh(
+        cli, "kubectl exec -t usonic-cli -- show interface status|grep Ethernet10_1"
+    )
+    try:
+        assert "PortChannel9" in output
+        raise Exception("Can't unconfigure interface from Portchannel")
+    except AssertionError:
+        print(
+            "This is negative case of unconfiguration of an interface from a portchannel"
+        )
+    ssh(cli, 'gscli -c "no portchannel PortChannel9"')
+    try:
+        ssh(cli, "ip link | grep -w PortChannel9")
+        raise Exception("Can't unconfigure Portchannel")
+    except SSHException:
+        print("This is negative case of unconfiguration of a portchannel")
+
 
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
@@ -1005,7 +1049,7 @@ def main(host, username, password):
             test_intf_type(cli)
             test_speed_intftype(cli)
             test_ufd(cli)
-            # test_portchannel(cli)
+            test_portchannel(cli)
             test_port_breakout(cli)
         except Exception as e:
             ssh(cli, "kubectl get pods -A")

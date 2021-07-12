@@ -31,7 +31,10 @@ module goldstone-portchannel {
     description "portchannel configuration container.";
 
     leaf portchannel-id {
-      type string;
+      type string{
+        length 1..128;
+        pattern 'PortChannel[0-9]{1,4}';
+      }
       description "portchannel group id.";
     } 
   
