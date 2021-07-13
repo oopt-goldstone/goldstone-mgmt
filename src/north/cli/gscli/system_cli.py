@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
-class Mgmt_CLI(Object):
+
+class ManagementInterface(Object):
     def __init__(self, conn, parent, ifname):
         super().__init__(parent)
         self.session = conn.start_session()
@@ -77,6 +78,7 @@ class Mgmt_CLI(Object):
         def show(args):
             if len(args) != 0:
                 return parent.show(args)
+            self.mgmt.show(ifname)
 
     def __str__(self):
         return "interface({})".format(self.name)

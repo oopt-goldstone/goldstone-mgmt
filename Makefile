@@ -200,6 +200,6 @@ system:
 	cd src/south/system && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
 
 lint:
-	exit $(black -q --diff --exclude src/north/snmp/src src | wc -l)
+	exit `black -q --diff --exclude src/north/snmp/src src | wc -l`
 	pyang -p /usr/local/share/yang/modules/ietf yang/*.yang
 	grep -rnI 'print(' src || exit 0 && exit 1

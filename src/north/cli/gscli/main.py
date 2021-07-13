@@ -26,7 +26,7 @@ from .cli import GSObject as Object
 from .tai_cli import Transponder
 from .sonic_cli import Interface, Vlan, Ufd, Portchannel
 from .sonic import Sonic
-from .system_cli import AAA_CLI, TACACS_CLI, Mgmt_CLI, System
+from .system_cli import AAA_CLI, TACACS_CLI, ManagementInterface, System
 from .system import AAA, TACACS, Mgmtif
 from natsort import natsorted
 
@@ -164,20 +164,22 @@ class Root(Object):
                 stderr.info(f"There is no device of name {line[0]}")
                 return
 
-        @self.command(
-            FuzzyWordCompleter(
-                lambda: (self.get_ifnames() + self.get_mgmt_ifname()), WORD=True
-            )
-        )
+        @self.command(FuzzyWordCompleter(self.get_ifnames, WORD=True))
         def interface(line):
             if len(line) != 1:
                 raise InvalidInput("usage: interface <ifname>")
-            if line[0] in self.get_mgmt_ifname():
-                return Mgmt_CLI(conn, self, line[0])
-            else:
-                return Interface(conn, self, line[0])
+            return Interface(conn, self, line[0])
 
-        @self.command(FuzzyWordCompleter(lambda: self.sonic.ufd.get_id(), WORD=True))
+        @self.command(
+            FuzzyWordCompleter(self.get_mgmt_ifname, WORD=True),
+            name="management-interface",
+        )
+        def management_interface(line):
+            if len(line) != 1:
+                raise InvalidInput("usage: management-interface <ifname>")
+            return ManagementInterface(conn, self, line[0])
+
+        @self.command(FuzzyWordCompleter(self.sonic.ufd.get_id, WORD=True))
         def ufd(line):
             if len(line) != 1:
                 raise InvalidInput("usage: ufd <ufd-id>")
@@ -245,7 +247,9 @@ class Root(Object):
                             self.sonic.vlan.create(vlans)
                         else:
                             vlan_limits = vlans.split("-")
-                            for vid in range(int(vlan_limits[0]), int(vlan_limits[1]) + 1):
+                            for vid in range(
+                                int(vlan_limits[0]), int(vlan_limits[1]) + 1
+                            ):
                                 self.sonic.vlan.create(str(vid))
 
                 else:

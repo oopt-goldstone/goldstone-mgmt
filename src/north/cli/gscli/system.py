@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
+
 class Mgmtif(object):
 
     XPATH_MGMT = "/goldstone-mgmt-interfaces:interfaces/interface"
@@ -73,6 +74,9 @@ class Mgmtif(object):
             return
 
         self.sr_op.delete_data(f"{xpath}")
+
+    def show(self, ifname):
+        stdout.info(self.sr_op.get_data(self.xpath_mgmt(ifname), "operational"))
 
     def run_conf(self):
         mgmt_dict = {}

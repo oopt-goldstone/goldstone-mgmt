@@ -11,8 +11,10 @@ from pathlib import Path
 
 libonlp = onlp.onlp.libonlp
 
+
 class InvalidXPath(Exception):
     pass
+
 
 logger = logging.getLogger(__name__)
 

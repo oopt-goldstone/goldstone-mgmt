@@ -777,7 +777,7 @@ def test_statistics(cli):
 
 def test_mgmt_if_cmds(cli):
     try:
-        ssh(cli, 'gscli -c "interface eth0; ip address 999.999.999.999/24"')
+        ssh(cli, 'gscli -c "management-interface eth0; ip address 999.999.999.999/24"')
     except SSHException as e:
         assert "does not satisfy the constraint" in e.stderr
     else:
@@ -785,7 +785,7 @@ def test_mgmt_if_cmds(cli):
             "failed to fail with an invalid cmd ip address 999.999.999.999/24"
         )
     try:
-        ssh(cli, 'gscli -c "interface eth0; ip address 999.999.999.999.24"')
+        ssh(cli, 'gscli -c "management-interface eth0; ip address 999.999.999.999.24"')
     except SSHException as e:
         assert (
             "Entered address is not in the expected format - A.B.C.D/<mask>" in e.stderr
@@ -796,12 +796,12 @@ def test_mgmt_if_cmds(cli):
         )
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip address 20.20.20.0/24; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip address 20.20.20.0/24; show running-config mgmt-if"',
     )
     assert "ip address 20.20.20.0/24" in output
 
     try:
-        ssh(cli, 'gscli -c "interface eth0; no ip address 999.999.999.999/24"')
+        ssh(cli, 'gscli -c "management-interface eth0; no ip address 999.999.999.999/24"')
     except SSHException as e:
         assert "does not satisfy the constraint" in e.stderr
     else:
@@ -809,7 +809,7 @@ def test_mgmt_if_cmds(cli):
             "failed to fail with an invalid cmd no ip address 999.999.999.999/24"
         )
     try:
-        ssh(cli, 'gscli -c "interface eth0; ip address 999.999.999.999.24"')
+        ssh(cli, 'gscli -c "management-interface eth0; ip address 999.999.999.999.24"')
     except SSHException as e:
         assert (
             "Entered address is not in the expected format - A.B.C.D/<mask>" in e.stderr
@@ -820,25 +820,25 @@ def test_mgmt_if_cmds(cli):
         )
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip address 20.20.20.0/24; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; no ip address 20.20.20.0/24; show running-config mgmt-if"',
     )
     assert "ip address 20.20.20.0/24" not in output
 
     try:
-        ssh(cli, 'gscli -c "interface eth0; ip route 10.10.10.117"')
+        ssh(cli, 'gscli -c "management-interface eth0; ip route 10.10.10.117"')
     except SSHException as e:
         assert "does not satisfy the constraint" in e.stderr
     else:
         raise Exception("failed to fail with an invalid cmd ip route 10.10.10.117")
     try:
-        ssh(cli, 'gscli -c "interface eth0; ip route 10.10.10.117/35"')
+        ssh(cli, 'gscli -c "management-interface eth0; ip route 10.10.10.117/35"')
     except SSHException as e:
         assert "does not satisfy the constraint" in e.stderr
     else:
         raise Exception("failed to fail with an invalid cmd ip route 10.10.10.117/35")
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip route 30.30.30.0/24; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip route 30.30.30.0/24; show running-config mgmt-if"',
     )
     assert "ip route 30.30.30.0/24" in output
 
@@ -847,7 +847,7 @@ def test_mgmt_if_cmds(cli):
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip route 30.30.30.0/24; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; no ip route 30.30.30.0/24; show running-config mgmt-if"',
     )
     assert "ip route 30.30.30.0/24" not in output
 
@@ -856,17 +856,17 @@ def test_mgmt_if_cmds(cli):
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip route 30.20.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip route 30.20.0.0/16; show running-config mgmt-if"',
     )
     assert "ip route 30.20.0.0/16" in output
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip route 20.10.20.0/24; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip route 20.10.20.0/24; show running-config mgmt-if"',
     )
     assert "ip route 20.10.20.0/24" in output
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip route 30.20.20.0/24; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip route 30.20.20.0/24; show running-config mgmt-if"',
     )
     assert "ip route 30.20.20.0/24" in output
     output = ssh(cli, 'gscli -c "show ip route"')
@@ -906,13 +906,13 @@ def test_onlp(cli):
 def test_system_reconcile(cli):
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip route 31.21.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip route 31.21.0.0/16; show running-config mgmt-if"',
     )
     assert "ip route 31.21.0.0/16" in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip address 20.21.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip address 20.21.0.0/16; show running-config mgmt-if"',
     )
     assert "ip address 20.21.0.0/16" in output
 
@@ -929,38 +929,38 @@ def test_system_reconcile(cli):
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip route 31.21.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; no ip route 31.21.0.0/16; show running-config mgmt-if"',
     )
     assert "ip route 31.21.0.0/16" not in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip address 20.21.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; no ip address 20.21.0.0/16; show running-config mgmt-if"',
     )
     assert "ip address 20.21.0.0/16" not in output
 
     # case for saving a tree without leaf address
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if"',
     )
     assert "ip address 56.10.0.0/16" in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if"',
     )
     assert "ip address 56.10.0.0/16" not in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if"',
     )
     assert "ip route 100.17.0.0/16" in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if"',
     )
     assert "ip route 100.17.0.0/16" not in output
 
@@ -969,25 +969,25 @@ def test_system_reconcile(cli):
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if"',
     )
     assert "ip address 56.10.0.0/16" in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if"',
     )
     assert "ip address 56.10.0.0/16" not in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if"',
     )
     assert "ip route 100.17.0.0/16" in output
 
     output = ssh(
         cli,
-        'gscli -c "interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if"',
+        'gscli -c "management-interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if"',
     )
     assert "ip route 100.17.0.0/16" not in output
 

@@ -48,6 +48,7 @@ def attr_tai2yang(attr, meta, schema):
     logger.warning(f"not supported float value: {attr}")
     raise taish.TAIException()
 
+
 MODULE_DEFAULT_VALUES = {"admin-status": "up", "enable-notify": False}
 
 NETIF_DEFAULT_VALUES = {
@@ -601,10 +602,10 @@ class Server(object):
 
         async def finalizer(obj, attr):
             while True:
-                await asyncio.sleep(.1)
+                await asyncio.sleep(0.1)
                 v = await obj.get(attr)
                 logger.debug(v)
-                if '(nil)' in v:
+                if "(nil)" in v:
                     return
 
         def add(obj, attr):
@@ -614,9 +615,7 @@ class Server(object):
         try:
             module = await self.taish.get_module(location)
         except Exception as e:
-            logger.warning(
-                    f"failed to get module location: {location}. err: {e}"
-            )
+            logger.warning(f"failed to get module location: {location}. err: {e}")
             return
 
         try:
@@ -642,7 +641,9 @@ class Server(object):
                 try:
                     await h.get(attr)
                 except taish.TAIException:
-                    logger.warning(f"monitoring {attr} is not supported for hostif({i})")
+                    logger.warning(
+                        f"monitoring {attr} is not supported for hostif({i})"
+                    )
                 else:
                     add(h, attr)
 
@@ -655,9 +656,7 @@ class Server(object):
         mconfig = config.get(location, {})
         # 'name' is not a valid TAI attribute. we need to exclude it
         # we might want to invent a cleaner way by using an annotation in the YANG model
-        attrs = [
-            (k, v) for k, v in mconfig.get("config", {}).items() if k != "name"
-        ]
+        attrs = [(k, v) for k, v in mconfig.get("config", {}).items() if k != "name"]
         try:
             module = await self.taish.create_module(location, attrs=attrs)
         except taish.TAIException as e:
@@ -673,14 +672,11 @@ class Server(object):
                 await module.set(k, v)
 
         nconfig = {
-            n["name"]: n.get("config", {})
-            for n in mconfig.get("network-interface", [])
+            n["name"]: n.get("config", {}) for n in mconfig.get("network-interface", [])
         }
         for index in range(int(await module.get("num-network-interfaces"))):
             attrs = [
-                (k, v)
-                for k, v in nconfig.get(str(index), {}).items()
-                if k != "name"
+                (k, v) for k, v in nconfig.get(str(index), {}).items() if k != "name"
             ]
             try:
                 netif = await module.create_netif(index)
@@ -700,7 +696,7 @@ class Server(object):
                 # reconcile with the sysrepo configuration
                 logger.debug(
                     f"module({location})/netif({index}) already exists. updating attributes.."
-                    )
+                )
                 for k, v in attrs:
                     try:
                         meta = await netif.get_attribute_metadata(k)
@@ -714,14 +710,11 @@ class Server(object):
                     )
 
         hconfig = {
-            n["name"]: n.get("config", {})
-            for n in mconfig.get("host-interface", [])
+            n["name"]: n.get("config", {}) for n in mconfig.get("host-interface", [])
         }
         for index in range(int(await module.get("num-host-interfaces"))):
             attrs = [
-                (k, v)
-                for k, v in hconfig.get(str(index), {}).items()
-                if k != "name"
+                (k, v) for k, v in hconfig.get(str(index), {}).items() if k != "name"
             ]
             try:
                 hostif = await module.create_hostif(index, attrs=attrs)
@@ -740,12 +733,11 @@ class Server(object):
         event = asyncio.Event()
         tasks.append(event.wait())
         task = asyncio.create_task(self.notif_handler(tasks, finalizers))
-        self.event_obj[location] = {'event': event, 'task': task}
-
+        self.event_obj[location] = {"event": event, "task": task}
 
     async def cleanup_piu(self, location):
-        self.event_obj[location]['event'].set()
-        await self.event_obj[location]['task']
+        self.event_obj[location]["event"].set()
+        await self.event_obj[location]["task"]
 
         m = await self.taish.get_module(location)
         for v in m.obj.hostifs:
@@ -757,14 +749,13 @@ class Server(object):
         logger.debug("removing module oid")
         await self.taish.remove(m.oid)
 
-
     async def notification_cb(self, a, b, c, d):
         logger.info(b.print_dict())
         notify_data = b.print_dict()
-        assert('piu-notify-event' in notify_data)
+        assert "piu-notify-event" in notify_data
 
-        notify_data = notify_data['piu-notify-event']
-        location = notify_data['name']
+        notify_data = notify_data["piu-notify-event"]
+        location = notify_data["name"]
         status = [v for v in notify_data.get("status", {})]
 
         if status[0] == "PRESENT":
@@ -778,7 +769,6 @@ class Server(object):
         elif status[0] == "UNPLUGGED":
             await self.cleanup_piu(location)
             await self.update_operds()
-
 
     async def update_operds(self):
 
@@ -812,7 +802,6 @@ class Server(object):
 
                 sess.apply_changes()
 
-
     async def notif_handler(self, tasks, finalizers):
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         logger.debug(f"done: {done}, pending: {pending}")
@@ -840,7 +829,7 @@ class Server(object):
             config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
             logger.debug(f"sysrepo running configuration: {config}")
 
-            tasks = [self.initialize_piu(config, m['location']) for m in modules]
+            tasks = [self.initialize_piu(config, m["location"]) for m in modules]
             await asyncio.gather(*tasks)
 
             await self.update_operds()
@@ -862,15 +851,20 @@ class Server(object):
                 asyncio_register=True,
             )
 
-            self.sess.subscribe_notification_tree('goldstone-onlp', f'/goldstone-onlp:piu-notify-event', 0, 0, self.notification_cb, asyncio_register=True)
-
+            self.sess.subscribe_notification_tree(
+                "goldstone-onlp",
+                f"/goldstone-onlp:piu-notify-event",
+                0,
+                0,
+                self.notification_cb,
+                asyncio_register=True,
+            )
 
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
         await site.start()
-        
-        return []
 
+        return []
 
 
 def main():
