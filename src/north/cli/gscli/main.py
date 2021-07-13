@@ -170,7 +170,10 @@ class Root(Object):
                 raise InvalidInput("usage: interface <ifname>")
             return Interface(conn, self, line[0])
 
-        @self.command(FuzzyWordCompleter(self.get_mgmt_ifname, WORD=True), name='management-interface')
+        @self.command(
+            FuzzyWordCompleter(self.get_mgmt_ifname, WORD=True),
+            name="management-interface",
+        )
         def management_interface(line):
             if len(line) != 1:
                 raise InvalidInput("usage: management-interface <ifname>")
@@ -244,7 +247,9 @@ class Root(Object):
                             self.sonic.vlan.create(vlans)
                         else:
                             vlan_limits = vlans.split("-")
-                            for vid in range(int(vlan_limits[0]), int(vlan_limits[1]) + 1):
+                            for vid in range(
+                                int(vlan_limits[0]), int(vlan_limits[1]) + 1
+                            ):
                                 self.sonic.vlan.create(str(vid))
 
                 else:

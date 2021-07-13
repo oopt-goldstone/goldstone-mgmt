@@ -13,16 +13,17 @@ DEFAULT_RT_TABLE = 254
 RT_PROTO_STATIC_TYPE = 4
 
 DHCP_LEASE_DIR = os.getenv("DHCP_LEASE_DIR", "/var/lib/dhcp")
-DHCP_LEASE_RE = re.compile(r'lease {(?P<lease>.*?)\n}', re.DOTALL)
+DHCP_LEASE_RE = re.compile(r"lease {(?P<lease>.*?)\n}", re.DOTALL)
 
 logger = logging.getLogger(__name__)
+
 
 def parse_dhcp_leases(data):
     leases = []
     for match in re.finditer(DHCP_LEASE_RE, data):
-        lease = match.group('lease')
-        lines = lease.strip().split('\n')
-        if not all(l.endswith(';') for l in lines):
+        lease = match.group("lease")
+        lines = lease.strip().split("\n")
+        if not all(l.endswith(";") for l in lines):
             raise Exception(f"unknown format: {lease}")
 
         lines = [l[:-1].split() for l in lines]
@@ -43,7 +44,7 @@ def parse_dhcp_leases(data):
 
 
 def get_latest_dhcp_ip_addr(ifname):
-    fname = f'{DHCP_LEASE_DIR}/dhclient.{ifname}.leases'
+    fname = f"{DHCP_LEASE_DIR}/dhclient.{ifname}.leases"
     if not os.path.exists(fname):
         return None
 
@@ -283,7 +284,7 @@ class ManagementInterfaceServer:
                     mask = ipaddr["prefixlen"]
                     prefix = f"{xpath}/goldstone-ip:ipv4/address[ip='{ip}']"
                     self.sess.set_item(f"{prefix}/prefix-length", mask)
-                    if dhcp and 'fixed-address' in dhcp and ip == dhcp['fixed-address']:
+                    if dhcp and "fixed-address" in dhcp and ip == dhcp["fixed-address"]:
                         self.sess.set_item(f"{prefix}/state/origin", "dhcp")
 
                 self.sess.set_item(f"{xpath}/admin-status", intf["state"])

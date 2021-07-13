@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
+
 class ManagementInterface(Object):
     def __init__(self, conn, parent, ifname):
         super().__init__(parent)

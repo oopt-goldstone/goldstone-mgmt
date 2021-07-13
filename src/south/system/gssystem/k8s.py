@@ -67,10 +67,9 @@ class KubernetesServer:
             with pyroute2.NDB() as ndb:
                 try:
                     intf = ndb.interfaces[K8S_INTF_NAME]
-                    ndb.routes.create(dst=SERVICE_CIDR,oif=intf["index"]).commit()
+                    ndb.routes.create(dst=SERVICE_CIDR, oif=intf["index"]).commit()
                 except Exception as error:
                     logger.debug(f"{str(error)}")
-
 
     async def start(self):
 

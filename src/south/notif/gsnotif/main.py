@@ -13,6 +13,7 @@ from libyang import SNode
 
 logger = logging.getLogger(__name__)
 
+
 class Server(object):
     def __init__(self):
         self.loop = asyncio.get_event_loop()
@@ -31,7 +32,6 @@ class Server(object):
 
         self.runner = web.AppRunner(app)
 
-
     async def stop(self):
         logger.info(f"stop server")
         await self.runner.cleanup()
@@ -48,7 +48,6 @@ class Server(object):
 
     async def start(self):
 
-
         logger.info("**********Inside Start**********")
 
         self.sess.switch_datastore("running")
@@ -58,12 +57,13 @@ class Server(object):
                 module = self.ctx.get_module(model.name())
                 notif = list(module.children(types=(SNode.NOTIF,)))
                 if len(notif) > 0:
-                    self.sess.subscribe_notification_tree(model.name(), f'/{model.name()}:*', 0, 0, self.notification_cb)
-        
+                    self.sess.subscribe_notification_tree(
+                        model.name(), f"/{model.name()}:*", 0, 0, self.notification_cb
+                    )
+
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
         await site.start()
-
 
         return [self.monitor_notif()]
 
@@ -81,7 +81,7 @@ def main():
             tasks = await server.start()
             tasks.append(stop_event.wait())
             done, pending = await asyncio.wait(
-            tasks, return_when=asyncio.FIRST_COMPLETED
+                tasks, return_when=asyncio.FIRST_COMPLETED
             )
             logger.debug(f"done: {done}, pending: {pending}")
             for task in done:
@@ -109,6 +109,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
