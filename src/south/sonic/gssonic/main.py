@@ -1060,9 +1060,7 @@ class Server(object):
                         )
                     elif key == "auto-nego" or key == "interface-type":
                         logger.debug("Reconcile for bcmcmd")
-                        status_bcm = self.k8s.run_bcmcmd_usonic(
-                            key, name, intf[key]
-                        )
+                        status_bcm = self.k8s.run_bcmcmd_usonic(key, name, intf[key])
                     elif key == "alias":
                         self.sonic_db.set(
                             self.sonic_db.CONFIG_DB,
@@ -1131,19 +1129,46 @@ class Server(object):
         portchannel_data = self.sess.get_data("/goldstone-portchannel:portchannel")
         if "portchannel" in portchannel_data:
             if "portchannel-group" in portchannel_data["portchannel"]:
-                for port_channel in portchannel_data["portchannel"]["portchannel-group"]:
+                for port_channel in portchannel_data["portchannel"][
+                    "portchannel-group"
+                ]:
                     key = port_channel["portchannel-id"]
                     try:
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL|" + key, "admin-status", port_channel["config"]["admin-status"])
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB,
+                            "PORTCHANNEL|" + key,
+                            "admin-status",
+                            port_channel["config"]["admin-status"],
+                        )
                     except KeyError:
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL|" + key, "admin-status", "up")
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB,
+                            "PORTCHANNEL|" + key,
+                            "admin-status",
+                            "up",
+                        )
                     try:
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL|" + key, "mtu", port_channel["config"]["goldstone-ip:ipv4"]["mtu"])
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB,
+                            "PORTCHANNEL|" + key,
+                            "mtu",
+                            port_channel["config"]["goldstone-ip:ipv4"]["mtu"],
+                        )
                     except KeyError:
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL|" + key, "mtu", self.mtu_default)
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB,
+                            "PORTCHANNEL|" + key,
+                            "mtu",
+                            self.mtu_default,
+                        )
                     try:
                         for intf in port_channel["config"]["interface"]:
-                            self.sonic_db.set(self.sonic_db.CONFIG_DB, "PORTCHANNEL_MEMBER|" + key + "|" + intf, "NULL", "NULL")
+                            self.sonic_db.set(
+                                self.sonic_db.CONFIG_DB,
+                                "PORTCHANNEL_MEMBER|" + key + "|" + intf,
+                                "NULL",
+                                "NULL",
+                            )
                     except KeyError:
                         logger.debug("interfaces not configured")
 
@@ -1266,9 +1291,7 @@ class Server(object):
                 else:
                     parent_dict[parent] = 1
 
-                logger.debug(
-                    f"parent: {parent}, parent_dict: {parent_dict}"
-                )
+                logger.debug(f"parent: {parent}, parent_dict: {parent_dict}")
 
                 sess.set_item(f"{xpath_subif_breakout}/parent", parent)
 
@@ -1551,7 +1574,9 @@ class Server(object):
         if event == "change":
             for change in changes:
                 logger.debug(f"event: {event}; change_cb: {change}")
-                portchannel_id, attr, _hash, _mem_hash= self.parse_portchannel_req(change.xpath)
+                portchannel_id, attr, _hash, _mem_hash = self.parse_portchannel_req(
+                    change.xpath
+                )
                 if isinstance(change, sysrepo.ChangeCreated):
                     if attr == "interface":
                         if self.is_portchannel_intf(change.value):
@@ -1563,27 +1588,40 @@ class Server(object):
         elif event == "done":
             for change in changes:
                 logger.debug(f"event: {event}; change_cb: {change}")
-                portchannel_id, attr, _hash, _mem_hash= self.parse_portchannel_req(change.xpath)
-                if isinstance(change, sysrepo.ChangeCreated) or isinstance(change, sysrepo.ChangeModified):
+                portchannel_id, attr, _hash, _mem_hash = self.parse_portchannel_req(
+                    change.xpath
+                )
+                if isinstance(change, sysrepo.ChangeCreated) or isinstance(
+                    change, sysrepo.ChangeModified
+                ):
                     logger.debug("change created/modified")
                     if attr == "config":
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "mtu", self.mtu_default)
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB, _hash, "mtu", self.mtu_default
+                        )
                     if attr == "admin-status":
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "admin-status", change.value)
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB, _hash, "admin-status", change.value
+                        )
                     if attr == "mtu":
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "mtu", change.value)
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB, _hash, "mtu", change.value
+                        )
                     if attr == "interface":
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _mem_hash, "NULL", "NULL")
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB, _mem_hash, "NULL", "NULL"
+                        )
                 if isinstance(change, sysrepo.ChangeDeleted):
                     logger.debug(f"{change.xpath}")
                     logger.debug("change deleted")
                     if attr == "mtu":
-                        self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, "mtu", self.mtu_default)
+                        self.sonic_db.set(
+                            self.sonic_db.CONFIG_DB, _hash, "mtu", self.mtu_default
+                        )
                     if attr == "interface":
                         self.sonic_db.delete(self.sonic_db.CONFIG_DB, _mem_hash)
                     if attr == "config":
                         self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
-        
 
     def event_handler(self, msg):
         try:
@@ -1656,9 +1694,6 @@ class Server(object):
             except queue.Empty:
                 pass
 
-
-
-
     async def start(self):
 
         logger.debug(
@@ -1692,7 +1727,9 @@ class Server(object):
                 self.sess.switch_datastore("running")
 
                 self.sess.subscribe_module_change(
-                    "goldstone-interfaces", None, self.intf_change_cb,
+                    "goldstone-interfaces",
+                    None,
+                    self.intf_change_cb,
                 )
                 self.sess.subscribe_module_change(
                     "goldstone-vlan", None, self.vlan_change_cb

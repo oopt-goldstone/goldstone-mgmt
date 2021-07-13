@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
+
 class Mgmtif(object):
 
     XPATH_MGMT = "/goldstone-mgmt-interfaces:interfaces/interface"
