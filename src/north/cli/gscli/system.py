@@ -74,6 +74,9 @@ class Mgmtif(object):
 
         self.sr_op.delete_data(f"{xpath}")
 
+    def show(self, ifname):
+        stdout.info(self.sr_op.get_data(self.xpath_mgmt(ifname), "operational"))
+
     def run_conf(self):
         mgmt_dict = {}
         try:

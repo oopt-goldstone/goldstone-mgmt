@@ -18,6 +18,7 @@ import logging
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
+
 class CLIException(Exception):
     pass
 

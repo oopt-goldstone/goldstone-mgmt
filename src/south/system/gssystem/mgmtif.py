@@ -2,15 +2,56 @@ import pyroute2
 import sysrepo
 import logging
 from pyroute2.netlink.rtnl import ndmsg
+import os
+import re
 
 # This hardcoding has to be removed once ENV
 # is added in system file for gssystem-south
-MGMT_INTF_NAME = "eth0"
+MGMT_INTF_NAMES = os.getenv("GS_MGMT_INTFS", "eth0").split(",")
 MAX_PREFIX_LENGTH = 32
 DEFAULT_RT_TABLE = 254
 RT_PROTO_STATIC_TYPE = 4
 
+DHCP_LEASE_DIR = os.getenv("DHCP_LEASE_DIR", "/var/lib/dhcp")
+DHCP_LEASE_RE = re.compile(r'lease {(?P<lease>.*?)\n}', re.DOTALL)
+
 logger = logging.getLogger(__name__)
+
+def parse_dhcp_leases(data):
+    leases = []
+    for match in re.finditer(DHCP_LEASE_RE, data):
+        lease = match.group('lease')
+        lines = lease.strip().split('\n')
+        if not all(l.endswith(';') for l in lines):
+            raise Exception(f"unknown format: {lease}")
+
+        lines = [l[:-1].split() for l in lines]
+        lease = {}
+        for line in lines:
+            key = line[0]
+            value = " ".join(line[1:])
+            if key in lease:
+                v = lease[key]
+                if type(v) == list:
+                    lease[key].append(value)
+                else:
+                    lease[key] = [v, value]
+            else:
+                lease[key] = value
+        leases.append(lease)
+    return leases
+
+
+def get_latest_dhcp_ip_addr(ifname):
+    fname = f'{DHCP_LEASE_DIR}/dhclient.{ifname}.leases'
+    if not os.path.exists(fname):
+        return None
+
+    with open(fname) as f:
+        leases = parse_dhcp_leases(f.read())
+        if not leases:
+            return None
+        return leases[-1]
 
 
 class ManagementInterfaceServer:
@@ -25,7 +66,8 @@ class ManagementInterfaceServer:
         if event != "change":
             return
         with pyroute2.NDB() as ndb:
-            intf = ndb.interfaces[MGMT_INTF_NAME]
+            # FIXME support setting nexthop
+            intf = ndb.interfaces[MGMT_INTF_NAMES[0]]
             for change in changes:
                 logger.debug(f"routing change_cb:{change}")
                 xpath = change.xpath
@@ -80,7 +122,6 @@ class ManagementInterfaceServer:
         update_operds = False
 
         with pyroute2.NDB() as ndb:
-            intf = ndb.interfaces[MGMT_INTF_NAME]
             for change in changes:
                 logger.debug(f"change_cb:{change}")
                 xpath = change.xpath
@@ -98,7 +139,7 @@ class ManagementInterfaceServer:
                                 ip = ip.replace("']", "")
                         logger.debug(intf_name)
                         logger.debug(ip)
-                        if intf_name != MGMT_INTF_NAME:
+                        if intf_name in MGMT_INTF_NAMES:
                             raise sysrepo.SysrepoInvalArgError(
                                 "interface name is not the management interface"
                             )
@@ -131,7 +172,7 @@ class ManagementInterfaceServer:
                                 ip = ip.replace("']", "")
                         logger.debug(intf_name)
                         logger.debug(ip)
-                        if intf_name != MGMT_INTF_NAME:
+                        if intf_name in MGMT_INTF_NAMES:
                             raise sysrepo.SysrepoInvalArgError(
                                 "interface name is not the management interface"
                             )
@@ -151,7 +192,7 @@ class ManagementInterfaceServer:
             self.update_oper_db()
 
     def get_neighbor(self):
-        intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAME)
+        intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAMES[0])
         tuple_of_neighbours = self.pyroute.get_neighbours(ifindex=intf_index.pop())
         neighbour_list = []
 
@@ -171,7 +212,7 @@ class ManagementInterfaceServer:
             routes = []
             destination_prefix = "0.0.0.0/0"
             next_hop_address = ""
-            for route in ndb.interfaces[MGMT_INTF_NAME].routes.dump():
+            for route in ndb.interfaces[MGMT_INTF_NAMES[0]].routes.dump():
                 if ":" not in route["dst"] and route["table"] == DEFAULT_RT_TABLE:
                     route_dic = {}
                     route_dic["next-hop"] = {}
@@ -216,7 +257,7 @@ class ManagementInterfaceServer:
         logger.debug(
             f"clear_arp: xpath: {xpath}, input: {input}, event: {event}, priv: {priv}"
         )
-        intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAME).pop()
+        intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAMES[0]).pop()
         for n in self.get_neighbor():
             dst = n["ip"]
             self.pyroute.neigh(
@@ -229,44 +270,43 @@ class ManagementInterfaceServer:
     def update_oper_db(self):
         logger.debug("*********inside update oper db***************")
         self.sess.switch_datastore("operational")
-        xpath = (
-            f"/goldstone-mgmt-interfaces:interfaces/interface[name='{MGMT_INTF_NAME}']"
-        )
-
+        prefix = "/goldstone-mgmt-interfaces:interfaces"
         with pyroute2.NDB() as ndb:
-            i = ndb.interfaces[MGMT_INTF_NAME]
+            for ifname in MGMT_INTF_NAMES:
+                xpath = f"{prefix}/interface[name='{ifname}']"
+                intf = ndb.interfaces[ifname]
+                dhcp = get_latest_dhcp_ip_addr(ifname)
+                for ipaddr in intf.ipaddr.summary():
+                    ip = ipaddr["address"]
+                    if ":" in ip:
+                        continue
+                    mask = ipaddr["prefixlen"]
+                    prefix = f"{xpath}/goldstone-ip:ipv4/address[ip='{ip}']"
+                    self.sess.set_item(f"{prefix}/prefix-length", mask)
+                    if dhcp and 'fixed-address' in dhcp and ip == dhcp['fixed-address']:
+                        self.sess.set_item(f"{prefix}/state/origin", "dhcp")
 
-            for ipaddr in ndb.interfaces[MGMT_INTF_NAME].ipaddr.summary():
-                ip = ipaddr["address"]
-                if ":" in ip:
-                    continue
-                mask = ipaddr["prefixlen"]
-                self.sess.set_item(
-                    f"{xpath}/goldstone-ip:ipv4/address[ip='{ip}']/prefix-length",
-                    mask,
-                )
+                self.sess.set_item(f"{xpath}/admin-status", intf["state"])
+                self.sess.set_item(f"{xpath}/mtu", intf["mtu"])
 
-            self.sess.set_item(f"{xpath}/admin-status", i["state"])
-            self.sess.set_item(f"{xpath}/mtu", i["mtu"])
+                logger.debug("********** update oper for routing **************")
 
-            logger.debug("********** update oper for routing **************")
+                xpath = "/goldstone-routing:routing/static-routes/ipv4/route"
+                for route in intf.routes:
+                    destination_prefix = ""
+                    if (
+                        ":" not in route["dst"]
+                        and route["dst_len"] != 0
+                        and route["table"] == DEFAULT_RT_TABLE
+                    ):
+                        destination_prefix = route["dst"] + "/" + str(route["dst_len"])
+                        if destination_prefix != "":
+                            self.sess.set_item(
+                                f"{xpath}[destination-prefix='{destination_prefix}']/destination-prefix",
+                                destination_prefix,
+                            )
 
-            xpath = "/goldstone-routing:routing/static-routes/ipv4/route"
-            for route in ndb.interfaces[MGMT_INTF_NAME].routes:
-                destination_prefix = ""
-                if (
-                    ":" not in route["dst"]
-                    and route["dst_len"] != 0
-                    and route["table"] == DEFAULT_RT_TABLE
-                ):
-                    destination_prefix = route["dst"] + "/" + str(route["dst_len"])
-                    if destination_prefix != "":
-                        self.sess.set_item(
-                            f"{xpath}[destination-prefix='{destination_prefix}']/destination-prefix",
-                            destination_prefix,
-                        )
-
-            logger.debug("********** update oper for routing done **********")
+                logger.debug("********** update oper for routing done **********")
 
         self.sess.apply_changes()
         logger.debug("********* update oper db done***************")
@@ -280,7 +320,7 @@ class ManagementInterfaceServer:
             logger.debug(mgmtif_list)
             with pyroute2.NDB() as ndb:
                 mgmtif = mgmtif_list.pop()
-                if mgmtif["name"] != MGMT_INTF_NAME:
+                if mgmtif["name"] in MGMT_INTF_NAMES:
                     raise sysrepo.SysrepoInvalArgError(
                         f"{mgmtif['name']} not the supported management interface"
                     )
@@ -288,7 +328,7 @@ class ManagementInterfaceServer:
                     if key == "ipv4":
                         for ip in mgmtif["ipv4"].get("address", []):
                             try:
-                                ndb.interfaces[MGMT_INTF_NAME].add_ip(
+                                ndb.interfaces[mgmtif["name"]].add_ip(
                                     ip["ip"] + "/" + str(ip["prefix-length"])
                                 ).commit()
                             except KeyError as error:
@@ -299,7 +339,7 @@ class ManagementInterfaceServer:
             route_list = route_data["routing"]["static-routes"]["ipv4"]["route"]
             logger.debug(route_list)
             with pyroute2.NDB() as ndb:
-                intf = ndb.interfaces[MGMT_INTF_NAME]
+                intf = ndb.interfaces[MGMT_INTF_NAMES[0]]
                 for route in route_list:
                     try:
                         ndb.routes.create(
