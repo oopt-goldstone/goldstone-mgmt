@@ -140,7 +140,7 @@ class ManagementInterfaceServer:
                                 ip = ip.replace("']", "")
                         logger.debug(intf_name)
                         logger.debug(ip)
-                        if intf_name in MGMT_INTF_NAMES:
+                        if intf_name not in MGMT_INTF_NAMES:
                             raise sysrepo.SysrepoInvalArgError(
                                 "interface name is not the management interface"
                             )
@@ -173,7 +173,7 @@ class ManagementInterfaceServer:
                                 ip = ip.replace("']", "")
                         logger.debug(intf_name)
                         logger.debug(ip)
-                        if intf_name in MGMT_INTF_NAMES:
+                        if intf_name not in MGMT_INTF_NAMES:
                             raise sysrepo.SysrepoInvalArgError(
                                 "interface name is not the management interface"
                             )
@@ -321,7 +321,7 @@ class ManagementInterfaceServer:
             logger.debug(mgmtif_list)
             with pyroute2.NDB() as ndb:
                 mgmtif = mgmtif_list.pop()
-                if mgmtif["name"] in MGMT_INTF_NAMES:
+                if mgmtif["name"] not in MGMT_INTF_NAMES:
                     raise sysrepo.SysrepoInvalArgError(
                         f"{mgmtif['name']} not the supported management interface"
                     )
