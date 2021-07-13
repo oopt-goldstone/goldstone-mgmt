@@ -85,7 +85,7 @@ class Component(object):
                 components = self.get_components(type_)
                 for component in components:
                     table = self.get_state_attr(type_, component)
-                    stdout.info(component['name'])
+                    stdout.info(component["name"])
                     stdout.info(tabulate(table))
             stdout.info("Note: Values with the symbol '-' are unsupported")
 
@@ -93,25 +93,25 @@ class Component(object):
             components = self.get_components("piu")
             for component in components:
                 table = self.get_state_attr("piu", component)
-                stdout.info(component['name'])
+                stdout.info(component["name"])
                 stdout.info(tabulate(table))
             components = self.get_components("sfp")
             for component in components:
                 table = self.get_state_attr("sfp", component)
-                stdout.info(component['name'])
+                stdout.info(component["name"])
                 stdout.info(tabulate(table))
         elif option == "system":
             components = self.get_components("sys")
             for component in components:
                 table = self.get_state_attr("sys", component)
-                stdout.info(component['name'])
+                stdout.info(component["name"])
                 stdout.info(tabulate(table))
 
         else:
             components = self.get_components(option)
             for component in components:
                 table = self.get_state_attr(option, component)
-                stdout.info(component['name'])
+                stdout.info(component["name"])
                 stdout.info(tabulate(table))
             stdout.info("Note: Values with the symbol '-' are unsupported")
 
