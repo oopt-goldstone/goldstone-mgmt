@@ -151,11 +151,10 @@ class Interface(Object):
 
         @self.command(WordCompleter(self.fec_list))
         def fec(args):
-            if len(args) != 1:
+            if len(args) != 1 or args[0] not in ["fc", "rs"]:
                 raise InvalidInput("usages: fec <fc|rs>")
-            else:
-                if args[0] in ["fc", "rs"]:
-                    self.sonic.port.set_fec(ifname, args[0])
+            for ifname in self.ifnames:
+                self.sonic.port.set_fec(ifname, args[0])
 
         @self.command()
         def shutdown(args):
@@ -258,13 +257,16 @@ class Interface(Object):
         def ufd(args):
             if len(args) != 2 or (args[1] != "uplink" and args[1] != "downlink"):
                 raise InvalidInput("usage: ufd <ufdid> <uplink|downlink>")
-            self.sonic.ufd.add_port(args[0], self.name, args[1])
+
+            for ifname in self.ifnames:
+                self.sonic.ufd.add_port(args[0], ifname, args[1])
 
         @self.command()
         def portchannel(args):
             if len(args) != 1:
                 raise InvalidInput("usage: portchannel <portchannel_id>")
-            self.sonic.pc.add_interface(args[0], self.name)
+            for ifname in self.ifnames:
+                self.sonic.pc.add_interface(args[0], ifname)
 
         @self.command(parent.get_completer("show"))
         def show(args):
