@@ -56,11 +56,12 @@ class sysrepo_wrap(object):
         self.session.switch_datastore("running")
         return data_ly
 
-    def set_data(self, xpath, value, ds="running"):
+    def set_data(self, xpath, value, ds="running", no_apply=False):
         self.session.switch_datastore(ds)
         try:
             self.session.set_item(xpath, value)
-            self.session.apply_changes(wait=True)
+            if not no_apply:
+                self.session.apply_changes(wait=True)
         except (
             sr.errors.SysrepoCallbackFailedError,
             sr.errors.SysrepoValidationFailedError,
@@ -75,11 +76,12 @@ class sysrepo_wrap(object):
             raise LockedError(f"{xpath} is locked", error)
         self.session.switch_datastore("running")
 
-    def delete_data(self, xpath, ds="running"):
+    def delete_data(self, xpath, ds="running", no_apply=False):
         self.session.switch_datastore(ds)
         try:
             self.session.delete_item(xpath)
-            self.session.apply_changes(wait=True)
+            if not no_apply:
+                self.session.apply_changes(wait=True)
         except (
             sr.errors.SysrepoCallbackFailedError,
             sr.errors.SysrepoValidationFailedError,
@@ -111,3 +113,19 @@ class sysrepo_wrap(object):
             raise InvalidInput(msg)
         self.session.switch_datastore("running")
         return val_list
+
+    def apply(self):
+        try:
+            self.session.apply_changes(wait=True)
+        except (
+            sr.errors.SysrepoCallbackFailedError,
+            sr.errors.SysrepoValidationFailedError,
+        ) as error:
+            self.session.discard_changes()
+            raise InvalidInput(str(error))
+        except sr.errors.SysrepoInvalArgError as error:
+            msg = str(error)
+            msg = msg.split("(")[0]
+            raise InvalidInput(msg)
+        except sr.errors.SysrepoLockedError as error:
+            raise LockedError(f"{xpath} is locked", error)
