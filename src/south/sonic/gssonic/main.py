@@ -418,45 +418,41 @@ class Server(object):
                     elif key == "interface-type":
                         if event == "change":
                             tmp_xpath = (change.xpath).replace("/interface-type", "")
-                            running_data = self.get_running_data(tmp_xpath)
+
                             try:
-                                for intf in running_data["interfaces"]["interface"]:
-                                    breakout_details = self.get_breakout_detail(ifname)
-                                    if not breakout_details:
-                                        raise KeyError
-                                    if int(breakout_details["num-channels"]) == 4:
-                                        if breakout_details["channel-speed"].endswith(
-                                            "10GB"
-                                        ):
-                                            if change.value == "SR":
-                                                raise sysrepo.SysrepoInvalArgError(
-                                                    "Unsupported interface type"
-                                                )
-                                        if change.value in single_lane_intf_type:
-                                            pass
-                                        else:
+                                data = self.get_running_data(tmp_xpath)
+                                intf = data["interfaces"]["interface"][0]
+                                detail = self.get_breakout_detail(ifname)
+                                if not detail:
+                                    raise KeyError
+                                numch = int(detail["num-channels"])
+
+                                if numch == 4:
+                                    if detail["channel-speed"].endswith("10GB"):
+                                        if change.value == "SR":
                                             raise sysrepo.SysrepoInvalArgError(
                                                 "Unsupported interface type"
                                             )
-                                    elif int(breakout_details["num-channels"]) == 2:
-                                        if change.value in double_lane_intf_type:
-                                            pass
-                                        else:
-                                            raise sysrepo.SysrepoInvalArgError(
-                                                "Unsupported interface type"
-                                            )
-                                    else:
+                                    if change.value not in single_lane_intf_type:
                                         raise sysrepo.SysrepoInvalArgError(
                                             "Unsupported interface type"
                                         )
-                            except KeyError:
-                                if change.value in quad_lane_intf_type:
-                                    pass
+                                elif numch == 2:
+                                    if change.value not in double_lane_intf_type:
+                                        raise sysrepo.SysrepoInvalArgError(
+                                            "Unsupported interface type"
+                                        )
                                 else:
                                     raise sysrepo.SysrepoInvalArgError(
                                         "Unsupported interface type"
                                     )
-                        if event == "done":
+                            except (KeyError, sysrepo.SysrepoNotFoundError):
+                                if change.value not in quad_lane_intf_type:
+                                    raise sysrepo.SysrepoInvalArgError(
+                                        "Unsupported interface type"
+                                    )
+
+                        elif event == "done":
                             status_bcm = self.k8s.run_bcmcmd_usonic(
                                 key, ifname, change.value
                             )
