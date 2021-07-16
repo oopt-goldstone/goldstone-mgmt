@@ -414,7 +414,11 @@ class Port(object):
     def set_admin_status(self, ifnames, value):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
-            set_attribute(self.sr_op, xpath, "interface", ifname, "admin-status", value)
+            set_attribute(
+                self.sr_op, xpath, "interface", ifname, "admin-status", value, True
+            )
+
+        self.sr_op.apply()
 
     def set_fec(self, ifnames, value):
         for ifname in ifnames:
@@ -426,32 +430,47 @@ class Port(object):
                 ifname,
                 "fec",
                 value if value else "none",
+                True,
             )
+        self.sr_op.apply()
 
-    def set_auto_nego(self, ifnames, mode, config=True):
+    def set_auto_nego(self, ifnames, mode):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
-            set_attribute(self.sr_op, xpath, "interface", ifname, "auto-nego", mode)
-            if config == False:
-                self.sr_op.delete_data("{}/auto-nego".format(xpath))
+            if mode:
+                set_attribute(
+                    self.sr_op, xpath, "interface", ifname, "auto-nego", mode, True
+                )
+            else:
+                self.sr_op.delete_data("{}/auto-nego".format(xpath), no_apply=True)
+        self.sr_op.apply()
 
     def set_interface_type(self, ifnames, value, config=True):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
             if config:
                 set_attribute(
-                    self.sr_op, xpath, "interface", ifname, "interface-type", value
+                    self.sr_op,
+                    xpath,
+                    "interface",
+                    ifname,
+                    "interface-type",
+                    value,
+                    True,
                 )
             else:
-                self.sr_op.delete_data("{}/interface-type".format(xpath))
+                self.sr_op.delete_data(f"{xpath}/interface-type", no_apply=True)
+        self.sr_op.apply()
 
     def set_mtu(self, ifnames, value):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
             if value:
-                set_attribute(self.sr_op, xpath, "interface", ifname, "mtu", value)
+                set_attribute(
+                    self.sr_op, xpath, "interface", ifname, "mtu", value, True
+                )
             else:
-                self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4/mtu")
+                self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4/mtu", no_apply=True)
 
                 # if the mtu leaf was the only node under the ipv4 container
                 # remove the container
@@ -463,7 +482,8 @@ class Port(object):
                 data = data.get("interfaces", {}).get("interface", {})
                 data = data.get(ifname, {}).get("ipv4", None) if len(data) else None
                 if not data:
-                    self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4")
+                    self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4", no_apply=True)
+        self.sr_op.apply()
 
     def mtu_range(self):
         ctx = self.session.get_ly_ctx()
@@ -478,11 +498,20 @@ class Port(object):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
             if config:
-                set_attribute(self.sr_op, xpath, "interface", ifname, "speed", value)
+                set_attribute(
+                    self.sr_op,
+                    xpath,
+                    "interface",
+                    ifname,
+                    "speed",
+                    value,
+                    no_apply=True,
+                )
             else:
-                self.sr_op.delete_data("{}/speed".format(xpath))
+                self.sr_op.delete_data(f"{xpath}/speed", no_apply=True)
+        self.sr_op.apply()
 
-    def set_vlan_mem(self, ifnames, mode, vid, config=True):
+    def set_vlan_mem(self, ifnames, mode, vid, config=True, no_apply=False):
         xpath_mem_list = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
         xpath_mem_mode = "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST"
         mode_map = {"tagged": "trunk", "untagged": "access"}
@@ -501,33 +530,30 @@ class Port(object):
 
             except sr.SysrepoNotFoundError as e:
                 self.sr_op.set_data(
-                    "{}/admin-status".format(self.xpath(ifname)), "down"
+                    f"{self.xpath(ifname)}/admin-status", "down", no_apply=True
                 )
 
-            if config == True:
+            if config:
                 set_attribute(
-                    self.sr_op, xpath_mem_list, "vlan", name, "members", ifname
+                    self.sr_op,
+                    xpath_mem_list,
+                    "vlan",
+                    name,
+                    "members",
+                    ifname,
+                    no_apply=True,
                 )
-                if mode == "trunk":
-                    set_attribute(
-                        self.sr_op,
-                        xpath_mem_mode,
-                        "vlan",
-                        name,
-                        "tagging_mode",
-                        "tagged",
-                    )
-                elif mode == "access":
-                    set_attribute(
-                        self.sr_op,
-                        xpath_mem_mode,
-                        "vlan",
-                        name,
-                        "tagging_mode",
-                        "untagged",
-                    )
+                set_attribute(
+                    self.sr_op,
+                    xpath_mem_mode,
+                    "vlan",
+                    name,
+                    "tagging_mode",
+                    "tagged" if mode == "trunk" else "untagged",
+                    no_apply=True,
+                )
 
-            elif config == False:
+            elif not config:
                 mem_list = self.sr_op.get_leaf_data(xpath_mem_list, "members")
                 if len(mem_list) == 0:
                     raise InvalidInput("No members added")
@@ -539,8 +565,8 @@ class Port(object):
                 if mode_map[mode_data] != mode:
                     raise InvalidInput(f"Incorrect mode given : {mode}")
                 if ifname in mem_list:
-                    self.sr_op.delete_data("{}/{}".format(xpath_mem_list, "members"))
-                    self.sr_op.delete_data("{}".format(xpath_mem_mode))
+                    self.sr_op.delete_data(f"{xpath_mem_list}/members", no_apply=True)
+                    self.sr_op.delete_data(xpath_mem_mode, no_apply=True)
                     mem_list.remove(ifname)
                     # Since we dont have utiity function in sysrepo to delete one node in
                     # leaf-list , we are deleting 'members' with old data and creating again
@@ -553,8 +579,11 @@ class Port(object):
                             name,
                             "members",
                             mem_intf,
+                            no_apply=True,
                         )
-                # Unconfig done
+
+        if not no_apply:
+            self.sr_op.apply()
 
     def speed_to_yang_val(self, speed):
         # Considering only speeds supported in CLI
@@ -584,7 +613,9 @@ class Port(object):
 
             for vlan in data:
                 if intf in vlan.get("members", []):
-                    self.set_vlan_mem(intf, None, str(vlan["vlanid"]), config=False)
+                    self.set_vlan_mem(
+                        intf, None, str(vlan["vlanid"]), config=False, no_apply=True
+                    )
 
         is_delete = number_of_channels == None
 
@@ -613,12 +644,12 @@ class Port(object):
                     parent = intf.get("breakout", {}).get("parent", None)
                     if ifname == parent:
                         remove_intf_from_all_vlans(intf["name"])
-                        self.sr_op.delete_data(self.xpath(intf["name"]))
+                        self.sr_op.delete_data(self.xpath(intf["name"]), no_apply=True)
 
             stdout.info("Existing configurations on parent interfaces will be flushed")
             remove_intf_from_all_vlans(ifname)
             xpath = self.xpath(ifname)
-            self.sr_op.delete_data(xpath)
+            self.sr_op.delete_data(xpath, no_apply=True)
 
             if is_delete:
                 continue
@@ -632,6 +663,7 @@ class Port(object):
                     ifname,
                     "num-channels",
                     number_of_channels,
+                    no_apply=True,
                 )
                 set_attribute(
                     self.sr_op,
@@ -640,10 +672,13 @@ class Port(object):
                     ifname,
                     "channel-speed",
                     self.speed_to_yang_val(speed),
+                    no_apply=True,
                 )
 
             except sr.errors.SysrepoValidationFailedError as error:
                 raise InvalidInput(str(error))
+
+        self.sr_op.apply()
 
     def show(self, ifnames):
         for ifname in ifnames:
@@ -886,21 +921,23 @@ class Sonic(object):
         self.pc.show()
 
 
-def set_attribute(sr_op, path, module, name, attr, value):
+def set_attribute(sr_op, path, module, name, attr, value, no_apply=False):
     try:
         sr_op.get_data(path, "running")
     except sr.SysrepoNotFoundError as e:
         if module == "interface":
-            sr_op.set_data(f"{path}/admin-status", "up")
+            sr_op.set_data(f"{path}/admin-status", "up", no_apply=no_apply)
         if attr != "tagging_mode":
-            sr_op.set_data(f"{path}/name", name)
+            sr_op.set_data(f"{path}/name", name, no_apply=no_apply)
 
     if module == "interface" and attr == "mtu":
-        sr_op.set_data("{}/goldstone-ip:ipv4/{}".format(path, attr), value)
+        sr_op.set_data(
+            "{}/goldstone-ip:ipv4/{}".format(path, attr), value, no_apply=no_apply
+        )
     elif module == "interface" and (attr == "num-channels" or attr == "channel-speed"):
-        sr_op.set_data("{}/breakout/{}".format(path, attr), value)
+        sr_op.set_data("{}/breakout/{}".format(path, attr), value, no_apply=no_apply)
     else:
-        sr_op.set_data(f"{path}/{attr}", value)
+        sr_op.set_data(f"{path}/{attr}", value, no_apply=no_apply)
 
 
 class Portchannel(object):

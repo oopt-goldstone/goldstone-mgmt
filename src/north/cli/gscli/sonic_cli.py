@@ -28,6 +28,7 @@ class Interface(Object):
         super().__init__(parent)
         self.conn = conn
         self.session = conn.start_session()
+        self.name = ifname
         try:
             ptn = re.compile(ifname)
         except re.error:
@@ -103,7 +104,7 @@ class Interface(Object):
                     ifnames, sonic_defaults.INTF_TYPE, config=False
                 )
             elif args[0] == "auto-nego":
-                self.sonic.port.set_auto_nego(ifnames, "no", config=False)
+                self.sonic.port.set_auto_nego(ifnames, None)
             elif args[0] == "ufd":
                 self.sonic.ufd.check_port(self.name)
             elif args[0] == "mtu":
