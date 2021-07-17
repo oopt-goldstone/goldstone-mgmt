@@ -975,16 +975,20 @@ class Portchannel(object):
         self.sr_op.delete_data(self.xpath(id))
         return
 
-    def add_interface(self, id, intf):
-        xpath_intf = f"/goldstone-interfaces:interfaces/interface[name = '{intf}']"
+    def add_interfaces(self, id, ifnames):
+        prefix = "/goldstone-interfaces:interfaces"
+        for ifname in ifnames:
+            xpath = f"{prefix}/interface[name='{ifname}']"
+            # in order to create the interface node if it doesn't exist in running DS
+            try:
+                self.sr_op.get_data(xpath, "running")
+            except sr.SysrepoNotFoundError as e:
+                self.sr_op.set_data(f"{xpath}/admin-status", "down", no_apply=True)
 
-        # in order to create the interface node if it doesn't exist in running DS
-        try:
-            self.sr_op.get_data(xpath_intf, "running")
-        except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data("{}/admin-status".format(xpath_intf), "down")
-
-        self.sr_op.set_data("{}/config/interface".format(self.xpath(id)), intf)
+            self.sr_op.set_data(
+                f"{self.xpath(id)}/config/interface", ifname, no_apply=True
+            )
+        self.sr_op.apply()
 
     def get_id(self):
         path = "/goldstone-portchannel:portchannel"
@@ -997,24 +1001,29 @@ class Portchannel(object):
             ]
         )
 
-    def remove_interface(self, intf):
+    def remove_interfaces(self, ifnames):
         try:
-            self.tree = self.sr_op.get_data(
-                "{}/portchannel-group".format(self.XPATH), "running"
-            )
-            id_list = self.tree["portchannel"]["portchannel-group"]
+            data = self.sr_op.get_data(f"{self.XPATH}/portchannel-group", "running")
+            groups = data["portchannel"]["portchannel-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
             raise InvalidInput("portchannel not configured for this interface")
 
-        for data in id_list:
-            try:
-                if intf in data["config"]["interface"]:
-                    xpath = self.xpath(data["portchannel-id"])
-                    self.sr_op.delete_data(f"{xpath}/config/interface[.='{intf}']")
-                    return
-            except KeyError:
-                pass
-        raise InvalidInput("portchannel not configured for this interface")
+        for ifname in ifnames:
+            for data in groups:
+                try:
+                    if ifname in data["config"]["interface"]:
+                        xpath = self.xpath(data["portchannel-id"])
+                        self.sr_op.delete_data(
+                            f"{xpath}/config/interface[.='{ifname}']", no_apply=True
+                        )
+                        break
+                except KeyError:
+                    pass
+            else:
+                self.sr_op.discard_changes()
+                raise InvalidInput(f"portchannel not configured for {ifname}")
+
+        self.sr_op.apply()
 
     def run_conf(self):
         try:
