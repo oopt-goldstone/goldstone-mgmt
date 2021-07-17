@@ -129,3 +129,6 @@ class sysrepo_wrap(object):
             raise InvalidInput(msg)
         except sr.errors.SysrepoLockedError as error:
             raise LockedError(f"{xpath} is locked", error)
+
+    def discard_changes(self):
+        self.session.discard_changes()

@@ -729,19 +729,26 @@ class UFD(object):
         self.sr_op.delete_data(self.xpath(id))
         return
 
-    def add_port(self, id, port, role):
-        xpath_intf = f"/goldstone-interfaces:interfaces/interface[name = '{port}']"
-        # in order to create the interface node if it doesn't exist in running DS
-        try:
-            self.sr_op.get_data(xpath_intf, "running")
-        except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data("{}/admin-status".format(xpath_intf), "down")
+    def add_ports(self, id, ports, role):
+        prefix = "/goldstone-interfaces:interfaces"
+        for port in ports:
+            xpath = f"{prefix}/interface[name='{port}']"
+            # in order to create the interface node if it doesn't exist in running DS
+            try:
+                self.sr_op.get_data(xpath, "running")
+            except sr.SysrepoNotFoundError as e:
+                self.sr_op.set_data(f"{xpath}/admin-status", "down", no_apply=True)
 
-        self.sr_op.set_data("{}/config/{}".format(self.xpath(id), role), port)
+            self.sr_op.set_data(f"{self.xpath(id)}/config/{role}", port, no_apply=True)
+        self.sr_op.apply()
 
-    def remove_port(self, id, role, port):
+    def remove_ports(self, id, role, ports, no_apply=False):
         xpath = self.xpath(id)
-        self.sr_op.delete_data(f"{xpath}/config/{role}[.='{port}']")
+        for port in ports:
+            self.sr_op.delete_data(f"{xpath}/config/{role}[.='{port}']", no_apply=True)
+
+        if not no_apply:
+            self.sr_op.apply()
 
     def get_id(self):
         path = "/goldstone-uplink-failure-detection:ufd-groups"
@@ -751,34 +758,37 @@ class UFD(object):
             [v["ufd-id"] for v in d.get("ufd-groups", {}).get("ufd-group", {})]
         )
 
-    def check_port(self, port):
+    def check_ports(self, ports):
         try:
-            self.tree = self.sr_op.get_data(
-                "{}/ufd-group".format(self.XPATH), "running"
-            )
-            id_list = self.tree["ufd-groups"]["ufd-group"]
+            data = self.sr_op.get_data(f"{self.XPATH}/ufd-group", "running")
+            ufds = data["ufd-groups"]["ufd-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
-            raise InvalidInput("ufd not configured for this interface")
+            raise InvalidInput("UFD not configured for this interface")
 
-        port_found = False
-        for data in id_list:
-            try:
-                uplink_port = data["config"]["uplink"]
-                if port in uplink_port:
-                    port_found = True
-                    self.remove_port(data["ufd-id"], "uplink", port)
-            except KeyError:
-                pass
-            try:
-                downlink_ports = data["config"]["downlink"]
-                if port in downlink_ports:
-                    port_found = True
-                    self.remove_port(data["ufd-id"], "downlink", port)
-            except KeyError:
-                pass
+        for port in ports:
+            found = False
+            for ufd in ufds:
+                try:
+                    uplinks = ufd["config"]["uplink"]
+                    if port in uplinks:
+                        found = True
+                        self.remove_ports(data["ufd-id"], "uplink", port, True)
+                except KeyError:
+                    pass
 
-        if port_found == False:
-            raise InvalidInput("ufd not configured for this interface")
+                try:
+                    downlinks = data["config"]["downlink"]
+                    if port in downlinks:
+                        found = True
+                        self.remove_ports(data["ufd-id"], "downlink", port, True)
+                except KeyError:
+                    pass
+
+            if not found:
+                self.sr_op.discard_changes()
+                raise InvalidInput("ufd not configured for this interface")
+
+        self.sr_op.apply()
 
     def show(self, id=None):
         try:
