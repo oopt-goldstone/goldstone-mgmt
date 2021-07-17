@@ -106,7 +106,7 @@ class Interface(Object):
             elif args[0] == "auto-nego":
                 self.sonic.port.set_auto_nego(ifnames, None)
             elif args[0] == "ufd":
-                self.sonic.ufd.check_port(self.name)
+                self.sonic.ufd.check_ports(ifnames)
             elif args[0] == "mtu":
                 self.sonic.port.set_mtu(ifnames, None)
             elif args[0] == "switchport" and len(args) == 5:
@@ -238,7 +238,7 @@ class Interface(Object):
             if len(args) != 2 or (args[1] != "uplink" and args[1] != "downlink"):
                 raise InvalidInput("usage: ufd <ufdid> <uplink|downlink>")
 
-            self.sonic.ufd.add_port(args[0], ifnames, args[1])
+            self.sonic.ufd.add_ports(args[0], ifnames, args[1])
 
         @self.command()
         def portchannel(args):
