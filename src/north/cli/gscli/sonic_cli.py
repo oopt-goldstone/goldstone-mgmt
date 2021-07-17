@@ -132,7 +132,7 @@ class Interface(Object):
             elif args[0] == "fec" and len(args) == 1:
                 self.sonic.port.set_fec(ifnames, None)
             elif args[0] == "portchannel":
-                self.sonic.pc.remove_interface(self.name)
+                self.sonic.pc.remove_interfaces(ifnames)
 
             else:
                 self.no_usage()
@@ -244,7 +244,7 @@ class Interface(Object):
         def portchannel(args):
             if len(args) != 1:
                 raise InvalidInput("usage: portchannel <portchannel_id>")
-            self.sonic.pc.add_interface(args[0], ifnames)
+            self.sonic.pc.add_interfaces(args[0], ifnames)
 
         @self.command(parent.get_completer("show"))
         def show(args):
