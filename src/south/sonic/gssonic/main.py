@@ -22,6 +22,11 @@ COUNTER_TABLE_PREFIX = "COUNTERS:"
 REDIS_SERVICE_HOST = os.getenv("REDIS_SERVICE_HOST")
 REDIS_SERVICE_PORT = os.getenv("REDIS_SERVICE_PORT")
 
+SINGLE_LANE_INTERFACE_TYPES = ["CR", "LR", "SR", "KR"]
+DOUBLE_LANE_INTERFACE_TYPES = ["CR2", "LR2", "SR2", "KR2"]
+QUAD_LANE_INTERFACE_TYPES = ["CR4", "LR4", "SR4", "KR4"]
+DEFAULT_INTERFACE_TYPE = "KR"
+
 
 def _decode(string):
     if hasattr(string, "decode"):
@@ -276,6 +281,35 @@ class Server(object):
 
         return False
 
+    def validate_interface_type(self, ifname, iftype):
+        xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+        err = sysrepo.SysrepoInvalArgError("Unsupported interface type")
+
+        try:
+            data = self.get_running_data(xpath)
+            intf = list(data["interfaces"]["interface"])[0]
+            detail = self.get_breakout_detail(ifname)
+            if not detail:
+                raise KeyError
+
+            numch = int(detail["num-channels"])
+        except (KeyError, sysrepo.SysrepoNotFoundError):
+            numch = 1
+
+        if numch == 4:
+            if detail["channel-speed"].endswith("10GB") and iftype == "SR":
+                raise err
+            elif iftype not in SINGLE_LANE_INTERFACE_TYPES:
+                raise err
+        elif numch == 2:
+            if iftype not in DOUBLE_LANE_INTERFACE_TYPES:
+                raise err
+        elif numch == 1:
+            if iftype not in QUAD_LANE_INTERFACE_TYPES:
+                raise err
+        else:
+            raise err
+
     def get_ufd_configured_ports(self, ifname):
         ufd_list = self.get_ufd()
         breakout_ports = []
@@ -323,7 +357,7 @@ class Server(object):
         logger.debug(f"event: {event}, changes: {changes}")
 
         if event not in ["change", "done"]:
-            logger.warn("unsupported event: {event}")
+            logger.warn(f"unsupported event: {event}")
             return
 
         for change in changes:
@@ -386,11 +420,6 @@ class Server(object):
         if self.is_usonic_rebooting:
             raise sysrepo.SysrepoLockedError("uSONiC is rebooting")
 
-        single_lane_intf_type = ["CR", "LR", "SR", "KR"]
-        double_lane_intf_type = ["CR2", "LR2", "SR2", "KR2"]
-        quad_lane_intf_type = ["CR4", "LR4", "SR4", "KR4"]
-
-        default_intf_type = "KR"
         valid_speeds = [40000, 100000]
         breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
 
@@ -416,57 +445,16 @@ class Server(object):
                         self.set_config_db(event, _hash, "admin_status", change.value)
 
                     elif key == "interface-type":
+                        iftype = change.value
                         if event == "change":
-                            tmp_xpath = (change.xpath).replace("/interface-type", "")
-                            running_data = self.get_running_data(tmp_xpath)
-                            try:
-                                for intf in running_data["interfaces"]["interface"]:
-                                    breakout_details = self.get_breakout_detail(ifname)
-                                    if not breakout_details:
-                                        raise KeyError
-                                    if int(breakout_details["num-channels"]) == 4:
-                                        if breakout_details["channel-speed"].endswith(
-                                            "10GB"
-                                        ):
-                                            if change.value == "SR":
-                                                raise sysrepo.SysrepoInvalArgError(
-                                                    "Unsupported interface type"
-                                                )
-                                        if change.value in single_lane_intf_type:
-                                            pass
-                                        else:
-                                            raise sysrepo.SysrepoInvalArgError(
-                                                "Unsupported interface type"
-                                            )
-                                    elif int(breakout_details["num-channels"]) == 2:
-                                        if change.value in double_lane_intf_type:
-                                            pass
-                                        else:
-                                            raise sysrepo.SysrepoInvalArgError(
-                                                "Unsupported interface type"
-                                            )
-                                    else:
-                                        raise sysrepo.SysrepoInvalArgError(
-                                            "Unsupported interface type"
-                                        )
-                            except KeyError:
-                                if change.value in quad_lane_intf_type:
-                                    pass
-                                else:
-                                    raise sysrepo.SysrepoInvalArgError(
-                                        "Unsupported interface type"
-                                    )
-                        if event == "done":
-                            status_bcm = self.k8s.run_bcmcmd_usonic(
-                                key, ifname, change.value
-                            )
+                            self.validate_interface_type(ifname, iftype)
+                        elif event == "done":
+                            self.k8s.run_bcmcmd_usonic(key, ifname, iftype)
                     elif key == "auto-nego":
                         # if event == "change":
                         #   Validation with respect to Port Breakout to be done
                         if event == "done":
-                            status_bcm = self.k8s.run_bcmcmd_usonic(
-                                key, ifname, change.value
-                            )
+                            self.k8s.run_bcmcmd_usonic(key, ifname, change.value)
 
                     elif key == "speed":
 
@@ -567,52 +555,13 @@ class Server(object):
                 elif key == "admin-status":
                     self.set_config_db(event, _hash, "admin_status", change.value)
                 elif key == "interface-type":
+                    iftype = change.value
+
                     if event == "change":
-                        logger.debug("......inside interface type change event......")
-                        #    Validation of Interface Type with respect to configured Speed to be done
-                        tmp_xpath = (change.xpath).replace("/interface-type", "")
-                        running_data = self.get_running_data(tmp_xpath)
-                        try:
-                            for intf in running_data["interfaces"]["interface"]:
-                                breakout_details = self.get_breakout_detail(ifname)
-                                if not breakout_details:
-                                    raise KeyError
-                                if int(breakout_details["num-channels"]) == 4:
-                                    if breakout_details["channel-speed"].endswith(
-                                        "10GB"
-                                    ):
-                                        if change.value == "SR":
-                                            raise sysrepo.SysrepoInvalArgError(
-                                                "Unsupported interface type"
-                                            )
-                                    if change.value in single_lane_intf_type:
-                                        pass
-                                    else:
-                                        raise sysrepo.SysrepoInvalArgError(
-                                            "Unsupported interface type"
-                                        )
-                                elif int(breakout_details["num-channels"]) == 2:
-                                    if change.value in double_lane_intf_type:
-                                        pass
-                                    else:
-                                        raise sysrepo.SysrepoInvalArgError(
-                                            "Unsupported interface type"
-                                        )
-                                else:
-                                    raise sysrepo.SysrepoInvalArgError(
-                                        "Unsupported interface type"
-                                    )
-                        except KeyError:
-                            if change.value in quad_lane_intf_type:
-                                pass
-                            else:
-                                raise sysrepo.SysrepoInvalArgError(
-                                    "Unsupported interface type"
-                                )
-                    if event == "done":
-                        status_bcm = self.k8s.run_bcmcmd_usonic(
-                            key, ifname, change.value
-                        )
+                        self.validate_interface_type(ifname, iftype)
+                    elif event == "done":
+                        self.k8s.run_bcmcmd_usonic(key, ifname, iftype)
+
                 elif key == "auto-nego":
                     # if event == "change":
                     #   Validation with respect to Port Breakout to be done
@@ -650,10 +599,20 @@ class Server(object):
                 if key in ["channel-speed", "num-channels"]:
 
                     if event == "change":
-                        if len(self.get_configured_breakout_ports(ifname)):
-                            raise sysrepo.SysrepoInvalArgError(
-                                "Breakout can't be removed due to the dependencies"
-                            )
+                        breakouts = self.get_configured_breakout_ports(ifname)
+                        # check if these breakouts are going to be deleted in this change
+                        for breakout in breakouts:
+                            xpath = f"/goldstone-interfaces:interfaces/interface[name='{breakout}']"
+                            for c in changes:
+                                if (
+                                    isinstance(c, sysrepo.ChangeDeleted)
+                                    and c.xpath == xpath
+                                ):
+                                    break
+                            else:
+                                raise sysrepo.SysrepoInvalArgError(
+                                    "Breakout can't be removed due to the dependencies"
+                                )
 
                         if len(self.get_ufd_configured_ports(ifname)):
                             raise sysrepo.SysrepoInvalArgError(

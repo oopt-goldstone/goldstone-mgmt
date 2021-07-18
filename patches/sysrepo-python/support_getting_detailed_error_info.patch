@@ -1,0 +1,156 @@
+Index: goldstone-mgmt/sm/sysrepo-python/sysrepo/errors.py
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo-python/sysrepo/errors.py
++++ goldstone-mgmt/sm/sysrepo-python/sysrepo/errors.py
+@@ -13,9 +13,10 @@ class SysrepoError(Exception):
+     rc = None
+     __slots__ = ("msg",)
+ 
+-    def __init__(self, msg: str):
++    def __init__(self, msg: str, details=None):
+         super().__init__()
+         self.msg = msg
++        self.details = details
+ 
+     def __str__(self):
+         return "%s: %s" % (self.msg, c2str(lib.sr_strerror(self.rc)))
+@@ -31,9 +32,9 @@ class SysrepoError(Exception):
+         return subclass
+ 
+     @staticmethod
+-    def new(msg: str, rc: int) -> "SysrepoError":
++    def new(msg: str, rc: int, details=None) -> "SysrepoError":
+         err_class = SysrepoError.RC_CLASSES[rc]
+-        return err_class(msg)
++        return err_class(msg, details)
+ 
+ 
+ # ------------------------------------------------------------------------------
+@@ -125,6 +126,7 @@ def _get_error_msg(session) -> Optional[
+     if lib.sr_get_error(session, err_info_p) == lib.SR_ERR_OK:
+         err_info = err_info_p[0]
+         error_strings = []
++        details = []
+         if err_info != ffi.NULL:
+             for i in range(err_info.err_count):
+                 err = err_info.err[i]
+@@ -135,8 +137,9 @@ def _get_error_msg(session) -> Optional[
+                     strings.append(c2str(err.message))
+                 if strings:
+                     error_strings.append(": ".join(strings))
++                details.append((c2str(err.xpath), c2str(err.message)))
+         msg = ", ".join(error_strings)
+-    return msg
++    return msg, details
+ 
+ 
+ # ------------------------------------------------------------------------------
+@@ -167,13 +170,14 @@ def check_call(
+     ret = func(*args)
+     if ret not in valid_codes:
+         msg = None
++        details = None
+         if (
+             args
+             and isinstance(args[0], ffi.CData)
+             and ffi.typeof(args[0]) == ffi.typeof("sr_session_ctx_t *")
+         ):
+-            msg = _get_error_msg(args[0])
++            msg, details = _get_error_msg(args[0])
+         if not msg:
+             msg = "%s failed" % func.__name__
+-        raise SysrepoError.new(msg, ret)
++        raise SysrepoError.new(msg, ret, details)
+     return ret
+Index: goldstone-mgmt/sm/sysrepo-python/sysrepo/session.py
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo-python/sysrepo/session.py
++++ goldstone-mgmt/sm/sysrepo-python/sysrepo/session.py
+@@ -117,6 +117,8 @@ class SysrepoSession:
+         """
+         if not self.is_implicit:
+             raise SysrepoUnsupportedError("can only report errors on implicit sessions")
++        if not isinstance(xpath, str):
++            xpath = ""
+         check_call(
+             lib.sr_set_error, self.cdata, str2c(xpath), str2c("%s"), str2c(message)
+         )
+Index: goldstone-mgmt/sm/sysrepo-python/sysrepo/subscription.py
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo-python/sysrepo/subscription.py
++++ goldstone-mgmt/sm/sysrepo-python/sysrepo/subscription.py
+@@ -265,7 +265,6 @@ def module_change_callback(session, modu
+             event in (lib.SR_EV_UPDATE, lib.SR_EV_CHANGE)
+             and e.msg
+             and isinstance(session, SysrepoSession)
+-            and isinstance(xpath, str)
+         ):
+             session.set_error(xpath, e.msg)
+         return e.rc
+@@ -278,7 +277,6 @@ def module_change_callback(session, modu
+         if (
+             event in (lib.SR_EV_UPDATE, lib.SR_EV_CHANGE)
+             and isinstance(session, SysrepoSession)
+-            and isinstance(xpath, str)
+         ):
+             session.set_error(xpath, str(e))
+         return lib.SR_ERR_CALLBACK_FAILED
+@@ -381,7 +379,7 @@ def oper_data_callback(session, module,
+         return lib.SR_ERR_OK
+ 
+     except SysrepoError as e:
+-        if e.msg and isinstance(session, SysrepoSession) and isinstance(xpath, str):
++        if e.msg and isinstance(session, SysrepoSession):
+             session.set_error(xpath, e.msg)
+         return e.rc
+ 
+@@ -390,7 +388,7 @@ def oper_data_callback(session, module,
+         # including KeyboardInterrupt, CancelledError, etc.
+         # We are in a C callback, we cannot let any error pass
+         LOG.exception("%r callback failed", locals().get("callback", priv))
+-        if isinstance(session, SysrepoSession) and isinstance(xpath, str):
++        if isinstance(session, SysrepoSession):
+             session.set_error(xpath, str(e))
+         return lib.SR_ERR_CALLBACK_FAILED
+ 
+@@ -491,7 +489,7 @@ def rpc_callback(session, xpath, input_n
+         return lib.SR_ERR_OK
+ 
+     except SysrepoError as e:
+-        if e.msg and isinstance(session, SysrepoSession) and isinstance(xpath, str):
++        if e.msg and isinstance(session, SysrepoSession):
+             session.set_error(xpath, e.msg)
+         return e.rc
+ 
+@@ -500,7 +498,7 @@ def rpc_callback(session, xpath, input_n
+         # including KeyboardInterrupt, CancelledError, etc.
+         # We are in a C callback, we cannot let any error pass
+         LOG.exception("%r callback failed", locals().get("callback", priv))
+-        if isinstance(session, SysrepoSession) and isinstance(xpath, str):
++        if isinstance(session, SysrepoSession):
+             session.set_error(xpath, str(e))
+         return lib.SR_ERR_CALLBACK_FAILED
+ 
+@@ -525,7 +523,6 @@ def event_notif_callback(session, notif,
+             event in (lib.SR_EV_UPDATE, lib.SR_EV_CHANGE)
+             and e.msg
+             and isinstance(session, SysrepoSession)
+-            and isinstance(xpath, str)
+         ):
+             session.set_error(xpath, e.msg)
+ 
+@@ -537,7 +534,6 @@ def event_notif_callback(session, notif,
+         if (
+             event in (lib.SR_EV_UPDATE, lib.SR_EV_CHANGE)
+             and isinstance(session, SysrepoSession)
+-            and isinstance(xpath, str)
+         ):
+             session.set_error(xpath, str(e))
+ 
+@@ -571,6 +567,5 @@ def event_notif_tree_callback(session, n
+         if (
+             event in (lib.SR_EV_UPDATE, lib.SR_EV_CHANGE)
+             and isinstance(session, SysrepoSession)
+-            and isinstance(xpath, str)
+         ):
+             session.set_error(xpath, str(e))

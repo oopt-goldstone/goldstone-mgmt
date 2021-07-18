@@ -35,19 +35,18 @@ class Interface(Object):
             raise InvalidInput(f"failed to compile {ifname} as a regular expression")
         self.sonic = Sonic(conn)
         iflist = [v["name"] for v in self.sonic.port.get_interface_list("operational")]
+        ifnames = [i for i in iflist if ptn.match(i)]
 
-        self.ifnames = [i for i in iflist if ptn.match(i)]
-
-        if len(self.ifnames) == 0:
+        if len(ifnames) == 0:
             raise InvalidInput(f"no interface found: {ifname}")
-        elif len(self.ifnames) > 1:
-            stdout.info(f"Selected interfaces: {self.ifnames}")
+        elif len(ifnames) > 1:
+            stdout.info(f"Selected interfaces: {ifnames}")
 
             @self.command()
             def selected(args):
                 if len(args) != 0:
                     raise InvalidInput("usage: selected[cr]")
-                stdout.info(", ".join(self.ifnames))
+                stdout.info(", ".join(ifnames))
 
         self.switchprt_dict = {
             "mode": {
@@ -97,26 +96,19 @@ class Interface(Object):
             if len(args) < 1:
                 raise InvalidInput("usage: {}".format(self.no_usage))
             if args[0] == "shutdown":
-                for ifname in self.ifnames:
-                    self.sonic.port.set_admin_status(ifname, "up")
+                self.sonic.port.set_admin_status(ifnames, "up")
             elif args[0] == "speed":
-                for ifname in self.ifnames:
-                    self.sonic.port.set_speed(
-                        ifname, sonic_defaults.SPEED, config=False
-                    )
+                self.sonic.port.set_speed(ifnames, sonic_defaults.SPEED, config=False)
             elif args[0] == "interface-type":
-                for ifname in self.ifnames:
-                    self.sonic.port.set_interface_type(
-                        ifname, sonic_defaults.INTF_TYPE, config=False
-                    )
+                self.sonic.port.set_interface_type(
+                    ifnames, sonic_defaults.INTF_TYPE, config=False
+                )
             elif args[0] == "auto-nego":
-                for ifname in self.ifnames:
-                    self.sonic.port.set_auto_nego(ifname, "no", config=False)
+                self.sonic.port.set_auto_nego(ifnames, None)
             elif args[0] == "ufd":
-                self.sonic.ufd.check_port(self.name)
+                self.sonic.ufd.check_ports(ifnames)
             elif args[0] == "mtu":
-                for ifname in self.ifnames:
-                    self.sonic.port.set_mtu(ifname, None)
+                self.sonic.port.set_mtu(ifnames, None)
             elif args[0] == "switchport" and len(args) == 5:
                 if args[1] != "mode" and args[2] not in self.tagging_mode_list:
                     raise InvalidInput(
@@ -128,41 +120,34 @@ class Interface(Object):
                     )
                 if args[4].isdigit():
                     if args[4] in parent.get_vid():
-                        for ifname in self.ifnames:
-                            self.sonic.port.set_vlan_mem(
-                                ifname, args[2], args[4], config=False
-                            )
+                        self.sonic.port.set_vlan_mem(
+                            ifnames, args[2], args[4], config=False
+                        )
                     else:
                         raise InvalidInput("Entered vid does not exist")
                 else:
                     raise InvalidInput("Entered <vid> must be numbers and not letters")
             elif args[0] == "breakout":
-                for ifname in self.ifnames:
-                    self.sonic.port.set_breakout(ifname, None, None)
+                self.sonic.port.set_breakout(ifnames, None, None)
             elif args[0] == "fec" and len(args) == 1:
-                for ifname in self.ifnames:
-                    self.sonic.port.set_fec(ifname, None)
-
+                self.sonic.port.set_fec(ifnames, None)
             elif args[0] == "portchannel":
-                self.sonic.pc.remove_interface(self.name)
+                self.sonic.pc.remove_interfaces(ifnames)
 
             else:
                 self.no_usage()
 
         @self.command(WordCompleter(self.fec_list))
         def fec(args):
-            if len(args) != 1:
+            if len(args) != 1 or args[0] not in ["fc", "rs"]:
                 raise InvalidInput("usages: fec <fc|rs>")
-            else:
-                if args[0] in ["fc", "rs"]:
-                    self.sonic.port.set_fec(ifname, args[0])
+            self.sonic.port.set_fec(ifnames, args[0])
 
         @self.command()
         def shutdown(args):
             if len(args) != 0:
                 raise InvalidInput("usage: shutdown")
-            for ifname in self.ifnames:
-                self.sonic.port.set_admin_status(ifname, "down")
+            self.sonic.port.set_admin_status(ifnames, "down")
 
         @self.command()
         def speed(args):
@@ -170,8 +155,7 @@ class Interface(Object):
                 raise InvalidInput("usage: speed 40000|100000")
             speed = args[0]
             if speed.isdigit():
-                for ifname in self.ifnames:
-                    self.sonic.port.set_speed(ifname, speed)
+                self.sonic.port.set_speed(ifnames, speed)
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
 
@@ -183,8 +167,7 @@ class Interface(Object):
                 raise InvalidInput(f"usage: mtu{range_}")
             if args[0].isdigit():
                 mtu = int(args[0])
-                for ifname in self.ifnames:
-                    self.sonic.port.set_mtu(ifname, mtu)
+                self.sonic.port.set_mtu(ifnames, mtu)
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
 
@@ -205,8 +188,7 @@ class Interface(Object):
             if args[3] not in parent.get_vid():
                 raise InvalidInput("Entered vid does not exist")
 
-            for ifname in self.ifnames:
-                self.sonic.port.set_vlan_mem(ifname, args[1], args[3])
+            self.sonic.port.set_vlan_mem(ifnames, args[1], args[3])
 
         @self.command(WordCompleter(self.interface_type_list))
         def interface_type(args):
@@ -218,20 +200,18 @@ class Interface(Object):
                 raise InvalidInput(invalid_input_str)
             if args[0] not in valid_args:
                 raise InvalidInput(invalid_input_str)
-            for ifname in self.ifnames:
-                self.sonic.port.set_interface_type(ifname, args[0])
+            self.sonic.port.set_interface_type(ifnames, args[0])
 
         @self.command(WordCompleter(self.auto_nego_list))
         def auto_nego(args):
             invalid_input_str = f'usage: auto_nego [{"|".join(self.auto_nego_list)}]'
             if len(args) != 1 or args[0] not in self.auto_nego_list:
                 raise InvalidInput(invalid_input_str)
-            else:
-                for ifname in self.ifnames:
-                    if args[0] == "enable":
-                        self.sonic.port.set_auto_nego(ifname, "yes")
-                    if args[0] == "disable":
-                        self.sonic.port.set_auto_nego(ifname, "no")
+
+            if args[0] == "enable":
+                self.sonic.port.set_auto_nego(ifnames, "yes")
+            if args[0] == "disable":
+                self.sonic.port.set_auto_nego(ifnames, "no")
 
         @self.command(WordCompleter(self.breakout_list))
         def breakout(args):
@@ -251,29 +231,26 @@ class Interface(Object):
             except:
                 raise InvalidInput(invalid_input_str)
 
-            for ifname in self.ifnames:
-                self.sonic.port.set_breakout(ifname, input_values[0], input_values[1])
+            self.sonic.port.set_breakout(ifnames, input_values[0], input_values[1])
 
         @self.command(NestedCompleter.from_nested_dict(self.ufd_dict))
         def ufd(args):
             if len(args) != 2 or (args[1] != "uplink" and args[1] != "downlink"):
                 raise InvalidInput("usage: ufd <ufdid> <uplink|downlink>")
-            self.sonic.ufd.add_port(args[0], self.name, args[1])
+
+            self.sonic.ufd.add_ports(args[0], ifnames, args[1])
 
         @self.command()
         def portchannel(args):
             if len(args) != 1:
                 raise InvalidInput("usage: portchannel <portchannel_id>")
-            self.sonic.pc.add_interface(args[0], self.name)
+            self.sonic.pc.add_interfaces(args[0], ifnames)
 
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
                 return parent.show(args)
-            for ifname in self.ifnames:
-                if len(self.ifnames) > 1:
-                    stdout.info(f"Interface {ifname}:")
-                self.sonic.port.show(ifname)
+            self.sonic.port.show(ifnames)
 
     def no_usage(self):
         no_keys = list(self.no_dict.keys())
