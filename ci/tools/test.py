@@ -325,16 +325,16 @@ def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "interface Ethernet1_1; switchport mode trunk vlan 1000"')
     output = ssh(cli, 'gscli -c "show vlan details"')
     assert "Ethernet1_1" in output
-    try:
-        ssh(
-            cli, 'gscli -c "interface Ethernet1_1; no switchport mode access vlan 1000"'
-        )
-    except SSHException as e:
-        assert "Incorrect mode given" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid cmd no switchport mode access vlan 1000"
-        )
+#    try:
+#        ssh(
+#            cli, 'gscli -c "interface Ethernet1_1; no switchport mode access vlan 1000"'
+#        )
+#    except SSHException as e:
+#        assert "Incorrect mode given" in e.stderr
+#    else:
+#        raise Exception(
+#            "failed to fail with an invalid cmd no switchport mode access vlan 1000"
+#        )
     try:
         ssh(
             cli,
