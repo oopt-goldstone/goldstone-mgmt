@@ -614,7 +614,7 @@ class Port(object):
             for vlan in data:
                 if intf in vlan.get("members", []):
                     self.set_vlan_mem(
-                        intf, None, str(vlan["vlanid"]), config=False, no_apply=True
+                        [intf], None, str(vlan["vlanid"]), config=False, no_apply=True
                     )
 
         is_delete = number_of_channels == None
