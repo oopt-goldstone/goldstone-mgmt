@@ -95,11 +95,11 @@ def test_speed_intftype(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet4_1; speed 10000"')
     except SSHException as e:
-        assert "Invalid argument: User callback failed" in e.stderr
+        assert "Invalid speed" in e.stderr
     try:
         ssh(cli, 'gscli -c "interface Ethernet4_1; interface_type SR"')
     except SSHException as e:
-        assert "Invalid argument: User callback failed" in e.stderr
+        assert "Unsupported interface type" in e.stderr
 
 
 def test_ufd(cli):
@@ -115,11 +115,11 @@ def test_ufd(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_1; ufd ufd1 uplink"')
     except SSHException as e:
-        assert "Validation failed: User callback failed" in e.stderr
+        assert "Uplink Already configured" in e.stderr
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; ufd ufd1 downlink"')
     except SSHException as e:
-        assert "Invalid argument: User callback failed" in e.stderr
+        assert "Ethernet1_1:Port Already configured" in e.stderr
 
     ssh(cli, 'gscli -c "ufd 10"')
     ssh(cli, 'gscli -c "interface Ethernet6_1; ufd 10 uplink"')
@@ -379,7 +379,7 @@ def test_port_breakout(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_1; mtu 4000"')
     except SSHException as e:
-        assert "locked" in e.stderr
+        assert ( "uSONiC is rebooting" in e.stderr or "locked" in e.stderr )
     else:
         raise Exception("failed to fail mtu setting under ds locked")
 
@@ -416,13 +416,13 @@ def test_port_breakout(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_2; speed 10000"')
     except SSHException as e:
-        assert "Invalid argument" in e.stderr
+        assert "Invalid speed" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: speed 10000")
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_2; speed 1000"')
     except SSHException as e:
-        assert "Invalid argument" in e.stderr
+        assert "Invalid speed" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: speed 1000")
 
@@ -662,13 +662,13 @@ def test_speed(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; speed 400000"')
     except SSHException as e:
-        assert "Invalid argument" in e.stderr
+        assert "Invalid" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: speed 400000")
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000"')
     except SSHException as e:
-        assert "Invalid argument" in e.stderr
+        assert "Invalid" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: speed 25000")
 
