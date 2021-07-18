@@ -357,7 +357,7 @@ class Server(object):
         logger.debug(f"event: {event}, changes: {changes}")
 
         if event not in ["change", "done"]:
-            logger.warn("unsupported event: {event}")
+            logger.warn(f"unsupported event: {event}")
             return
 
         for change in changes:
@@ -599,10 +599,20 @@ class Server(object):
                 if key in ["channel-speed", "num-channels"]:
 
                     if event == "change":
-                        if len(self.get_configured_breakout_ports(ifname)):
-                            raise sysrepo.SysrepoInvalArgError(
-                                "Breakout can't be removed due to the dependencies"
-                            )
+                        breakouts = self.get_configured_breakout_ports(ifname)
+                        # check if these breakouts are going to be deleted in this change
+                        for breakout in breakouts:
+                            xpath = f"/goldstone-interfaces:interfaces/interface[name='{breakout}']"
+                            for c in changes:
+                                if (
+                                    isinstance(c, sysrepo.ChangeDeleted)
+                                    and c.xpath == xpath
+                                ):
+                                    break
+                            else:
+                                raise sysrepo.SysrepoInvalArgError(
+                                    "Breakout can't be removed due to the dependencies"
+                                )
 
                         if len(self.get_ufd_configured_ports(ifname)):
                             raise sysrepo.SysrepoInvalArgError(
