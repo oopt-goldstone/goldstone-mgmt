@@ -513,27 +513,24 @@ class Port(object):
 
     def set_vlan_mem(self, ifnames, mode, vid, config=True, no_apply=False):
         xpath_mem_list = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
-        xpath_mem_mode = "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST"
+        xpath_mem_mode_prefix = "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST"
         mode_map = {"tagged": "trunk", "untagged": "access"}
 
         name = "Vlan" + vid
         xpath_mem_list = xpath_mem_list + "[name='{}']".format(name)
 
-        for ifname in ifnames:
-            xpath_mem_mode = xpath_mem_mode + "[name='{}'][ifname='{}']".format(
-                name, ifname
-            )
+        if config:
+            for ifname in ifnames:
 
-            # in order to create the interface node if it doesn't exist in running DS
-            try:
-                self.sr_op.get_data(self.xpath(ifname), "running")
+                # in order to create the interface node if it doesn't exist in running DS
+                try:
+                    self.sr_op.get_data(self.xpath(ifname), "running")
 
-            except sr.SysrepoNotFoundError as e:
-                self.sr_op.set_data(
-                    f"{self.xpath(ifname)}/admin-status", "down", no_apply=True
-                )
+                except sr.SysrepoNotFoundError as e:
+                    self.sr_op.set_data(
+                        f"{self.xpath(ifname)}/admin-status", "down", no_apply=True
+                    )
 
-            if config:
                 set_attribute(
                     self.sr_op,
                     xpath_mem_list,
@@ -542,6 +539,10 @@ class Port(object):
                     "members",
                     ifname,
                     no_apply=True,
+                )
+
+                xpath_mem_mode = (
+                    f"{xpath_mem_mode_prefix}[name='{name}'][ifname='{ifname}']"
                 )
                 set_attribute(
                     self.sr_op,
@@ -553,34 +554,33 @@ class Port(object):
                     no_apply=True,
                 )
 
-            elif not config:
-                mem_list = self.sr_op.get_leaf_data(xpath_mem_list, "members")
-                if len(mem_list) == 0:
-                    raise InvalidInput("No members added")
-                mode_data = self.sr_op.get_leaf_data(xpath_mem_mode, "tagging_mode")
-                mode_data = mode_data.pop()
-                if mode == None:
-                    mode = mode_map[mode_data]
-                # checking whether the delete was triggered with the correct mode in the command issued
-                if mode_map[mode_data] != mode:
-                    raise InvalidInput(f"Incorrect mode given : {mode}")
+        else:
+            mem_list = self.sr_op.get_leaf_data(xpath_mem_list, "members")
+            if len(mem_list) == 0:
+                raise InvalidInput("No members added")
+            self.sr_op.delete_data(f"{xpath_mem_list}/members", no_apply=True)
+
+            for ifname in ifnames:
                 if ifname in mem_list:
-                    self.sr_op.delete_data(f"{xpath_mem_list}/members", no_apply=True)
+                    xpath_mem_mode = (
+                        f"{xpath_mem_mode_prefix}[name='{name}'][ifname='{ifname}']"
+                    )
                     self.sr_op.delete_data(xpath_mem_mode, no_apply=True)
                     mem_list.remove(ifname)
-                    # Since we dont have utiity function in sysrepo to delete one node in
-                    # leaf-list , we are deleting 'members' with old data and creating again
-                    # with new data.
-                    for mem_intf in mem_list:
-                        set_attribute(
-                            self.sr_op,
-                            xpath_mem_list,
-                            "vlan",
-                            name,
-                            "members",
-                            mem_intf,
-                            no_apply=True,
-                        )
+
+            # Since we dont have utiity function in sysrepo to delete one node in
+            # leaf-list , we are deleting 'members' with old data and creating again
+            # with new data.
+            for mem_intf in mem_list:
+                set_attribute(
+                    self.sr_op,
+                    xpath_mem_list,
+                    "vlan",
+                    name,
+                    "members",
+                    mem_intf,
+                    no_apply=True,
+                )
 
         if not no_apply:
             self.sr_op.apply()
@@ -603,7 +603,7 @@ class Port(object):
                 f"unsupported combination: {number_of_channels}, {speed}"
             )
 
-        def remove_intf_from_all_vlans(intf):
+        def remove_interfaces_from_vlans(interfaces):
             try:
                 data = self.sr_op.get_data("/goldstone-vlan:vlan/VLAN/VLAN_LIST")
                 data = data["vlan"]["VLAN"]["VLAN_LIST"]
@@ -612,9 +612,10 @@ class Port(object):
                 return
 
             for vlan in data:
-                if intf in vlan.get("members", []):
+                intfs = [m for m in vlan.get("members", []) if m in interfaces]
+                if intfs:
                     self.set_vlan_mem(
-                        [intf], None, str(vlan["vlanid"]), config=False, no_apply=True
+                        intfs, None, str(vlan["vlanid"]), config=False, no_apply=True
                     )
 
         is_delete = number_of_channels == None
@@ -640,22 +641,28 @@ class Port(object):
                 stdout.info("Sub Interfaces will be deleted")
 
                 data = self.sr_op.get_data(self.XPATH, ds="operational", no_subs=True)
+                interfaces = [ifname]
                 for intf in data["interfaces"]["interface"]:
                     parent = intf.get("breakout", {}).get("parent", None)
                     if ifname == parent:
-                        remove_intf_from_all_vlans(intf["name"])
-                        self.sr_op.delete_data(self.xpath(intf["name"]), no_apply=True)
+                        interfaces.append(intf["name"])
 
-            stdout.info("Existing configurations on parent interfaces will be flushed")
-            remove_intf_from_all_vlans(ifname)
-            xpath = self.xpath(ifname)
-            self.sr_op.delete_data(xpath, no_apply=True)
+                stdout.info(
+                    "Existing configurations on parent interfaces will be flushed"
+                )
+                remove_interfaces_from_vlans(interfaces)
+                for i in interfaces:
+                    self.sr_op.delete_data(self.xpath(i), no_apply=True)
 
-            if is_delete:
-                continue
+            else:
+                stdout.info(
+                    "Existing configurations on parent interfaces will be flushed"
+                )
+                remove_interfaces_from_vlans([ifname])
+                xpath = self.xpath(ifname)
+                self.sr_op.delete_data(xpath, no_apply=True)
 
-            # Set breakout configuration
-            try:
+                # Set breakout configuration
                 set_attribute(
                     self.sr_op,
                     xpath,
@@ -674,9 +681,6 @@ class Port(object):
                     self.speed_to_yang_val(speed),
                     no_apply=True,
                 )
-
-            except sr.errors.SysrepoValidationFailedError as error:
-                raise InvalidInput(str(error))
 
         self.sr_op.apply()
 
