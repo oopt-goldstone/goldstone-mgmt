@@ -28,7 +28,6 @@ from .sonic_cli import Interface, Vlan, Ufd, Portchannel
 from .sonic import Sonic
 from .system_cli import AAA_CLI, TACACS_CLI, ManagementInterface, System
 from .system import AAA, TACACS, Mgmtif
-from natsort import natsorted
 
 logger = logging.getLogger(__name__)
 

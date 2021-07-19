@@ -787,6 +787,12 @@ class Server(object):
 
             modules = await self.taish.list()
             for location, m in modules.items():
+                key = location2name(location)
+
+                xpath = f"/goldstone-tai:modules/module[name='{key}']"
+                sess.set_item(f"{xpath}/config/name", key)
+                sess.set_item(f"{xpath}/state/location", location)
+
                 try:
                     module = await self.taish.get_module(location)
                 except Exception as e:
@@ -794,11 +800,6 @@ class Server(object):
                         f"failed to get module location: {location}. err: {e}"
                     )
                     continue
-                key = location2name(location)
-
-                xpath = f"/goldstone-tai:modules/module[name='{key}']"
-                sess.set_item(f"{xpath}/config/name", key)
-                sess.set_item(f"{xpath}/state/location", location)
 
                 for i in range(len(m.netifs)):
                     sess.set_item(
@@ -807,7 +808,7 @@ class Server(object):
                 for i in range(len(m.hostifs)):
                     sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
 
-                sess.apply_changes()
+            sess.apply_changes()
 
     async def notif_handler(self, tasks, finalizers):
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
