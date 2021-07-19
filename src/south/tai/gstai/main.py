@@ -749,26 +749,33 @@ class Server(object):
         logger.debug("removing module oid")
         await self.taish.remove(m.oid)
 
-    async def notification_cb(self, a, b, c, d):
-        logger.info(b.print_dict())
-        notify_data = b.print_dict()
-        assert "piu-notify-event" in notify_data
+    async def notification_cb(self, notif_name, value, timestamp, priv):
+        logger.info(value.print_dict())
+        data = value.print_dict()
+        assert "piu-notify-event" in data
 
-        notify_data = notify_data["piu-notify-event"]
-        location = notify_data["name"]
-        status = [v for v in notify_data.get("status", {})]
+        data = data["piu-notify-event"]
+        location = data["name"]
+        status = [v for v in data.get("status", [])]
+        piu_present = "PRESENT" in status
+        cfp_status = data.get("cfp2-presence", "UNPLUGGED")
 
-        if status[0] == "PRESENT":
+        if piu_present and cfp_status == "PRESENT":
             self.sess.switch_datastore("running")
             config = self.sess.get_data("/goldstone-tai:*")
             config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
-            logger.debug(f"sysrepo running configuration: {config}")
-            await self.initialize_piu(config, location)
-            await self.update_operds()
+            logger.debug(f"running configuration for {location}: {config}")
+            try:
+                await self.initialize_piu(config, location)
+            except Exception as e:
+                logger.info(f"failed to initialize PIU: {e}")
+        else:
+            try:
+                await self.cleanup_piu(location)
+            except Exception as e:
+                logger.info(f"failed to cleanup PIU: {e}")
 
-        elif status[0] == "UNPLUGGED":
-            await self.cleanup_piu(location)
-            await self.update_operds()
+        await self.update_operds()
 
     async def update_operds(self):
 
