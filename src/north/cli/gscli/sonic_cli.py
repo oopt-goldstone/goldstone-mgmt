@@ -16,7 +16,6 @@ from prompt_toolkit.completion import (
     FuzzyWordCompleter,
 )
 from .sonic import Sonic, sonic_defaults
-from natsort import natsorted
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")

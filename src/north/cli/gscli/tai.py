@@ -7,6 +7,7 @@ import logging
 from tabulate import tabulate
 from .common import sysrepo_wrap, print_tabular
 from .base import InvalidInput
+from natsort import natsorted
 
 _FREQ_RE = re.compile(r".+[kmgt]?hz$")
 
@@ -101,38 +102,31 @@ class Transponder(object):
             return
 
     def show_transponder_summary(self):
-        path = "/goldstone-tai:modules"
-        d = self.sr_op.get_data(path, "operational", no_subs=True)
-        modules = []
-        for v in d.get("modules", {}).get("module", {}):
-            modules.append(v["name"])
-        state_data = []
-        try:
-            attrs = [
-                "vendor-name",
-                "vendor-part-number",
-                "vendor-serial-number",
-                "admin-status",
-                "oper-status",
-            ]
-            rows = []
-            for module in modules:
-                xpath = self.xpath(module)
-                data = [module]
-                for attr in attrs:
-                    try:
-                        v = self.sr_op.get_data(f"{xpath}/state/{attr}", "operational")
-                        data.append(v["modules"]["module"][module]["state"][attr])
-                    except (sr.SysrepoNotFoundError, KeyError) as e:
-                        data.append("N/A")
-                rows.append(data)
+        attrs = [
+            "vendor-name",
+            "vendor-part-number",
+            "vendor-serial-number",
+            "admin-status",
+            "oper-status",
+        ]
+        rows = []
+        for module in self.get_modules():
+            prefix = self.xpath(module)
+            data = [module]
+            for attr in attrs:
+                xpath = f"{prefix}/state/{attr}"
+                try:
+                    v = self.sr_op.get_data(xpath, "operational")
+                    v = ly.xpath_get(v, xpath, "N/A")
+                except sr.SysrepoNotFoundError:
+                    v = "N/A"
+                data.append(v)
+            rows.append(data)
 
-            # insert "transponder" for the header use
-            attrs.insert(0, "transponder")
+        # insert "transponder" for the header use
+        attrs.insert(0, "transponder")
 
-            stdout.info(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
-        except Exception as e:
-            stderr.info(e)
+        stdout.info(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
 
     def run_conf(self):
         transponder_run_conf_list = ["admin-status"]
@@ -200,6 +194,7 @@ class Transponder(object):
             self.show_transponder(module)
 
     def get_modules(self):
-        path = "/goldstone-tai:modules"
-        module_data = self.sr_op.get_data(path, "operational", no_subs=True)
-        return [v["name"] for v in module_data.get("modules", {}).get("module", {})]
+        path = "/goldstone-tai:modules/module"
+        d = self.sr_op.get_data(path, "operational", no_subs=True)
+        d = ly.xpath_get(d, path, [])
+        return natsorted(v["name"] for v in d)
