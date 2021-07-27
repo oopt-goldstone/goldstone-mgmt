@@ -618,12 +618,15 @@ class Server(object):
             logger.warning(f"failed to get module location: {location}. err: {e}")
             return
 
-        try:
-            await module.get("notify")
-        except taish.TAIException:
-            logger.warning(f"monitoring {attr} is not supported for module({key})")
-        else:
-            add(module, "notify")
+        for attr in ["notify"]:
+            try:
+                await module.get(attr)
+            except taish.TAIException:
+                logger.warning(
+                    f"monitoring {attr} is not supported for module({location})"
+                )
+            else:
+                add(module, attr)
 
         for i in range(int(await module.get("num-network-interfaces"))):
             n = module.get_netif(i)
