@@ -41,13 +41,6 @@ module goldstone-interfaces {
    * Identities
    */
 
-  identity interface-type {
-    description
-      "Base identity from which specific interface types are
-       derived.";
-  }
-
-
   identity ETHERNET_SPEED {
     description "base type to specify available Ethernet link
     speeds";
@@ -97,24 +90,6 @@ module goldstone-interfaces {
   }
 
   /*
-   * Features
-   */
-
-  feature arbitrary-names {
-    description
-      "This feature indicates that the device allows user-controlled
-       interfaces to be named arbitrarily.";
-  }
-  feature pre-provisioning {
-    description
-      "This feature indicates that the device supports
-       pre-provisioning of interface configuration, i.e., it is
-       possible to configure an interface whose physical interface
-       hardware is not present on the device.";
-  }
-
-
-  /*
    * Data nodes
    */
 
@@ -149,546 +124,418 @@ module goldstone-interfaces {
     }
   }
 
-  grouping interface_oper_status {
-      leaf oper-status {
-        type enumeration {
-          enum up {
-            value 1;
-            description
-              "Ready to pass packets.";
-          }
-          enum down {
-            value 2;
-
-            description
-              "The interface does not pass any packets.";
-          }
-          enum testing {
-            value 3;
-            description
-              "In some test mode.  No operational packets can
-               be passed.";
-          }
-          enum unknown {
-            value 4;
-            description
-              "Status cannot be determined for some reason.";
-          }
-          enum dormant {
-            value 5;
-            description
-              "Waiting for some external event.";
-          }
-          enum not-present {
-            value 6;
-            description
-              "Some component (typically hardware) is missing.";
-          }
-          enum lower-layer-down {
-            value 7;
-            description
-              "Down due to state of lower-layer interface(s).";
-          }
+  grouping interface-common-state {
+    leaf oper-status {
+      type enumeration {
+        enum UP {
+          value 1;
+          description
+            "Ready to pass packets.";
         }
-        config false;
-        mandatory true;
-        description
-          "The current operational state of the interface.
-           This leaf has the same semantics as ifOperStatus.";
-        reference
-          "RFC 2863: The Interfaces Group MIB - ifOperStatus";
+        enum DOWN {
+          value 2;
+
+          description
+            "The interface does not pass any packets.";
+        }
+        enum DORMANT {
+          value 5;
+          description
+            "Waiting for some external event.";
+        }
       }
+      description
+        "The current operational state of the interface.
+         This leaf has the same semantics as ifOperStatus.";
+      reference
+        "RFC 2863: The Interfaces Group MIB - ifOperStatus";
+    }
+
+    leaf lanes {
+      type string;
+    }
+
+    leaf alias {
+      type string;
+    }
+
   }
 
-  container interfaces {
-    description
-      "Interface parameters.";
-    list interface {
-      key "name";
+  grouping interface-counters-state {
 
+    container counters {
       description
-        "The list of interfaces on the device.
+        "A collection of interface-related statistics objects.";
 
-         The status of an interface is available in this list in the
-         operational state.  If the configuration of a
-         system-controlled interface cannot be used by the system
-         (e.g., the interface hardware present does not match the
-         interface type), then the configuration is not applied to
-         the system-controlled interface shown in the operational
-         state.  If the configuration of a user-controlled interface
-         cannot be used by the system, the configured interface is
-         not instantiated in the operational state.
-
-         System-controlled interfaces created by the system are
-         always present in this list in the operational state,
-         whether or not they are configured.";
-
-     leaf name {
-        type string;
+      leaf in-octets {
+        type yang:counter64;
         description
-          "The name of the interface.
+          "The total number of octets received on the interface,
+           including framing characters.
 
-           A device MAY restrict the allowed values for this leaf,
-           possibly depending on the type of the interface.
-           For system-controlled interfaces, this leaf is the
-           device-specific name of the interface.
-
-           If a client tries to create configuration for a
-           system-controlled interface that is not present in the
-           operational state, the server MAY reject the request if
-           the implementation does not support pre-provisioning of
-           interfaces or if the name refers to an interface that can
-           never exist in the system.  A Network Configuration
-           Protocol (NETCONF) server MUST reply with an rpc-error
-           with the error-tag 'invalid-value' in this case.
-
-           If the device supports pre-provisioning of interface
-           configuration, the 'pre-provisioning' feature is
-           advertised.
-
-           If the device allows arbitrarily named user-controlled
-           interfaces, the 'arbitrary-names' feature is advertised.
-
-           When a configured user-controlled interface is created by
-           the system, it is instantiated with the same name in the
-           operational state.
-
-           A server implementation MAY map this leaf to the ifName
-           MIB object.  Such an implementation needs to use some
-           mechanism to handle the differences in size and characters
-           allowed between this leaf and ifName.  The definition of
-           such a mechanism is outside the scope of this document.";
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
         reference
-          "RFC 2863: The Interfaces Group MIB - ifName";
+          "RFC 2863: The Interfaces Group MIB - ifHCInOctets";
       }
 
-      leaf description {
-        type string;
+      leaf in-unicast-pkts {
+        type yang:counter64;
         description
-          "A textual description of the interface.
+          "The number of packets, delivered by this sub-layer to a
+           higher (sub-)layer, that were not addressed to a
+           multicast or broadcast address at this sub-layer.
 
-           A server implementation MAY map this leaf to the ifAlias
-           MIB object.  Such an implementation needs to use some
-           mechanism to handle the differences in size and characters
-           allowed between this leaf and ifAlias.  The definition of
-           such a mechanism is outside the scope of this document.
-
-           Since ifAlias is defined to be stored in non-volatile
-           storage, the MIB implementation MUST map ifAlias to the
-           value of 'description' in the persistently stored
-           configuration.";
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
         reference
-          "RFC 2863: The Interfaces Group MIB - ifAlias";
+          "RFC 2863: The Interfaces Group MIB - ifHCInUcastPkts";
       }
 
-      leaf fec {
-        when "not (../auto-nego = 'yes')";
-        type enumeration {
-          enum fc {
-            value 1;
-          }
-          enum rs {
-            value 2;
-          }
-          enum none {
-            value 3;
-          }
-        }
-      }
-     
-      leaf auto-nego{
-        type enumeration{
-          enum yes{
-            value 1;
-          }
-          enum no{
-            value 2;
-          }
-        }
-      }
-
-      leaf interface-type{
-         when "not (../auto-nego = 'yes')";
-         type enumeration{
-           enum SR{
-            value 1;
-         }
-           enum SR2{
-            value 2;
-         }
-           enum SR4{
-            value 3;
-         }
-           enum CR{
-            value 4;
-         }
-           enum CR2{
-            value 5;
-         }
-           enum CR4{
-            value 6;
-         }
-           enum LR{
-            value 7;
-         }
-           enum LR2{
-            value 8;
-         }
-           enum LR4{
-            value 9;
-         }
-           enum KR{
-            value 10;
-         }
-           enum KR2{
-            value 11;
-         }
-           enum KR4{
-            value 12;
-         }
-       }  
-    }
-      leaf admin-status {
-        type enumeration {
-          enum up {
-            value 1;
-            description
-              "Ready to pass packets.";
-          }
-          enum down {
-            value 2;
-            description
-              "Not ready to pass packets and not in some test mode.";
-          }
-          enum testing {
-            value 3;
-            description
-              "In some test mode.";
-          }
-        }
-        mandatory true;
+      leaf in-broadcast-pkts {
+        type yang:counter64;
         description
-          "The desired state of the interface.
+          "The number of packets, delivered by this sub-layer to a
+           higher (sub-)layer, that were addressed to a broadcast
+           address at this sub-layer.
 
-           This leaf has the same read semantics as ifAdminStatus.";
-        reference
-          "RFC 2863: The Interfaces Group MIB - ifAdminStatus";
-      }
-
-      uses interface_oper_status;
-
-      leaf if-index {
-        type int32 {
-          range "1..2147483647";
-        }
-        config false;
-        mandatory true;
-        description
-          "The ifIndex value for the ifEntry represented by this
-           interface.";
-        reference
-          "RFC 2863: The Interfaces Group MIB - ifIndex";
-      }
-
-      leaf phys-address {
-        type yang:phys-address;
-        config false;
-        description
-          "The interface's address at its protocol sub-layer.  For
-           example, for an 802.x interface, this object normally
-           contains a Media Access Control (MAC) address.  The
-           interface's media-specific modules must define the bit
-           and byte ordering and the format of the value of this
-           object.  For interfaces that do not have such an address
-           (e.g., a serial line), this node is not present.";
-        reference
-          "RFC 2863: The Interfaces Group MIB - ifPhysAddress";
-      }
-
-      leaf speed {
-        when "not (../auto-nego = 'yes')";
-        type yang:gauge64 {
-               range "1000|10000|20000|25000|40000|50000|100000|400000" {
-                       error-message "Invalid Ethernet interface speed";
-                       error-app-tag port-speed-invalid;
-               }
-        }
-        units "bits/second";
-        /*Having default value for speed is causing issues for sub-interfaces after breakout.
-          Even sub-interfaces are getting configuration with this value automatically from sysrepo.
-        default 100000;*/
-        description
-            "An estimate of the interface's current bandwidth in bits
-             per second.  For interfaces that do not vary in
-             bandwidth or for those where no accurate estimation can
-             be made, this node should contain the nominal bandwidth.
-             For interfaces that have no concept of bandwidth, this
-             node is not present.";
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
         reference
           "RFC 2863: The Interfaces Group MIB -
-                     ifSpeed, ifHighSpeed";
-
+                     ifHCInBroadcastPkts";
       }
 
-      leaf lanes {
-        type string;
+      leaf in-multicast-pkts {
+        type yang:counter64;
         description
-            "Todo";
+          "The number of packets, delivered by this sub-layer to a
+           higher (sub-)layer, that were addressed to a multicast
+           address at this sub-layer.  For a MAC-layer protocol,
+           this includes both Group and Functional addresses.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
         reference
-          "Todo";
+          "RFC 2863: The Interfaces Group MIB -
+                     ifHCInMulticastPkts";
       }
 
-      leaf alias {
-        type string;
+      leaf in-discards {
+        type yang:counter64;
         description
-            "Todo";
+          "The number of inbound packets that were chosen to be
+           discarded even though no errors had been detected to
+           prevent their being deliverable to a higher-layer
+           protocol.  One possible reason for discarding such a
+           packet could be to free up buffer space.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
         reference
-          "Todo";
+          "RFC 2863: The Interfaces Group MIB - ifInDiscards";
       }
-      uses port-breakout-config;
 
-      container statistics {
-        config false;
+      leaf in-errors {
+        type yang:counter64;
         description
-          "A collection of interface-related statistics objects.";
+          "For packet-oriented interfaces, the number of inbound
+           packets that contained errors preventing them from being
+           deliverable to a higher-layer protocol.  For character-
+           oriented or fixed-length interfaces, the number of
+           inbound transmission units that contained errors
+           preventing them from being deliverable to a higher-layer
+           protocol.
 
-        leaf in-octets {
-          type yang:counter64;
-          description
-            "The total number of octets received on the interface,
-             including framing characters.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifHCInOctets";
-        }
-
-        leaf in-unicast-pkts {
-          type yang:counter64;
-          description
-            "The number of packets, delivered by this sub-layer to a
-             higher (sub-)layer, that were not addressed to a
-             multicast or broadcast address at this sub-layer.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifHCInUcastPkts";
-        }
-
-        leaf in-broadcast-pkts {
-          type yang:counter64;
-          description
-            "The number of packets, delivered by this sub-layer to a
-             higher (sub-)layer, that were addressed to a broadcast
-             address at this sub-layer.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB -
-                       ifHCInBroadcastPkts";
-        }
-
-        leaf in-multicast-pkts {
-          type yang:counter64;
-          description
-            "The number of packets, delivered by this sub-layer to a
-             higher (sub-)layer, that were addressed to a multicast
-             address at this sub-layer.  For a MAC-layer protocol,
-             this includes both Group and Functional addresses.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB -
-                       ifHCInMulticastPkts";
-        }
-
-        leaf in-discards {
-          type yang:counter64;
-          description
-            "The number of inbound packets that were chosen to be
-             discarded even though no errors had been detected to
-             prevent their being deliverable to a higher-layer
-             protocol.  One possible reason for discarding such a
-             packet could be to free up buffer space.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifInDiscards";
-        }
-
-        leaf in-errors {
-          type yang:counter64;
-          description
-            "For packet-oriented interfaces, the number of inbound
-             packets that contained errors preventing them from being
-             deliverable to a higher-layer protocol.  For character-
-             oriented or fixed-length interfaces, the number of
-             inbound transmission units that contained errors
-             preventing them from being deliverable to a higher-layer
-             protocol.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifInErrors";
-        }
-
-        leaf in-unknown-protos {
-          type yang:counter64;
-
-          description
-            "For packet-oriented interfaces, the number of packets
-             received via the interface that were discarded because
-             of an unknown or unsupported protocol.  For
-             character-oriented or fixed-length interfaces that
-             support protocol multiplexing, the number of
-             transmission units received via the interface that were
-             discarded because of an unknown or unsupported protocol.
-             For any interface that does not support protocol
-             multiplexing, this counter is not present.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifInUnknownProtos";
-        }
-
-        leaf out-octets {
-          type yang:counter64;
-          description
-            "The total number of octets transmitted out of the
-             interface, including framing characters.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifHCOutOctets";
-        }
-
-        leaf out-unicast-pkts {
-          type yang:counter64;
-          description
-            "The total number of packets that higher-level protocols
-             requested be transmitted and that were not addressed
-             to a multicast or broadcast address at this sub-layer,
-             including those that were discarded or not sent.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifHCOutUcastPkts";
-        }
-
-        leaf out-broadcast-pkts {
-          type yang:counter64;
-          description
-            "The total number of packets that higher-level protocols
-             requested be transmitted and that were addressed to a
-             broadcast address at this sub-layer, including those
-             that were discarded or not sent.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB -
-                       ifHCOutBroadcastPkts";
-        }
-
-        leaf out-multicast-pkts {
-          type yang:counter64;
-          description
-            "The total number of packets that higher-level protocols
-             requested be transmitted and that were addressed to a
-             multicast address at this sub-layer, including those
-             that were discarded or not sent.  For a MAC-layer
-             protocol, this includes both Group and Functional
-             addresses.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB -
-                       ifHCOutMulticastPkts";
-        }
-
-        leaf out-discards {
-          type yang:counter64;
-          description
-            "The number of outbound packets that were chosen to be
-             discarded even though no errors had been detected to
-             prevent their being transmitted.  One possible reason
-             for discarding such a packet could be to free up buffer
-             space.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifOutDiscards";
-        }
-
-        leaf out-errors {
-          type yang:counter64;
-          description
-            "For packet-oriented interfaces, the number of outbound
-             packets that could not be transmitted because of errors.
-             For character-oriented or fixed-length interfaces, the
-             number of outbound transmission units that could not be
-             transmitted because of errors.
-
-             Discontinuities in the value of this counter can occur
-             at re-initialization of the management system and at
-             other times as indicated by the value of
-             'discontinuity-time'.";
-          reference
-            "RFC 2863: The Interfaces Group MIB - ifOutErrors";
-        }
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
+        reference
+          "RFC 2863: The Interfaces Group MIB - ifInErrors";
       }
 
+      leaf in-unknown-protos {
+        type yang:counter64;
+
+        description
+          "For packet-oriented interfaces, the number of packets
+           received via the interface that were discarded because
+           of an unknown or unsupported protocol.  For
+           character-oriented or fixed-length interfaces that
+           support protocol multiplexing, the number of
+           transmission units received via the interface that were
+           discarded because of an unknown or unsupported protocol.
+           For any interface that does not support protocol
+           multiplexing, this counter is not present.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
+        reference
+          "RFC 2863: The Interfaces Group MIB - ifInUnknownProtos";
+      }
+
+      leaf out-octets {
+        type yang:counter64;
+        description
+          "The total number of octets transmitted out of the
+           interface, including framing characters.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
+        reference
+          "RFC 2863: The Interfaces Group MIB - ifHCOutOctets";
+      }
+
+      leaf out-unicast-pkts {
+        type yang:counter64;
+        description
+          "The total number of packets that higher-level protocols
+           requested be transmitted and that were not addressed
+           to a multicast or broadcast address at this sub-layer,
+           including those that were discarded or not sent.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
+        reference
+          "RFC 2863: The Interfaces Group MIB - ifHCOutUcastPkts";
+      }
+
+      leaf out-broadcast-pkts {
+        type yang:counter64;
+        description
+          "The total number of packets that higher-level protocols
+           requested be transmitted and that were addressed to a
+           broadcast address at this sub-layer, including those
+           that were discarded or not sent.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
+        reference
+          "RFC 2863: The Interfaces Group MIB -
+                     ifHCOutBroadcastPkts";
+      }
+
+      leaf out-multicast-pkts {
+        type yang:counter64;
+        description
+          "The total number of packets that higher-level protocols
+           requested be transmitted and that were addressed to a
+           multicast address at this sub-layer, including those
+           that were discarded or not sent.  For a MAC-layer
+           protocol, this includes both Group and Functional
+           addresses.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
+        reference
+          "RFC 2863: The Interfaces Group MIB -
+                     ifHCOutMulticastPkts";
+      }
+
+      leaf out-discards {
+        type yang:counter64;
+        description
+          "The number of outbound packets that were chosen to be
+           discarded even though no errors had been detected to
+           prevent their being transmitted.  One possible reason
+           for discarding such a packet could be to free up buffer
+           space.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
+        reference
+          "RFC 2863: The Interfaces Group MIB - ifOutDiscards";
+      }
+
+      leaf out-errors {
+        type yang:counter64;
+        description
+          "For packet-oriented interfaces, the number of outbound
+           packets that could not be transmitted because of errors.
+           For character-oriented or fixed-length interfaces, the
+           number of outbound transmission units that could not be
+           transmitted because of errors.
+
+           Discontinuities in the value of this counter can occur
+           at re-initialization of the management system and at
+           other times as indicated by the value of
+           'discontinuity-time'.";
+        reference
+          "RFC 2863: The Interfaces Group MIB - ifOutErrors";
+      }
     }
   }
+
+  grouping interface-config {
+    description
+      "Configuration data data nodes common to physical interfaces
+      and subinterfaces";
+
+    leaf name {
+      type string;
+    }
+
+    leaf description {
+      type string;
+      reference
+        "RFC 2863: The Interfaces Group MIB - ifAlias";
+    }
+
+    leaf admin-status {
+      type enumeration {
+        enum UP {
+          value 1;
+          description
+            "Ready to pass packets.";
+        }
+        enum DOWN {
+          value 2;
+          description
+            "Not ready to pass packets and not in some test mode.";
+        }
+      }
+      default DOWN;
+      description
+        "The desired state of the interface.
+
+         This leaf has the same read semantics as ifAdminStatus.";
+      reference
+        "RFC 2863: The Interfaces Group MIB - ifAdminStatus";
+    }
+
+    leaf auto-negotiate {
+      type boolean;
+      default false;
+    }
+
+    leaf fec {
+      when "../auto-negotiate = 'false'";
+      type enumeration {
+        enum FC {
+          value 1;
+        }
+        enum RS {
+          value 2;
+        }
+        enum NONE {
+          value 3;
+        }
+      }
+    }
+
+    leaf interface-type {
+      when "../auto-negotiate = 'false'";
+      type enumeration {
+        enum SR {
+         value 1;
+        }
+        enum SR2 {
+         value 2;
+        }
+        enum SR4 {
+         value 3;
+        }
+        enum CR {
+         value 4;
+        }
+        enum CR2 {
+         value 5;
+        }
+        enum CR4 {
+         value 6;
+        }
+        enum LR {
+         value 7;
+        }
+        enum LR2 {
+         value 8;
+        }
+        enum LR4 {
+         value 9;
+        }
+        enum KR {
+         value 10;
+        }
+        enum KR2 {
+         value 11;
+        }
+        enum KR4 {
+         value 12;
+        }
+      }
+    }
+
+    leaf speed {
+      when "../auto-negotiate = 'false'";
+      type identityref {
+        base ETHERNET_SPEED;
+      }
+    }
+
+    uses port-breakout-config;
+
+  }
+
+  grouping interfaces-top {
+    container interfaces {
+      list interface {
+        key "name";
+        leaf name {
+          type leafref {
+            path "../config/name";
+          }
+        }
+        container config {
+          uses interface-config;
+        }
+        container state {
+          config false;
+          uses interface-config;
+          uses interface-common-state;
+          uses interface-counters-state;
+        }
+      }
+    }
+  }
+
+  uses interfaces-top;
 
   /*
    * Notifications
    */
 
-  notification interface-link-state-notify-event{
-    leaf ifname {
+  notification interface-link-state-notify-event {
+    leaf if-name {
       type string;
     }
 
-    uses interface_oper_status;
+    uses interface-common-state;
   }
 
-  rpc clear_counters {
+  rpc clear-counters {
     output {
       leaf status {
         type enumeration {
