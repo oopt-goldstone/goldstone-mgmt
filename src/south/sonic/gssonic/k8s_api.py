@@ -41,7 +41,8 @@ class incluster_apis(object):
 
         if attr == "interface-type":
             cmd = f"port {port_no} if={value}"
-        elif attr == "auto-nego":
+        elif attr == "auto-negotiate":
+            value = "yes" if value else "no"
             cmd = f"port {port_no} an={value}"
 
         w = k.watch.Watch()
