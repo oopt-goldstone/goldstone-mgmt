@@ -70,6 +70,7 @@ class Interface(Object):
             "fec": None,
             "ufd": None,
             "portchannel": None,
+            "admin-status": None,
         }
         self.fec_list = ["fc", "rs"]
         self.breakout_list = ["2X50G", "2X20G", "4X25G", "4X10G"]
@@ -96,6 +97,8 @@ class Interface(Object):
                 raise InvalidInput("usage: {}".format(self.no_usage))
             if args[0] == "shutdown":
                 self.sonic.port.set_admin_status(ifnames, "UP")
+            if args[0] == "admin-status":
+                self.sonic.port.set_admin_status(ifnames, None)
             elif args[0] == "speed":
                 self.sonic.port.set_speed(ifnames, None)
             elif args[0] == "interface-type":
@@ -145,6 +148,16 @@ class Interface(Object):
             if len(args) != 0:
                 raise InvalidInput("usage: shutdown")
             self.sonic.port.set_admin_status(ifnames, "DOWN")
+
+        admin_status_list = ["up", "down"]
+
+        @self.command(WordCompleter(admin_status_list), name="admin-status")
+        def admin_status(args):
+            if len(args) != 1 or args[0] not in admin_status_list:
+                raise InvalidInput(
+                    f"usage: admin_status <{'|'.join(admin_status_list)}>"
+                )
+            self.sonic.port.set_admin_status(ifnames, args[0].upper())
 
         @self.command()
         def speed(args):
