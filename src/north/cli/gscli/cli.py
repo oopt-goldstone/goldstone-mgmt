@@ -487,7 +487,7 @@ class GlobalShowCommand(Command):
             "/goldstone-interfaces:interfaces/interface",
             "/goldstone-mgmt-interfaces:interfaces/interface",
             "/goldstone-uplink-failure-detection:ufd-groups/ufd-group",
-            "/goldstone-portchannel:portchannel/portchannel-group",
+            "/goldstone-portchannel:portchannel",
             "/goldstone-routing:routing/static-routes/ipv4/route",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",

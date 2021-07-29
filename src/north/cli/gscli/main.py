@@ -113,8 +113,8 @@ class Root(Object):
             "vlan": FuzzyWordCompleter(lambda: ["range"] + self.get_vid(), WORD=True),
             "aaa": {"authentication": {"login": None}},
             "tacacs-server": {"host": None},
-            "ufd": FuzzyWordCompleter(lambda: self.sonic.ufd.get_id(), WORD=True),
-            "portchannel": {},
+            "ufd": FuzzyWordCompleter(self.sonic.ufd.get_id, WORD=True),
+            "portchannel": FuzzyWordCompleter(self.sonic.pc.get_id, WORD=True),
         }
         # TODO:add timer for inactive user
 
@@ -184,7 +184,7 @@ class Root(Object):
                 raise InvalidInput("usage: ufd <ufd-id>")
             return Ufd(conn, self, line[0])
 
-        @self.command()
+        @self.command(FuzzyWordCompleter(self.sonic.pc.get_id, WORD=True))
         def portchannel(line):
             if len(line) != 1:
                 raise InvalidInput("usage: portchannel <portchannel_id>")

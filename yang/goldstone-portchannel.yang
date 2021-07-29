@@ -42,6 +42,7 @@ module goldstone-portchannel {
       type gs-if:interface-ref;
       description "List of interfaces to be combined";
     }
+    
     leaf admin-status {
       type enumeration {
         enum up{
@@ -53,6 +54,8 @@ module goldstone-portchannel {
       }
       default "up";
     }
+    
+    uses gs-if:interface_oper_status;
   }
 
   grouping portchannel-state {
