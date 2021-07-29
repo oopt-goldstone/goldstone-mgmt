@@ -1,5 +1,6 @@
 import sys
 import os
+import libyang as ly
 
 from tabulate import tabulate
 import json
@@ -865,7 +866,8 @@ class UFD(object):
                         else:
                             data_tabulate.append(["", "", downlink_ports[i][j]])
 
-                data_tabulate.append(["", "", ""])
+                if i != len(ids) - 1:
+                    data_tabulate.append(["", "", ""])
 
             stdout.info(
                 tabulate(
@@ -994,16 +996,13 @@ class Portchannel(object):
             )
         self.sr_op.apply()
 
+    def set_admin_status(self, id, value):
+        self.sr_op.set_data("{}/config/admin-status".format(self.xpath(id)), value)
+
     def get_id(self):
-        path = "/goldstone-portchannel:portchannel"
-        self.session.switch_datastore("operational")
-        d = self.session.get_data(path)
-        return natsorted(
-            [
-                v["portchannel-id"]
-                for v in d.get("portchannel-group", {}).get("portchannel", {})
-            ]
-        )
+        d = self.sr_op.get_data(self.XPATH, "operational", no_subs=True)
+        d = ly.xpath_get(d, f"{self.XPATH}/portchannel-group", [])
+        return natsorted(v["portchannel-id"] for v in d)
 
     def remove_interfaces(self, ifnames):
         try:
@@ -1048,27 +1047,32 @@ class Portchannel(object):
         for id in ids:
             data = id_list[id]
             stdout.info("portchannel {}".format(data["config"]["portchannel-id"]))
+            if data["config"]["admin-status"] == "down":
+                stdout.info("  shutdown")
             stdout.info("  quit")
             stdout.info("!")
 
     def show(self, id=None):
         try:
-            # Fecting from running DS since south is not implemented
-            self.tree = self.sr_op.get_data(
-                "{}/portchannel-group".format(self.XPATH), "running"
-            )
+            self.tree = self.sr_op.get_data(self.XPATH, "operational")
             id_list = self.tree["portchannel"]["portchannel-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
             id_list = []
 
         if len(id_list) == 0:
             stdout.info(
-                tabulate([], ["Portchannel-ID", "Interface"], tablefmt="pretty")
+                tabulate(
+                    [],
+                    ["Portchannel-ID", "oper-status", "admin-status", "Interface"],
+                    tablefmt="pretty",
+                )
             )
         else:
             data_tabulate = []
             interface = []
             ids = []
+            adm_st = []
+            op_st = []
 
             if id != None:
                 ids.append(id)
@@ -1080,25 +1084,33 @@ class Portchannel(object):
 
             for id in ids:
                 data = id_list[id]
+                adm_st.append(data["config"]["admin-status"])
                 try:
                     interface.append(natsorted(list(data["config"]["interface"])))
                 except (sr.errors.SysrepoNotFoundError, KeyError):
                     interface.append([])
+                try:
+                    op_st.append(data["config"]["oper-status"])
+                except (sr.errors.SysrepoNotFoundError, KeyError):
+                    op_st.append("-")
 
             for i in range(len(ids)):
 
                 if len(interface[i]) > 0:
-                    data_tabulate.append([ids[i], interface[i][0]])
+                    data_tabulate.append([ids[i], op_st[i], adm_st[i], interface[i][0]])
                 else:
-                    data_tabulate.append([ids[i], "-"])
+                    data_tabulate.append([ids[i], op_st[i], adm_st[i], "-"])
 
                 for j in range(1, len(interface[i])):
-                    data_tabulate.append(["", interface[i][j]])
+                    data_tabulate.append(["", "", "", interface[i][j]])
+
+                if i != len(ids) - 1:
+                    data_tabulate.append(["", "", "", ""])
 
             stdout.info(
                 tabulate(
                     data_tabulate,
-                    ["Portchannel-ID", "Interface"],
+                    ["Portchannel-ID", "oper-status", "admin-status", "Interface"],
                     tablefmt="pretty",
                     colalign=("left",),
                 )

@@ -183,6 +183,8 @@ def test_portchannel(cli):
         print(
             "This is negative case of unconfiguration of an interface from a portchannel"
         )
+    ssh(cli, 'gscli -c "portchannel PortChannel9; shutdown"')
+    ssh(cli, 'gscli -c "portchannel PortChannel9; no shutdown"')
     ssh(cli, 'gscli -c "no portchannel PortChannel9"')
     try:
         ssh(cli, "ip link | grep -w PortChannel9")
@@ -801,7 +803,10 @@ def test_mgmt_if_cmds(cli):
     assert "ip address 20.20.20.0/24" in output
 
     try:
-        ssh(cli, 'gscli -c "management-interface eth0; no ip address 999.999.999.999/24"')
+        ssh(
+            cli,
+            'gscli -c "management-interface eth0; no ip address 999.999.999.999/24"',
+        )
     except SSHException as e:
         assert "does not satisfy the constraint" in e.stderr
     else:

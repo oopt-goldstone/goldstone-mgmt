@@ -239,7 +239,7 @@ class Interface(Object):
 
             self.sonic.ufd.add_ports(args[0], ifnames, args[1])
 
-        @self.command()
+        @self.command(WordCompleter(self.sonic.pc.get_id))
         def portchannel(args):
             if len(args) != 1:
                 raise InvalidInput("usage: portchannel <portchannel_id>")
@@ -305,6 +305,19 @@ class Portchannel(Object):
             if len(args) != 0:
                 return parent.show(args)
             self.sonic.pc.show(self.id)
+
+        @self.command()
+        def shutdown(args):
+            if len(args) != 0:
+                raise InvalidInput("usage: shutdown")
+            self.sonic.pc.set_admin_status(id, "down")
+
+        @self.command(WordCompleter(["shutdown"]))
+        def no(args):
+            if len(args) == 1 and args[0] == "shutdown":
+                self.sonic.pc.set_admin_status(id, "up")
+            else:
+                raise InvalidInput("usage: no shutdown")
 
     def __str__(self):
         return "portchannel({})".format(self.id)

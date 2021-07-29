@@ -933,6 +933,38 @@ class Server(object):
                 return r
         return r
 
+    def portchannel_oper_cb(self, sess, xpath, req_xpath, parent, priv):
+        logger.debug("***********inside portchannel oper callback***********")
+        if self.is_usonic_rebooting:
+            logger.debug("usonic is rebooting. no handling done in oper-callback")
+            return
+
+        self.sess.switch_datastore("running")
+        r = self.sess.get_data(req_xpath)
+        if r == {}:
+            return r
+
+        keys = self.sonic_db.keys(
+            self.sonic_db.APPL_DB, pattern="LAG_TABLE:PortChannel*"
+        )
+        keys = keys if keys else []
+        oper_dict = {}
+
+        for key in keys:
+            _hash = _decode(key)
+            pc_id = _hash.split(":")[1]
+            oper_status = _decode(
+                self.sonic_db.get(self.sonic_db.APPL_DB, key, "oper_status")
+            )
+            if oper_status != None:
+                oper_dict[pc_id] = oper_status
+
+        for data in r["portchannel"]["portchannel-group"]:
+            if oper_dict[data["portchannel-id"]] != None:
+                data["config"]["oper-status"] = oper_dict[data["portchannel-id"]]
+
+        return r
+
     def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(
             "****************************inside oper-callback******************************"
@@ -1096,14 +1128,14 @@ class Server(object):
                         self.sonic_db.set(
                             self.sonic_db.CONFIG_DB,
                             "PORTCHANNEL|" + key,
-                            "admin-status",
+                            "admin_status",
                             port_channel["config"]["admin-status"],
                         )
                     except KeyError:
                         self.sonic_db.set(
                             self.sonic_db.CONFIG_DB,
                             "PORTCHANNEL|" + key,
-                            "admin-status",
+                            "admin_status",
                             "up",
                         )
                     try:
@@ -1560,7 +1592,7 @@ class Server(object):
                         )
                     if attr == "admin-status":
                         self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB, _hash, "admin-status", change.value
+                            self.sonic_db.CONFIG_DB, _hash, "admin_status", change.value
                         )
                     if attr == "mtu":
                         self.sonic_db.set(
@@ -1707,6 +1739,12 @@ class Server(object):
                     "goldstone-interfaces",
                     "/goldstone-interfaces:interfaces",
                     self.oper_cb,
+                    oper_merge=True,
+                )
+                self.sess.subscribe_oper_data_request(
+                    "goldstone-portchannel",
+                    "/goldstone-portchannel:portchannel",
+                    self.portchannel_oper_cb,
                     oper_merge=True,
                 )
                 self.sess.subscribe_rpc_call(
