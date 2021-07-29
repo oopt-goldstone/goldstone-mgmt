@@ -45,21 +45,21 @@ module goldstone-portchannel {
     
     leaf admin-status {
       type enumeration {
-        enum up{
+        enum up {
           value 1;
         }
-        enum down{
+        enum down {
           value 2;
         }
       }
       default "up";
     }
-    
-    uses gs-if:interface_oper_status;
   }
 
   grouping portchannel-state {
     description "portchannel State variables container.";
+
+    uses gs-if:interface-common-state;
 
     // placeholder
   }
@@ -93,12 +93,11 @@ module goldstone-portchannel {
           config false;
           description "State variables for portchannel";
 
+          uses portchannel-config;
           uses portchannel-state;
         }
       }
     }
   }
- uses portchannel-top;
+  uses portchannel-top;
 }
-
-             
