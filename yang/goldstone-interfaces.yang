@@ -395,7 +395,6 @@ module goldstone-interfaces {
         enum KR;
         enum KR2;
         enum KR4;
-        }
       }
     }
 
