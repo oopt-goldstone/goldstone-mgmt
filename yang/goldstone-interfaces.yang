@@ -37,56 +37,19 @@ module goldstone-interfaces {
        interfaces.";
   }
 
-  /*
-   * Identities
-   */
-
-  identity ETHERNET_SPEED {
-    description "base type to specify available Ethernet link
-    speeds";
-  }
-
-  identity SPEED_1GB {
-    base ETHERNET_SPEED;
-    description "1 Gbps Ethernet";
-  }
-
-  identity SPEED_10GB {
-    base ETHERNET_SPEED;
-    description "10 Gbps Ethernet";
-  }
-
-  identity SPEED_20GB {
-    base ETHERNET_SPEED;
-    description "20 Gbps Ethernet";
-  }
-
-  identity SPEED_25GB {
-    base ETHERNET_SPEED;
-    description "25 Gbps Ethernet";
-  }
-
-  identity SPEED_40GB {
-    base ETHERNET_SPEED;
-    description "40 Gbps Ethernet";
-  }
-
-  identity SPEED_50GB {
-    base ETHERNET_SPEED;
-    description "50 Gbps Ethernet";
-  }
-
-  identity SPEED_100GB {
-    base ETHERNET_SPEED;
-    description "100 Gbps Ethernet";
-  }
-
-  identity SPEED_UNKNOWN {
-    base ETHERNET_SPEED;
-    description
-      "Interface speed is unknown.  Systems may report
-      speed UNKNOWN when an interface is down or unpopuplated (e.g.,
-      pluggable not present).";
+  typedef ethernet-speed {
+    type enumeration {
+      enum SPEED_UNKNOWN;
+      enum SPEED_1GB;
+      enum SPEED_10GB;
+      enum SPEED_20GB;
+      enum SPEED_25GB;
+      enum SPEED_40GB;
+      enum SPEED_50GB;
+      enum SPEED_100GB;
+      enum SPEED_200GB;
+      enum SPEED_400GB;
+    }
   }
 
   /*
@@ -106,9 +69,7 @@ module goldstone-interfaces {
       }
 
       leaf channel-speed {
-        type identityref {
-          base ETHERNET_SPEED;
-        }
+        type ethernet-speed;
         description
           "Sets the channel speed on each channel -- the
           supported values are defined by the
@@ -127,22 +88,9 @@ module goldstone-interfaces {
   grouping interface-common-state {
     leaf oper-status {
       type enumeration {
-        enum UP {
-          value 1;
-          description
-            "Ready to pass packets.";
-        }
-        enum DOWN {
-          value 2;
-
-          description
-            "The interface does not pass any packets.";
-        }
-        enum DORMANT {
-          value 5;
-          description
-            "Waiting for some external event.";
-        }
+        enum UP;
+        enum DOWN;
+        enum DORMANT;
       }
       description
         "The current operational state of the interface.
@@ -406,16 +354,8 @@ module goldstone-interfaces {
 
     leaf admin-status {
       type enumeration {
-        enum UP {
-          value 1;
-          description
-            "Ready to pass packets.";
-        }
-        enum DOWN {
-          value 2;
-          description
-            "Not ready to pass packets and not in some test mode.";
-        }
+        enum UP;
+        enum DOWN;
       }
       default DOWN;
       description
@@ -434,65 +374,34 @@ module goldstone-interfaces {
     leaf fec {
       when "../auto-negotiate = 'false'";
       type enumeration {
-        enum FC {
-          value 1;
-        }
-        enum RS {
-          value 2;
-        }
-        enum NONE {
-          value 3;
-        }
+        enum FC;
+        enum RS;
+        enum NONE;
       }
     }
 
     leaf interface-type {
       when "../auto-negotiate = 'false'";
       type enumeration {
-        enum SR {
-         value 1;
-        }
-        enum SR2 {
-         value 2;
-        }
-        enum SR4 {
-         value 3;
-        }
-        enum CR {
-         value 4;
-        }
-        enum CR2 {
-         value 5;
-        }
-        enum CR4 {
-         value 6;
-        }
-        enum LR {
-         value 7;
-        }
-        enum LR2 {
-         value 8;
-        }
-        enum LR4 {
-         value 9;
-        }
-        enum KR {
-         value 10;
-        }
-        enum KR2 {
-         value 11;
-        }
-        enum KR4 {
-         value 12;
+        enum SR;
+        enum SR2;
+        enum SR4;
+        enum CR;
+        enum CR2;
+        enum CR4;
+        enum LR;
+        enum LR2;
+        enum LR4;
+        enum KR;
+        enum KR2;
+        enum KR4;
         }
       }
     }
 
     leaf speed {
       when "../auto-negotiate = 'false'";
-      type identityref {
-        base ETHERNET_SPEED;
-      }
+      type ethernet-speed;
     }
 
     uses port-breakout-config;
