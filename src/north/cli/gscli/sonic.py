@@ -268,9 +268,9 @@ class Port(object):
             for key, value in config.items():
                 if key == "admin-status":
                     if value == "DOWN":
-                        stdout.info("  shutdown")
+                        stdout.info("  admin-status down")
                     elif value == "UP":
-                        stdout.info("  no shutdown")
+                        stdout.info("  admin-status up")
 
                 elif key == "ipv4":
                     try:
@@ -390,9 +390,12 @@ class Port(object):
     def set_admin_status(self, ifnames, value):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
-            set_attribute(
-                self.sr_op, xpath, "interface", ifname, "admin-status", value, True
-            )
+            if value:
+                set_attribute(
+                    self.sr_op, xpath, "interface", ifname, "admin-status", value, True
+                )
+            else:
+                self.sr_op.delete_data(f"{xpath}/config/admin-status", no_apply=True)
 
         self.sr_op.apply()
 
