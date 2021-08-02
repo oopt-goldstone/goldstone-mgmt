@@ -244,7 +244,7 @@ module goldstone-routing {
     }
   }
 
-  rpc clear_arp {
+  rpc clear-arp {
     output{
       leaf status {
         type enumeration {
