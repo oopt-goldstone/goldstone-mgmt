@@ -20,7 +20,7 @@ def main(host, username, password):
         ssh(cli, "rm -rf /var/lib/rancher/k3s/server/manifests/mgmt")
         ssh(cli, "mkdir -p /var/lib/rancher/k3s/server/manifests/mgmt")
 
-        ssh(cli, "systemctl start usonic")
+        ssh(cli, "systemctl restart usonic")
 
         # stop South system service
         ssh(cli, "systemctl stop gs-south-system || true")  # can fail
