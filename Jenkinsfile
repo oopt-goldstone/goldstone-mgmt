@@ -45,6 +45,15 @@ pipeline {
       }
     }
 
+    stage('Build Builder') {
+      when {
+        environment name: 'BUILD_BUILDER', value: '1'
+      }
+      steps {
+          sh 'make builder'
+      }
+    }
+
     stage('Build') {
       when {
         environment name: 'SKIP', value: '0'
