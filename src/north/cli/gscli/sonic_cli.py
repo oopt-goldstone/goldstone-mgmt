@@ -66,7 +66,7 @@ class Interface(Object):
             "switchport": self.switchprt_dict,
             "breakout": None,
             "interface-type": None,
-            "auto-nego": None,
+            "auto-negotiate": None,
             "fec": None,
             "ufd": None,
             "portchannel": None,
@@ -103,7 +103,7 @@ class Interface(Object):
                 self.sonic.port.set_speed(ifnames, None)
             elif args[0] == "interface-type":
                 self.sonic.port.set_interface_type(ifnames, None)
-            elif args[0] == "auto-nego":
+            elif args[0] == "auto-negotiate":
                 self.sonic.port.set_auto_nego(ifnames, None)
             elif args[0] == "ufd":
                 self.sonic.ufd.check_ports(ifnames)
