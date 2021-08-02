@@ -285,16 +285,16 @@ class Port(object):
                     if value:
                         stdout.info(f"  {key} {value}")
 
-                elif key == "auto-negotiation":
+                elif key == "auto-negotiate":
                     if value:
-                        stdout.info("  auto-nego enable")
+                        stdout.info("  auto-negotiate enable")
                     else:
-                        stdout.info("  auto-nego disable")
+                        stdout.info("  auto-negotiate disable")
 
                 elif key == "breakout":
                     if value:
-                        num_of_channels = value["breakout"]["num-channels"]
-                        channel_speed = value["breakout"]["channel-speed"]
+                        num_of_channels = value["num-channels"]
+                        channel_speed = value["channel-speed"]
                         channel_speed = channel_speed.split("_")
                         channel_speed = channel_speed[1].split("B")
                         stdout.info(
@@ -511,7 +511,7 @@ class Port(object):
 
                 except sr.SysrepoNotFoundError as e:
                     self.sr_op.set_data(
-                        f"{self.xpath(ifname)}/admin-status", "down", no_apply=True
+                        f"{self.xpath(ifname)}/config/name", ifname, no_apply=True
                     )
 
                 set_attribute(
@@ -604,8 +604,9 @@ class Port(object):
             if is_delete:
                 try:
                     xpath = self.xpath(ifname)
-                    data = self.sr_op.get_data(f"{xpath}/breakout", "running")
-                    data = data["interfaces"]["interface"][ifname]["breakout"]
+                    xpath = f"{xpath}/config/breakout"
+                    data = self.sr_op.get_data(xpath, "running")
+                    ly.xpath_get(data, xpath)
                 except (sr.errors.SysrepoNotFoundError, KeyError):
                     # If no configuration exists, no need to return error
                     continue
@@ -613,9 +614,13 @@ class Port(object):
                 stdout.info("Sub Interfaces will be deleted")
 
                 data = self.sr_op.get_data(self.XPATH, ds="operational", no_subs=True)
+                data = ly.xpath_get(data, self.XPATH)
+
                 interfaces = [ifname]
-                for intf in data["interfaces"]["interface"]:
-                    parent = intf.get("breakout", {}).get("parent", None)
+                for intf in data:
+                    parent = (
+                        intf.get("state", {}).get("breakout", {}).get("parent", None)
+                    )
                     if ifname == parent:
                         interfaces.append(intf["name"])
 
@@ -730,7 +735,7 @@ class UFD(object):
             try:
                 self.sr_op.get_data(xpath, "running")
             except sr.SysrepoNotFoundError as e:
-                self.sr_op.set_data(f"{xpath}/admin-status", "down", no_apply=True)
+                self.sr_op.set_data(f"{xpath}/config/name", port, no_apply=True)
 
             self.sr_op.set_data(f"{self.xpath(id)}/config/{role}", port, no_apply=True)
         self.sr_op.apply()
@@ -761,21 +766,12 @@ class UFD(object):
         for port in ports:
             found = False
             for ufd in ufds:
-                try:
-                    uplinks = ufd["config"]["uplink"]
-                    if port in uplinks:
+                config = ufd["config"]
+                for role in ["uplink", "downlink"]:
+                    links = config.get(role, [])
+                    if port in links:
                         found = True
-                        self.remove_ports(data["ufd-id"], "uplink", port, True)
-                except KeyError:
-                    pass
-
-                try:
-                    downlinks = data["config"]["downlink"]
-                    if port in downlinks:
-                        found = True
-                        self.remove_ports(data["ufd-id"], "downlink", port, True)
-                except KeyError:
-                    pass
+                        self.remove_ports(ufd["ufd-id"], role, [port], True)
 
             if not found:
                 self.sr_op.discard_changes()
@@ -956,7 +952,6 @@ class Portchannel(object):
     def __init__(self, conn, parent):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
-        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
 
     def create(self, id):
         try:
@@ -979,7 +974,7 @@ class Portchannel(object):
             try:
                 self.sr_op.get_data(xpath, "running")
             except sr.SysrepoNotFoundError as e:
-                self.sr_op.set_data(f"{xpath}/admin-status", "down", no_apply=True)
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
 
             self.sr_op.set_data(
                 f"{self.xpath(id)}/config/interface", ifname, no_apply=True
@@ -1020,10 +1015,10 @@ class Portchannel(object):
 
     def run_conf(self):
         try:
-            self.tree = self.sr_op.get_data(
+            tree = self.sr_op.get_data(
                 "{}/portchannel-group".format(self.XPATH), "running"
             )
-            id_list = self.tree["portchannel"]["portchannel-group"]
+            id_list = tree["portchannel"]["portchannel-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
             return
 
@@ -1044,8 +1039,8 @@ class Portchannel(object):
 
     def show(self, id=None):
         try:
-            self.tree = self.sr_op.get_data(self.XPATH, "operational")
-            id_list = self.tree["portchannel"]["portchannel-group"]
+            tree = self.sr_op.get_data(self.XPATH, "operational")
+            id_list = tree["portchannel"]["portchannel-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
             id_list = []
 
