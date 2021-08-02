@@ -51,13 +51,16 @@ def test_interface_admin_set(cli, host):
         f.write("""<interfaces xmlns="http://goldstone.net/yang/goldstone-interfaces">
   <interface>
     <name>Ethernet1_1</name>
-    <admin-status>down</admin-status>
+    <config>
+        <name>Ethernet1_1</name>
+        <admin-status>DOWN</admin-status>
+    </config>
   </interface>
 </interfaces>""")
 
     run_np2_cli(cli, host, [f"edit-config --target running --config={config}", "commit"])
     output = ssh(cli, "gscli -c 'show running-config'")
-    assert "shutdown" in output
+    assert "admin-status down" in output
 
 
 def main(host, username, password):

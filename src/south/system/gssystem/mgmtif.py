@@ -378,7 +378,7 @@ class ManagementInterfaceServer:
             "goldstone-routing", None, self.routing_change_cb, asyncio_register=True
         )
         self.sess.subscribe_rpc_call(
-            "/goldstone-routing:clear_arp",
+            "/goldstone-routing:clear-arp",
             self.clear_arp,
         )
 

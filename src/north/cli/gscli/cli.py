@@ -562,7 +562,7 @@ class ClearArpGroupCommand(Command):
     def exec(self, line):
         conn = self.context.root().conn
         with conn.start_session() as sess:
-            stdout.info(sess.rpc_send("/goldstone-routing:clear_arp", {}))
+            stdout.info(sess.rpc_send("/goldstone-routing:clear-arp", {}))
 
 
 class ClearInterfaceGroupCommand(Command):
@@ -577,7 +577,7 @@ class ClearInterfaceGroupCommand(Command):
                 raise InvalidInput(self.usage())
             if len(line) == 1:
                 if line[0] == "counters":
-                    sess.rpc_send("/goldstone-interfaces:clear_counters", {})
+                    sess.rpc_send("/goldstone-interfaces:clear-counters", {})
                     stdout.info("Interface counters are cleared.\n")
             else:
                 raise InvalidInput(self.usage())

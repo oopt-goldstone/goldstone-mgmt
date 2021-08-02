@@ -78,9 +78,29 @@ pipeline {
         sh 'make tester'
         timeout(time: 20, unit: 'MINUTES') {
             sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test ${params.DEVICE}"
-            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_np2 ${params.DEVICE}"
-            sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_snmp ${params.DEVICE}"
         }
+      }
+    }
+
+    stage('Test NETCONF') {
+      when {
+        branch pattern: "^PR.*", comparator: "REGEXP"
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+        sh 'make tester'
+        sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_np2 ${params.DEVICE}"
+      }
+    }
+
+   stage('Test SNMP') {
+      when {
+        branch pattern: "^PR.*", comparator: "REGEXP"
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+        sh 'make tester'
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_snmp ${params.DEVICE}"
       }
     }
   }

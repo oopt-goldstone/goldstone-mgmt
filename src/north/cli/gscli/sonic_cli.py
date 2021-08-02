@@ -15,7 +15,7 @@ from prompt_toolkit.completion import (
     NestedCompleter,
     FuzzyWordCompleter,
 )
-from .sonic import Sonic, sonic_defaults
+from .sonic import Sonic
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
@@ -66,10 +66,11 @@ class Interface(Object):
             "switchport": self.switchprt_dict,
             "breakout": None,
             "interface-type": None,
-            "auto-nego": None,
+            "auto-negotiate": None,
             "fec": None,
             "ufd": None,
             "portchannel": None,
+            "admin-status": None,
         }
         self.fec_list = ["fc", "rs"]
         self.breakout_list = ["2X50G", "2X20G", "4X25G", "4X10G"]
@@ -95,14 +96,14 @@ class Interface(Object):
             if len(args) < 1:
                 raise InvalidInput("usage: {}".format(self.no_usage))
             if args[0] == "shutdown":
-                self.sonic.port.set_admin_status(ifnames, "up")
+                self.sonic.port.set_admin_status(ifnames, "UP")
+            if args[0] == "admin-status":
+                self.sonic.port.set_admin_status(ifnames, None)
             elif args[0] == "speed":
-                self.sonic.port.set_speed(ifnames, sonic_defaults.SPEED, config=False)
+                self.sonic.port.set_speed(ifnames, None)
             elif args[0] == "interface-type":
-                self.sonic.port.set_interface_type(
-                    ifnames, sonic_defaults.INTF_TYPE, config=False
-                )
-            elif args[0] == "auto-nego":
+                self.sonic.port.set_interface_type(ifnames, None)
+            elif args[0] == "auto-negotiate":
                 self.sonic.port.set_auto_nego(ifnames, None)
             elif args[0] == "ufd":
                 self.sonic.ufd.check_ports(ifnames)
@@ -140,23 +141,30 @@ class Interface(Object):
         def fec(args):
             if len(args) != 1 or args[0] not in ["fc", "rs"]:
                 raise InvalidInput("usages: fec <fc|rs>")
-            self.sonic.port.set_fec(ifnames, args[0])
+            self.sonic.port.set_fec(ifnames, args[0].upper())
 
         @self.command()
         def shutdown(args):
             if len(args) != 0:
                 raise InvalidInput("usage: shutdown")
-            self.sonic.port.set_admin_status(ifnames, "down")
+            self.sonic.port.set_admin_status(ifnames, "DOWN")
+
+        admin_status_list = ["up", "down"]
+
+        @self.command(WordCompleter(admin_status_list), name="admin-status")
+        def admin_status(args):
+            if len(args) != 1 or args[0] not in admin_status_list:
+                raise InvalidInput(
+                    f"usage: admin_status <{'|'.join(admin_status_list)}>"
+                )
+            self.sonic.port.set_admin_status(ifnames, args[0].upper())
 
         @self.command()
         def speed(args):
             if len(args) != 1:
-                raise InvalidInput("usage: speed 40000|100000")
+                raise InvalidInput("usage: speed 40G|100G")
             speed = args[0]
-            if speed.isdigit():
-                self.sonic.port.set_speed(ifnames, speed)
-            else:
-                raise InvalidInput("Argument must be numbers and not letters")
+            self.sonic.port.set_speed(ifnames, speed)
 
         @self.command()
         def mtu(args):
@@ -189,7 +197,7 @@ class Interface(Object):
 
             self.sonic.port.set_vlan_mem(ifnames, args[1], args[3])
 
-        @self.command(WordCompleter(self.interface_type_list))
+        @self.command(WordCompleter(self.interface_type_list), name="interface-type")
         def interface_type(args):
             valid_args = self.interface_type_list
             invalid_input_str = (
@@ -201,16 +209,18 @@ class Interface(Object):
                 raise InvalidInput(invalid_input_str)
             self.sonic.port.set_interface_type(ifnames, args[0])
 
-        @self.command(WordCompleter(self.auto_nego_list))
+        @self.command(WordCompleter(self.auto_nego_list), name="auto-negotiate")
         def auto_nego(args):
-            invalid_input_str = f'usage: auto_nego [{"|".join(self.auto_nego_list)}]'
+            invalid_input_str = (
+                f'usage: auto-negotiate [{"|".join(self.auto_nego_list)}]'
+            )
             if len(args) != 1 or args[0] not in self.auto_nego_list:
                 raise InvalidInput(invalid_input_str)
 
             if args[0] == "enable":
-                self.sonic.port.set_auto_nego(ifnames, "yes")
+                self.sonic.port.set_auto_nego(ifnames, True)
             if args[0] == "disable":
-                self.sonic.port.set_auto_nego(ifnames, "no")
+                self.sonic.port.set_auto_nego(ifnames, False)
 
         @self.command(WordCompleter(self.breakout_list))
         def breakout(args):

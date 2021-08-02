@@ -41,23 +41,23 @@ def test_vlan(cli):
 
 
 def test_auto_nego(cli):
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego disable"')
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate enable"')
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate disable"')
 
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate enable"')
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-sonic")
     check_pod(cli, "gs-mgmt-sonic")
     time.sleep(90)
     output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "auto-nego enable" in output
-    ssh(cli, 'gscli -c "interface Ethernet3_1; no auto-nego"')
+    assert "auto-negotiate enable" in output
+    ssh(cli, 'gscli -c "interface Ethernet3_1; no auto-negotiate"')
     output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "auto-nego" not in output
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto_nego enable"')
+    assert "auto-negotiate" not in output
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate enable"')
     try:
-        ssh(cli, 'gscli -c "interface Ethernet3_1; interface_type SR4"')
+        ssh(cli, 'gscli -c "interface Ethernet3_1; interface-type SR4"')
     except SSHException as e:
-        assert "(../auto-nego = 'yes')" in e.stderr
+        assert "../auto-negotiate = 'false'" in e.stderr
     else:
         raise Exception(
             "Failed to stop configuring interface type when auto-nego is enabled"
@@ -65,22 +65,22 @@ def test_auto_nego(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet3_1; fec rs"')
     except SSHException as e:
-        assert "(../auto-nego = 'yes')" in e.stderr
+        assert "../auto-negotiate = 'false'" in e.stderr
     else:
         raise Exception("Failed to stop configuring FEC when auto-nego is enabled")
     try:
-        ssh(cli, 'gscli -c "interface Ethernet3_1; speed 40000"')
+        ssh(cli, 'gscli -c "interface Ethernet3_1; speed 40G"')
     except SSHException as e:
-        assert "(../auto-nego = 'yes')" in e.stderr
+        assert "../auto-negotiate = 'false'" in e.stderr
     else:
         raise Exception("Failed to stop configuring speed when auto-nego is enabled")
 
 
 def test_intf_type(cli):
-    ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type SR4"')
-    ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type KR4"')
+    ssh(cli, 'gscli -c "interface Ethernet1_1; interface-type SR4"')
+    ssh(cli, 'gscli -c "interface Ethernet1_1; interface-type KR4"')
 
-    ssh(cli, 'gscli -c "interface Ethernet1_1; interface_type CR4"')
+    ssh(cli, 'gscli -c "interface Ethernet1_1; interface-type CR4"')
     ssh(cli, "kubectl rollout restart ds/gs-mgmt-sonic")
     check_pod(cli, "gs-mgmt-sonic")
     time.sleep(90)
@@ -95,9 +95,9 @@ def test_speed_intftype(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet4_1; speed 10000"')
     except SSHException as e:
-        assert "Invalid speed" in e.stderr
+        assert "Invalid" in e.stderr
     try:
-        ssh(cli, 'gscli -c "interface Ethernet4_1; interface_type SR"')
+        ssh(cli, 'gscli -c "interface Ethernet4_1; interface-type SR"')
     except SSHException as e:
         assert "Unsupported interface type" in e.stderr
 
@@ -416,17 +416,17 @@ def test_port_breakout(cli):
     ssh(cli, 'gscli -c "show running-config interface"')
     ssh(cli, 'gscli -c "show tech-support"')
     try:
-        ssh(cli, 'gscli -c "interface Ethernet5_2; speed 10000"')
+        ssh(cli, 'gscli -c "interface Ethernet5_2; speed 100G"')
     except SSHException as e:
-        assert "Invalid speed" in e.stderr
+        assert "Invalid" in e.stderr
     else:
-        raise Exception("failed to fail with an invalid command: speed 10000")
+        raise Exception("failed to fail with an invalid command: speed 100G")
     try:
-        ssh(cli, 'gscli -c "interface Ethernet5_2; speed 1000"')
+        ssh(cli, 'gscli -c "interface Ethernet5_2; speed 1G"')
     except SSHException as e:
-        assert "Invalid speed" in e.stderr
+        assert "Invalid" in e.stderr
     else:
-        raise Exception("failed to fail with an invalid command: speed 1000")
+        raise Exception("failed to fail with an invalid command: speed 1G")
 
     ssh(cli, 'gscli -c "interface Ethernet5_3; mtu 9000"')
 
@@ -644,13 +644,13 @@ def test_speed(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; speed 100"')
     except SSHException as e:
-        assert "does not satisfy the constraint" in e.stderr
+        assert "Invalid" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: speed 100")
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; speed 1000000000000000000000000000"')
     except SSHException as e:
-        assert "Invalid value" in e.stderr
+        assert "Invalid" in e.stderr
     else:
         raise Exception(
             "failed to fail with an invalid command: speed 1000000000000000000000000000"
@@ -658,7 +658,7 @@ def test_speed(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet1_1; speed 410000"')
     except SSHException as e:
-        assert "does not satisfy the constraint" in e.stderr
+        assert "Invalid" in e.stderr
     else:
         raise Exception("failed to fail with an invalid command: speed 410000")
     try:
@@ -668,22 +668,19 @@ def test_speed(cli):
     else:
         raise Exception("failed to fail with an invalid command: speed 400000")
     try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000"')
+        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25G"')
     except SSHException as e:
         assert "Invalid" in e.stderr
     else:
-        raise Exception("failed to fail with an invalid command: speed 25000")
-
-    # TODO this should fail
-    # output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25000; show"')
+        raise Exception("failed to fail with an invalid command: speed 25G")
 
     output = ssh(
-        cli, 'gscli -c "interface Ethernet1_1; speed 40000; show" | grep speed'
+        cli, 'gscli -c "interface Ethernet1_1; speed 40G; show" | grep speed'
     )
-    assert "40000" in output
+    assert "40G" in output
 
     output = ssh(cli, 'gscli -c "interface Ethernet1_1; no speed ; !sleep 1; show"')
-    assert "100000" in output
+    assert "100G" in output
 
 
 def test_invalid_intf(cli):
