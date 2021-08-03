@@ -364,7 +364,11 @@ class Root(Object):
                 "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
             )
             self.notif_session.subscribe_notification_tree(
-                "goldstone-onlp", "/goldstone-onlp:*", 0, 0, self.notification_cb
+                "goldstone-platform",
+                "/goldstone-platform:*",
+                0,
+                0,
+                self.notification_cb,
             )
             self.notif_session.subscribe_notification_tree(
                 "goldstone-interfaces",

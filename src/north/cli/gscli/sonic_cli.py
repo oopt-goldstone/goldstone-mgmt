@@ -159,7 +159,7 @@ class Interface(Object):
                 )
             self.sonic.port.set_admin_status(ifnames, args[0].upper())
 
-        speeds = self.sonic.valid_speeds()
+        speeds = self.sonic.port.valid_speeds()
 
         @self.command(WordCompleter(speeds))
         def speed(args):

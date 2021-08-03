@@ -475,6 +475,18 @@ class Port(object):
         for node in ctx.find_path(xpath):
             return node.type().range()
 
+    def valid_speeds(self):
+        ctx = self.session.get_ly_ctx()
+        xpath = "/goldstone-interfaces:interfaces"
+        xpath += "/goldstone-interfaces:interface"
+        xpath += "/goldstone-interfaces:config"
+        xpath += "/goldstone-interfaces:speed"
+        leaf = list(ctx.find_path(xpath))[0]
+        # SPEED_10G => 10G
+        v = [e[0].replace("SPEED_", "") for e in leaf.type().enums()]
+        v = v[1:]  # remove SPEED_UNKNOWN
+        return v
+
     def set_speed(self, ifnames, speed):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
@@ -918,18 +930,6 @@ class Sonic(object):
         stdout.info("\nshow ufd:\n")
         self.ufd.show()
         self.pc.show()
-
-    def valid_speeds(self):
-        ctx = self.session.get_ly_ctx()
-        xpath = "/goldstone-interfaces:interfaces"
-        xpath += "/goldstone-interfaces:interface"
-        xpath += "/goldstone-interfaces:config"
-        xpath += "/goldstone-interfaces:speed"
-        leaf = list(ctx.find_path(xpath))[0]
-        # SPEED_10G => 10G
-        v = [e[0].replace("SPEED_", "") for e in leaf.type().enums()]
-        v = v[1:]  # remove SPEED_UNKNOWN
-        return v
 
 
 def set_attribute(sr_op, path, module, name, attr, value, no_apply=False):
