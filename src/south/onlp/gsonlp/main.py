@@ -341,39 +341,33 @@ class Server(object):
 
             self.components["goldstone-platform:components"]["component"].append(r)
 
+    def get_onie_fields_from_schema(self):
+        xpath = ["components", "component", "sys", "state", "onie-info"]
+        xpath = "".join(f"/goldstone-platform:{v}" for v in xpath)
+        ctx = self.sess.get_ly_ctx()
+        o = list(ctx.find_path(xpath)).pop()
+        return [child.name() for child in o.children()]
+
     def get_sys_info(self):
         sys = onlp.onlp.onlp_sys_info()
         libonlp.onlp_sys_info_get(ctypes.byref(sys))
-        name = "SYS"
-        product_name = " "
-        part_number = " "
-        serial_number = " "
-        cpld_versions = " "
-        other_versions = " "
-        if isinstance(sys.onie_info.product_name, bytes):
-            product_name = str(sys.onie_info.product_name, "utf-8")
-        if isinstance(sys.onie_info.part_number, bytes):
-            part_number = str(sys.onie_info.part_number, "utf-8")
-        if isinstance(sys.onie_info.serial_number, bytes):
-            serial_number = str(sys.onie_info.serial_number, "utf-8")
-        if isinstance(sys.platform_info.cpld_versions, bytes):
-            cpld_versions = str(sys.platform_info.cpld_versions, "utf-8")
-        if isinstance(sys.platform_info.other_versions, bytes):
-            other_versions = str(sys.platform_info.other_versions, "utf-8")
+        onie = {}
+        for field in self.get_onie_fields_from_schema():
+            value = getattr(sys.onie_info, field.replace("-", "_"), None)
+            if type(value) == bytes:
+                onie[field] = value.decode("utf-8")
+            elif field == "mac" and value:
+                onie[field] = ":".join(f"{v:02x}" for v in value)
+            elif value:
+                onie[field] = int(value)
 
         r = {
-            "name": name,
-            "config": {"name": name},
+            "name": "SYS",
+            "config": {"name": "SYS"},
             "state": {"type": "SYS", "description": "System Information"},
             "sys": {
                 "state": {
-                    "onie": {
-                        "product-name": product_name,
-                        "part-number": part_number,
-                        "serial-number": serial_number,
-                    },
-                    "cpld-version": cpld_versions,
-                    "other-versions": other_versions,
+                    "onie-info": onie,
                 }
             },
         }
