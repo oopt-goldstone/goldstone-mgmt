@@ -155,14 +155,16 @@ class Interface(Object):
         def admin_status(args):
             if len(args) != 1 or args[0] not in admin_status_list:
                 raise InvalidInput(
-                    f"usage: admin_status <{'|'.join(admin_status_list)}>"
+                    f"usage: admin_status [{'|'.join(admin_status_list)}]"
                 )
             self.sonic.port.set_admin_status(ifnames, args[0].upper())
 
-        @self.command()
+        speeds = self.sonic.valid_speeds()
+
+        @self.command(WordCompleter(speeds))
         def speed(args):
             if len(args) != 1:
-                raise InvalidInput("usage: speed 40G|100G")
+                raise InvalidInput(f"usage: speed [{'|'.join(speeds)}]")
             speed = args[0]
             self.sonic.port.set_speed(ifnames, speed)
 
