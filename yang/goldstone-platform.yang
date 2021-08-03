@@ -218,7 +218,8 @@ module goldstone-platform {
   }
 
   grouping platform-sys-top-state {
-    container onie {
+
+    container onie-info {
         leaf product-name {
           type string;
         }
@@ -228,14 +229,54 @@ module goldstone-platform {
         leaf serial-number {
           type string;
         }
+        leaf mac {
+          type string;
+        }
+        leaf manufacture-date {
+          type string;
+        }
+        leaf device-version {
+          type string;
+        }
+        leaf label-revision {
+          type string;
+        }
+        leaf platform-name {
+          type string;
+        }
+        leaf onie-version {
+          type string;
+        }
+        leaf mac-range {
+          type uint16;
+        }
+        leaf manufacturer {
+          type string;
+        }
+        leaf country-code {
+          type string;
+        }
+        leaf vendor {
+          type string;
+        }
+        leaf diag-version {
+          type string;
+        }
+        leaf service-tag {
+          type string;
+        }
+        leaf ctc {
+          type uint32;
+        }
     }
 
-    leaf cpld-version {
-      type string;
-    }
-
-    leaf other-versions {
-      type string;
+    container platform-info {
+        leaf cpld-versions {
+          type string;
+        }
+        leaf other-versions {
+          type string;
+        }
     }
   }
 
@@ -245,10 +286,10 @@ module goldstone-platform {
       container config {
         uses platform-sys-top-config;
       }
-  
+
       container state {
         config false;
-  
+
         uses platform-sys-top-config;
         uses platform-sys-top-state;
       }
