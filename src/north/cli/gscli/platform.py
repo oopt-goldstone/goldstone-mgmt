@@ -41,14 +41,14 @@ class Component(object):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
         self.component = {}
-        self.XPATH = "/goldstone-onlp:components"
+        self.XPATH = "/goldstone-platform:components"
 
     def get_state_attr(self, details, component):
         table = []
         try:
             data = component[details]["state"]
             data = to_human(data)
-            if details != "piu" and details != "sfp":
+            if details != "piu" and details != "transceiver":
                 desc = component["state"]["description"]
                 table.append(["description", desc])
             for k, v in data.items():
@@ -72,10 +72,10 @@ class Component(object):
             stderr.info(error)
         return table
 
-    def show_onlp(self, option="all"):
+    def show_platform(self, option="all"):
 
         if option == "all":
-            types = ["fan", "psu", "led", "piu", "sfp", "thermal", "sys"]
+            types = ["fan", "psu", "led", "piu", "transceiver", "thermal", "sys"]
             for type_ in types:
                 stdout.info("\n")
                 t = type_.upper()
@@ -95,9 +95,9 @@ class Component(object):
                 table = self.get_state_attr("piu", component)
                 stdout.info(component["name"])
                 stdout.info(tabulate(table))
-            components = self.get_components("sfp")
+            components = self.get_components("transceiver")
             for component in components:
-                table = self.get_state_attr("sfp", component)
+                table = self.get_state_attr("transceiver", component)
                 stdout.info(component["name"])
                 stdout.info(tabulate(table))
         elif option == "system":
@@ -123,5 +123,5 @@ class Component(object):
         return natsorted(c, key=lambda v: v["name"])
 
     def tech_support(self):
-        stdout.info("\n Show Onlp details")
-        self.show_onlp()
+        stdout.info("\n Show platform details")
+        self.show_platform()
