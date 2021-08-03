@@ -884,11 +884,11 @@ def test_mgmt_if_cmds(cli):
     assert "30.20.20.0/24" not in output
 
 
-def test_onlp(cli):
-    # ADD test for onlp CLIs here
-    output = ssh(cli, 'gscli -c "show datastore /goldstone-onlp:* operational"')
+def test_platform(cli):
+    # ADD test for platform CLIs here
+    output = ssh(cli, 'gscli -c "show datastore /goldstone-platform:* operational"')
     assert "piu" in output
-    assert "sfp" in output
+    assert "transceiver" in output
     print("Component PIU and SFP found in operational-DB")
     ssh(cli, 'gscli -c "show chassis-hardware fan"')
     ssh(cli, 'gscli -c "show chassis-hardware led"')
@@ -1060,7 +1060,7 @@ def main(host, username, password):
             raise e
 
         try:
-            test_onlp(cli)
+            test_platform(cli)
         except Exception as e:
             ssh(cli, "kubectl get pods -A")
             ssh(cli, "kubectl logs -l app=gs-mgmt-onlp")

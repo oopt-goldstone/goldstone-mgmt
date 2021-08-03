@@ -22,14 +22,13 @@ stderr = logging.getLogger("stderr")
 
 def speed_human_to_yang(speed):
     # Considering only speeds supported in CLI
-    return f"SPEED_{speed}B"
+    return f"SPEED_{speed}"
 
 
 def speed_yang_to_human(speed):
     # Considering only speeds supported in CLI
     speed = speed.split(":")[-1]
-    speed = speed.replace("SPEED_", "")
-    return speed[:-1]
+    return speed.replace("SPEED_", "")
 
 
 class Vlan(object):
@@ -475,6 +474,18 @@ class Port(object):
         xpath += "/goldstone-ip:mtu"
         for node in ctx.find_path(xpath):
             return node.type().range()
+
+    def valid_speeds(self):
+        ctx = self.session.get_ly_ctx()
+        xpath = "/goldstone-interfaces:interfaces"
+        xpath += "/goldstone-interfaces:interface"
+        xpath += "/goldstone-interfaces:config"
+        xpath += "/goldstone-interfaces:speed"
+        leaf = list(ctx.find_path(xpath))[0]
+        # SPEED_10G => 10G
+        v = [e[0].replace("SPEED_", "") for e in leaf.type().enums()]
+        v = v[1:]  # remove SPEED_UNKNOWN
+        return v
 
     def set_speed(self, ifnames, speed):
         for ifname in ifnames:

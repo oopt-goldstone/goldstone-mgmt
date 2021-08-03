@@ -42,7 +42,7 @@ class Server(object):
         # This list would be indexed by piuId
         self.onlp_piu_status = []
         # This list would be indexed by port
-        self.onlp_sfp_presence = []
+        self.transceiver_presence = []
         self.components = {}
 
     def stop(self):
@@ -51,9 +51,9 @@ class Server(object):
         self.conn.disconnect()
 
     async def parse_oper_req(self, xpath):
-        if xpath == "/goldstone-onlp:*":
+        if xpath == "/goldstone-platform:*":
             return None
-        prefix = "/goldstone-onlp:components"
+        prefix = "/goldstone-platform:components"
         if not xpath.startswith(prefix):
             raise InvalidXPath()
         xpath = xpath[len(prefix) :]
@@ -83,7 +83,7 @@ class Server(object):
                     },
                     "thermal": {"state": {"status": [status]}},
                 }
-                self.components["goldstone-onlp:components"]["component"].append(r)
+                self.components["goldstone-platform:components"]["component"].append(r)
                 continue
             threshold = thermal.thresholds
 
@@ -126,7 +126,7 @@ class Server(object):
                     }
                 },
             }
-            self.components["goldstone-onlp:components"]["component"].append(r)
+            self.components["goldstone-platform:components"]["component"].append(r)
 
     def get_fan_info(self):
         fan = onlp.onlp.onlp_fan_info()
@@ -155,7 +155,7 @@ class Server(object):
                     "fan": {"state": {"fan-state": state}},
                 }
 
-                self.components["goldstone-onlp:components"]["component"].append(r)
+                self.components["goldstone-platform:components"]["component"].append(r)
                 continue
 
             if fan.status & onlp.onlp.ONLP_FAN_STATUS.B2F:
@@ -191,7 +191,7 @@ class Server(object):
                 },
             }
 
-            self.components["goldstone-onlp:components"]["component"].append(r)
+            self.components["goldstone-platform:components"]["component"].append(r)
 
     def get_psu_info(self):
         psu = onlp.onlp.onlp_psu_info()
@@ -273,7 +273,7 @@ class Server(object):
                     },
                     "psu": {"state": {"psu-state": state}},
                 }
-            self.components["goldstone-onlp:components"]["component"].append(r)
+            self.components["goldstone-platform:components"]["component"].append(r)
 
     def get_led_info(self):
         led = onlp.onlp.onlp_led_info()
@@ -339,52 +339,46 @@ class Server(object):
                 "led": {"state": {"mode": mode, "status": [status]}},
             }
 
-            self.components["goldstone-onlp:components"]["component"].append(r)
+            self.components["goldstone-platform:components"]["component"].append(r)
+
+    def get_onie_fields_from_schema(self):
+        xpath = ["components", "component", "sys", "state", "onie-info"]
+        xpath = "".join(f"/goldstone-platform:{v}" for v in xpath)
+        ctx = self.sess.get_ly_ctx()
+        o = list(ctx.find_path(xpath)).pop()
+        return [child.name() for child in o.children()]
 
     def get_sys_info(self):
         sys = onlp.onlp.onlp_sys_info()
         libonlp.onlp_sys_info_get(ctypes.byref(sys))
-        name = "SYS"
-        product_name = " "
-        part_number = " "
-        serial_number = " "
-        cpld_versions = " "
-        other_versions = " "
-        if isinstance(sys.onie_info.product_name, bytes):
-            product_name = str(sys.onie_info.product_name, "utf-8")
-        if isinstance(sys.onie_info.part_number, bytes):
-            part_number = str(sys.onie_info.part_number, "utf-8")
-        if isinstance(sys.onie_info.serial_number, bytes):
-            serial_number = str(sys.onie_info.serial_number, "utf-8")
-        if isinstance(sys.platform_info.cpld_versions, bytes):
-            cpld_versions = str(sys.platform_info.cpld_versions, "utf-8")
-        if isinstance(sys.platform_info.other_versions, bytes):
-            other_versions = str(sys.platform_info.other_versions, "utf-8")
+        onie = {}
+        for field in self.get_onie_fields_from_schema():
+            value = getattr(sys.onie_info, field.replace("-", "_"), None)
+            if type(value) == bytes:
+                onie[field] = value.decode("utf-8")
+            elif field == "mac" and value:
+                onie[field] = ":".join(f"{v:02x}" for v in value)
+            elif value:
+                onie[field] = int(value)
 
         r = {
-            "name": name,
-            "config": {"name": name},
+            "name": "SYS",
+            "config": {"name": "SYS"},
             "state": {"type": "SYS", "description": "System Information"},
             "sys": {
                 "state": {
-                    "onie": {
-                        "product-name": product_name,
-                        "part-number": part_number,
-                        "serial-number": serial_number,
-                    },
-                    "cpld-version": cpld_versions,
-                    "other-versions": other_versions,
+                    "onie-info": onie,
                 }
             },
         }
-        self.components["goldstone-onlp:components"]["component"].append(r)
+        self.components["goldstone-platform:components"]["component"].append(r)
 
     async def change_cb(self, event, req_id, changes, priv):
         logger.info(f"change_cb: {event}, {req_id}, {changes}")
         return
 
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
-        self.components = {"goldstone-onlp:components": {"component": []}}
+        self.components = {"goldstone-platform:components": {"component": []}}
         logger.debug(f"oper_cb: {xpath}, {req_xpath}")
         item = await self.parse_oper_req(req_xpath)
         if item == None:
@@ -403,7 +397,7 @@ class Server(object):
             self.get_led_info()
         elif item == "SYS":
             self.get_sys_info()
-        elif item == "PIU" or "SFP":
+        elif item == "PIU" or "TRANSCEIVER":
             pass
         return self.components
 
@@ -422,7 +416,7 @@ class Server(object):
     def monitor_piu(self):
         self.sess.switch_datastore("operational")
 
-        eventname = "goldstone-onlp:piu-notify-event"
+        eventname = "goldstone-platform:piu-notify-event"
 
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
             # TODO we set the PIU name as /dev/piu?. This is because libtai-aco.so expects
@@ -433,7 +427,7 @@ class Server(object):
 
             name = f"/dev/piu{piuId}"
 
-            xpath = f"/goldstone-onlp:components/component[name='{name}']"
+            xpath = f"/goldstone-platform:components/component[name='{name}']"
 
             sts = ctypes.c_uint()
             libonlp.onlp_module_status_get(oid, ctypes.byref(sts))
@@ -500,28 +494,30 @@ class Server(object):
 
         self.sess.apply_changes()
 
-    # monitor_sfp() monitor SFP presence periodically and change the operational data store
-    # accordingly.
-    def monitor_sfp(self):
+    # monitor_transceiver() monitor transceiver presence periodically and
+    # change the operational data store accordingly.
+    def monitor_transceiver(self):
         self.sess.switch_datastore("operational")
-        eventname = "goldstone-onlp:sfp-notify-event"
+        eventname = "goldstone-platform:transceiver-notify-event"
         eeprom = ctypes.POINTER(ctypes.c_ubyte)()
 
-        for i in range(len(self.onlp_sfp_presence)):
+        for i in range(len(self.transceiver_presence)):
             port = i + 1
             name = f"sfp{port}"
-            xpath = f"/goldstone-onlp:components/component[name='{name}']"
+            xpath = f"/goldstone-platform:components/component[name='{name}']"
 
             presence = libonlp.onlp_sfp_is_present(port)
 
-            if not (presence ^ self.onlp_sfp_presence[i]):
+            if not (presence ^ self.transceiver_presence[i]):
                 continue
 
+            self.transceiver_presence[i] = presence
+
             self.sess.set_item(f"{xpath}/config/name", "sfp" + str(port))
-            self.sess.set_item(f"{xpath}/state/type", "SFP")
+            self.sess.set_item(f"{xpath}/state/type", "TRANSCEIVER")
 
             if presence:
-                sfp_presence = "PRESENT"
+                presence = "PRESENT"
                 libonlp.onlp_sfp_eeprom_read(port, ctypes.byref(eeprom))
                 sffEeprom = onlp.sff.sff_eeprom()
                 libonlp.sff_eeprom_parse(ctypes.byref(sffEeprom), eeprom)
@@ -534,23 +530,22 @@ class Server(object):
                     model = str(model, "utf-8")
                 if isinstance(serial_number, bytes):
                     serial_number = str(serial_number, "utf-8")
-                self.sess.set_item(f"{xpath}/sfp/state/vendor", vendor)
-                self.sess.set_item(f"{xpath}/sfp/state/model", model)
-                self.sess.set_item(f"{xpath}/sfp/state/serial", serial_number)
+                self.sess.set_item(f"{xpath}/transceiver/state/vendor", vendor)
+                self.sess.set_item(f"{xpath}/transceiver/state/model", model)
+                self.sess.set_item(f"{xpath}/transceiver/state/serial", serial_number)
             else:
-                sfp_presence = "UNPLUGGED"
+                presence = "UNPLUGGED"
 
-            self.sess.set_item(f"{xpath}/sfp/state/presence", sfp_presence)
-            notif = {eventname: {"name": name, "presence": sfp_presence}}
+            self.sess.set_item(f"{xpath}/transceiver/state/presence", presence)
+            notif = {eventname: {"name": name, "presence": presence}}
             self.send_notifcation(notif)
-            self.onlp_sfp_presence[i] = presence
 
     async def monitor_devices(self):
         while True:
             # Monitor change in PIU status
             self.monitor_piu()
             # Monitor change in QSFP presence
-            self.monitor_sfp()
+            self.monitor_transceiver()
 
             await asyncio.sleep(1)
 
@@ -575,7 +570,7 @@ class Server(object):
             piuId = oid & 0xFFFFFF
             name = f"/dev/piu{piuId}"
 
-            xpath = f"/goldstone-onlp:components/component[name='{name}']"
+            xpath = f"/goldstone-platform:components/component[name='{name}']"
             self.sess.set_item(f"{xpath}/config/name", "piu" + str(piuId))
             self.sess.set_item(f"{xpath}/state/type", "PIU")
             self.sess.set_item(f"{xpath}/piu/state/status", "UNPLUGGED")
@@ -584,7 +579,7 @@ class Server(object):
 
         self.sess.apply_changes()
 
-    def initialise_component_sfp(self):
+    def initialise_component_transceiver(self):
         self.sess.switch_datastore("operational")
 
         # Component : SFP
@@ -594,21 +589,21 @@ class Server(object):
         libonlp.onlp_sfp_bitmap_t_init(ctypes.byref(bitmap))
         libonlp.onlp_sfp_bitmap_get(ctypes.byref(bitmap))
 
-        total_sfp_ports = 0
+        total_ports = 0
         for port in range(1, 256):
             if onlp.onlp.aim_bitmap_get(bitmap.hdr, port):
                 name = f"sfp{port}"
-                xpath = f"/goldstone-onlp:components/component[name='{name}']"
+                xpath = f"/goldstone-platform:components/component[name='{name}']"
 
                 self.sess.set_item(f"{xpath}/config/name", "sfp" + str(port))
-                self.sess.set_item(f"{xpath}/state/type", "SFP")
-                self.sess.set_item(f"{xpath}/sfp/state/presence", "UNPLUGGED")
+                self.sess.set_item(f"{xpath}/state/type", "TRANSCEIVER")
+                self.sess.set_item(f"{xpath}/transceiver/state/presence", "UNPLUGGED")
 
-                self.onlp_sfp_presence.append(0)
-                total_sfp_ports += 1
+                self.transceiver_presence.append(0)
+                total_ports += 1
 
         self.sess.apply_changes()
-        logger.debug(f"Total SFP ports supported: {total_sfp_ports}")
+        logger.debug(f"Total ports supported: {total_ports}")
 
     def initialise_component_devices(self):
         # Read all the OID's , which would be used as handles to invoke ONLP API's
@@ -619,7 +614,7 @@ class Server(object):
 
         self.initialise_component_piu()
 
-        self.initialise_component_sfp()
+        self.initialise_component_transceiver()
 
         # Extend here for other devices[FAN,PSU,LED etc]
 
@@ -628,13 +623,13 @@ class Server(object):
         # as the bottom layer of the operational datastore
         self.sess.switch_datastore("running")
         self.sess.subscribe_module_change(
-            "goldstone-onlp", None, self.change_cb, asyncio_register=True
+            "goldstone-platform", None, self.change_cb, asyncio_register=True
         )
 
         # passing oper_merge=True is important to enable pull/push information layering
         self.sess.subscribe_oper_data_request(
-            "goldstone-onlp",
-            "/goldstone-onlp:components/component",
+            "goldstone-platform",
+            "/goldstone-platform:components/component",
             self.oper_cb,
             oper_merge=True,
             asyncio_register=True,
