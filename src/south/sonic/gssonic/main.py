@@ -666,6 +666,7 @@ class Server(object):
 
                         logger.debug(f"adding default value of {key} to redis")
                         self.pack_defaults_to_redis(ifname=ifname, leaf_node=key)
+                        update_oper_ds = True
 
                 elif key == "interface-type":
                     if event == "change":
@@ -692,6 +693,7 @@ class Server(object):
                             status_bcm = self.k8s.run_bcmcmd_usonic(
                                 key, ifname, DEFAULT_INTERFACE_TYPE + "4"
                             )
+                        update_oper_ds = True
 
                 elif "PORT|" in _hash and key == "":
                     if event == "done":
