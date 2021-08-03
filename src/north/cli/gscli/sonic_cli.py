@@ -97,7 +97,7 @@ class Interface(Object):
                 raise InvalidInput("usage: {}".format(self.no_usage))
             if args[0] == "shutdown":
                 self.sonic.port.set_admin_status(ifnames, "UP")
-            if args[0] == "admin-status":
+            elif args[0] == "admin-status":
                 self.sonic.port.set_admin_status(ifnames, None)
             elif args[0] == "speed":
                 self.sonic.port.set_speed(ifnames, None)
