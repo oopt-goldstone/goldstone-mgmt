@@ -1,10 +1,10 @@
-module goldstone-onlp {
+module goldstone-platform {
 
   yang-version "1";
 
-  namespace "http://goldstone.net/yang/onlp";
+  namespace "http://goldstone.net/yang/platform";
 
-  prefix "gs-onlp";
+  prefix "gs-platform";
 
   revision "2019-11-01" {
       reference "0.1.0";
@@ -397,10 +397,10 @@ module goldstone-onlp {
     }
   }
 
-  grouping platform-sfp-top-config {
+  grouping platform-transceiver-top-config {
   }
 
-  grouping platform-sfp-top-state {
+  grouping platform-transceiver-top-state {
 
     leaf presence {
       type enumeration {
@@ -421,20 +421,36 @@ module goldstone-onlp {
       type string;
     }
 
+    leaf form-factor {
+      type enumeration {
+        enum UNKNOWN;
+        enum CFP2;
+        enum CFP2_ACO;
+        enum QSFP;
+        enum QSFP_PLUS;
+        enum QSFP28;
+        enum SFP;
+        enum SFP_PLUS;
+        enum QSFP_DD;
+        enum OSFP;
+        enum NON_PLUGGABLE;
+      }
+    }
+
   }
 
-  grouping platform-sfp-top {
+  grouping platform-transceiver-top {
 
-    container sfp {
+    container transceiver {
       container config {
-        uses platform-sfp-top-config;
+        uses platform-transceiver-top-config;
       }
 
       container state {
         config false;
 
-        uses platform-sfp-top-config;
-        uses platform-sfp-top-state;
+        uses platform-transceiver-top-config;
+        uses platform-transceiver-top-state;
       }
     }
   }
@@ -467,7 +483,7 @@ module goldstone-onlp {
           enum MODULE;
           enum RTC;
           enum PIU;
-          enum SFP;
+          enum TRANSCEIVER;
       }
       description
         "Type of component as identified by the system";
@@ -552,7 +568,7 @@ module goldstone-onlp {
         uses platform-sys-top;
         uses platform-psu-top;
         uses platform-piu-top;
-        uses platform-sfp-top;
+        uses platform-transceiver-top;
       }
     }
   }
@@ -564,9 +580,9 @@ module goldstone-onlp {
     uses platform-piu-top-state;
   }
 
-  notification sfp-notify-event {
+  notification transceiver-notify-event {
     uses platform-component-config;
-    uses platform-sfp-top-state;
+    uses platform-transceiver-top-state;
   }
 }
 

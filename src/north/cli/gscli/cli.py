@@ -5,7 +5,7 @@ from tabulate import tabulate
 from .sonic import Sonic
 from .tai import Transponder
 from .system import System, TACACS, AAA, Mgmtif
-from .onlp import Component
+from .platform import Component
 import json
 import libyang as ly
 import sysrepo as sr
@@ -207,7 +207,7 @@ class TransponderGroupCommand(Command):
         )
 
 
-class OnlpGroupCommand(Command):
+class PlatformGroupCommand(Command):
     SUBCOMMAND_DICT = {
         "fan": Command,
         "psu": Command,
@@ -220,7 +220,7 @@ class OnlpGroupCommand(Command):
 
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.onlp_component = Component(context.conn)
+        self.platform_component = Component(context.conn)
 
     def exec(self, line):
         if len(line) < 1 or line[0] not in [
@@ -233,7 +233,7 @@ class OnlpGroupCommand(Command):
             "all",
         ]:
             raise InvalidInput(self.usage())
-        return self.onlp_component.show_onlp(line[0])
+        return self.platform_component.show_platform(line[0])
 
     def usage(self):
         return (
@@ -275,7 +275,7 @@ class TACACSGroupCommand(Command):
 class RunningConfigCommand(Command):
     SUBCOMMAND_DICT = {
         "transponder": TransponderGroupCommand,
-        "onlp": Command,
+        "platform": Command,
         "vlan": Command,
         "interface": Command,
         "aaa": Command,
@@ -336,7 +336,7 @@ class GlobalShowCommand(Command):
         "version": Command,
         "transponder": TransponderGroupCommand,
         "running-config": RunningConfigCommand,
-        "chassis-hardware": OnlpGroupCommand,
+        "chassis-hardware": PlatformGroupCommand,
         "aaa": AAAGroupCommand,
         "tacacs": TACACSGroupCommand,
     }
@@ -491,17 +491,17 @@ class GlobalShowCommand(Command):
             "/goldstone-routing:routing/static-routes/ipv4/route",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",
-            "/goldstone-onlp:components",
+            "/goldstone-platform:components",
         ]
 
         sonic = Sonic(self.context.conn)
         transponder = Transponder(self.context.conn)
         system = System(self.context.conn)
-        onlp_component = Component(self.context.conn)
+        component = Component(self.context.conn)
         sonic.tech_support()
         transponder.tech_support()
         system.tech_support()
-        onlp_component.tech_support()
+        component.tech_support()
         stdout.info("\nshow datastore:\n")
 
         with self.context.conn.start_session() as session:
@@ -534,7 +534,7 @@ class GlobalShowCommand(Command):
             f" {self.name} aaa \n"
             f" {self.name} tacacs \n"
             f" {self.name} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
-            f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|ufd|portchannel]\n"
+            f" {self.name} running-config [transponder|platform|vlan|interface|aaa|ufd|portchannel]\n"
             f" {self.name} tech-support"
         )
 
