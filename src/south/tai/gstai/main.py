@@ -98,7 +98,7 @@ class Server(object):
 
     1. start-up process
 
-    In the beginning of the start-up process, the TAI south server gets the hardware configuration from the ONLP operational configuration.
+    In the beginning of the start-up process, the TAI south server gets the hardware configuration from the Platform operational configuration.
     In order to get this information, the ONLP south server must be always running.
     If ONLP south server is not running, TAI south server fails to get the hardware configuraion and exit. The restarting of the server is k8s's responsibility.
 
@@ -823,9 +823,9 @@ class Server(object):
         logger.debug("done")
 
     async def start(self):
-        # get hardware configuration from ONLP datastore ( ONLP south must be running )
+        # get hardware configuration from platform datastore ( ONLP south must be running )
         self.sess.switch_datastore("operational")
-        d = self.sess.get_data("/goldstone-onlp:components/component", no_subs=True)
+        d = self.sess.get_data("/goldstone-platform:components/component", no_subs=True)
         modules = [
             {"name": c["name"], "location": c["name"]}
             for c in d["components"]["component"]
@@ -863,8 +863,8 @@ class Server(object):
             )
 
             self.sess.subscribe_notification_tree(
-                "goldstone-onlp",
-                f"/goldstone-onlp:piu-notify-event",
+                "goldstone-platform",
+                f"/goldstone-platform:piu-notify-event",
                 0,
                 0,
                 self.notification_cb,
