@@ -86,7 +86,7 @@ class incluster_apis(object):
             v = interface_map.get(name, (None, None))
             if v[0] != None and v[1] != None:
                 channel = v[0]
-                speed = v[1]
+                speed = v[1] // 1000
 
             lane_num = m["lane_num"] // channel
 
@@ -114,7 +114,7 @@ class incluster_apis(object):
             v = interface_map.get(name, (None, None))
             if v[0] != None and v[1] != None:
                 channel = v[0]
-                speed = v[1] * 1000
+                speed = v[1]
 
             lane_num = m["lane_num"] // channel
 
@@ -147,7 +147,7 @@ class incluster_apis(object):
             v = interface_map.get(name, (None, None))
             if v[0] != None and v[1] != None:
                 channel = v[0]
-                speed = v[1] * 1000
+                speed = v[1]
 
             lane_num = m["lane_num"] // channel
 

@@ -34,31 +34,33 @@ def _decode(string):
     return string
 
 
-def yang_val_to_speed(yang_val):
+# SPEED_10G => 10000
+# goldstone-interfaces:SPEED_100G => 100000
+def speed_yang_to_redis(yang_val):
     if not yang_val:
         return None
     yang_val = yang_val.split(":")[-1]
     yang_val = yang_val.split("_")
-    return int(yang_val[1].split("GB")[0])
+    return int(yang_val[1].split("G")[0]) * 1000
 
 
-def speed_to_yang_val(speed):
+def speed_redis_to_yang(speed):
     # Considering only speeds supported in CLI
     speed = _decode(speed)
     if speed == "25000":
-        return "SPEED_25GB"
+        return "SPEED_25G"
     elif speed == "20000":
-        return "SPEED_20GB"
+        return "SPEED_20G"
     elif speed == "50000":
-        return "SPEED_50GB"
+        return "SPEED_50G"
     elif speed == "100000":
-        return "SPEED_100GB"
+        return "SPEED_100G"
     elif speed == "40000":
-        return "SPEED_40GB"
+        return "SPEED_40G"
     elif speed == "10000":
-        return "SPEED_10GB"
+        return "SPEED_10G"
     elif speed == "1000":
-        return "SPEED_1GB"
+        return "SPEED_1G"
     raise sysrepo.SysrepoInvalArgError(f"unsupported speed: {speed}")
 
 
@@ -130,7 +132,7 @@ class Server(object):
         if event != "done":
             return
         if key == "speed":
-            value = yang_val_to_speed(value) * 1000
+            value = speed_yang_to_redis(value)
         if type(value) == str:
             value = value.lower()
         key = key.replace("-", "_")
@@ -262,7 +264,7 @@ class Server(object):
             name = i["name"]
             b = i.get("config", {}).get("breakout", {})
             numch = b.get("num-channels", None)
-            speed = yang_val_to_speed(b.get("channel-speed", None))
+            speed = speed_yang_to_redis(b.get("channel-speed", None))
             intfs[name] = (numch, speed)
 
         is_updated = self.k8s.update_usonic_config(intfs)
@@ -486,7 +488,7 @@ class Server(object):
 
                     if event == "change":
                         # 'goldstone-interfaces:SPEED_100GB' to 1000000
-                        value = yang_val_to_speed(change.value) * 1000
+                        value = speed_yang_to_redis(change.value)
                         ifname = attr_dict["ifname"]
                         if self.get_breakout_detail(ifname):
                             valids = breakout_valid_speeds
@@ -582,7 +584,7 @@ class Server(object):
                             valids = valid_speeds
 
                         # 'goldstone-interfaces:SPEED_100GB' to 1000000
-                        value = yang_val_to_speed(change.value.split(":")[-1]) * 1000
+                        value = speed_yang_to_redis(change.value)
 
                         if value not in valids:
                             logger.debug("****** Invalid speed value *********")
@@ -846,7 +848,7 @@ class Server(object):
                 if key in ["alias", "lanes"]:
                     intf["state"][key] = value
                 elif key in ["speed"]:
-                    intf["state"][key] = speed_to_yang_val(value)
+                    intf["state"][key] = speed_redis_to_yang(value)
                 elif key in ["mtu"]:
                     intf["ipv4"] = {key: value}
                 elif key in ["admin_status"]:
@@ -1131,7 +1133,7 @@ class Server(object):
             v = self.get_redis_all("APPL_DB", f"PORT_TABLE:{key}")
 
             if "speed" in v:
-                speed = speed_to_yang_val(v["speed"])
+                speed = speed_redis_to_yang(v["speed"])
                 logger.debug(f"key: {key}, speed: {speed}")
                 sess.set_item(f"{xpath}/num-channels", value + 1)
                 sess.set_item(f"{xpath}/channel-speed", speed)
