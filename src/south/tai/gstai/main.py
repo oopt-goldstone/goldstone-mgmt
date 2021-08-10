@@ -142,7 +142,8 @@ class Server(object):
     """
 
     def __init__(self, taish_server):
-        self.taish = taish.AsyncClient(*taish_server.split(":"))
+        self.ataish = taish.AsyncClient(*taish_server.split(":"))
+        self.taish = taish.Client(*taish_server.split(":"))
         self.loop = asyncio.get_event_loop()
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
@@ -161,9 +162,14 @@ class Server(object):
 
     async def stop(self):
         logger.info(f"stop server")
+        for v in self.event_obj.values():
+            v["event"].set()
+            await v["task"]
+
         await self.runner.cleanup()
         self.sess.stop()
         self.conn.disconnect()
+        self.ataish.close()
         self.taish.close()
 
     def get_default_value(self, obj, attr):
@@ -179,7 +185,7 @@ class Server(object):
         logger.warning(f"no default value for {obj} {attr}")
         return None
 
-    async def _get_module_from_xpath(self, xpath):
+    def _get_module_from_xpath(self, xpath):
         prefix = "/goldstone-tai:modules"
         if not xpath.startswith(prefix):
             raise InvalidXPath()
@@ -199,14 +205,14 @@ class Server(object):
                 no_subs=True,
             )
             location = d["modules"]["module"][name]["state"]["location"]
-            module = await self.taish.get_module(location)
+            module = self.taish.get_module(location)
         except Exception as e:
             logger.error(str(e))
             raise InvalidXPath()
 
         return xpath[m.end() :], module
 
-    async def parse_change_req(self, xpath, value):
+    def parse_change_req(self, xpath, value):
         """
         Helper method to parse sysrepo ChangeCreated, ChangeModified and ChangeDeleted.
         This returns a TAI object and a dict of attributes to be set
@@ -222,10 +228,14 @@ class Server(object):
             If xpath can't be handled
         """
 
-        xpath, module = await self._get_module_from_xpath(xpath)
+        ignore = ["name"]
+
+        xpath, module = self._get_module_from_xpath(xpath)
 
         if xpath.startswith("/config/"):
             xpath = xpath[len("/config/") :]
+            if xpath in ignore:
+                return None, None
             if value == None:
                 value = self.get_default_value("module", xpath)
                 if value == None:
@@ -256,6 +266,9 @@ class Server(object):
             if xpath.startswith("/config/"):
                 xpath = xpath[len("/config/") :]
 
+                if xpath in ignore:
+                    return None, None
+
                 if value == None:
                     value = self.get_default_value(intf, xpath)
                     if value == None:
@@ -265,7 +278,7 @@ class Server(object):
 
         return None, None
 
-    async def parse_oper_req(self, xpath):
+    def parse_oper_req(self, xpath):
         """
         Helper method to parse a xpath of an operational datastore pull request
         and return objects and an attribute which is requested
@@ -288,7 +301,7 @@ class Server(object):
         if xpath == "/goldstone-tai:*":
             return None, None, None
 
-        xpath, module = await self._get_module_from_xpath(xpath)
+        xpath, module = self._get_module_from_xpath(xpath)
 
         if xpath == "":
             return module, None, None
@@ -350,67 +363,87 @@ class Server(object):
 
         raise InvalidXPath()
 
-    async def change_cb(self, event, req_id, changes, priv):
-        if event == "done":
-            # TODO can be smarter. detect when the container is removed
-            if any(isinstance(change, sysrepo.ChangeDeleted) for change in changes):
-                await self.update_operds()
-            return
-
-        if event != "change":
+    def change_cb(self, event, req_id, changes, priv):
+        if event not in ["done", "change"]:
+            logger.warning(f"not handling {event}")
             return
 
         for change in changes:
-            logger.debug(f"change_cb: {change}")
+            logger.debug(f"change_cb: {event} {change}")
 
-            if any(
-                isinstance(change, cls)
-                for cls in [
-                    sysrepo.ChangeCreated,
-                    sysrepo.ChangeModified,
-                    sysrepo.ChangeDeleted,
-                ]
+            if type(change) in (
+                sysrepo.ChangeCreated,
+                sysrepo.ChangeModified,
+                sysrepo.ChangeDeleted,
             ):
                 is_deleted = isinstance(change, sysrepo.ChangeDeleted)
                 value = None if is_deleted else change.value
-                obj, items = await self.parse_change_req(change.xpath, value)
+                obj, items = self.parse_change_req(change.xpath, value)
+
+                logger.debug(f"obj: {obj}, items: {items}")
 
                 if obj and items:
                     for k, v in items.items():
                         # check if we can get metadata of this attribute
                         # before doing actual setting
                         try:
-                            meta = await obj.get_attribute_metadata(k)
+                            meta = obj.get_attribute_metadata(k)
                             if meta.usage == "<bool>":
                                 v = "true" if v else "false"
-                        except taish.TAIException:
-                            continue
-
-                        try:
-                            await obj.set(k, v)
                         except taish.TAIException as e:
                             raise sysrepo.SysrepoUnsupportedError(str(e))
+
+                        if event == "change":
+                            cap = obj.get_attribute_capability(k)
+                            if cap.min != "" and float(cap.min) > float(v):
+                                raise sysrepo.SysrepoInvalArgError(
+                                    f"minimum {k} value is {cap.min}. given {v}"
+                                )
+
+                            if cap.max != "" and float(cap.max) < float(v):
+                                raise sysrepo.SysrepoInvalArgError(
+                                    f"maximum {k} value is {cap.max}. given {v}"
+                                )
+
+                            if len(cap.supportedvalues) > 0:
+                                logger.info(
+                                    f"{cap.supportedvalues}, {list(cap.supportedvalues)}"
+                                )
+
+                            logger.info(f"cap: {cap}, dir: {dir(cap)}")
+
+                        elif event == "done":
+                            try:
+                                obj.set(k, v)
+                            except taish.TAIException as e:
+                                raise sysrepo.SysrepoUnsupportedError(str(e))
+
                 else:
                     logger.warning(f"unsupported xpath: {change.xpath}, value: {value}")
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+        if event == "done":
+            # TODO can be smarter. detect when the container is removed
+            if any(isinstance(change, sysrepo.ChangeDeleted) for change in changes):
+                self.update_operds()
+
+    def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f"oper get callback requested xpath: {req_xpath}")
 
-        async def get(obj, schema):
-            attr, meta = await obj.get(schema.name(), with_metadata=True, json=True)
+        def get(obj, schema):
+            attr, meta = obj.get(schema.name(), with_metadata=True, json=True)
             return attr_tai2yang(attr, meta, schema)
 
-        async def get_attrs(obj, schema):
+        def get_attrs(obj, schema):
             attrs = {}
             for item in schema:
                 try:
-                    attrs[item.name()] = await get(obj, item)
+                    attrs[item.name()] = get(obj, item)
                 except taish.TAIException:
                     pass
             return attrs
 
         try:
-            module, intf, item = await self.parse_oper_req(req_xpath)
+            module, intf, item = self.parse_oper_req(req_xpath)
         except InvalidXPath:
             logger.error(f"invalid xpath: {req_xpath}")
             return {}
@@ -434,15 +467,15 @@ class Server(object):
             hostif_schema = get_path(["modules", "module", "host-interface", "state"])
 
             if module:
-                keys = [await module.get("location")]
+                keys = [module.get("location")]
             else:
                 # if module is None, get all modules information
-                modules = await self.taish.list()
+                modules = self.taish.list()
                 keys = modules.keys()
 
             for location in keys:
                 try:
-                    module = await self.taish.get_module(location)
+                    module = self.taish.get_module(location)
                 except Exception as e:
                     logger.warning(
                         f"failed to get module location: {location}. err: {e}"
@@ -455,11 +488,11 @@ class Server(object):
                 }
 
                 if intf:
-                    index = await intf.get("index")
+                    index = intf.get("index")
                     vv = {"name": index, "config": {"name": index}}
 
                     if item:
-                        attr = await get(intf, item)
+                        attr = get(intf, item)
                         vv["state"] = {item.name(): attr}
                     else:
                         if isinstance(intf, taish.NetIf):
@@ -467,7 +500,7 @@ class Server(object):
                         elif isinstance(intf, taish.HostIf):
                             schema = hostif_schema
 
-                        state = await get_attrs(intf, schema)
+                        state = get_attrs(intf, schema)
                         vv["state"] = state
 
                     if isinstance(intf, taish.NetIf):
@@ -478,13 +511,13 @@ class Server(object):
                 else:
 
                     if item:
-                        attr = await get(module, item)
+                        attr = get(module, item)
                         v["state"] = {item.name(): attr}
                     else:
-                        v["state"] = await get_attrs(module, module_schema)
+                        v["state"] = get_attrs(module, module_schema)
 
                         netif_states = [
-                            await get_attrs(module.get_netif(index), netif_schema)
+                            get_attrs(module.get_netif(index), netif_schema)
                             for index in range(len(module.obj.netifs))
                         ]
                         if len(netif_states):
@@ -494,7 +527,7 @@ class Server(object):
                             ]
 
                         hostif_states = [
-                            await get_attrs(module.get_hostif(index), hostif_schema)
+                            get_attrs(module.get_hostif(index), hostif_schema)
                             for index in range(len(module.obj.hostifs))
                         ]
                         if len(hostif_states):
@@ -516,8 +549,6 @@ class Server(object):
         self.sess.switch_datastore("running")
         ly_ctx = self.sess.get_ly_ctx()
 
-        logger.debug(f"attr: {attr_meta.name}, msg: {msg}")
-
         if isinstance(obj, taish.Module):
             type_ = "module"
         elif isinstance(obj, taish.NetIf):
@@ -535,7 +566,7 @@ class Server(object):
         else:
             type_ = type_ + "-interface"
             m_oid = obj.obj.module_oid
-            modules = await self.taish.list()
+            modules = await self.ataish.list()
 
             for location, m in modules.items():
                 if m.oid == m_oid:
@@ -548,6 +579,9 @@ class Server(object):
             key = location2name(module_location)
             index = await obj.get("index")
             xpath = f"/goldstone-tai:modules/module[name='{key}']/{type_}[name='{index}']/config/enable-{attr_meta.short_name}"
+        locked = self.sess.is_locked("goldstone-tai")
+        if locked:
+            logger.info(f"{key} is_locked: {locked}")
 
         try:
             data = self.sess.get_data(xpath, include_implicit_defaults=True)
@@ -613,7 +647,7 @@ class Server(object):
             finalizers.append(finalizer(obj, attr))
 
         try:
-            module = await self.taish.get_module(location)
+            module = await self.ataish.get_module(location)
         except Exception as e:
             logger.warning(f"failed to get module location: {location}. err: {e}")
             return
@@ -661,14 +695,14 @@ class Server(object):
         # we might want to invent a cleaner way by using an annotation in the YANG model
         attrs = [(k, v) for k, v in mconfig.get("config", {}).items() if k != "name"]
         try:
-            module = await self.taish.create_module(location, attrs=attrs)
+            module = await self.ataish.create_module(location, attrs=attrs)
         except taish.TAIException as e:
             if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
                 if e.code == TAI_STATUS_FAILURE:
                     logger.debug(f"Failed to intialize module {location}")
                     return
                 raise e
-            module = await self.taish.get_module(location)
+            module = await self.ataish.get_module(location)
             # reconcile with the sysrepo configuration
             logger.debug(f"module({location}) already exists. updating attributes..")
             for k, v in attrs:
@@ -742,15 +776,15 @@ class Server(object):
         self.event_obj[location]["event"].set()
         await self.event_obj[location]["task"]
 
-        m = await self.taish.get_module(location)
+        m = await self.ataish.get_module(location)
         for v in m.obj.hostifs:
             logger.debug("removing hostif oid")
-            await self.taish.remove(v.oid)
+            await self.ataish.remove(v.oid)
         for v in m.obj.netifs:
             logger.debug("removing netif oid")
-            await self.taish.remove(v.oid)
+            await self.ataish.remove(v.oid)
         logger.debug("removing module oid")
-        await self.taish.remove(m.oid)
+        await self.ataish.remove(m.oid)
 
     async def notification_cb(self, notif_name, value, timestamp, priv):
         logger.info(value.print_dict())
@@ -778,40 +812,36 @@ class Server(object):
             except Exception as e:
                 logger.info(f"failed to cleanup PIU: {e}")
 
-        await self.update_operds()
+        self.update_operds()
 
-    async def update_operds(self):
+    def update_operds(self):
 
         logger.info("updating operds")
 
-        with self.conn.start_session() as sess:
+        self.sess.switch_datastore("operational")
 
-            sess.switch_datastore("operational")
+        modules = self.taish.list()
+        for location, m in modules.items():
+            key = location2name(location)
 
-            modules = await self.taish.list()
-            for location, m in modules.items():
-                key = location2name(location)
+            xpath = f"/goldstone-tai:modules/module[name='{key}']"
+            self.sess.set_item(f"{xpath}/config/name", key)
+            self.sess.set_item(f"{xpath}/state/location", location)
 
-                xpath = f"/goldstone-tai:modules/module[name='{key}']"
-                sess.set_item(f"{xpath}/config/name", key)
-                sess.set_item(f"{xpath}/state/location", location)
+            try:
+                module = self.taish.get_module(location)
+            except Exception as e:
+                logger.warning(f"failed to get module location: {location}. err: {e}")
+                continue
 
-                try:
-                    module = await self.taish.get_module(location)
-                except Exception as e:
-                    logger.warning(
-                        f"failed to get module location: {location}. err: {e}"
-                    )
-                    continue
+            for i in range(len(m.netifs)):
+                self.sess.set_item(
+                    f"{xpath}/network-interface[name='{i}']/config/name", i
+                )
+            for i in range(len(m.hostifs)):
+                self.sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
 
-                for i in range(len(m.netifs)):
-                    sess.set_item(
-                        f"{xpath}/network-interface[name='{i}']/config/name", i
-                    )
-                for i in range(len(m.hostifs)):
-                    sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
-
-            sess.apply_changes()
+        self.sess.apply_changes()
 
     async def notif_handler(self, tasks, finalizers):
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -843,15 +873,13 @@ class Server(object):
             tasks = [self.initialize_piu(config, m["location"]) for m in modules]
             await asyncio.gather(*tasks)
 
-            await self.update_operds()
+            self.update_operds()
 
             self.sess.switch_datastore("running")
 
             # passing None to the 2nd argument is important to enable layering the running datastore
             # as the bottom layer of the operational datastore
-            self.sess.subscribe_module_change(
-                "goldstone-tai", None, self.change_cb, asyncio_register=True
-            )
+            self.sess.subscribe_module_change("goldstone-tai", None, self.change_cb)
 
             # passing oper_merge=True is important to enable pull/push information layering
             self.sess.subscribe_oper_data_request(
@@ -859,7 +887,6 @@ class Server(object):
                 "/goldstone-tai:modules/module",
                 self.oper_cb,
                 oper_merge=True,
-                asyncio_register=True,
             )
 
             self.sess.subscribe_notification_tree(
