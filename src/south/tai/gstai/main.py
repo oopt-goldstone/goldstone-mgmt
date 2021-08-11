@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 def location2name(loc):
     return loc.split("/")[-1]
 
-
 def attr_tai2yang(attr, meta, schema):
     if meta.usage != "<float>":
         return json.loads(attr)
@@ -585,8 +584,6 @@ class Server(object):
         finalizers = []
 
         async def finalizer(obj, attr):
-
-            # TODO timeout
             while True:
                 await asyncio.sleep(0.1)
                 v = await obj.get(attr)
@@ -801,8 +798,15 @@ class Server(object):
         for task in pending:
             task.cancel()
         logger.debug("waiting for finalizer tasks")
-        await asyncio.wait(finalizers, return_when=asyncio.ALL_COMPLETED)
-        logger.debug("done")
+        done, pending = await asyncio.wait(
+            finalizers, return_when=asyncio.ALL_COMPLETED, timeout=5
+        )
+        if len(pending) > 0:
+            logger.warning(
+                f"finalizer not all tasks finished: done: {done}, pending: {pending}"
+            )
+        else:
+            logger.debug("finalizer done")
 
     async def start(self):
         # get hardware configuration from platform datastore ( ONLP south must be running )
@@ -854,7 +858,16 @@ class Server(object):
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
         await site.start()
 
-        return []
+        async def ping():
+            while True:
+                await asyncio.sleep(5)
+                try:
+                    await self.ataish.list()
+                except Exception as e:
+                    logger.error(f"ping failed {e}")
+                    return
+
+        return [ping()]
 
 
 def main():
