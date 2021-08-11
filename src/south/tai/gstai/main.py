@@ -861,7 +861,7 @@ class Server(object):
             while True:
                 await asyncio.sleep(5)
                 try:
-                    await self.ataish.list()
+                    await asyncio.wait_for(self.ataish.list(), timeout=2)
                 except Exception as e:
                     logger.error(f"ping failed {e}")
                     return
