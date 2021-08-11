@@ -31,6 +31,11 @@ logger = logging.getLogger(__name__)
 def location2name(loc):
     return loc.split("/")[-1]
 
+
+def name2location(name):
+    return f"/dev/{name}"
+
+
 def attr_tai2yang(attr, meta, schema):
     if meta.usage != "<float>":
         return json.loads(attr)
@@ -150,13 +155,7 @@ class Server(object):
         name = m.group("name")
 
         try:
-            self.sess.switch_datastore("operational")
-            d = self.sess.get_data(
-                f"/goldstone-tai:modules/module[name='{name}']/state/location",
-                no_subs=True,
-            )
-            location = d["modules"]["module"][name]["state"]["location"]
-            module = self.taish.get_module(location)
+            module = self.taish.get_module(name2location(name))
         except Exception as e:
             logger.error(str(e))
             raise InvalidXPath()
