@@ -26,6 +26,28 @@ CFP2_STATUS_UNPLUGGED = 1 << 3
 CFP2_STATUS_PRESENT = 1 << 4
 
 
+def get_eeprom(port):
+    raw_eeprom = ctypes.POINTER(ctypes.c_ubyte)()
+    libonlp.onlp_sfp_eeprom_read(port, ctypes.byref(raw_eeprom))
+    eeprom = onlp.sff.sff_eeprom()
+    libonlp.sff_eeprom_parse(ctypes.byref(eeprom), raw_eeprom)
+
+    info = {}
+    for field in [
+        "vendor",
+        "model",
+        "serial",
+        "media_type_name",
+        "module_type_name",
+        "sfp_type_name",
+    ]:
+        v = getattr(eeprom.info, field)
+        v = v.strip().decode("utf-8")
+        info[field] = v
+
+    return info
+
+
 class Server(object):
     def __init__(self):
         self.conn = sysrepo.SysrepoConnection()
@@ -499,11 +521,12 @@ class Server(object):
     def monitor_transceiver(self):
         self.sess.switch_datastore("operational")
         eventname = "goldstone-platform:transceiver-notify-event"
-        eeprom = ctypes.POINTER(ctypes.c_ubyte)()
+
+        update = False
 
         for i in range(len(self.transceiver_presence)):
             port = i + 1
-            name = f"sfp{port}"
+            name = f"port{port}"
             xpath = f"/goldstone-platform:components/component[name='{name}']"
 
             presence = libonlp.onlp_sfp_is_present(port)
@@ -511,34 +534,60 @@ class Server(object):
             if not (presence ^ self.transceiver_presence[i]):
                 continue
 
+            update = True
+
             self.transceiver_presence[i] = presence
 
-            self.sess.set_item(f"{xpath}/config/name", "sfp" + str(port))
+            self.sess.set_item(f"{xpath}/config/name", name)
             self.sess.set_item(f"{xpath}/state/type", "TRANSCEIVER")
 
             if presence:
                 presence = "PRESENT"
-                libonlp.onlp_sfp_eeprom_read(port, ctypes.byref(eeprom))
-                sffEeprom = onlp.sff.sff_eeprom()
-                libonlp.sff_eeprom_parse(ctypes.byref(sffEeprom), eeprom)
-                vendor = sffEeprom.info.vendor.strip()
-                model = sffEeprom.info.model.strip()
-                serial_number = sffEeprom.info.serial.strip()
-                if isinstance(vendor, bytes):
-                    vendor = str(vendor, "utf-8")
-                if isinstance(model, bytes):
-                    model = str(model, "utf-8")
-                if isinstance(serial_number, bytes):
-                    serial_number = str(serial_number, "utf-8")
-                self.sess.set_item(f"{xpath}/transceiver/state/vendor", vendor)
-                self.sess.set_item(f"{xpath}/transceiver/state/model", model)
-                self.sess.set_item(f"{xpath}/transceiver/state/serial", serial_number)
+                eeprom = get_eeprom(port)
+                logger.debug(f"port{port} eeprom: {eeprom}")
+                if "vendor" in eeprom:
+                    self.sess.set_item(
+                        f"{xpath}/transceiver/state/vendor", eeprom["vendor"]
+                    )
+                if "model" in eeprom:
+                    self.sess.set_item(
+                        f"{xpath}/transceiver/state/model", eeprom["model"]
+                    )
+                if "serial" in eeprom:
+                    self.sess.set_item(
+                        f"{xpath}/transceiver/state/serial", eeprom["serial"]
+                    )
+                if "sfp_type_name" in eeprom:
+                    try:
+                        self.sess.set_item(
+                            f"{xpath}/transceiver/state/form-factor",
+                            "SFF_MODULE_TYPE_"
+                            + eeprom["sfp_type_name"].replace("-", "_"),
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"failed to set sff-type: {eeprom['sfp_type_name']}, {e}"
+                        )
+
+                if "module_type_name" in eeprom:
+                    try:
+                        self.sess.set_item(
+                            f"{xpath}/transceiver/state/sff-module-type",
+                            eeprom["module_type_name"],
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"failed to set module-type: {eeprom['module_type_name']}, {e}"
+                        )
             else:
                 presence = "UNPLUGGED"
 
             self.sess.set_item(f"{xpath}/transceiver/state/presence", presence)
             notif = {eventname: {"name": name, "presence": presence}}
             self.send_notifcation(notif)
+
+        if update:
+            self.sess.apply_changes()
 
     async def monitor_devices(self):
         while True:
@@ -592,10 +641,10 @@ class Server(object):
         total_ports = 0
         for port in range(1, 256):
             if onlp.onlp.aim_bitmap_get(bitmap.hdr, port):
-                name = f"sfp{port}"
+                name = f"port{port}"
                 xpath = f"/goldstone-platform:components/component[name='{name}']"
 
-                self.sess.set_item(f"{xpath}/config/name", "sfp" + str(port))
+                self.sess.set_item(f"{xpath}/config/name", name)
                 self.sess.set_item(f"{xpath}/state/type", "TRANSCEIVER")
                 self.sess.set_item(f"{xpath}/transceiver/state/presence", "UNPLUGGED")
 
