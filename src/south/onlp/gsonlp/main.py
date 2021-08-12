@@ -21,9 +21,8 @@ logger = logging.getLogger(__name__)
 STATUS_UNPLUGGED = 0
 STATUS_ACO_PRESENT = 1 << 0
 STATUS_DCO_PRESENT = 1 << 1
-STATUS_QSFP_PRESENT = 1 << 2
-CFP2_STATUS_UNPLUGGED = 1 << 3
-CFP2_STATUS_PRESENT = 1 << 4
+STATUS_QSFP28_PRESENT = 1 << 2
+CFP2_STATUS_PRESENT = 1 << 3
 
 
 def get_eeprom(port):
@@ -456,11 +455,9 @@ class Server(object):
 
             status_change = self.onlp_piu_status[piuId - 1] ^ sts.value
             piu_sts_change = status_change & (
-                STATUS_ACO_PRESENT | STATUS_DCO_PRESENT | STATUS_QSFP_PRESENT
+                STATUS_ACO_PRESENT | STATUS_DCO_PRESENT | STATUS_QSFP28_PRESENT
             )
-            cfp_sts_change = status_change & (
-                CFP2_STATUS_UNPLUGGED | CFP2_STATUS_PRESENT
-            )
+            cfp_sts_change = status_change & CFP2_STATUS_PRESENT
 
             # continue if there is no change in status
             if status_change == 0:
@@ -480,8 +477,8 @@ class Server(object):
                     piu_type = "ACO"
                 elif sts.value & STATUS_DCO_PRESENT:
                     piu_type = "DCO"
-                elif sts.value & STATUS_QSFP_PRESENT:
-                    piu_type = "QSFP"
+                elif sts.value & STATUS_QSFP28_PRESENT:
+                    piu_type = "QSFP28"
                 else:
                     piu_type = "UNKNOWN"
                 if sts.value & CFP2_STATUS_PRESENT:
@@ -593,7 +590,7 @@ class Server(object):
         while True:
             # Monitor change in PIU status
             self.monitor_piu()
-            # Monitor change in QSFP presence
+            # Monitor change in QSFP28 presence
             self.monitor_transceiver()
 
             await asyncio.sleep(1)

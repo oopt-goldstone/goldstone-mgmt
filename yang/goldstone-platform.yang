@@ -473,7 +473,7 @@ module goldstone-platform {
       type enumeration {
           enum ACO;
           enum DCO;
-          enum QSFP;
+          enum QSFP28;
           enum UNKNOWN;
       }
     }
