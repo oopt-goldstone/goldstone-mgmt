@@ -25,6 +25,7 @@ STATUS_QSFP_PRESENT = 1 << 2
 CFP2_STATUS_UNPLUGGED = 1 << 3
 CFP2_STATUS_PRESENT = 1 << 4
 
+
 def get_eeprom(port):
     raw_eeprom = ctypes.POINTER(ctypes.c_ubyte)()
     libonlp.onlp_sfp_eeprom_read(port, ctypes.byref(raw_eeprom))
@@ -32,7 +33,14 @@ def get_eeprom(port):
     libonlp.sff_eeprom_parse(ctypes.byref(eeprom), raw_eeprom)
 
     info = {}
-    for field in ["vendor", "model", "serial", "media_type_name", "module_type_name", "sfp_type_name"]:
+    for field in [
+        "vendor",
+        "model",
+        "serial",
+        "media_type_name",
+        "module_type_name",
+        "sfp_type_name",
+    ]:
         v = getattr(eeprom.info, field)
         v = v.strip().decode("utf-8")
         info[field] = v
@@ -538,11 +546,39 @@ class Server(object):
                 eeprom = get_eeprom(port)
                 logger.debug(f"port{port} eeprom: {eeprom}")
                 if "vendor" in eeprom:
-                    self.sess.set_item(f"{xpath}/transceiver/state/vendor", eeprom["vendor"])
+                    self.sess.set_item(
+                        f"{xpath}/transceiver/state/vendor", eeprom["vendor"]
+                    )
                 if "model" in eeprom:
-                    self.sess.set_item(f"{xpath}/transceiver/state/model", eeprom["model"])
-                if "serial" in  eeprom:
-                    self.sess.set_item(f"{xpath}/transceiver/state/serial", eeprom["serial"])
+                    self.sess.set_item(
+                        f"{xpath}/transceiver/state/model", eeprom["model"]
+                    )
+                if "serial" in eeprom:
+                    self.sess.set_item(
+                        f"{xpath}/transceiver/state/serial", eeprom["serial"]
+                    )
+                if "sfp_type_name" in eeprom:
+                    try:
+                        self.sess.set_item(
+                            f"{xpath}/transceiver/state/form-factor",
+                            "SFF_MODULE_TYPE_"
+                            + eeprom["sfp_type_name"].replace("-", "_"),
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"failed to set sff-type: {eeprom['sfp_type_name']}, {e}"
+                        )
+
+                if "module_type_name" in eeprom:
+                    try:
+                        self.sess.set_item(
+                            f"{xpath}/transceiver/state/sff-module-type",
+                            eeprom["module_type_name"],
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"failed to set module-type: {eeprom['module_type_name']}, {e}"
+                        )
             else:
                 presence = "UNPLUGGED"
 
