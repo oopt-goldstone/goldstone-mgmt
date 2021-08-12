@@ -25,6 +25,13 @@ STATUS_QSFP28_PRESENT = 1 << 2
 CFP2_STATUS_PRESENT = 1 << 3
 
 
+def module_type2yang_value(v):
+    v = v.replace("-", "_")
+    if "GBASE" in v:
+        v = v.replace("GBASE", "G_BASE")
+    return "SFF_MODULE_TYPE_" + v
+
+
 def get_eeprom(port):
     raw_eeprom = ctypes.POINTER(ctypes.c_ubyte)()
     libonlp.onlp_sfp_eeprom_read(port, ctypes.byref(raw_eeprom))
@@ -569,8 +576,7 @@ class Server(object):
                     try:
                         self.sess.set_item(
                             f"{xpath}/transceiver/state/sff-module-type",
-                            "SFF_MODULE_TYPE_"
-                            + eeprom["module_type_name"].replace("-", "_"),
+                            module_type2yang_value(eeprom["module_type_name"]),
                         )
                     except Exception as e:
                         logger.warning(
