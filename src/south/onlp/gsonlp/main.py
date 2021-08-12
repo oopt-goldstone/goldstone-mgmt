@@ -25,6 +25,20 @@ STATUS_QSFP_PRESENT = 1 << 2
 CFP2_STATUS_UNPLUGGED = 1 << 3
 CFP2_STATUS_PRESENT = 1 << 4
 
+def get_eeprom(port):
+    raw_eeprom = ctypes.POINTER(ctypes.c_ubyte)()
+    libonlp.onlp_sfp_eeprom_read(port, ctypes.byref(raw_eeprom))
+    eeprom = onlp.sff.sff_eeprom()
+    libonlp.sff_eeprom_parse(ctypes.byref(eeprom), raw_eeprom)
+
+    info = {}
+    for field in ["vendor", "model", "serial", "media_type_name", "module_type_name", "sfp_type_name"]:
+        v = getattr(eeprom.info, field)
+        v = v.strip().decode("utf-8")
+        info[field] = v
+
+    return info
+
 
 class Server(object):
     def __init__(self):
@@ -499,7 +513,6 @@ class Server(object):
     def monitor_transceiver(self):
         self.sess.switch_datastore("operational")
         eventname = "goldstone-platform:transceiver-notify-event"
-        eeprom = ctypes.POINTER(ctypes.c_ubyte)()
 
         update = False
 
@@ -522,21 +535,14 @@ class Server(object):
 
             if presence:
                 presence = "PRESENT"
-                libonlp.onlp_sfp_eeprom_read(port, ctypes.byref(eeprom))
-                sffEeprom = onlp.sff.sff_eeprom()
-                libonlp.sff_eeprom_parse(ctypes.byref(sffEeprom), eeprom)
-                vendor = sffEeprom.info.vendor.strip()
-                model = sffEeprom.info.model.strip()
-                serial_number = sffEeprom.info.serial.strip()
-                if isinstance(vendor, bytes):
-                    vendor = str(vendor, "utf-8")
-                if isinstance(model, bytes):
-                    model = str(model, "utf-8")
-                if isinstance(serial_number, bytes):
-                    serial_number = str(serial_number, "utf-8")
-                self.sess.set_item(f"{xpath}/transceiver/state/vendor", vendor)
-                self.sess.set_item(f"{xpath}/transceiver/state/model", model)
-                self.sess.set_item(f"{xpath}/transceiver/state/serial", serial_number)
+                eeprom = get_eeprom(port)
+                logger.debug(f"port{port} eeprom: {eeprom}")
+                if "vendor" in eeprom:
+                    self.sess.set_item(f"{xpath}/transceiver/state/vendor", eeprom["vendor"])
+                if "model" in eeprom:
+                    self.sess.set_item(f"{xpath}/transceiver/state/model", eeprom["model"])
+                if "serial" in  eeprom:
+                    self.sess.set_item(f"{xpath}/transceiver/state/serial", eeprom["serial"])
             else:
                 presence = "UNPLUGGED"
 
