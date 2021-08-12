@@ -72,7 +72,7 @@ class Component(object):
             stderr.info(error)
         return table
 
-    def show_platform(self, option="all"):
+    def show_platform(self, option="all", format=""):
 
         if option == "all":
             types = ["fan", "psu", "led", "piu", "transceiver", "thermal", "sys"]
@@ -88,25 +88,49 @@ class Component(object):
                     stdout.info(component["name"])
                     stdout.info(tabulate(table))
             stdout.info("Note: Values with the symbol '-' are unsupported")
-
-        elif option == "transceiver":
-            components = self.get_components("piu")
-            for component in components:
-                table = self.get_state_attr("piu", component)
-                stdout.info(component["name"])
-                stdout.info(tabulate(table))
-            components = self.get_components("transceiver")
-            for component in components:
-                table = self.get_state_attr("transceiver", component)
-                stdout.info(component["name"])
-                stdout.info(tabulate(table))
+        elif option == "transceiver" and format == "table":
+            header = [
+                "name",
+                "presence",
+                "model",
+                "serial number",
+                "form factor",
+                "SFF type",
+            ]
+            rows = []
+            for c in self.get_components("transceiver"):
+                s = c.get("transceiver", {}).get("state", {})
+                rows.append(
+                    [
+                        c["name"],
+                        s.get("presence", "-").lower(),
+                        s.get("model", "-"),
+                        s.get("serial", "-"),
+                        s.get("form-factor", "-"),
+                        s.get("sff-module-type", "-"),
+                    ]
+                )
+            stdout.info(tabulate(rows, header))
+        elif option == "piu" and format == "table":
+            header = ["name", "status", "PIU type", "CFP2 presence"]
+            rows = []
+            for c in self.get_components("piu"):
+                s = c.get("piu", {}).get("state", {})
+                rows.append(
+                    [
+                        c["name"],
+                        "|".join(list(s.get("status", ["-"]))).lower(),
+                        s.get("piu-type", "-"),
+                        s.get("cfp2-presence", "-").lower(),
+                    ]
+                )
+            stdout.info(tabulate(rows, header))
         elif option == "system":
             components = self.get_components("sys")
             for component in components:
                 table = self.get_state_attr("sys", component)
                 stdout.info(component["name"])
                 stdout.info(tabulate(table))
-
         else:
             components = self.get_components(option)
             for component in components:

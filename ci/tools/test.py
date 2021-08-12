@@ -895,10 +895,10 @@ def test_platform(cli):
     ssh(cli, 'gscli -c "show chassis-hardware psu"')
     ssh(cli, 'gscli -c "show chassis-hardware thermal"')
     ssh(cli, 'gscli -c "show chassis-hardware system"')
-    output = ssh(cli, 'gscli -c "show chassis-hardware transceiver"')
-    assert "/dev/piu" in output
-    assert "PRESENT" in output
-    output = ssh(cli, 'gscli -c "show chassis-hardware all"')
+    ssh(cli, 'gscli -c "show chassis-hardware transceiver table"')
+    ssh(cli, 'gscli -c "show chassis-hardware transceiver"')
+    ssh(cli, 'gscli -c "show chassis-hardware piu table"')
+    output = ssh(cli, 'gscli -c "show chassis-hardware piu"')
     assert "/dev/piu" in output
     assert "PRESENT" in output
     output = ssh(cli, 'gscli -c "show tech-support"')
