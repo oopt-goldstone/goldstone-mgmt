@@ -506,9 +506,10 @@ class Server(object):
                 self.sess.delete_item(f"{xpath}/piu/state/status")
                 if piu_presence == "PRESENT":
                     self.sess.set_item(f"{xpath}/piu/state/piu-type", piu_type)
-                    self.sess.set_item(
-                        f"{xpath}/piu/state/cfp2-presence", cfp2_presence
-                    )
+                    if piu_type in ["ACO", "DCO"]:
+                        self.sess.set_item(
+                            f"{xpath}/piu/state/cfp2-presence", cfp2_presence
+                        )
                 else:
                     self.sess.delete_item(f"{xpath}/piu/state/piu-type")
                     self.sess.delete_item(f"{xpath}/piu/state/cfp2-presence")
