@@ -558,8 +558,7 @@ class Server(object):
                     try:
                         self.sess.set_item(
                             f"{xpath}/transceiver/state/form-factor",
-                            "SFF_MODULE_TYPE_"
-                            + eeprom["sfp_type_name"].replace("-", "_"),
+                            eeprom["sfp_type_name"],
                         )
                     except Exception as e:
                         logger.warning(
@@ -570,7 +569,8 @@ class Server(object):
                     try:
                         self.sess.set_item(
                             f"{xpath}/transceiver/state/sff-module-type",
-                            eeprom["module_type_name"],
+                            "SFF_MODULE_TYPE_"
+                            + eeprom["module_type_name"].replace("-", "_"),
                         )
                     except Exception as e:
                         logger.warning(
