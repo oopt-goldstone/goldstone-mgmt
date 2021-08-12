@@ -505,7 +505,7 @@ class Server(object):
 
         for i in range(len(self.transceiver_presence)):
             port = i + 1
-            name = f"sfp{port}"
+            name = f"port{port}"
             xpath = f"/goldstone-platform:components/component[name='{name}']"
 
             presence = libonlp.onlp_sfp_is_present(port)
@@ -517,7 +517,7 @@ class Server(object):
 
             self.transceiver_presence[i] = presence
 
-            self.sess.set_item(f"{xpath}/config/name", "sfp" + str(port))
+            self.sess.set_item(f"{xpath}/config/name", name)
             self.sess.set_item(f"{xpath}/state/type", "TRANSCEIVER")
 
             if presence:
@@ -599,10 +599,10 @@ class Server(object):
         total_ports = 0
         for port in range(1, 256):
             if onlp.onlp.aim_bitmap_get(bitmap.hdr, port):
-                name = f"sfp{port}"
+                name = f"port{port}"
                 xpath = f"/goldstone-platform:components/component[name='{name}']"
 
-                self.sess.set_item(f"{xpath}/config/name", "sfp" + str(port))
+                self.sess.set_item(f"{xpath}/config/name", name)
                 self.sess.set_item(f"{xpath}/state/type", "TRANSCEIVER")
                 self.sess.set_item(f"{xpath}/transceiver/state/presence", "UNPLUGGED")
 
