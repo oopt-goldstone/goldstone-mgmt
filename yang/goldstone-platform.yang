@@ -10,6 +10,79 @@ module goldstone-platform {
       reference "0.1.0";
   }
 
+  typedef form-factor {
+    type enumeration {
+      enum UNKNOWN;
+      enum CFP2;
+      enum CFP2_ACO;
+      enum QSFP;
+      enum QSFP_PLUS;
+      enum QSFP28;
+      enum SFP;
+      enum SFP_PLUS;
+      enum QSFP_DD;
+      enum OSFP;
+      enum NON_PLUGGABLE;
+    }
+  }
+
+  typedef sff-module-type {
+    type enumeration {
+      enum SFF_MODULE_TYPE_UNKNOWN;
+      enum SFF_MODULE_TYPE_400G_CR8;
+      enum SFF_MODULE_TYPE_400G_SR8;
+      enum SFF_MODULE_TYPE_400G_SR4;
+      enum SFF_MODULE_TYPE_400G_BASE_FR8;
+      enum SFF_MODULE_TYPE_400G_FR4;
+      enum SFF_MODULE_TYPE_400G_BASE_LR8;
+      enum SFF_MODULE_TYPE_400G_LR4;
+      enum SFF_MODULE_TYPE_400G_BASE_DR4;
+      enum SFF_MODULE_TYPE_400G_AOC;
+      enum SFF_MODULE_TYPE_400G_BIDI;
+      enum SFF_MODULE_TYPE_100G_AOC;
+      enum SFF_MODULE_TYPE_100G_BASE_CR4;
+      enum SFF_MODULE_TYPE_100G_BASE_SR4;
+      enum SFF_MODULE_TYPE_100G_BASE_LR4;
+      enum SFF_MODULE_TYPE_100G_BASE_ER4;
+      enum SFF_MODULE_TYPE_100G_CWDM4;
+      enum SFF_MODULE_TYPE_100G_PSM4;
+      enum SFF_MODULE_TYPE_100G_SWDM4;
+      enum SFF_MODULE_TYPE_100G_PAM4_BIDI;
+      enum SFF_MODULE_TYPE_40G_BASE_CR4;
+      enum SFF_MODULE_TYPE_40G_BASE_SR4;
+      enum SFF_MODULE_TYPE_40G_BASE_LR4;
+      enum SFF_MODULE_TYPE_40G_BASE_LM4;
+      enum SFF_MODULE_TYPE_40G_BASE_ACTIVE;
+      enum SFF_MODULE_TYPE_40G_BASE_CR;
+      enum SFF_MODULE_TYPE_40G_BASE_SR2;
+      enum SFF_MODULE_TYPE_40G_BASE_SM4;
+      enum SFF_MODULE_TYPE_40G_BASE_ER4;
+      enum SFF_MODULE_TYPE_40G_BASE_SWDM4;
+      enum SFF_MODULE_TYPE_25G_BASE_CR;
+      enum SFF_MODULE_TYPE_25G_BASE_SR;
+      enum SFF_MODULE_TYPE_25G_BASE_LR;
+      enum SFF_MODULE_TYPE_25G_BASE_AOC;
+      enum SFF_MODULE_TYPE_10G_BASE_SR;
+      enum SFF_MODULE_TYPE_10G_BASE_LR;
+      enum SFF_MODULE_TYPE_10G_BASE_LRM;
+      enum SFF_MODULE_TYPE_10G_BASE_ER;
+      enum SFF_MODULE_TYPE_10G_BASE_CR;
+      enum SFF_MODULE_TYPE_10G_BASE_SX;
+      enum SFF_MODULE_TYPE_10G_BASE_LX;
+      enum SFF_MODULE_TYPE_10G_BASE_ZR;
+      enum SFF_MODULE_TYPE_10G_BASE_SRL;
+      enum SFF_MODULE_TYPE_10G_BASE_T;
+      enum SFF_MODULE_TYPE_1G_BASE_SX;
+      enum SFF_MODULE_TYPE_1G_BASE_LX;
+      enum SFF_MODULE_TYPE_1G_BASE_ZX;
+      enum SFF_MODULE_TYPE_1G_BASE_CX;
+      enum SFF_MODULE_TYPE_1G_BASE_T;
+      enum SFF_MODULE_TYPE_100_BASE_LX;
+      enum SFF_MODULE_TYPE_100_BASE_FX;
+      enum SFF_MODULE_TYPE_4X_MUX;
+    }
+  }
+
   grouping platform-fan-top-config {
     leaf rpm {
         type uint32;
@@ -463,19 +536,11 @@ module goldstone-platform {
     }
 
     leaf form-factor {
-      type enumeration {
-        enum UNKNOWN;
-        enum CFP2;
-        enum CFP2_ACO;
-        enum QSFP;
-        enum QSFP_PLUS;
-        enum QSFP28;
-        enum SFP;
-        enum SFP_PLUS;
-        enum QSFP_DD;
-        enum OSFP;
-        enum NON_PLUGGABLE;
-      }
+      type form-factor;
+    }
+
+    leaf sff-module-type {
+      type sff-module-type;
     }
 
   }
