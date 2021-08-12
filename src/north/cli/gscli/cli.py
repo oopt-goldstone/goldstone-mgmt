@@ -207,14 +207,32 @@ class TransponderGroupCommand(Command):
         )
 
 
+class PlatformComponentCommand(Command):
+    SUBCOMMAND_DICT = {
+        "table": Command,
+    }
+
+    def exec(self, line):
+        if len(line) > 1:
+            raise InvalidInput(self.usage())
+        format = "" if len(line) == 0 else line[0]
+        return self.parent.platform_component.show_platform(self.name, format=format)
+
+    def usage(self):
+        return (
+            f"usage: {self.parent.parent.name} {self.parent.name} {self.name} [table]"
+        )
+
+
 class PlatformGroupCommand(Command):
     SUBCOMMAND_DICT = {
         "fan": Command,
         "psu": Command,
         "led": Command,
-        "transceiver": Command,
+        "transceiver": PlatformComponentCommand,
         "thermal": Command,
         "system": Command,
+        "piu": PlatformComponentCommand,
         "all": Command,
     }
 
@@ -223,22 +241,14 @@ class PlatformGroupCommand(Command):
         self.platform_component = Component(context.conn)
 
     def exec(self, line):
-        if len(line) < 1 or line[0] not in [
-            "fan",
-            "psu",
-            "led",
-            "transceiver",
-            "thermal",
-            "system",
-            "all",
-        ]:
+        if len(line) != 1:
             raise InvalidInput(self.usage())
         return self.platform_component.show_platform(line[0])
 
     def usage(self):
         return (
             "usage:\n"
-            f" {self.parent.name} {self.name} (fan|psu|led|transceiver|thermal|system|all)"
+            f" {self.parent.name} {self.name} (fan|psu|led|transceiver|thermal|system|piu|all)"
         )
 
 
