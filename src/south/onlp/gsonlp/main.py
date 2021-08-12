@@ -501,6 +501,8 @@ class Server(object):
         eventname = "goldstone-platform:transceiver-notify-event"
         eeprom = ctypes.POINTER(ctypes.c_ubyte)()
 
+        update = False
+
         for i in range(len(self.transceiver_presence)):
             port = i + 1
             name = f"sfp{port}"
@@ -510,6 +512,8 @@ class Server(object):
 
             if not (presence ^ self.transceiver_presence[i]):
                 continue
+
+            update = True
 
             self.transceiver_presence[i] = presence
 
@@ -539,6 +543,9 @@ class Server(object):
             self.sess.set_item(f"{xpath}/transceiver/state/presence", presence)
             notif = {eventname: {"name": name, "presence": presence}}
             self.send_notifcation(notif)
+
+        if update:
+            self.sess.apply_changes()
 
     async def monitor_devices(self):
         while True:
