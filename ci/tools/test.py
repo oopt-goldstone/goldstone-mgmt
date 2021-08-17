@@ -727,6 +727,7 @@ def test_mgmt_intf(cli):
     output = ssh(cli, 'gscli -c "show arp"')
     assert "10.10.10.100" in output
     ssh(cli, 'gscli -c "clear arp"')
+    ssh(cli, 'gscli -c "clear arp"')
     output = ssh(cli, 'gscli -c "show arp"')
     assert "10.10.10.100" not in output
 

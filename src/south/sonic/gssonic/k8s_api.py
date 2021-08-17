@@ -1,6 +1,5 @@
 import datetime
 import io
-import re
 import os
 import logging
 import asyncio
@@ -30,14 +29,22 @@ class incluster_apis(object):
         self.usonic_deleted = 0
 
     def run_bcmcmd_usonic(self, attr, port_name, value):
+        if not port_name.startswith(PORT_PREFIX):
+            raise Exception(f"invalid port name: {port_name}")
+
+        port_name = port_name[len(PORT_PREFIX) :]
+        elems = port_name.split("_")
+        if len(elems) != 2:
+            raise Exception(f"invalid port name: {port_name}")
+
+        idx = int(elems[0])
+        sub_idx = int(elems[1])
+
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             interface_config = json.loads(f.read())
-        x = re.findall("[0-9]+", port_name)
-        intf_no = int(x[0])
-        port_no = ""
-        for i, interface in enumerate(interface_config):
-            if i == (intf_no - 1):
-                port_no = str(interface["port"])
+
+        port_no = int(interface_config[idx - 1]["port"])
+        port_no += sub_idx - 1
 
         if attr == "interface-type":
             cmd = f"port {port_no} if={value}"
