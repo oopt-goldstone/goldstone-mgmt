@@ -48,8 +48,9 @@ def get_eeprom(port):
         "sfp_type_name",
     ]:
         v = getattr(eeprom.info, field)
-        v = v.strip().decode("utf-8")
-        info[field] = v
+        if v:
+            v = v.strip().decode("utf-8")
+            info[field] = v
 
     return info
 
