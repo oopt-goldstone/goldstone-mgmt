@@ -4,6 +4,7 @@ import os
 import logging
 import asyncio
 import json
+import re
 
 import kubernetes as k
 import kubernetes_asyncio as k_async
@@ -27,49 +28,54 @@ class incluster_apis(object):
         k.config.load_incluster_config()
         k_async.config.load_incluster_config()
         self.usonic_deleted = 0
+        self.usonic_core = self.get_podname("usonic-core")
+        self.update_bcm_portmap()
 
-    def run_bcmcmd_usonic(self, attr, port_name, value):
-        if not port_name.startswith(PORT_PREFIX):
-            raise Exception(f"invalid port name: {port_name}")
-
-        port_name = port_name[len(PORT_PREFIX) :]
-        elems = port_name.split("_")
-        if len(elems) != 2:
-            raise Exception(f"invalid port name: {port_name}")
-
-        idx = int(elems[0])
-        sub_idx = int(elems[1])
+    def update_bcm_portmap(self):
+        output = self.run_bcmcmd("ps")
+        portmap = {}
+        for line in output.split("\n"):
+            m = re.search("(?P<name>\w+)\(\s*(?P<index>[0-9]+)\)", line)
+            if m:
+                portmap[int(m.group("index"))] = m.group("name")
 
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
-            interface_config = json.loads(f.read())
+            master = {}
+            for i, m in enumerate(json.loads(f.read())):
+                master[m["port"]] = (i + 1, m)
 
-        port_no = int(interface_config[idx - 1]["port"])
-        port_no += sub_idx - 1
+        pmap = {}
+        for index, name in portmap.items():
+            if index in master:
+                i, m = master[index]
+                pmap[f"{PORT_PREFIX}{i}_1"] = (index, name)
+            else:
+                for j in range(1, 4):
+                    if index - j in master:
+                        i, m = master[index - j]
+                        pmap[f"{PORT_PREFIX}{i}_{1+j}"] = (index, name)
+                        break
 
-        if attr == "interface-type":
-            cmd = f"port {port_no} if={value}"
-        elif attr == "auto-negotiate":
-            value = "yes" if value else "no"
-            cmd = f"port {port_no} an={value}"
+        logger.debug(pmap)
+        self.bcm_portmap = pmap
 
+    def get_podname(self, name):
         w = k.watch.Watch()
         api = k.client.api.CoreV1Api()
-
         for event in w.stream(api.list_pod_for_all_namespaces):
-            name = event["object"].metadata.name
-            if "usonic-core" in name:
-                podname = name
-                logger.debug(f"podname: {podname}")
+            n = event["object"].metadata.name
+            if name in n:
                 w.stop()
-                break
-        else:
-            raise Exception("usonic-core not found")
+                return n
+        raise Exception(f"{name} not found")
 
+    def run_bcmcmd(self, cmd):
+        api = k.client.api.CoreV1Api()
         exec_command = ["bcmcmd", cmd]
-        logger.debug(f"exec command : {exec_command}")
+        logger.debug(f"exec command: {exec_command}")
         resp = k.stream.stream(
             api.connect_get_namespaced_pod_exec,
-            podname,
+            self.usonic_core,
             USONIC_NAMESPACE,
             command=exec_command,
             container="syncd",
@@ -78,7 +84,87 @@ class incluster_apis(object):
             stdout=True,
             tty=False,
         )
-        logger.debug(f"Response: {resp}")
+        logger.debug(f"response: {resp}")
+        return resp
+
+    def bcm_ports_info(self, ports):
+        def parse(output):
+            info = {}
+            m = re.search("IF\((?P<iftype>.*?)\)", output)
+            if m:
+                iftype = m.group("iftype")
+                info["iftype"] = iftype
+
+            # auto negotiation enabled
+            if "Auto" in output:
+
+                def g(t):
+                    m = re.search(f"{t} \((?P<v>.*?)\)", output)
+                    if m:
+                        v = m.group("v")
+                        keys = ["fd", "hd", "intf", "medium", "pause", "lb", "flags"]
+                        pattern = " ".join(f"{k} =(?P<{k}>.*?)" for k in keys)
+                        m = re.search(pattern, v)
+                        v = {}
+                        for k in keys:
+                            e = m.group(k).strip()
+                            if e:
+                                v[k] = e.split(",")
+                        return v
+
+                info["auto-nego"] = {
+                    t.lower(): g(t) for t in ("Ability", "Local", "Remote")
+                }
+
+            return info
+
+        logger.debug(f"ports: {list(ports)}")
+        output = self.run_bcmcmd_port(ports)
+        v = {}
+        for line in output.split("\n"):
+            m = re.search(f"\s+\*?(?P<name>\w+)\s+", line)
+            if m:
+                name = m.group("name")
+                v[name] = parse(line)
+
+        w = {}
+        for port in ports:
+            _, name = self.bcm_portmap[port]
+            if name in v:
+                w[port] = v[name]
+
+        return w
+
+    def run_bcmcmd_port(self, ports, cmd=""):
+
+        ports_no = []
+
+        with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
+            interface_config = json.loads(f.read())
+
+        if type(ports) == str:
+            ports = [ports]
+
+        for port in ports:
+            if not port.startswith(PORT_PREFIX):
+                raise Exception(f"invalid port name: {port}")
+
+            port = port[len(PORT_PREFIX) :]
+            elems = port.split("_")
+            if len(elems) != 2:
+                raise Exception(f"invalid port name: {port}")
+
+            idx = int(elems[0])
+            sub_idx = int(elems[1])
+
+            port_no = int(interface_config[idx - 1]["port"])
+            port_no += sub_idx - 1
+
+            ports_no.append(str(port_no))
+
+        ports_no = ",".join(ports_no)
+
+        return self.run_bcmcmd(f"port {ports_no} {cmd}")
 
     def create_usonic_config_bcm(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
@@ -290,6 +376,8 @@ class incluster_apis(object):
                 # will watch for the deployment to be Running
                 if self.usonic_deleted == 1 and phase == "Running":
                     logger.debug("uSONiC reached running state, exiting")
+                    self.usonic_core = self.get_podname("usonic-core")
+                    self.update_bcm_portmap()
                     self.usonic_deleted = 0
                     return
                 if self.usonic_deleted != 1 and event["type"] == "DELETED":
