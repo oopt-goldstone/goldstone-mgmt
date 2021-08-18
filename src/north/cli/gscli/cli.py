@@ -20,6 +20,8 @@ from .base import *
 
 KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 
+SR_TIMEOUT_MS = 60000
+
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
@@ -408,7 +410,11 @@ class GlobalShowCommand(Command):
                 defaults = False
 
             try:
-                data = sess.get_data(line[1], include_implicit_defaults=defaults)
+                data = sess.get_data(
+                    line[1],
+                    include_implicit_defaults=defaults,
+                    timeout_ms=SR_TIMEOUT_MS,
+                )
             except Exception as e:
                 stderr.info(e)
                 return
