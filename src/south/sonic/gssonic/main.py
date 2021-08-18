@@ -231,6 +231,8 @@ class Server(object):
                 key = xpath[-1][1]
             elif xpath[2][1] == "ipv4":
                 key = xpath[3][1]
+            elif xpath[2][1] == "auto-negotiate":
+                key = "auto-negotiate"
 
         return key, _hash, attr_dict
 
@@ -456,6 +458,9 @@ class Server(object):
 
         update_oper_ds = False
         update_usonic = False
+        intfs_need_adv_speed_config = (
+            set()
+        )  # put ifname of the interfaces that need adv speed config
 
         for change in changes:
             logger.debug(f"change_cb: {change}")
@@ -477,12 +482,28 @@ class Server(object):
                     if event == "change":
                         self.validate_interface_type(ifname, iftype)
                     elif event == "done":
-                        self.k8s.run_bcmcmd_usonic(key, ifname, iftype)
+                        self.k8s.run_bcmcmd_port(ifname, "if=" + iftype)
                 elif key == "auto-negotiate":
-                    # if event == "change":
-                    #   Validation with respect to Port Breakout to be done
+                    if event == "change":
+                        if attr_dict["xpath"][-1][1] == "advertised-speeds":
+                            value = speed_yang_to_redis(change.value)
+                            if self.get_breakout_detail(ifname):
+                                valids = breakout_valid_speeds
+                            else:
+                                valids = valid_speeds
+                            if value not in valids:
+                                valids = [speed_redis_to_yang(v) for v in valids]
+                                raise sysrepo.SysrepoInvalArgError(
+                                    f"Invalid speed: {change.value}, candidates: {valids}"
+                                )
+
                     if event == "done":
-                        self.k8s.run_bcmcmd_usonic(key, ifname, change.value)
+                        if attr_dict["xpath"][-1][1] == "enabled":
+                            self.k8s.run_bcmcmd_port(
+                                ifname, "an=" + ("yes" if change.value else "no")
+                            )
+                        elif attr_dict["xpath"][-1][1] == "advertised-speeds":
+                            intfs_need_adv_speed_config.add(ifname)
 
                 elif key == "speed":
 
@@ -498,8 +519,9 @@ class Server(object):
                             raise sysrepo.SysrepoInvalArgError(
                                 f"Invalid speed: {change.value}, candidates: {valids}"
                             )
-
-                    self.set_config_db(event, _hash, key, change.value)
+                    elif event == "done":
+                        self.set_config_db(event, _hash, key, change.value)
+                        self.k8s.update_bcm_portmap()
 
                 elif key == "num-channels" or key == "channel-speed":
                     # using "_1" is vulnerable to the interface nameing schema change
@@ -566,14 +588,27 @@ class Server(object):
                     if event == "change":
                         self.validate_interface_type(ifname, iftype)
                     elif event == "done":
-                        self.k8s.run_bcmcmd_usonic(key, ifname, iftype)
+                        self.k8s.run_bcmcmd_port(ifname, "if=" + iftype)
                 elif key == "auto-negotiate":
-                    # if event == "change":
-                    #   Validation with respect to Port Breakout to be done
+                    if event == "change":
+                        if attr_dict["xpath"][-1][1] == "advertised-speeds":
+                            value = speed_yang_to_redis(change.value)
+                            if self.get_breakout_detail(ifname):
+                                valids = breakout_valid_speeds
+                            else:
+                                valids = valid_speeds
+                            if value not in valids:
+                                raise sysrepo.SysrepoInvalArgError(
+                                    f"Invalid speed: {change.value}, candidates: {valids}"
+                                )
+
                     if event == "done":
-                        status_bcm = self.k8s.run_bcmcmd_usonic(
-                            key, ifname, change.value
-                        )
+                        if attr_dict["xpath"][-1][1] == "enabled":
+                            self.k8s.run_bcmcmd_port(
+                                ifname, "an=" + ("yes" if change.value else "no")
+                            )
+                        elif attr_dict["xpath"][-1][1] == "advertised-speeds":
+                            intfs_need_adv_speed_config.add(ifname)
 
                 elif key == "speed":
 
@@ -591,8 +626,9 @@ class Server(object):
                             raise sysrepo.SysrepoInvalArgError(
                                 f"Invalid speed: {change.value}, candidates: {valids}"
                             )
-
-                    self.set_config_db(event, _hash, key, change.value)
+                    elif event == "done":
+                        self.set_config_db(event, _hash, key, change.value)
+                        self.k8s.update_bcm_portmap()
 
                 elif key == "num-channels" or key == "channel-speed":
                     raise sysrepo.SysrepoInvalArgError(
@@ -668,6 +704,9 @@ class Server(object):
                         self.pack_defaults_to_redis(ifname=ifname, leaf_node=key)
                         update_oper_ds = True
 
+                        if key == "speed":
+                            self.k8s.update_bcm_portmap()
+
                 elif key == "interface-type":
                     if event == "change":
                         pass
@@ -678,22 +717,28 @@ class Server(object):
                             if not breakout_details:
                                 raise KeyError
                             if int(breakout_details["num-channels"]) == 4:
-                                status_bcm = self.k8s.run_bcmcmd_usonic(
-                                    key, ifname, DEFAULT_INTERFACE_TYPE
+                                self.k8s.run_bcmcmd_port(
+                                    ifname, "if=" + DEFAULT_INTERFACE_TYPE
                                 )
                             elif int(breakout_details["num-channels"]) == 2:
-                                status_bcm = self.k8s.run_bcmcmd_usonic(
-                                    key, ifname, DEFAULT_INTERFACE_TYPE + "2"
+                                self.k8s.run_bcmcmd_port(
+                                    ifname, "if=" + DEFAULT_INTERFACE_TYPE + "2"
                                 )
                             else:
                                 raise sysrepo.SysrepoInvalArgError(
                                     "Unsupported interface type"
                                 )
                         except (sysrepo.errors.SysrepoNotFoundError, KeyError):
-                            status_bcm = self.k8s.run_bcmcmd_usonic(
-                                key, ifname, DEFAULT_INTERFACE_TYPE + "4"
+                            self.k8s.run_bcmcmd_port(
+                                ifname, "if=" + DEFAULT_INTERFACE_TYPE + "4"
                             )
                         update_oper_ds = True
+                elif key == "auto-negotiate":
+                    if event == "done":
+                        if attr_dict["xpath"][-1][1] == "enabled":
+                            self.k8s.run_bcmcmd_port(ifname, "an=no")
+                        elif attr_dict["xpath"][-1][1] == "advertised-speeds":
+                            intfs_need_adv_speed_config.add(ifname)
 
                 elif "PORT|" in _hash and key == "":
                     if event == "done":
@@ -706,6 +751,16 @@ class Server(object):
                         update_oper_ds = True
                 else:
                     logger.warn(f"unhandled change: {change}")
+
+        for ifname in intfs_need_adv_speed_config:
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/auto-negotiate/config/advertised-speeds"
+            config = self.get_running_data(xpath)
+            if config:
+                speeds = ",".join(v.replace("SPEED_", "").lower() for v in config)
+                logger.debug(f"speeds: {speeds}")
+            else:
+                speeds = ""
+            self.k8s.run_bcmcmd_port(ifname, f"adv={speeds}")
 
         if update_oper_ds:
             self.update_oper_ds()
@@ -837,6 +892,8 @@ class Server(object):
         interfaces = interfaces.get("interfaces", {}).get("interface", [])
         prefix = "/goldstone-interfaces:interfaces"
 
+        bcminfo = self.k8s.bcm_ports_info(list(i["name"] for i in interfaces))
+
         for intf in interfaces:
             ifname = intf["name"]
             if not "state" in intf:
@@ -862,6 +919,24 @@ class Server(object):
                 sl_value = self.get_interface_state_data(xpath + "/" + sl)
                 if sl_value != None:
                     intf["state"]["counters"][sl] = sl_value
+
+            info = bcminfo.get(ifname, {})
+            logger.debug(f"bcminfo: {info}")
+
+            iftype = info.get("iftype")
+            if iftype:
+                intf["state"]["interface-type"] = iftype
+
+            auto_nego = info.get("auto-nego")
+            if auto_nego:
+                intf["auto-negotiate"] = {"state": {"enabled": True}}
+                v = auto_nego.get("local", {}).get("fd")
+                if v:
+                    intf["auto-negotiate"]["state"]["advertised-speeds"] = [
+                        f"SPEED_{e[:-1]}" for e in v
+                    ]
+            else:
+                intf["auto-negotiate"] = {"state": {"enabled": False}}
 
         return {"goldstone-interfaces:interfaces": {"interface": interfaces}}
 
@@ -961,9 +1036,12 @@ class Server(object):
 
             for key in intf:
                 _hash = "PORT|" + name
-                if key == "auto-negotiate" or key == "interface-type":
-                    logger.debug("Reconcile for bcmcmd")
-                    status_bcm = self.k8s.run_bcmcmd_usonic(key, name, intf[key])
+                if key == "auto-negotiate":
+                    self.k8s.run_bcmcmd_port(
+                        name, "an=" + ("yes" if intf[key] else "no")
+                    )
+                elif key == "interface-type":
+                    self.k8s.run_bcmcmd_port(name, "if=" + intf[key])
                 elif key in [
                     "admin-status",
                     "fec",
@@ -1097,16 +1175,6 @@ class Server(object):
 
         prefix = "/goldstone-interfaces:interfaces"
 
-        keys = self.sonic_db.keys(self.sonic_db.APPL_DB, pattern="PORT_TABLE:Ethernet*")
-        keys = keys if keys else []
-
-        for key in keys:
-            _hash = _decode(key)
-            name = _hash.split(":")[1]
-            xpath = f"{prefix}/interface[name='{name}']"
-            sess.set_item(f"{xpath}/config/name", name)
-            sess.set_item(f"{xpath}/state/name", name)
-
         parent_dict = {}
         for key in self.get_config_db_keys("PORT|Ethernet*"):
             name = key.split("|")[1]
@@ -1114,6 +1182,9 @@ class Server(object):
             logger.debug(f"config db entry: key: {key}, value: {intf_data}")
 
             xpath = f"{prefix}/interface[name='{name}']"
+            sess.set_item(f"{xpath}/config/name", name)
+            sess.set_item(f"{xpath}/state/name", name)
+
             xpath_subif_breakout = f"{xpath}/state/breakout"
 
             # TODO use the parent leaf to detect if this is a sub-interface or not
@@ -1150,7 +1221,7 @@ class Server(object):
         self.clean_oper_ds(self.sess)
         self.update_interface_oper_ds(self.sess)
 
-        self.sess.apply_changes(wait=True)
+        self.sess.apply_changes()
 
     def is_ufd_port(self, port, ufd_list):
 
@@ -1537,8 +1608,9 @@ class Server(object):
                 else:
                     self.cache_counters()
 
-                await self.reconcile()
                 self.update_oper_ds()
+                await self.reconcile()
+
                 self.is_usonic_rebooting = False
 
                 self.sess.switch_datastore("running")

@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   parameters {
-    string(name: 'DEVICE', defaultValue: '10.10.10.116', description: 'IP address of the test device')
+    string(name: 'DEVICE', defaultValue: '10.10.10.115', description: 'IP address of the test device')
     booleanParam(name: 'FORCE_BUILD_BUILDER', defaultValue: false, description: 'build builder image forcibly')
   }
 

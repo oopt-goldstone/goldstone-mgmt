@@ -366,13 +366,8 @@ module goldstone-interfaces {
         "RFC 2863: The Interfaces Group MIB - ifAdminStatus";
     }
 
-    leaf auto-negotiate {
-      type boolean;
-      default false;
-    }
-
     leaf fec {
-      when "../auto-negotiate = 'false'";
+      when "../../auto-negotiate/config/enabled = 'false'";
       type enumeration {
         enum FC;
         enum RS;
@@ -381,7 +376,7 @@ module goldstone-interfaces {
     }
 
     leaf interface-type {
-      when "../auto-negotiate = 'false'";
+      when "../../auto-negotiate/config/enabled = 'false'";
       type enumeration {
         enum SR;
         enum SR2;
@@ -395,16 +390,47 @@ module goldstone-interfaces {
         enum KR;
         enum KR2;
         enum KR4;
+        enum SFI;
+        enum XFI;
       }
     }
 
     leaf speed {
-      when "../auto-negotiate = 'false'";
+      when "../../auto-negotiate/config/enabled = 'false'";
       type ethernet-speed;
     }
 
     uses port-breakout-config;
 
+  }
+
+  grouping interface-auto-negotiate-config {
+    leaf enabled {
+      type boolean;
+      default false;
+    }
+    leaf-list advertised-speeds {
+      type ethernet-speed;
+    }
+  }
+
+  grouping interface-auto-negotiate-state {
+    leaf-list capable-speeds {
+      type ethernet-speed;
+    }
+  }
+
+  grouping interface-auto-negotiate-top {
+    container auto-negotiate {
+      container config {
+        uses interface-auto-negotiate-config;
+      }
+      container state {
+        config false;
+        uses interface-auto-negotiate-config;
+        uses interface-auto-negotiate-state;
+      }
+    }
   }
 
   grouping interfaces-top {
@@ -425,6 +451,8 @@ module goldstone-interfaces {
           uses interface-common-state;
           uses interface-counters-state;
         }
+
+        uses interface-auto-negotiate-top;
       }
     }
   }

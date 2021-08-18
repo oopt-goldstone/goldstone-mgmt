@@ -57,7 +57,7 @@ def test_auto_nego(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet3_1; interface-type SR4"')
     except SSHException as e:
-        assert "../auto-negotiate = 'false'" in e.stderr
+        assert "../../auto-negotiate/config/enabled = 'false'" in e.stderr
     else:
         raise Exception(
             "Failed to stop configuring interface type when auto-nego is enabled"
@@ -65,15 +65,18 @@ def test_auto_nego(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet3_1; fec rs"')
     except SSHException as e:
-        assert "../auto-negotiate = 'false'" in e.stderr
+        assert "../../auto-negotiate/config/enabled = 'false'" in e.stderr
     else:
         raise Exception("Failed to stop configuring FEC when auto-nego is enabled")
     try:
         ssh(cli, 'gscli -c "interface Ethernet3_1; speed 40G"')
     except SSHException as e:
-        assert "../auto-negotiate = 'false'" in e.stderr
+        assert "../../auto-negotiate/config/enabled = 'false'" in e.stderr
     else:
         raise Exception("Failed to stop configuring speed when auto-nego is enabled")
+
+    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate advertise 40G"')
+    output = ssh(cli, 'gscli -c "interface Ethernet3_1; show" | grep advertise')
 
 
 def test_intf_type(cli):
@@ -327,16 +330,16 @@ def test_vlan_member_add_delete(cli):
     ssh(cli, 'gscli -c "interface Ethernet1_1; switchport mode trunk vlan 1000"')
     output = ssh(cli, 'gscli -c "show vlan details"')
     assert "Ethernet1_1" in output
-#    try:
-#        ssh(
-#            cli, 'gscli -c "interface Ethernet1_1; no switchport mode access vlan 1000"'
-#        )
-#    except SSHException as e:
-#        assert "Incorrect mode given" in e.stderr
-#    else:
-#        raise Exception(
-#            "failed to fail with an invalid cmd no switchport mode access vlan 1000"
-#        )
+    #    try:
+    #        ssh(
+    #            cli, 'gscli -c "interface Ethernet1_1; no switchport mode access vlan 1000"'
+    #        )
+    #    except SSHException as e:
+    #        assert "Incorrect mode given" in e.stderr
+    #    else:
+    #        raise Exception(
+    #            "failed to fail with an invalid cmd no switchport mode access vlan 1000"
+    #        )
     try:
         ssh(
             cli,
@@ -381,7 +384,7 @@ def test_port_breakout(cli):
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_1; mtu 4000"')
     except SSHException as e:
-        assert ( "uSONiC is rebooting" in e.stderr or "locked" in e.stderr )
+        assert "uSONiC is rebooting" in e.stderr or "locked" in e.stderr
     else:
         raise Exception("failed to fail mtu setting under ds locked")
 
@@ -674,9 +677,7 @@ def test_speed(cli):
     else:
         raise Exception("failed to fail with an invalid command: speed 25G")
 
-    output = ssh(
-        cli, 'gscli -c "interface Ethernet1_1; speed 40G; show" | grep speed'
-    )
+    output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 40G; show" | grep speed')
     assert "40G" in output
 
     output = ssh(cli, 'gscli -c "interface Ethernet1_1; no speed ; !sleep 1; show"')

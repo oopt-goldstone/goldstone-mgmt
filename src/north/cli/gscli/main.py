@@ -312,7 +312,10 @@ class Root(Object):
                 raise InvalidInput(self.no_usage())
 
     def get_ifnames(self):
-        return [v["name"] for v in self.sonic.port.get_interface_list("operational")]
+        return [
+            v["name"]
+            for v in self.sonic.port.get_interface_list("operational", no_subs=True)
+        ]
 
     def get_mgmt_ifname(self):
         return [v["name"] for v in self.mgmt.get_mgmt_interface_list("operational")]
