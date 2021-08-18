@@ -184,10 +184,12 @@ class Port(object):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
 
-    def get_interface_list(self, datastore, include_implicit_values=True):
+    def get_interface_list(
+        self, datastore, include_implicit_values=True, no_subs=False
+    ):
         try:
             tree = self.sr_op.get_data(
-                self.XPATH, datastore, False, include_implicit_values
+                self.XPATH, datastore, no_subs, include_implicit_values
             )
             return natsorted(tree["interfaces"]["interface"], key=lambda x: x["name"])
         except (KeyError, sr.errors.SysrepoNotFoundError) as error:
@@ -263,6 +265,9 @@ class Port(object):
             ipv4 = data.get("ipv4", {})
             config["ipv4"] = ipv4
 
+            an = data.get("auto-negotiate", {})
+            config["auto-negotiate"] = an
+
             stdout.info("interface {}".format(ifname))
             for key, value in config.items():
                 if key == "admin-status":
@@ -285,10 +290,18 @@ class Port(object):
                         stdout.info(f"  {key} {value}")
 
                 elif key == "auto-negotiate":
-                    if value:
-                        stdout.info("  auto-negotiate enable")
-                    else:
-                        stdout.info("  auto-negotiate disable")
+                    try:
+                        v = value["config"]["enabled"]
+                        if v:
+                            stdout.info("  auto-negotiate enable")
+                        else:
+                            stdout.info("  auto-negotiate disable")
+                        v = value["config"]["advertised-speeds"]
+                        if v:
+                            v = ",".join(speed_yang_to_human(s) for s in v)
+                            stdout.info(f"  auto-negotiate advatise {v}")
+                    except KeyError:
+                        pass
 
                 elif key == "breakout":
                     if value:
@@ -418,12 +431,34 @@ class Port(object):
     def set_auto_nego(self, ifnames, mode):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
-            if mode:
-                set_attribute(
-                    self.sr_op, xpath, "interface", ifname, "auto-negotiate", mode, True
+            if mode == None:
+                self.sr_op.delete_data(
+                    f"{xpath}/auto-negotiate/config/enabled", no_apply=True
                 )
             else:
-                self.sr_op.delete_data(f"{xpath}/config/auto-negotiate", no_apply=True)
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(f"{xpath}/name", ifname, no_apply=True)
+                self.sr_op.set_data(
+                    f"{xpath}/auto-negotiate/config/enabled", mode, no_apply=True
+                )
+        self.sr_op.apply()
+
+    def set_auto_nego_adv_speed(self, ifnames, speeds):
+        for ifname in ifnames:
+            xpath = self.xpath(ifname)
+            self.sr_op.delete_data(
+                f"{xpath}/auto-negotiate/config/advertised-speeds", no_apply=True
+            )
+            if speeds:
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(f"{xpath}/name", ifname, no_apply=True)
+                for speed in speeds.split(","):
+                    self.sr_op.set_data(
+                        f"{xpath}/auto-negotiate/config/advertised-speeds",
+                        speed_human_to_yang(speed),
+                        no_apply=True,
+                    )
+
         self.sr_op.apply()
 
     def set_interface_type(self, ifnames, value):
@@ -701,6 +736,17 @@ class Port(object):
                 except:
                     data["breakout:parent"] = data["breakout"]["parent"]
                 del data["breakout"]
+
+            autonego = data.get("auto-negotiate", {}).get("state")
+            if autonego:
+                v = "enabled" if autonego["enabled"] else "disabled"
+                data["auto-negotiate"] = v
+                v = autonego.get("advertised-speeds")
+                if v:
+                    v = ",".join(speed_yang_to_human(e) for e in v)
+                    data["advertised-speeds"] = v
+            else:
+                del data["auto-negotiate"]
 
             if "speed" in data:
                 data["speed"] = speed_yang_to_human(data["speed"])

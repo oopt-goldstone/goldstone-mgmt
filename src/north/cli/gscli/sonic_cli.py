@@ -33,7 +33,10 @@ class Interface(Object):
         except re.error:
             raise InvalidInput(f"failed to compile {ifname} as a regular expression")
         self.sonic = Sonic(conn)
-        iflist = [v["name"] for v in self.sonic.port.get_interface_list("operational")]
+        iflist = [
+            v["name"]
+            for v in self.sonic.port.get_interface_list("operational", no_subs=True)
+        ]
         ifnames = [i for i in iflist if ptn.match(i)]
 
         if len(ifnames) == 0:
@@ -49,8 +52,8 @@ class Interface(Object):
 
         self.switchprt_dict = {
             "mode": {
-                "trunk": {"vlan": WordCompleter(lambda: parent.get_vid())},
-                "access": {"vlan": WordCompleter(lambda: parent.get_vid())},
+                "trunk": {"vlan": WordCompleter(parent.get_vid)},
+                "access": {"vlan": WordCompleter(parent.get_vid)},
             }
         }
 
@@ -66,7 +69,7 @@ class Interface(Object):
             "switchport": self.switchprt_dict,
             "breakout": None,
             "interface-type": None,
-            "auto-negotiate": None,
+            "auto-negotiate": {"advertise": None},
             "fec": None,
             "ufd": None,
             "portchannel": None,
@@ -88,7 +91,6 @@ class Interface(Object):
             "KR2",
             "KR4",
         ]
-        self.auto_nego_list = ["enable", "disable"]
         self.tagging_mode_list = ["trunk", "access"]
 
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
@@ -104,7 +106,12 @@ class Interface(Object):
             elif args[0] == "interface-type":
                 self.sonic.port.set_interface_type(ifnames, None)
             elif args[0] == "auto-negotiate":
-                self.sonic.port.set_auto_nego(ifnames, None)
+                if len(args) == 2:
+                    if args[1] != "advertise":
+                        raise InvalidInput("usage: {}".format(self.no_usage))
+                    self.sonic.port.set_auto_nego_adv_speed(ifnames, None)
+                else:
+                    self.sonic.port.set_auto_nego(ifnames, None)
             elif args[0] == "ufd":
                 self.sonic.ufd.check_ports(ifnames)
             elif args[0] == "mtu":
@@ -211,18 +218,30 @@ class Interface(Object):
                 raise InvalidInput(invalid_input_str)
             self.sonic.port.set_interface_type(ifnames, args[0])
 
-        @self.command(WordCompleter(self.auto_nego_list), name="auto-negotiate")
+        auto_nego_dict = {
+            "enable": None,
+            "disable": None,
+            "advertise": WordCompleter(speeds),
+        }
+
+        @self.command(
+            NestedCompleter.from_nested_dict(auto_nego_dict), name="auto-negotiate"
+        )
         def auto_nego(args):
             invalid_input_str = (
-                f'usage: auto-negotiate [{"|".join(self.auto_nego_list)}]'
+                f'usage: auto-negotiate [{"|".join(auto_nego_dict.keys())}]'
             )
-            if len(args) != 1 or args[0] not in self.auto_nego_list:
+            if len(args) < 1 or args[0] not in auto_nego_dict.keys():
                 raise InvalidInput(invalid_input_str)
 
-            if args[0] == "enable":
-                self.sonic.port.set_auto_nego(ifnames, True)
-            if args[0] == "disable":
-                self.sonic.port.set_auto_nego(ifnames, False)
+            if args[0] in ["enable", "disable"]:
+                if len(args) != 1:
+                    raise InvalidInput(invalid_input_str)
+                self.sonic.port.set_auto_nego(ifnames, args[0] == "enable")
+            elif args[0] == "advertise":
+                if len(args) != 2:
+                    raise InvalidInput(invalid_input_str)
+                self.sonic.port.set_auto_nego_adv_speed(ifnames, args[1])
 
         @self.command(WordCompleter(self.breakout_list))
         def breakout(args):
