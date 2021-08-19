@@ -370,9 +370,7 @@ class Server(object):
                     logger.warning(f"unsupported xpath: {change.xpath}, value: {value}")
 
         if event == "done":
-            # TODO can be smarter. detect when the container is removed
-            if any(isinstance(change, sysrepo.ChangeDeleted) for change in changes):
-                self.update_operds()
+            self.update_operds()
 
     def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f"oper get callback requested xpath: {req_xpath}")
