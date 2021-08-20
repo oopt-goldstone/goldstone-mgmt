@@ -6,16 +6,25 @@ ARG http_proxy
 ARG https_proxy
 
 FROM $GS_MGMT_BUILDER_BASE
+ARG TARGETARCH
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus libffi-dev
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
+            if [ $TARGETARCH = arm64 ]; then \
+                apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libffi-dev; \
+            fi
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
 
 RUN pip install --upgrade pip
 
-RUN --mount=type=bind,source=sm/OpenNetworkLinux/REPO/stretch/packages/binary-amd64,target=/src mkdir -p /usr/share/onlp && cp /src/onlp_1.0.0_amd64.deb /src/onlp-dev_1.0.0_amd64.deb /src/onlp-x86-64-kvm-x86-64-r0_1.0.0_amd64.deb /src/onlp-py3_1.0.0_amd64.deb /usr/share/onlp/
+RUN --mount=type=bind,source=sm/OpenNetworkLinux/REPO/stretch/packages,target=/src \ 
+    mkdir -p /usr/share/onlp && cd /src/binary-$TARGETARCH && \ 
+        `([ $TARGETARCH = arm64 ] && cp onlp_1.0.0_arm64.deb onlp-dev_1.0.0_arm64.deb onlp-arm64-wistron-wtp-01-c1-00-r0_1.0.0_arm64.deb onlp-py3_1.0.0_arm64.deb /usr/share/onlp/ ) || \
+        ([ $TARGETARCH = amd64 ] && cp onlp_1.0.0_amd64.deb onlp-dev_1.0.0_amd64.deb onlp-x86-64-kvm-x86-64-r0_1.0.0_amd64.deb onlp-py3_1.0.0_amd64.deb /usr/share/onlp/ )`
+
 RUN dpkg -i /usr/share/onlp/*.deb
 
 RUN --mount=type=bind,source=sm/libyang,target=/root/sm/libyang,rw \
@@ -64,8 +73,8 @@ RUN --mount=type=bind,source=sm/pam_tacplus,target=/root/sm/pam_tacplus,rw \
     cd /root && quilt upgrade && quilt push -a && \
     cd /root/sm/pam_tacplus && dpkg-buildpackage -rfakeroot -b -us -uc
 
-RUN dpkg -i /root/sm/libtac2_1.4.1-1_amd64.deb
-RUN dpkg -i /root/sm/libtac-dev_1.4.1-1_amd64.deb
+RUN dpkg -i /root/sm/libtac2_1.4.1-1_${TARGETARCH}.deb
+RUN dpkg -i /root/sm/libtac-dev_1.4.1-1_${TARGETARCH}.deb
 
 RUN --mount=type=bind,source=sm/libnss-tacplus,target=/root/sm/libnss-tacplus,rw \
     --mount=type=bind,source=patches/nss,target=/root/patches \
