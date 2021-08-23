@@ -11,10 +11,8 @@ import kubernetes_asyncio as k_async
 
 from jinja2 import Template
 
-USONIC_DEPLOYMENTS = os.getenv(
-    "USONIC_DEPLOYMENTS",
-    "usonic-core,usonic-bcm,usonic-port,usonic-neighbor,usonic-mgrd,usonic-teamd",
-)
+USONIC_SELECTOR = os.getenv("USONIC_SELECTOR", "app=usonic")
+USONIC_CHECKPOINT = os.getenv("USONIC_CHECKPOINT", "usonic-mgrd")
 USONIC_NAMESPACE = os.getenv("USONIC_NAMESPACE", "default")
 USONIC_CONFIGMAP = os.getenv("USONIC_CONFIGMAP", "usonic-config")
 USONIC_TEMPLATE_DIR = os.getenv("USONIC_TEMPLATE_DIR", "/var/lib/usonic")
@@ -325,12 +323,11 @@ class incluster_apis(object):
 
         api = k.client.AppsV1Api()
 
-        for dname in USONIC_DEPLOYMENTS.split(","):
-            deployment = api.read_namespaced_deployment(
-                name=dname,
-                namespace=USONIC_NAMESPACE,
-            )
+        l = api.list_namespaced_deployment(
+            namespace=USONIC_NAMESPACE, label_selector=USONIC_SELECTOR
+        )
 
+        for deployment in l.items:
             # Update annotation, to restart the deployment
             annotations = deployment.spec.template.metadata.annotations
             if annotations:
@@ -345,7 +342,9 @@ class incluster_apis(object):
 
             # Update the deployment
             api.patch_namespaced_deployment(
-                name=dname, namespace=USONIC_NAMESPACE, body=deployment
+                name=deployment.metadata.name,
+                namespace=USONIC_NAMESPACE,
+                body=deployment,
             )
             logger.info("Deployment updated")
 
@@ -357,8 +356,7 @@ class incluster_apis(object):
                 name = event["object"].metadata.name
                 phase = event["object"].status.phase
 
-                # TODO make this configurable
-                if "usonic-mgrd" not in name:
+                if USONIC_CHECKPOINT not in name:
                     continue
 
                 logger.debug(
