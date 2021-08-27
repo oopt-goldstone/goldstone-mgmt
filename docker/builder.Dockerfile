@@ -8,9 +8,9 @@ ARG https_proxy
 FROM $GS_MGMT_BUILDER_BASE
 ARG TARGETARCH
 
-RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus
-RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
             if [ $TARGETARCH = arm64 ]; then \
                 apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libffi-dev; \
             fi

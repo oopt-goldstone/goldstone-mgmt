@@ -7,5 +7,5 @@ ARG https_proxy
 
 FROM $GS_SNMP_BASE
 
-RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
             apt update && DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends -qy snmpd snmp

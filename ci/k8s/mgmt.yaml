@@ -103,7 +103,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: netopeer2
-              image: docker.io/gs-test/gs-mgmt-netopeer2:latest
+              image: docker.io/gs-test/gs-mgmt-netopeer2:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['netopeer2-server']
               args: ['-d', '-v', '2']
@@ -168,7 +168,7 @@ spec:
               command: ['sh', '-c', "kubectl wait --for=condition=ready pods/$(kubectl get pods -l app=gs-mgmt-onlp -o jsonpath='{.items[0].metadata.name}')"]
             containers:
             - name: tai
-              image: docker.io/gs-test/gs-mgmt-south-tai:latest
+              image: docker.io/gs-test/gs-mgmt-south-tai:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-tai']
               args: ['--taish-server', "$(TAISH_SERVER_SERVICE_HOST):$(TAISH_SERVER_SERVICE_PORT)", "--verbose"]
@@ -225,7 +225,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: onlp
-              image: docker.io/gs-test/gs-mgmt-south-onlp:latest
+              image: docker.io/gs-test/gs-mgmt-south-onlp:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-onlp']
               args: ['--verbose']
@@ -293,7 +293,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: sonic
-              image: docker.io/gs-test/gs-mgmt-south-sonic:latest
+              image: docker.io/gs-test/gs-mgmt-south-sonic:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-sonic']
               env:
@@ -363,7 +363,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: notif
-              image: docker.io/gs-test/gs-mgmt-south-notif:latest
+              image: docker.io/gs-test/gs-mgmt-south-notif:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-notif']
               args: ['--verbose']

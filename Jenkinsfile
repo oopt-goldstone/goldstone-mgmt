@@ -45,71 +45,115 @@ pipeline {
       }
     }
 
-    stage('Build Builder') {
+    stage('Build ONLP packages') {
       when {
         environment name: 'BUILD_BUILDER', value: '1'
       }
       steps {
-          sh 'make builder'
+          sh 'ARCH=amd64 make onlp'
+          sh 'ARCH=arm64 make onlp'
       }
     }
 
     stage('Build') {
-      when {
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-          sh 'make snmpd'
-          sh 'make base-image'
-          sh 'make images'
-      }
-    }
-
-    stage('Load') {
-      when {
-        branch pattern: "^PR.*", comparator: "REGEXP"
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-        sh 'make tester'
-        timeout(time: 15, unit: 'MINUTES') {
-            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.load ${params.DEVICE}"
+      failFast true
+      parallel {
+        stage('amd64') {
+          environment {
+            ARCH = 'amd64'
+          }
+          stages {
+            stage('Build Builder') {
+              when {
+                environment name: 'BUILD_BUILDER', value: '1'
+              }
+              steps {
+                  sh 'make builder'
+              }
+            }
+            stage('Build') {
+              when {
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                  sh 'make snmpd'
+                  sh 'make base-image'
+                  sh 'make images'
+              }
+            }
+            stage('Load') {
+              when {
+                branch pattern: "^PR.*", comparator: "REGEXP"
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                sh 'make tester'
+                timeout(time: 15, unit: 'MINUTES') {
+                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.load ${params.DEVICE}"
+                }
+              }
+            }
+            stage('Test') {
+              when {
+                branch pattern: "^PR.*", comparator: "REGEXP"
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                sh 'make tester'
+                timeout(time: 20, unit: 'MINUTES') {
+                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test ${params.DEVICE}"
+                }
+              }
+            }
+            stage('Test NETCONF') {
+              when {
+                branch pattern: "^PR.*", comparator: "REGEXP"
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                sh 'make tester'
+                sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_np2 ${params.DEVICE}"
+              }
+            }
+            stage('Test SNMP') {
+              when {
+                branch pattern: "^PR.*", comparator: "REGEXP"
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                sh 'make tester'
+                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_snmp ${params.DEVICE}"
+              }
+            }
+          }
         }
-      }
-    }
 
-    stage('Test') {
-      when {
-        branch pattern: "^PR.*", comparator: "REGEXP"
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-        sh 'make tester'
-        timeout(time: 20, unit: 'MINUTES') {
-            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test ${params.DEVICE}"
+        stage('arm64') {
+          environment {
+            ARCH = 'arm64'
+          }
+          stages {
+            stage('Build Builder') {
+              when {
+                environment name: 'BUILD_BUILDER', value: '1'
+              }
+              steps {
+                  sh 'make builder'
+              }
+            }
+
+            stage('Build') {
+              when {
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                  sh 'make snmpd'
+                  sh 'make base-image'
+                  sh 'make images'
+              }
+            }
+          }
         }
-      }
-    }
-
-    stage('Test NETCONF') {
-      when {
-        branch pattern: "^PR.*", comparator: "REGEXP"
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-        sh 'make tester'
-        sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_np2 ${params.DEVICE}"
-      }
-    }
-
-   stage('Test SNMP') {
-      when {
-        branch pattern: "^PR.*", comparator: "REGEXP"
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-        sh 'make tester'
-        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_snmp ${params.DEVICE}"
       }
     }
   }
@@ -125,3 +169,4 @@ pipeline {
   }
 
 }
+// vim: ft=groovy
