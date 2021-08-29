@@ -31,9 +31,20 @@ def main(host, username, password):
         # stop SNMP service
         ssh(cli, "gs-snmp.sh stop || true")  # can fail
 
-        run(
-            "docker save -o /tmp/gs-mgmt.tar gs-test/gs-mgmt gs-test/gs-mgmt-netopeer2 gs-test/gs-mgmt-snmpd gs-test/gs-mgmt-south-sonic gs-test/gs-mgmt-south-onlp gs-test/gs-mgmt-south-tai gs-test/gs-mgmt-south-notif gs-test/gs-mgmt-north-snmp gs-test/gs-mgmt-xlate-openconfig"
-        )
+        images = [
+            "gs-mgmt",
+            "gs-mgmt-netopeer2",
+            "gs-mgmt-snmpd",
+            "gs-mgmt-south-sonic",
+            "gs-mgmt-south-onlp",
+            "gs-mgmt-south-tai",
+            "gs-mgmt-south-notif",
+            "gs-mgmt-north-snmp",
+            "gs-mgmt-xlate-openconfig",
+        ]
+        images = " ".join(f"gs-test/{name}:latest-amd64" for name in images)
+
+        run(f"docker save -o /tmp/gs-mgmt.tar {images}")
 
         # clean up sysrepo files
         ssh(cli, "rm -rf /dev/shm/sr_*")

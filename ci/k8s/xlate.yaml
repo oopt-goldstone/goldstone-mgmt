@@ -21,7 +21,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: xlate-openconfig
-              image: docker.io/gs-test/gs-mgmt-xlate-openconfig:latest
+              image: docker.io/gs-test/gs-mgmt-xlate-openconfig:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gsxlated-openconfig', '-v']
               volumeMounts:

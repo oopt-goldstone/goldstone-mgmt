@@ -10,7 +10,7 @@ ARG https_proxy
 
 FROM $GS_MGMT_BASE
 
-RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
             apt update && apt install -qy --no-install-recommends libdbus-1-3
 
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \

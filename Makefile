@@ -1,5 +1,9 @@
 .PHONY: builder bash init yang base-image images docker cli system
 
+ifndef ARCH
+    ARCH=amd64
+endif
+
 ifndef DOCKER_CMD
     DOCKER_CMD=bash
 endif
@@ -57,19 +61,21 @@ ifndef GS_MGMT_NOTIF_IMAGE
 endif
 
 ifndef GS_MGMT_IMAGE_TAG
-    GS_MGMT_IMAGE_TAG := latest
+    GS_MGMT_IMAGE_TAG := latest-$(ARCH)
 endif
 
 ifndef ONL_REPO
-    ONL_REPO := sm/OpenNetworkLinux/REPO/stretch/packages/binary-amd64
+    ONL_REPO := sm/OpenNetworkLinux/REPO/stretch/packages/binary-$(ARCH)
 endif
 
-ifndef ONLP_PACKAGES
-    ONLP_PACKAGES := onlp onlp-dev onlp-x86-64-kvm-x86-64-r0 onlp-py3
+ifeq ($(ARCH), amd64)
+    ONLP_PACKAGES ?= onlp onlp-dev onlp-x86-64-kvm-x86-64-r0 onlp-py3
+else ifeq ($(ARCH), arm64)
+    ONLP_PACKAGES ?= onlp onlp-dev onlp-arm64-wistron-wtp-01-c1-00-r0 onlp-py3
 endif
 
 ifndef ONLP_DEBS
-    ONLP_DEBS := $(foreach repo,$(ONLP_PACKAGES),$(ONL_REPO)/$(repo)_1.0.0_amd64.deb)
+    ONLP_DEBS := $(foreach repo,$(ONLP_PACKAGES),$(ONL_REPO)/$(repo)_1.0.0_$(ARCH).deb)
 endif
 
 ifndef DOCKER_REPO
@@ -96,6 +102,8 @@ ifndef TAI_META_CUSTOM_FILES
     TAI_META_CUSTOM_FILES := $(abspath $(wildcard scripts/tai/*))
 endif
 
+DOCKER_BUILD_OPTION ?= --platform linux/$(ARCH)
+
 all: builder np2 snmpd base-image images
 
 docker:
@@ -104,8 +112,11 @@ docker:
 builder: $(ONLP_DEBS)
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
+onlp: $(ONLP_DEBS)
+
+
 $(ONLP_DEBS):
-	cd sm/OpenNetworkLinux && docker/tools/onlbuilder -9 --non-interactive --isolate -c "bash -c '../../tools/build_onlp.sh'"
+	cd sm/OpenNetworkLinux && docker/tools/onlbuilder -9 --non-interactive --isolate -c "../../tools/build_onlp.sh $(ARCH)"
 
 base-image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \
