@@ -116,7 +116,7 @@ images: south-images north-images xlate-images
 
 south-images: south-sonic south-tai south-onlp south-system south-notif
 
-north-images: north-cli north-snmp
+north-images: north-cli north-snmp np2
 
 xlate-images: xlate-openconfig
 
