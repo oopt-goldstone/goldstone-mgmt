@@ -3,6 +3,7 @@ pipeline {
 
   parameters {
     string(name: 'DEVICE', defaultValue: '10.10.10.115', description: 'IP address of the test device')
+    string(name: 'ARM_DEVICE', defaultValue: '10.10.10.118', description: 'IP address of the test device')
     booleanParam(name: 'FORCE_BUILD_BUILDER', defaultValue: false, description: 'build builder image forcibly')
   }
 
@@ -90,7 +91,7 @@ pipeline {
               steps {
                 sh 'make tester'
                 timeout(time: 15, unit: 'MINUTES') {
-                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.load ${params.DEVICE}"
+                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.load ${params.DEVICE} --arch $ARCH"
                 }
               }
             }
@@ -153,6 +154,20 @@ pipeline {
                   sh 'make images'
               }
             }
+
+            stage('Load') {
+              when {
+                branch pattern: "^PR.*", comparator: "REGEXP"
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
+                timeout(time: 15, unit: 'MINUTES') {
+                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.load ${params.ARM_DEVICE} --arch $ARCH"
+                }
+              }
+            }
+ 
           }
         }
       }

@@ -9,65 +9,71 @@ import time
 from .common import *
 
 
-def main(host, username, password):
+def main(host, username, password, arch):
+
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         cli.connect(host, username=username, password=password)
 
-        ssh(
-            cli, "kubectl delete -f /var/lib/rancher/k3s/server/manifests/mgmt || true"
-        )  # can fail
-        ssh(cli, "rm -rf /var/lib/rancher/k3s/server/manifests/mgmt")
-        ssh(cli, "mkdir -p /var/lib/rancher/k3s/server/manifests/mgmt")
+        if arch == "amd64":
+            ssh(
+                cli, "kubectl delete -f /var/lib/rancher/k3s/server/manifests/mgmt || true"
+            )  # can fail
+            ssh(cli, "rm -rf /var/lib/rancher/k3s/server/manifests/mgmt")
+            ssh(cli, "mkdir -p /var/lib/rancher/k3s/server/manifests/mgmt")
 
-        ssh(cli, "systemctl restart usonic")
+            ssh(cli, "systemctl restart usonic")
 
         # stop South system service
         ssh(cli, "systemctl stop gs-south-system || true")  # can fail
-        # stop Goldstone Management service
-        ssh(cli, "gs-mgmt.sh stop || true")  # can fail
-        # stop NETOPEER2 service
-        ssh(cli, "netopeer2.sh stop || true")  # can fail
-        # stop SNMP service
-        ssh(cli, "gs-snmp.sh stop || true")  # can fail
 
-        images = [
-            "gs-mgmt",
-            "gs-mgmt-netopeer2",
-            "gs-mgmt-snmpd",
-            "gs-mgmt-south-sonic",
-            "gs-mgmt-south-onlp",
-            "gs-mgmt-south-tai",
-            "gs-mgmt-south-notif",
-            "gs-mgmt-north-snmp",
-            "gs-mgmt-xlate-openconfig",
-        ]
-        images = " ".join(f"gs-test/{name}:latest-amd64" for name in images)
+        if arch == "amd64":
+            # stop Goldstone Management service
+            ssh(cli, "gs-mgmt.sh stop || true")  # can fail
+            # stop NETOPEER2 service
+            ssh(cli, "netopeer2.sh stop || true")  # can fail
+            # stop SNMP service
+            ssh(cli, "gs-snmp.sh stop || true")  # can fail
 
-        run(f"docker save -o /tmp/gs-mgmt.tar {images}")
+            images = [
+                "gs-mgmt",
+                "gs-mgmt-netopeer2",
+                "gs-mgmt-snmpd",
+                "gs-mgmt-south-sonic",
+                "gs-mgmt-south-onlp",
+                "gs-mgmt-south-tai",
+                "gs-mgmt-south-notif",
+                "gs-mgmt-north-snmp",
+                "gs-mgmt-xlate-openconfig",
+            ]
+            images = " ".join(f"gs-test/{name}:latest-{arch}" for name in images)
+
+            run(f"docker save -o /tmp/gs-mgmt.tar {images}")
 
         # clean up sysrepo files
         ssh(cli, "rm -rf /dev/shm/sr_*")
         ssh(cli, "rm -rf /var/lib/sysrepo/*")
 
         scp = SCPClient(cli.get_transport())
-        scp.put("/tmp/gs-mgmt.tar", "/tmp")
-        ssh(cli, "ctr images import /tmp/gs-mgmt.tar")
 
-        scp.put(
-            "./ci/k8s/prep.yaml",
-            remote_path="/var/lib/rancher/k3s/server/manifests/mgmt/prep.yaml",
-        )
+        if arch == "amd64":
+            scp.put("/tmp/gs-mgmt.tar", "/tmp")
+            ssh(cli, "ctr images import /tmp/gs-mgmt.tar")
 
-        ssh(
-            cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/prep.yaml"
-        )
+            scp.put(
+                "./ci/k8s/prep.yaml",
+                remote_path="/var/lib/rancher/k3s/server/manifests/mgmt/prep.yaml",
+            )
 
-        ssh(cli, "kubectl wait --for=condition=complete job/prep-gs-mgmt")
+            ssh(
+                cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/prep.yaml"
+            )
+
+            ssh(cli, "kubectl wait --for=condition=complete job/prep-gs-mgmt")
 
         run("rm -rf deb && mkdir -p deb")
         run(
-            'docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"'
+            f'docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest-{arch} sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"'
         )
 
         ssh(cli, "rm -rf /tmp/deb")
@@ -76,17 +82,18 @@ def main(host, username, password):
 
         ssh(cli, "sysrepoctl -l | grep goldstone")  # goldstone models must be loaded
 
-        for app in ["mgmt", "snmp", "xlate"]:
-            scp.put(
-                f"./ci/k8s/{app}.yaml",
-                remote_path=f"/var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml",
-            )
-            ssh(
-                cli,
-                f"kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml",
-            )
+        if arch == "amd64":
+            for app in ["mgmt", "snmp", "xlate"]:
+                scp.put(
+                    f"./ci/k8s/{app}.yaml",
+                    remote_path=f"/var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml",
+                )
+                ssh(
+                    cli,
+                    f"kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml",
+                )
 
-        run("make docker")
+        run(f"ARCH={arch} make docker")
         ssh(cli, "rm -rf /tmp/wheels")
         ssh(cli, "mkdir -p /tmp/wheels/cli /tmp/wheels/system")
         scp.put("src/north/cli/dist", recursive=True, remote_path="/tmp/wheels/cli")
@@ -99,12 +106,13 @@ def main(host, username, password):
 
         # ssh(cli, 'gscli -c "show version"')
 
-        check_pod(cli, "gs-mgmt-sonic")
-        check_pod(cli, "gs-mgmt-onlp")
-        check_pod(cli, "gs-mgmt-tai")
-        check_pod(cli, "gs-mgmt-snmp")
-        check_pod(cli, "gs-mgmt-openconfig")
-        check_pod(cli, "gs-mgmt-notif")
+        if arch == "amd64":
+            check_pod(cli, "gs-mgmt-sonic")
+            check_pod(cli, "gs-mgmt-onlp")
+            check_pod(cli, "gs-mgmt-tai")
+            check_pod(cli, "gs-mgmt-snmp")
+            check_pod(cli, "gs-mgmt-openconfig")
+            check_pod(cli, "gs-mgmt-notif")
 
         def restart_gssouth_system():
             max_iteration = 3
@@ -129,6 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("host")
     parser.add_argument("--username", default="root")
     parser.add_argument("--password", default="x1")
+    parser.add_argument("--arch", default="amd64", choices=["amd64", "arm64"])
 
     args = parser.parse_args()
-    main(args.host, args.username, args.password)
+    main(args.host, args.username, args.password, args.arch)
