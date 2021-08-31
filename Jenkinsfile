@@ -14,12 +14,13 @@ pipeline {
               env.SKIP = 0
               if (env.BRANCH_NAME == 'master' ) {
                   env.DOCKER_REPO = 'nlpldev'
-                  env.BUILD_BUILDER = 1
+                  env.BUILD_BUILDER = sh(returnStdout: true, script: 'cat /run/build_builder || echo 1')
               } else if ( env.BRANCH_NAME.startsWith('PR') ) {
                   env.DOCKER_REPO = 'gs-test'
                   // if sm/, patches/, builder.Dockerfile, build_onlp.sh is updated
                   // build the builder
                   env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile\\|build_onlp.sh'") ? 0 : 1
+                  sh 'echo $BUILD_BUILDER > /run/build_builder'
               } else {
                   env.SKIP = 1
                   env.BUILD_BUILDER = 0

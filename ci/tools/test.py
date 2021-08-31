@@ -901,7 +901,7 @@ def test_platform(cli):
     ssh(cli, 'gscli -c "show chassis-hardware transceiver"')
     ssh(cli, 'gscli -c "show chassis-hardware piu table"')
     output = ssh(cli, 'gscli -c "show chassis-hardware piu"')
-    assert "/dev/piu" in output
+    assert "piu" in output
     assert "PRESENT" in output
     output = ssh(cli, 'gscli -c "show tech-support"')
     assert "FAN INFORMATION" in output
