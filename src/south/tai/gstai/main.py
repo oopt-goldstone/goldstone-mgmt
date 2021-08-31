@@ -29,11 +29,9 @@ logger = logging.getLogger(__name__)
 
 
 def location2name(loc):
-    return loc.split("/")[-1]
-
-
-def name2location(name):
-    return f"/dev/{name}"
+    if loc.isdigit():
+        return f"piu{loc}"  # 1 => piu1
+    return loc.split("/")[-1]  # /dev/piu1 => piu1
 
 
 def attr_tai2yang(attr, meta, schema):
@@ -155,7 +153,7 @@ class Server(object):
         name = m.group("name")
 
         try:
-            module = self.taish.get_module(name2location(name))
+            module = self.taish.get_module(self.name2location(name))
         except Exception as e:
             logger.error(str(e))
             raise InvalidXPath()
@@ -428,9 +426,10 @@ class Server(object):
                     )
                     continue
 
+                name = location2name(location)
                 v = {
-                    "name": location2name(location),
-                    "config": {"name": location2name(location)},
+                    "name": name,
+                    "config": {"name": name},
                 }
 
                 if intf:
@@ -759,6 +758,14 @@ class Server(object):
                 logger.info(f"failed to cleanup PIU: {e}")
 
         self.update_operds()
+
+    def name2location(self, name, modules=None):
+        if modules == None:
+            modules = self.taish.list()
+        v = f"/dev/{name}"
+        if v in modules:
+            return v  # piu1 => /dev/piu1
+        return name.replace("piu", "")  # piu1 => 1
 
     def update_operds(self):
 
