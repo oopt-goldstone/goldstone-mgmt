@@ -83,6 +83,84 @@ pipeline {
                   sh 'make images'
               }
             }
+          }
+        }
+
+        stage('arm64') {
+          environment {
+            ARCH = 'arm64'
+          }
+          stages {
+            stage('Build Builder') {
+              when {
+                environment name: 'BUILD_BUILDER', value: '1'
+              }
+              steps {
+                  sh 'make builder'
+              }
+            }
+
+            stage('Build') {
+              when {
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                  sh 'make snmpd'
+                  sh 'make base-image'
+                  sh 'make images'
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Build sysrepo packages for host') {
+      when {
+        branch pattern: "^PR.*", comparator: "REGEXP"
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+          sh 'rm -rf deb && mkdir -p deb'
+          sh 'docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"'
+          sh 'rm -rf builds/amd64/deb && mkdir -p builds/amd64/deb/'
+          sh 'cp deb/*.deb builds/amd64/deb/'
+
+          sh 'rm -rf deb && mkdir -p deb'
+          sh 'docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"'
+          sh 'rm -rf builds/arm64/deb && mkdir -p builds/arm64/deb/'
+          sh 'cp deb/*.deb builds/arm64/deb/'
+      }
+    }
+
+    stage('Build cli and south-system packages for host') {
+      when {
+        branch pattern: "^PR.*", comparator: "REGEXP"
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+          sh 'rm -rf src/north/cli/dist src/south/system/dist'
+          sh 'ARCH=amd64 make docker'
+          sh 'rm -rf builds/amd64/wheels && mkdir -p builds/amd64/wheels'
+          sh 'cp -r src/north/cli/dist builds/amd64/wheels/cli'
+          sh 'cp -r src/south/system/dist builds/amd64/wheels/system'
+
+          sh 'rm -rf src/north/cli/dist src/south/system/dist'
+          sh 'ARCH=arm64 make docker'
+          sh 'rm -rf builds/arm64/wheels && mkdir -p builds/arm64/wheels'
+          sh 'cp -r src/north/cli/dist builds/arm64/wheels/cli'
+          sh 'cp -r src/south/system/dist builds/arm64/wheels/system'
+      }
+    }
+
+    stage('Load and Test') {
+      failFast true
+      parallel {
+        stage('amd64') {
+          environment {
+            ARCH = 'amd64'
+          }
+          stages {
             stage('Load') {
               when {
                 branch pattern: "^PR.*", comparator: "REGEXP"
@@ -135,26 +213,6 @@ pipeline {
             ARCH = 'arm64'
           }
           stages {
-            stage('Build Builder') {
-              when {
-                environment name: 'BUILD_BUILDER', value: '1'
-              }
-              steps {
-                  sh 'make builder'
-              }
-            }
-
-            stage('Build') {
-              when {
-                environment name: 'SKIP', value: '0'
-              }
-              steps {
-                  sh 'make snmpd'
-                  sh 'make base-image'
-                  sh 'make images'
-              }
-            }
-
             stage('Load') {
               when {
                 branch pattern: "^PR.*", comparator: "REGEXP"
@@ -167,15 +225,15 @@ pipeline {
                 }
               }
             }
- 
           }
         }
       }
     }
+
   }
 
   post {
-    always {
+    success {
       script {
         if ( env.BRANCH_NAME != 'master' ) {
           deleteDir() /* clean up our workspace */
