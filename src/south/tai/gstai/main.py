@@ -114,6 +114,7 @@ class Server(object):
         self.loop = asyncio.get_event_loop()
         self.conn = sysrepo.SysrepoConnection()
         self.sess = self.conn.start_session()
+        self.notif_q = asyncio.Queue()
 
         routes = web.RouteTableDef()
 
@@ -322,6 +323,12 @@ class Server(object):
 
                 if obj and items:
                     for k, v in items.items():
+
+                        # leaf that doesn't need to be passed to TAI
+                        # TODO invent cleaner way to detect this
+                        if "enable" in k and "notification" in k:
+                            continue
+
                         # check if we can get metadata of this attribute
                         # before doing actual setting
                         try:
@@ -491,9 +498,6 @@ class Server(object):
         return r
 
     async def tai_cb(self, obj, attr_meta, msg):
-        self.sess.switch_datastore("running")
-        ly_ctx = self.sess.get_ly_ctx()
-
         if isinstance(obj, taish.Module):
             type_ = "module"
         elif isinstance(obj, taish.NetIf):
@@ -524,18 +528,6 @@ class Server(object):
             key = location2name(module_location)
             index = await obj.get("index")
             xpath = f"/goldstone-tai:modules/module[name='{key}']/{type_}[name='{index}']/config/enable-{attr_meta.short_name}"
-        locked = self.sess.is_locked("goldstone-tai")
-        if locked:
-            logger.info(f"{key} is_locked: {locked}")
-
-        try:
-            data = self.sess.get_data(xpath, include_implicit_defaults=True)
-        except sysrepo.errors.SysrepoNotFoundError as e:
-            return
-
-        notify = libyang.xpath_get(data, xpath)
-        if not notify:
-            return
 
         eventname = f"goldstone-tai:{type_}-{attr_meta.short_name}-event"
 
@@ -543,37 +535,9 @@ class Server(object):
         if type_ != "module":
             v["index"] = int(index)
 
-        keys = []
-
-        for attr in msg.attrs:
-            meta = await obj.get_attribute_metadata(attr.attr_id)
-            try:
-                xpath = f"/{eventname}/goldstone-tai:{meta.short_name}"
-                schema = list(ly_ctx.find_path(xpath))[0]
-                data = attr_tai2yang(attr.value, meta, schema)
-                keys.append(meta.short_name)
-                if type(data) == list and len(data) == 0:
-                    logger.warning(f"empty leaf-list is not supported for notification")
-                    continue
-                v[meta.short_name] = data
-            except libyang.util.LibyangError as e:
-                logger.warning(f"{xpath}: {e}")
-                continue
-
-        if len(keys) == 0:
-            logger.warning(f"nothing to notify")
-            return
-
-        v["keys"] = keys
-
-        notif = {eventname: v}
-
-        # FIXME adding '/' at the prefix or giving wrong module causes Segmentation fault
-        # needs a fix in sysrepo
-        n = json.dumps(notif)
-        logger.debug(f"notification: {n}")
-        dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-        self.sess.notification_send_ly(dnode)
+        await self.notif_q.put(
+            {"xpath": xpath, "eventname": eventname, "v": v, "obj": obj, "msg": msg}
+        )
 
     async def get_tai_notification_tasks(self, location):
         tasks = []
@@ -737,7 +701,7 @@ class Server(object):
         assert "piu-notify-event" in data
 
         data = data["piu-notify-event"]
-        location = data["name"]
+        location = self.name2location(data["name"])
         status = [v for v in data.get("status", [])]
         piu_present = "PRESENT" in status
         cfp_status = data.get("cfp2-presence", "UNPLUGGED")
@@ -816,8 +780,9 @@ class Server(object):
         # get hardware configuration from platform datastore ( ONLP south must be running )
         self.sess.switch_datastore("operational")
         d = self.sess.get_data("/goldstone-platform:components/component", no_subs=True)
+        ms = self.taish.list()
         modules = [
-            {"name": c["name"], "location": c["name"]}
+            self.name2location(c["name"], ms)
             for c in d["components"]["component"]
             if c["state"]["type"] == "PIU"
             and c["piu"]["state"]["status"] == ["PRESENT"]
@@ -830,7 +795,7 @@ class Server(object):
             config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
             logger.debug(f"sysrepo running configuration: {config}")
 
-            tasks = [self.initialize_piu(config, m["location"]) for m in modules]
+            tasks = [self.initialize_piu(config, m) for m in modules]
             await asyncio.gather(*tasks)
 
             self.update_operds()
@@ -871,7 +836,66 @@ class Server(object):
                     logger.error(f"ping failed {e}")
                     return
 
-        return [ping()]
+        async def handle_notification(notification):
+            xpath = notification["xpath"]
+            eventname = notification["eventname"]
+            v = notification["v"]
+            obj = notification["obj"]
+            msg = notification["msg"]
+
+            self.sess.switch_datastore("running")
+            ly_ctx = self.sess.get_ly_ctx()
+
+            try:
+                data = self.sess.get_data(xpath, include_implicit_defaults=True)
+            except sysrepo.errors.SysrepoNotFoundError as e:
+                return
+
+            notify = libyang.xpath_get(data, xpath)
+            if not notify:
+                return
+
+            keys = []
+
+            for attr in msg.attrs:
+                meta = await obj.get_attribute_metadata(attr.attr_id)
+                try:
+                    xpath = f"/{eventname}/goldstone-tai:{meta.short_name}"
+                    schema = list(ly_ctx.find_path(xpath))[0]
+                    data = attr_tai2yang(attr.value, meta, schema)
+                    keys.append(meta.short_name)
+                    if type(data) == list and len(data) == 0:
+                        logger.warning(
+                            f"empty leaf-list is not supported for notification"
+                        )
+                        continue
+                    v[meta.short_name] = data
+                except libyang.util.LibyangError as e:
+                    logger.warning(f"{xpath}: {e}")
+                    continue
+
+            if len(keys) == 0:
+                logger.warning(f"nothing to notify")
+                return
+
+            v["keys"] = keys
+
+            notif = {eventname: v}
+
+            # FIXME adding '/' at the prefix or giving wrong module causes Segmentation fault
+            # needs a fix in sysrepo
+            n = json.dumps(notif)
+            logger.debug(f"notification: {n}")
+            dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
+            self.sess.notification_send_ly(dnode)
+
+        async def notif_loop():
+            while True:
+                notification = await self.notif_q.get()
+                await handle_notification(notification)
+                self.notif_q.task_done()
+
+        return [ping(), notif_loop()]
 
 
 def main():
