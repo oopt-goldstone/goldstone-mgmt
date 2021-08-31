@@ -448,13 +448,8 @@ class Server(object):
         eventname = "goldstone-platform:piu-notify-event"
 
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
-            # TODO we set the PIU name as /dev/piu?. This is because libtai-aco.so expects
-            # the module location to be the device file of the module.
-            # However, this device file name might be awkward for network operators.
-            # We may want to think about having more friendly alias for these names.
             piuId = oid & 0xFFFFFF
-
-            name = f"/dev/piu{piuId}"
+            name = f"piu{piuId}"
 
             xpath = f"/goldstone-platform:components/component[name='{name}']"
 
@@ -622,7 +617,7 @@ class Server(object):
         # Component : PIU
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
             piuId = oid & 0xFFFFFF
-            name = f"/dev/piu{piuId}"
+            name = f"piu{piuId}"
 
             xpath = f"/goldstone-platform:components/component[name='{name}']"
             self.sess.set_item(f"{xpath}/config/name", "piu" + str(piuId))
