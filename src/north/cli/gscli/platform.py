@@ -137,12 +137,19 @@ class Component(object):
                 table = self.get_state_attr(option, component)
                 stdout.info(component["name"])
                 stdout.info(tabulate(table))
-            stdout.info("Note: Values with the symbol '-' are unsupported")
+
+            if components:
+                stdout.info("Note: Values with the symbol '-' are unsupported")
+            else:
+                stdout.info(f"No {option} found on this platform")
 
     def get_components(self, type_):
-        c = self.sr_op.get_data(
-            f"{self.XPATH}/component[state/type='{type_.upper()}']", "operational"
-        )
+        try:
+            c = self.sr_op.get_data(
+                f"{self.XPATH}/component[state/type='{type_.upper()}']", "operational"
+            )
+        except sr.errors.SysrepoNotFoundError:
+            return []
         c = c.get("components", {}).get("component", [])
         return natsorted(c, key=lambda v: v["name"])
 
