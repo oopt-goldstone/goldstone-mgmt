@@ -225,6 +225,18 @@ pipeline {
                 }
               }
             }
+            stage('Test') {
+              when {
+                branch pattern: "^PR.*", comparator: "REGEXP"
+                environment name: 'SKIP', value: '0'
+              }
+              steps {
+                sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
+                timeout(time: 20, unit: 'MINUTES') {
+                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthONLP"
+                }
+              }
+            }
           }
         }
       }
