@@ -1,496 +1,816 @@
 #!/usr/bin/env python3
 
 import paramiko
-import argparse
 import time
 import sys
+import unittest
+import os
 
 from .common import *
 
+HOST = os.getenv("GS_TEST_HOST")
+assert HOST
 
-def test_system(cli):
-    ssh(cli, 'gscli -c "show version"')
-
-
-def test_vlan(cli):
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "vlan 1000"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "vlan 2000"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "vlan range 1000-1010"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "vlan range 200-205,250,295-300"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "no vlan range 200-205,250"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "no vlan 2000"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "no vlan 1000"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "show interface brief"')
-    ssh(cli, 'gscli -c "show interface description"')
-    ssh(cli, 'gscli -c "show tech-support"')
-    ssh(cli, 'gscli -c "show running-config"')
-    ssh(cli, 'gscli -c "show running-config interface"')
-    ssh(cli, 'gscli -c "show running-config vlan"')
-    try:
-        ssh(cli, 'gscli -c "vlan range 25-19"')
-    except SSHException as e:
-        assert "The vlan-range entered is invalid" in e.stderr
+USERNAME = os.getenv("GS_TEST_USERNAME", "root")
+PASSWORD = os.getenv("GS_TEST_PASSWORD", "x1")
 
 
-def test_auto_nego(cli):
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate enable"')
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate disable"')
+class TestBase(unittest.TestCase):
+    def setUp(self):
+        self.cli = paramiko.SSHClient()
+        self.cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.cli.connect(HOST, username=USERNAME, password=PASSWORD)
 
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate enable"')
-    ssh(cli, "kubectl rollout restart ds/gs-mgmt-sonic")
-    check_pod(cli, "gs-mgmt-sonic")
-    time.sleep(90)
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "auto-negotiate enable" in output
-    ssh(cli, 'gscli -c "interface Ethernet3_1; no auto-negotiate"')
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "auto-negotiate" not in output
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate enable"')
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet3_1; interface-type SR4"')
-    except SSHException as e:
-        assert "../../auto-negotiate/config/enabled = 'false'" in e.stderr
-    else:
-        raise Exception(
-            "Failed to stop configuring interface type when auto-nego is enabled"
+    def tearDown(self):
+        self.cli.close()
+
+    def ssh(self, command):
+        return ssh(self.cli, command)
+
+    def gscli(self, command):
+        return self.ssh(f'gscli -c "{command}"')
+
+
+class TestSouthONLP(TestBase):
+    def test_platform(self):
+        # ADD test for platform CLIs here
+        output = self.ssh('gscli -c "show datastore /goldstone-platform:* operational"')
+        self.assertTrue("piu" in output)
+        self.assertTrue("transceiver" in output)
+        self.gscli("show chassis-hardware fan")
+        self.gscli("show chassis-hardware led")
+        self.gscli("show chassis-hardware psu")
+        self.gscli("show chassis-hardware thermal")
+        self.gscli("show chassis-hardware system")
+        self.gscli("show chassis-hardware transceiver table")
+        self.gscli("show chassis-hardware transceiver")
+        self.gscli("show chassis-hardware piu table")
+        output = self.gscli("show chassis-hardware piu")
+        self.assertTrue("piu" in output)
+        self.assertTrue("PRESENT" in output)
+        output = self.gscli("show tech-support")
+        self.assertTrue("FAN INFORMATION" in output)
+
+
+class TestSouthSystem(TestBase):
+    def test_show_version(self):
+        self.gscli("show version")
+
+    def test_mgmt_if_cmds(self):
+        with self.assertRaisesRegex(SSHException, "does not satisfy the constraint"):
+            self.gscli("management-interface eth0; ip address 999.999.999.999/24")
+        with self.assertRaisesRegex(
+            SSHException,
+            "Entered address is not in the expected format - A.B.C.D\/\<mask\>",
+        ):
+            self.gscli("management-interface eth0; ip address 999.999.999.999.24")
+        output = self.gscli(
+            "management-interface eth0; ip address 20.20.20.0/24; show running-config mgmt-if",
         )
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet3_1; fec rs"')
-    except SSHException as e:
-        assert "../../auto-negotiate/config/enabled = 'false'" in e.stderr
-    else:
-        raise Exception("Failed to stop configuring FEC when auto-nego is enabled")
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet3_1; speed 40G"')
-    except SSHException as e:
-        assert "../../auto-negotiate/config/enabled = 'false'" in e.stderr
-    else:
-        raise Exception("Failed to stop configuring speed when auto-nego is enabled")
+        self.assertTrue("ip address 20.20.20.0/24" in output)
 
-    ssh(cli, 'gscli -c "interface Ethernet3_1; auto-negotiate advertise 40G"')
-    output = ssh(cli, 'gscli -c "interface Ethernet3_1; show" | grep advertise')
+        with self.assertRaisesRegex(SSHException, "does not satisfy the constraint"):
+            self.gscli(
+                "management-interface eth0; no ip address 999.999.999.999/24",
+            )
 
+        with self.assertRaisesRegex(
+            SSHException,
+            "Entered address is not in the expected format - A.B.C.D\/\<mask\>",
+        ):
+            self.gscli("management-interface eth0; ip address 999.999.999.999.24")
 
-def test_intf_type(cli):
-    ssh(cli, 'gscli -c "interface Ethernet1_1; interface-type SR4"')
-    ssh(cli, 'gscli -c "interface Ethernet1_1; interface-type KR4"')
-
-    ssh(cli, 'gscli -c "interface Ethernet1_1; interface-type CR4"')
-    ssh(cli, "kubectl rollout restart ds/gs-mgmt-sonic")
-    check_pod(cli, "gs-mgmt-sonic")
-    time.sleep(90)
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "interface-type CR4" in output
-    ssh(cli, 'gscli -c "interface Ethernet1_1; no interface-type"')
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "interface-type" not in output
-
-
-def test_speed_intftype(cli):
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet4_1; speed 10000"')
-    except SSHException as e:
-        assert "Invalid" in e.stderr
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet4_1; interface-type SR"')
-    except SSHException as e:
-        assert "Unsupported interface type" in e.stderr
-
-
-def test_ufd(cli):
-    ssh(cli, 'gscli -c "ufd ufd1"')
-    ssh(cli, 'gscli -c "interface Ethernet1_1; ufd ufd1 uplink"')
-    ssh(cli, 'gscli -c "interface Ethernet2_1; ufd ufd1 downlink"')
-    ssh(cli, 'gscli -c "interface Ethernet4_1; ufd ufd1 downlink"')
-    output = ssh(cli, 'gscli -c "ufd ufd1; show"')
-    assert "Ethernet1_1" in output
-    assert "Ethernet2_1" in output
-    assert "Ethernet4_1" in output
-
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet5_1; ufd ufd1 uplink"')
-    except SSHException as e:
-        assert "Uplink Already configured" in e.stderr
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; ufd ufd1 downlink"')
-    except SSHException as e:
-        assert "Ethernet1_1:Port Already configured" in e.stderr
-
-    ssh(cli, 'gscli -c "ufd 10"')
-    ssh(cli, 'gscli -c "interface Ethernet6_1; ufd 10 uplink"')
-    ssh(cli, 'gscli -c "interface Ethernet7_1; ufd 10 downlink"')
-    ssh(cli, 'gscli -c "interface Ethernet6_1; shutdown"')
-    output = ssh(cli, 'gscli -c "show interface brief"')
-    assert "Ethernet7_1  |   dormant  " in output
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "ufd 10 downlink" in output
-
-
-def test_portchannel(cli):
-    ssh(cli, 'gscli -c "portchannel PortChannel10"')
-    ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel PortChannel10"')
-    ssh(cli, 'gscli -c "interface Ethernet2_1; portchannel PortChannel10"')
-    ssh(cli, 'gscli -c "interface Ethernet4_1; portchannel PortChannel10"')
-    output = ssh(cli, 'gscli -c "portchannel PortChannel10; show"')
-    assert "Ethernet1_1" in output
-    assert "Ethernet2_1" in output
-    assert "Ethernet4_1" in output
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "portchannel PortChannel10" in output
-    ssh(cli, 'gscli -c "portchannel PortChannel20"')
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; portchannel PortChannel10"')
-    except SSHException as e:
-        assert "Invalid argument: User callback failed" in e.stderr
-    ssh(cli, 'gscli -c "portchannel PortChannel9"')
-    ssh(cli, 'gscli -c "portchannel PortChannel99"')
-    ssh(cli, 'gscli -c "portchannel PortChannel999"')
-    ssh(cli, 'gscli -c "portchannel PortChannel9999"')
-    try:
-        ssh(cli, 'gscli -c "portchannel PortChannel10000"')
-    except SSHException as e:
-        assert (
-            'Value "PortChannel10000" does not satisfy the constraint "PortChannel[0-9]{1,4}"'
-            in e.stderr
+        output = self.gscli(
+            "management-interface eth0; no ip address 20.20.20.0/24; show running-config mgmt-if",
         )
-    try:
-        ssh(cli, 'gscli -c "portchannel Lag10"')
-    except SSHException as e:
-        assert (
-            'Value "Lag10" does not satisfy the constraint "PortChannel[0-9]{1,4}"'
-            in e.stderr
+        self.assertTrue("ip address 20.20.20.0/24" not in output)
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "does not satisfy the constraint",
+        ):
+            self.gscli("management-interface eth0; ip route 10.10.10.117")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "does not satisfy the constraint",
+        ):
+            self.gscli("management-interface eth0; ip route 10.10.10.117/35")
+
+        output = self.gscli(
+            "management-interface eth0; ip route 30.30.30.0/24; show running-config mgmt-if",
         )
-    ssh(cli, 'gscli -c "interface Ethernet10_1; portchannel PortChannel9"')
-    output = ssh(cli, "ip link | grep -w PortChannel9")
-    assert "PortChannel9" in output
-    output = ssh(
-        cli, "kubectl exec -t usonic-cli -- show interface status|grep Ethernet10_1"
-    )
-    assert "PortChannel9" in output
-    ssh(cli, 'gscli -c "interface Ethernet10_1; no portchannel PortChannel9"')
-    output = ssh(
-        cli, "kubectl exec -t usonic-cli -- show interface status|grep Ethernet10_1"
-    )
-    try:
-        assert "PortChannel9" in output
-        raise Exception("Can't unconfigure interface from Portchannel")
-    except AssertionError:
-        print(
-            "This is negative case of unconfiguration of an interface from a portchannel"
+        self.assertTrue("ip route 30.30.30.0/24" in output)
+
+        output = self.gscli("show ip route")
+        self.assertTrue("30.30.30.0/24" in output)
+
+        output = self.gscli(
+            "management-interface eth0; no ip route 30.30.30.0/24; show running-config mgmt-if",
         )
-    ssh(cli, 'gscli -c "portchannel PortChannel9; shutdown"')
-    ssh(cli, 'gscli -c "portchannel PortChannel9; no shutdown"')
-    ssh(cli, 'gscli -c "no portchannel PortChannel9"')
-    try:
-        ssh(cli, "ip link | grep -w PortChannel9")
-        raise Exception("Can't unconfigure Portchannel")
-    except SSHException:
-        print("This is negative case of unconfiguration of a portchannel")
+        self.assertTrue("ip route 30.30.30.0/24" not in output)
 
+        output = self.gscli("show ip route")
+        self.assertTrue("30.30.30.0/24" not in output)
 
-def test_tai(cli):
-    output = ssh(cli, 'gscli -c "show transponder summary"')
-    lines = [line for line in output.split("\n") if "piu" in line]
-
-    for line in lines:
-        elems = [e.strip() for e in line.split("|") if e]
-        if elems[1] != "N/A":
-            device = elems[0]
-            break
-    else:
-        raise Exception("no transponder found on this device")
-
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 194.5thz"')
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
-
-    try:
-        ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq aaa"')
-    except SSHException as e:
-        assert "invalid frequency input" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: tx-laser-freq aaa")
-
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; output-power -4; !sleep 1; show" | grep output-power',
-    )
-    assert "-4.00 dBm" in output
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; no output-power; !sleep 1; show" | grep output-power',
-    )
-    assert "0.00 dBm" in output
-
-    #    output = ssh(
-    #        cli,
-    #        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; !sleep 1; show" | grep voa-rx',
-    #    )
-    #    assert "0.9" in output
-    #    output = ssh(
-    #        cli,
-    #        f'gscli -c "transponder {device}; netif 0; no voa-rx; !sleep 1; show" | grep voa-rx',
-    #    )
-    #    assert "0.0" in output
-
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; !sleep 1; show" | grep tx-laser-freq',
-    )
-    assert "193.70THz" in output
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; !sleep 1; show" | grep tx-laser-freq',
-    )
-    assert "193.50THz" in output
-
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk; !sleep 1; show" | grep modulation-format',
-    )
-    assert "dp-qpsk" in output
-    output = ssh(
-        cli,
-        f'gscli -c "transponder {device}; netif 0; no modulation-format; !sleep 1; show" | grep modulation-format',
-    )
-    assert "dp-16-qam" in output
-
-    #    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; output-power -3.2"')
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz"')
-    ssh(cli, f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk"')
-
-    ssh(cli, "kubectl rollout restart ds/gs-mgmt-tai")
-    check_pod(cli, "gs-mgmt-tai")
-
-    #    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
-    #    assert "0.9" in output
-    output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; show" | grep output-power'
-    )
-    assert "-3.20 dBm" in output
-    output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; show" | grep tx-laser-freq'
-    )
-    assert "193.70THz" in output
-    output = ssh(
-        cli, f'gscli -c "transponder {device}; netif 0; show" | grep modulation-format'
-    )
-    assert "dp-qpsk" in output
-
-    ssh(cli, f'gscli -c "transponder {device}; shutdown"')
-    ssh(cli, f'gscli -c "transponder {device}; no shutdown"')
-    ssh(cli, f'gscli -c "clear datastore goldstone-tai"')
-
-
-def test_vlan_member_add_delete(cli):
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "vlan 1000"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(
-        cli,
-        'gscli -c "interface Ethernet1_1; no shutdown; switchport mode trunk vlan 1000; show"',
-    )
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(
-        cli,
-        'gscli -c "interface Ethernet2_1; no shutdown; switchport mode trunk vlan 1000; show"',
-    )
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(
-        cli,
-        'gscli -c "interface Ethernet1_1; no shutdown; no switchport mode trunk vlan 1000; show"',
-    )
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; switchport mode trunk vlab 1000"')
-    except SSHException as e:
-        assert "usage: switchport mode (trunk|access) vlan <vid>" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid cmd switchport mode trunk vlab 1000"
+        output = self.gscli(
+            "management-interface eth0; ip route 30.20.0.0/16; show running-config mgmt-if",
         )
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; switchport mode trunk access 1000"')
-    except SSHException as e:
-        assert "usage: switchport mode (trunk|access) vlan <vid>" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid cmd switchport mode trunk access 1000"
+        self.assertTrue("ip route 30.20.0.0/16" in output)
+        output = self.gscli(
+            "management-interface eth0; ip route 20.10.20.0/24; show running-config mgmt-if",
+        )
+        self.assertTrue("ip route 20.10.20.0/24" in output)
+        output = self.gscli(
+            "management-interface eth0; ip route 30.20.20.0/24; show running-config mgmt-if",
+        )
+        self.assertTrue("ip route 30.20.20.0/24" in output)
+        output = self.gscli("show ip route")
+        self.assertTrue("30.20.0.0/16" in output)
+        self.assertTrue("20.10.20.0/24" in output)
+        self.assertTrue("30.20.20.0/24" in output)
+
+        self.gscli("clear ip route")
+
+        output = self.gscli("show ip route")
+        self.assertTrue("30.20.0.0/16" not in output)
+        self.assertTrue("20.10.20.0/24" not in output)
+        self.assertTrue("30.20.20.0/24" not in output)
+
+    def test_mgmt_intf(self):
+        self.gscli("show arp")
+        self.gscli("ping 10.10.10.250 -c 4")
+        output = self.gscli("show arp")
+        self.assertTrue("10.10.10.250" in output)
+        self.gscli("clear arp")
+        output = self.gscli("show arp")
+        self.assertTrue("10.10.10.250" not in output)
+        self.gscli("show arp")
+        self.gscli("ping 10.10.10.100 -c 4")
+        output = self.gscli("show arp")
+        self.assertTrue("10.10.10.100" in output)
+        self.gscli("clear arp")
+        self.gscli("clear arp")
+        output = self.gscli("show arp")
+        self.assertTrue("10.10.10.100" not in output)
+
+    def test_system_reconcile(self):
+        output = self.gscli(
+            "management-interface eth0; ip route 31.21.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip route 31.21.0.0/16" in output)
+
+        output = self.gscli(
+            "management-interface eth0; ip address 20.21.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip address 20.21.0.0/16" in output)
+
+        output = self.gscli("show ip route")
+        self.assertTrue("31.21.0.0/16" in output)
+
+        self.ssh("systemctl restart gs-south-system")
+        time.sleep(10)
+
+        output = self.gscli("show ip route")
+        self.assertTrue("31.21.0.0/16" in output)
+        output = self.gscli("show running-config mgmt-if")
+        self.assertTrue("ip address 20.21.0.0/16" in output)
+
+        output = self.gscli(
+            "management-interface eth0; no ip route 31.21.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip route 31.21.0.0/16" not in output)
+
+        output = self.gscli(
+            "management-interface eth0; no ip address 20.21.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip address 20.21.0.0/16" not in output)
+
+        # case for saving a tree without leaf address
+        output = self.gscli(
+            "management-interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip address 56.10.0.0/16" in output)
+
+        output = self.gscli(
+            "management-interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip address 56.10.0.0/16" not in output)
+
+        output = self.gscli(
+            "management-interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip route 100.17.0.0/16" in output)
+
+        output = self.gscli(
+            "management-interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip route 100.17.0.0/16" not in output)
+
+        self.ssh("systemctl restart gs-south-system")
+        time.sleep(10)
+
+        output = self.gscli(
+            "management-interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip address 56.10.0.0/16" in output)
+
+        output = self.gscli(
+            "management-interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip address 56.10.0.0/16" not in output)
+
+        output = self.gscli(
+            "management-interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip route 100.17.0.0/16" in output)
+
+        output = self.gscli(
+            "management-interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if",
+        )
+        self.assertTrue("ip route 100.17.0.0/16" not in output)
+
+
+class TestSouthSONiC(TestBase):
+    def test_vlan(self):
+        self.gscli("show vlan details")
+        self.gscli("vlan 1000")
+        self.gscli("show vlan details")
+        self.gscli("vlan 2000")
+        self.gscli("show vlan details")
+        self.gscli("vlan range 1000-1010")
+        self.gscli("show vlan details")
+        self.gscli("vlan range 200-205,250,295-300")
+        self.gscli("show vlan details")
+        self.gscli("no vlan range 200-205,250")
+        self.gscli("show vlan details")
+        self.gscli("no vlan 2000")
+        self.gscli("show vlan details")
+        self.gscli("no vlan 1000")
+        self.gscli("show vlan details")
+        self.gscli("show interface brief")
+        self.gscli("show interface description")
+        self.gscli("show tech-support")
+        self.gscli("show running-config")
+        self.gscli("show running-config interface")
+        self.gscli("show running-config vlan")
+
+    #        with self.assertRaisesRegex(SSHException, "The vlan-range entered is invalid"):
+    #            self.ssh('gscli -c "vlan range 25-19"')
+
+    def test_auto_nego(self):
+        self.gscli("interface Ethernet3_1; auto-negotiate enable")
+        self.gscli("interface Ethernet3_1; auto-negotiate disable")
+
+        self.gscli("interface Ethernet3_1; auto-negotiate enable")
+        self.ssh("kubectl rollout restart ds/gs-mgmt-sonic")
+        check_pod(self.cli, "gs-mgmt-sonic")
+        output = self.gscli("show running-config interface")
+        self.assertTrue("auto-negotiate enable" in output)
+        self.gscli("interface Ethernet3_1; no auto-negotiate")
+        output = self.gscli("show running-config interface")
+        self.assertTrue("auto-negotiate" not in output)
+        self.gscli("interface Ethernet3_1; auto-negotiate enable")
+
+        with self.assertRaisesRegex(
+            SSHException, "../../auto-negotiate/config/enabled = 'false'"
+        ):
+            self.gscli("interface Ethernet3_1; interface-type SR4")
+
+        with self.assertRaisesRegex(
+            SSHException, "../../auto-negotiate/config/enabled = 'false'"
+        ):
+            self.gscli("interface Ethernet3_1; fec rs")
+
+        with self.assertRaisesRegex(
+            SSHException, "../../auto-negotiate/config/enabled = 'false'"
+        ):
+            self.gscli("interface Ethernet3_1; speed 40G")
+
+        self.gscli("interface Ethernet3_1; auto-negotiate advertise 40G")
+        output = self.ssh('gscli -c "interface Ethernet3_1; show" | grep advertise')
+
+    def test_intf_type(self):
+        self.gscli("interface Ethernet1_1; interface-type SR4")
+        self.gscli("interface Ethernet1_1; interface-type KR4")
+
+        self.gscli("interface Ethernet1_1; interface-type CR4")
+        self.ssh("kubectl rollout restart ds/gs-mgmt-sonic")
+        check_pod(self.cli, "gs-mgmt-sonic")
+        output = self.gscli("show running-config interface")
+        self.assertTrue("interface-type CR4" in output)
+        self.gscli("interface Ethernet1_1; no interface-type")
+        output = self.gscli("show running-config interface")
+        self.assertTrue("interface-type" not in output)
+
+    def test_speed_intftype(self):
+        with self.assertRaisesRegex(SSHException, "Invalid"):
+            self.gscli("interface Ethernet4_1; speed 10000")
+        with self.assertRaisesRegex(SSHException, "Unsupported interface type"):
+            self.gscli("interface Ethernet4_1; interface-type SR")
+
+    def test_ufd(self):
+        self.gscli("ufd ufd1")
+        self.gscli("interface Ethernet1_1; ufd ufd1 uplink")
+        self.gscli("interface Ethernet2_1; ufd ufd1 downlink")
+        self.gscli("interface Ethernet4_1; ufd ufd1 downlink")
+        output = self.gscli("ufd ufd1; show")
+        self.assertTrue("Ethernet1_1" in output)
+        self.assertTrue("Ethernet2_1" in output)
+        self.assertTrue("Ethernet4_1" in output)
+
+        with self.assertRaisesRegex(SSHException, "Uplink Already configured"):
+            self.gscli("interface Ethernet5_1; ufd ufd1 uplink")
+
+        with self.assertRaisesRegex(
+            SSHException, "Ethernet1_1:Port Already configured"
+        ):
+            self.gscli("interface Ethernet1_1; ufd ufd1 downlink")
+
+        self.gscli("ufd 10")
+        self.gscli("interface Ethernet6_1; ufd 10 uplink")
+        self.gscli("interface Ethernet7_1; ufd 10 downlink")
+        self.gscli("interface Ethernet6_1; shutdown")
+        output = self.gscli("show interface brief")
+        self.assertTrue("Ethernet7_1  |   dormant  " in output)
+        output = self.gscli("show running-config interface")
+        self.assertTrue("ufd 10 downlink" in output)
+
+    def test_portchannel(self):
+        self.gscli("portchannel PortChannel10")
+        self.gscli("interface Ethernet1_1; portchannel PortChannel10")
+        self.gscli("interface Ethernet2_1; portchannel PortChannel10")
+        self.gscli("interface Ethernet4_1; portchannel PortChannel10")
+        output = self.gscli("portchannel PortChannel10; show")
+        self.assertTrue("Ethernet1_1" in output)
+        self.assertTrue("Ethernet2_1" in output)
+        self.assertTrue("Ethernet4_1" in output)
+        output = self.gscli("show running-config interface")
+        self.assertTrue("portchannel PortChannel10" in output)
+        self.gscli("portchannel PortChannel20")
+
+        with self.assertRaisesRegex(SSHException, "points to a non-existing leaf"):
+            self.gscli("interface Ethernet1_1; portchannel PortChannel30")
+
+        self.gscli("portchannel PortChannel9")
+        self.gscli("portchannel PortChannel99")
+        self.gscli("portchannel PortChannel999")
+        self.gscli("portchannel PortChannel9999")
+        with self.assertRaisesRegex(
+            SSHException,
+            "does not satisfy the constraint",
+        ):
+            self.gscli("portchannel PortChannel10000")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "does not satisfy the constraint",
+        ):
+            self.gscli("portchannel Lag10")
+
+        self.gscli("interface Ethernet10_1; portchannel PortChannel9")
+        output = self.ssh("ip link | grep -w PortChannel9")
+        self.assertTrue("PortChannel9" in output)
+        output = self.ssh(
+            "kubectl exec -t usonic-cli -- show interface status|grep Ethernet10_1"
+        )
+        self.assertTrue("PortChannel9" in output)
+        self.gscli("interface Ethernet10_1; no portchannel PortChannel9")
+        output = self.ssh(
+            "kubectl exec -t usonic-cli -- show interface status|grep Ethernet10_1"
+        )
+        self.assertTrue("PortChannel9" not in output)
+        self.gscli("portchannel PortChannel9; shutdown")
+        self.gscli("portchannel PortChannel9; no shutdown")
+        self.gscli("no portchannel PortChannel9")
+
+        with self.assertRaises(SSHException):
+            self.ssh("ip link | grep -w PortChannel9")
+
+    def test_vlan_member_add_delete(self):
+        self.gscli("show vlan details")
+        self.gscli("vlan 1000")
+        self.gscli("show vlan details")
+        self.gscli(
+            "interface Ethernet1_1; no shutdown; switchport mode trunk vlan 1000; show",
+        )
+        self.gscli("show vlan details")
+        self.gscli(
+            "interface Ethernet2_1; no shutdown; switchport mode trunk vlan 1000; show",
+        )
+        self.gscli("show vlan details")
+        self.gscli(
+            "interface Ethernet1_1; no shutdown; no switchport mode trunk vlan 1000; show",
         )
 
-    ssh(cli, 'gscli -c "interface Ethernet1_1; switchport mode trunk vlan 1000"')
-    output = ssh(cli, 'gscli -c "show vlan details"')
-    assert "Ethernet1_1" in output
-    #    try:
-    #        ssh(
-    #            cli, 'gscli -c "interface Ethernet1_1; no switchport mode access vlan 1000"'
-    #        )
-    #    except SSHException as e:
-    #        assert "Incorrect mode given" in e.stderr
-    #    else:
-    #        raise Exception(
-    #            "failed to fail with an invalid cmd no switchport mode access vlan 1000"
-    #        )
-    try:
-        ssh(
-            cli,
-            'gscli -c "interface Ethernet1_1; no switchport mode trunk access 1000"',
+        with self.assertRaisesRegex(
+            SSHException,
+            "usage: switchport mode \(trunk\|access\) vlan \<vid\>",
+        ):
+            self.gscli("interface Ethernet1_1; switchport mode trunk vlab 1000")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "usage: switchport mode \(trunk\|access\) vlan \<vid\>",
+        ):
+            self.gscli(
+                "interface Ethernet1_1; switchport mode trunk access 1000",
+            )
+
+        self.gscli("interface Ethernet1_1; switchport mode trunk vlan 1000")
+        output = self.gscli("show vlan details")
+        self.assertTrue("Ethernet1_1" in output)
+
+        #    try:
+        #        ssh(
+        #            cli, 'gscli -c "interface Ethernet1_1; no switchport mode access vlan 1000"'
+        #        )
+        #    except SSHException as e:
+        #        assert "Incorrect mode given" in e.stderr
+        #    else:
+        #        raise Exception(
+        #            "failed to fail with an invalid cmd no switchport mode access vlan 1000"
+        #
+        with self.assertRaises(
+            SSHException,
+        ):
+            self.gscli(
+                "interface Ethernet1_1; no switchport mode trunk access 1000",
+            )
+
+        self.gscli("interface Ethernet1_1; no switchport mode trunk vlan 1000")
+        output = self.gscli("show vlan details")
+        self.assertTrue("Ethernet1_1" not in output)
+
+        self.gscli("show vlan details")
+        self.gscli("no vlan 1000")
+        self.gscli("show vlan details")
+
+    def test_port_breakout(self):
+        self.gscli("show vlan details")
+        self.gscli("vlan 1000")
+        self.gscli("show vlan details")
+        self.gscli(
+            "interface Ethernet5_1; no shutdown; switchport mode trunk vlan 1000; show",
         )
-    except SSHException as e:
-        assert "usage : no switchport mode trunk|access vlan <vid>" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid cmd no switchport mode trunk access 1000"
-        )
+        self.gscli("show vlan details")
 
-    ssh(cli, 'gscli -c "interface Ethernet1_1; no switchport mode trunk vlan 1000"')
-    output = ssh(cli, 'gscli -c "show vlan details"')
-    assert "Ethernet1_1" not in output
+        with self.assertRaises(SSHException):
+            self.gscli("interface Ethernet5_1; breakout 4X10GB")
 
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "no vlan 1000"')
-    ssh(cli, 'gscli -c "show vlan details"')
+        self.gscli("interface Ethernet5_1; breakout 4X10G")
+        # the ds is locked. this must fail
+        with self.assertRaises(SSHException):
+            self.gscli("interface Ethernet5_1; mtu 4000")
 
-
-def test_port_breakout(cli):
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(cli, 'gscli -c "vlan 1000"')
-    ssh(cli, 'gscli -c "show vlan details"')
-    ssh(
-        cli,
-        'gscli -c "interface Ethernet5_1; no shutdown; switchport mode trunk vlan 1000; show"',
-    )
-    ssh(cli, 'gscli -c "show vlan details"')
-
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet5_1; breakout 4X10GB"')
-    except:
-        print("This was 'Negative Testcase' for Breakout configuration")
-
-    ssh(cli, 'gscli -c "interface Ethernet5_1; breakout 4X10G"')
-
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet5_1; mtu 4000"')
-    except SSHException as e:
-        pass
-    else:
-        raise Exception("failed to fail mtu setting while uSONiC is rebooting")
-
-    try:
-        ssh(cli, 'gscli -c "show interface brief"')
-    except SSHException as e:
-        pass
-    else:
-        raise Exception("failed to fail showing interface brief while uSONiC is rebooting")
-
-    for i in range(180):
         try:
-            ssh(cli, 'gscli -c "show interface brief"')
+            self.gscli("show interface brief")
         except SSHException as e:
-            time.sleep(1)
+            pass
         else:
-            print(f"uSONiC took {i}sec to restart")
-            break
-    else:
-        raise Exception("uSONiC didn't come up")
+            raise Exception("failed to fail showing interface brief while uSONiC is rebooting")
 
-    ssh(cli, 'gscli -c "show interface brief" | grep "Ethernet5_2"')
+        for i in range(180):
+            try:
+                self.gscli("show interface brief")
+            except SSHException as e:
+                time.sleep(1)
+            else:
+                print(f"uSONiC took {i}sec to restart")
+                break
+        else:
+            raise Exception("uSONiC didn't come up")
 
-    # Validating if 'syncd' has come up properly
-    validate_str = "sending switch_shutdown_request notification to OA"
-    output = ssh(cli, "kubectl logs deploy/usonic-core syncd")
-    if output.find(validate_str) == -1:
-        print("Syncd in usonic has come up properly")
-    else:
-        print("Syncd in usonic has ERRORS")
-        sys.exit(1)
+        self.ssh('gscli -c "show interface brief" | grep "Ethernet5_2"')
 
-    ssh(cli, 'gscli -c "interface Ethernet5_1; show"')
-    ssh(cli, 'gscli -c "show interface description"')
-    ssh(cli, 'gscli -c "show running-config"')
-    ssh(cli, 'gscli -c "show running-config interface"')
-    ssh(cli, 'gscli -c "show tech-support"')
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet5_2; speed 100G"')
-    except SSHException as e:
-        assert "Invalid" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: speed 100G")
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet5_2; speed 1G"')
-    except SSHException as e:
-        assert "Invalid" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: speed 1G")
+        # Validating if 'syncd' has come up properly
+        validate_str = "sending switch_shutdown_request notification to OA"
+        output = self.ssh("kubectl logs deploy/usonic-core syncd")
+        self.assertTrue(output.find(validate_str) == -1)
 
-    ssh(cli, 'gscli -c "interface Ethernet5_3; mtu 9000"')
+        self.gscli("interface Ethernet5_1; show")
+        self.gscli("show interface description")
+        self.gscli("show running-config")
+        self.gscli("show running-config interface")
+        self.gscli("show tech-support")
 
-    ssh(
-        cli, 'gscli -c "interface Ethernet5_1; no shutdown"'
-    )  # add configuration to a sub-interface
-    ssh(
-        cli, 'gscli -c "interface Ethernet5_2; no shutdown"'
-    )  # add configuration to a sub-interface
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid",
+        ):
+            self.gscli("interface Ethernet5_2; speed 100G")
 
-    ssh(
-        cli,
-        'gscli -c "interface Ethernet5_1; no shutdown; switchport mode trunk vlan 1000; show"',
-    )
-    ssh(
-        cli,
-        'gscli -c "interface Ethernet5_3; no shutdown; switchport mode trunk vlan 1000; show"',
-    )
-    ssh(cli, 'gscli -c "show vlan details"')
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid",
+        ):
+            self.gscli("interface Ethernet5_2; speed 1G")
 
-    # Unconfigure
-    ssh(cli, 'gscli -c "interface Ethernet5_1; no breakout"')
+        self.gscli("interface Ethernet5_3; mtu 9000")
 
-    try:
-        ssh(cli, 'gscli -c "show interface brief"')
-    except SSHException as e:
-        pass
-    else:
-        raise Exception("failed to fail showing interface brief while uSONiC is rebooting")
+        self.gscli(
+            "interface Ethernet5_1; no shutdown"
+        )  # add configuration to a sub-interface
+        self.gscli(
+            "interface Ethernet5_2; no shutdown"
+        )  # add configuration to a sub-interface
 
-    for i in range(180):
+        self.gscli(
+            "interface Ethernet5_1; no shutdown; switchport mode trunk vlan 1000; show",
+        )
+        self.gscli(
+            "interface Ethernet5_3; no shutdown; switchport mode trunk vlan 1000; show",
+        )
+        self.gscli("show vlan details")
+
+        # Unconfigure
+        self.gscli("interface Ethernet5_1; no breakout")
+
         try:
-            ssh(cli, 'gscli -c "show interface brief"')
+            self.gscli("show interface brief")
         except SSHException as e:
-            time.sleep(1)
+            pass
         else:
-            print(f"uSONiC took {i}sec to restart")
-            break
-    else:
-        raise Exception("uSONiC didn't come up")
+            raise Exception("failed to fail showing interface brief while uSONiC is rebooting")
 
-    try:
-        ssh(cli, 'gscli -c "show interface brief" | grep "Ethernet5_2"')
-    except SSHException as e:
-        pass
-    else:
-        raise Exception("Ethernet5_2 didn't disappear")
+        for i in range(180):
+            try:
+                self.gscli("show interface brief")
+            except SSHException as e:
+                time.sleep(1)
+            else:
+                print(f"uSONiC took {i}sec to restart")
+                break
+        else:
+            raise Exception("uSONiC didn't come up")
 
-    # Validating if 'syncd' has come up properly
-    output = ssh(cli, "kubectl logs deploy/usonic-core syncd")
-    if output.find(validate_str) == -1:
-        print("Syncd in usonic has come up properly")
-    else:
-        print("Syncd in usonic has ERRORS")
-        sys.exit(1)
+        try:
+            self.ssh('gscli -c "show interface brief" | grep "Ethernet5_2"')
+        except SSHException as e:
+            pass
+        else:
+            raise Exception("Ethernet5_2 didn't disappear")
 
-    ssh(cli, 'gscli -c "interface Ethernet5_1; show"')
-    ssh(cli, 'gscli -c "show interface description"')
-    ssh(cli, 'gscli -c "show running-config"')
-    ssh(cli, 'gscli -c "show running-config interface"')
-    ssh(cli, 'gscli -c "show tech-support"')
+        # Validating if 'syncd' has come up properly
+        output = self.ssh("kubectl logs deploy/usonic-core syncd")
+        self.assertTrue(output.find(validate_str) == -1)
+
+        self.gscli("interface Ethernet5_1; show")
+        self.gscli("show interface description")
+        self.gscli("show running-config")
+        self.gscli("show running-config interface")
+        self.gscli("show tech-support")
+
+    def test_fec(self):
+        # FIXME we need interface leaf created before setting FEC
+        self.gscli("interface Ethernet1_1; admin-status up")
+        self.gscli("interface Ethernet1_1; no fec")
+        output = self.gscli("interface Ethernet1_1; fec fc; show")
+        output = "".join(l for l in output.split("\n") if "fec" in l)
+        self.assertIn("fc", output)
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "usages: fec \<fc\|rs\>",
+        ):
+            self.gscli("interface Ethernet1_1; fec ff")
+
+    def test_mtu(self):
+        with self.assertRaisesRegex(
+            SSHException,
+            "does not satisfy the constraint",
+        ):
+            self.gscli("interface Ethernet1_1; mtu 56")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid value",
+        ):
+            self.gscli("interface Ethernet1_1; mtu 110000")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "does not satisfy the constraint",
+        ):
+            self.ssh('gscli -c "interface Ethernet1_1; mtu 10000"')
+
+        output = self.ssh('gscli -c "interface Ethernet1_1; mtu 3500; show" | grep mtu')
+        self.assertTrue("3500" in output)
+
+        output = self.ssh('gscli -c "interface Ethernet1_1; no mtu; show" | grep mtu')
+        self.assertTrue("9100" in output)
+
+        # check multiple 'no mtu' command won't crash
+        self.gscli("interface Ethernet1_1; no mtu")
+        self.gscli("interface Ethernet1_1; no mtu")
+
+        output = self.gscli("show datastore /goldstone-interfaces:*")
+        self.assertTrue("9100" not in output)
+        self.assertTrue("mtu" not in output)
+
+        output = self.gscli(
+            "show datastore /goldstone-interfaces:interfaces/interface[name='Ethernet1_1'] operational"
+        )
+        self.assertTrue("9100" in output)
+        self.assertTrue("ipv4" in output)
+
+    def test_speed(self):
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid",
+        ):
+            self.gscli("interface Ethernet1_1; speed 100")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid",
+        ):
+            self.gscli(
+                "interface Ethernet1_1; speed 1000000000000000000000000000",
+            )
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid",
+        ):
+            self.gscli("interface Ethernet1_1; speed 410000")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid",
+        ):
+            self.gscli("interface Ethernet1_1; speed 400000")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid",
+        ):
+            self.gscli("interface Ethernet1_1; speed 25G")
+
+        output = self.ssh(
+            'gscli -c "interface Ethernet1_1; speed 40G; show" | grep speed'
+        )
+        self.assertTrue("40G" in output)
+
+        output = self.gscli("interface Ethernet1_1; no speed ; show")
+        self.assertTrue("100G" in output)
+
+    def test_invalid_intf(self):
+        self.gscli("show interface description")
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "no interface found",
+        ):
+            self.gscli("interface eth1")
+
+        output = self.gscli("show running-config interface")
+        self.assertTrue("eth1" not in output)
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "no interface found",
+        ):
+            self.gscli("interface Ethernet79; mtu 4000")
+
+        output = self.gscli("show running-config interface")
+        self.assertTrue("Ethernet79" not in output)
+
+        with self.assertRaisesRegex(
+            SSHException,
+            "no interface found",
+        ):
+            self.gscli("interface Ethernet111_1")
+
+        output = self.gscli("show running-config interface")
+        self.assertTrue("Ethernet111_1" not in output)
+
+    def test_select_intf(self):
+        port_num = self.ssh(
+            'jq ". | length" /var/lib/goldstone/device/current/usonic/interfaces.json'
+        )
+        output = self.gscli("interface .*; selected")
+        line = output.strip().split("\n")[-1]  # get the last line
+        self.assertTrue(
+            len(line.split(",")) == int(port_num)
+        )  # all interfaces should be selected
+
+        output = self.gscli("interface Ethernet[1-4]_1; selected")
+        line = output.strip().split("\n")[-1]  # get the last line
+        self.assertTrue(len(line.split(",")) == 4)  # 4 interfaces should be selected
+
+        # invalid regex
+        with self.assertRaisesRegex(
+            SSHException,
+            "failed to compile",
+        ):
+            output = self.gscli("interface Ethernet[1-4_1; selected")
+
+    def test_statistics(self):
+        with self.assertRaisesRegex(
+            SSHException,
+            "Invalid interface",
+        ):
+            self.gscli("show interface counters Ethernet1_1 Ethernet2_2")
+
+        output = self.gscli("show interface counters Ethernet1_1 Ethernet2_1")
+        self.assertTrue("Ethernet1_1" in output)
+        self.assertTrue("Ethernet2_1" in output)
+
+        output = self.gscli("show interface counters")
+        # Validataing if last interface is present
+        self.assertTrue("Ethernet20_1" in output)
+
+        output = self.gscli("clear interface counters")
+        self.assertTrue("Interface counters are cleared" in output)
+
+
+class TestSouthTAI(TestBase):
+    def test_tai(self):
+        output = self.gscli("show transponder summary")
+        lines = [line for line in output.split("\n") if "piu" in line]
+
+        self.assertTrue(len(lines) != 0)
+
+        for line in lines:
+            elems = [e.strip() for e in line.split("|") if e]
+            if elems[1] != "N/A":
+                device = elems[0]
+                break
+        else:
+            raise Exception("no transponder found on this device")
+
+        self.gscli(f"transponder {device}; netif 0; show")
+        self.gscli(f"transponder {device}; netif 0; tx-laser-freq 194.5thz")
+        self.gscli(f"transponder {device}; netif 0; show")
+
+        with self.assertRaisesRegex(SSHException, "invalid frequency input"):
+            self.gscli(f"transponder {device}; netif 0; tx-laser-freq aaa")
+
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; output-power -4; show" | grep output-power',
+        )
+        self.assertTrue("-4.00 dBm" in output)
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; no output-power; show" | grep output-power',
+        )
+        self.assertTrue("0.00 dBm" in output)
+
+        #    output = ssh(
+        #        cli,
+        #        f'gscli -c "transponder {device}; netif 0; voa-rx 0.9; show" | grep voa-rx',
+        #    )
+        #    assert "0.9" in output
+        #    output = ssh(
+        #        cli,
+        #        f'gscli -c "transponder {device}; netif 0; no voa-rx; show" | grep voa-rx',
+        #    )
+        #    assert "0.0" in output
+
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; tx-laser-freq 193.7thz; show" | grep tx-laser-freq',
+        )
+        self.assertTrue("193.70THz" in output)
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; no tx-laser-freq; show" | grep tx-laser-freq',
+        )
+        self.assertTrue("193.50THz" in output)
+
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; modulation-format dp-qpsk; show" | grep modulation-format',
+        )
+        self.assertTrue("dp-qpsk" in output)
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; no modulation-format; show" | grep modulation-format',
+        )
+        self.assertTrue("dp-16-qam" in output)
+
+        #    ssh(cli, f'gscli -c "transponder {device}; netif 0; voa-rx 0.9"')
+        self.gscli(f"transponder {device}; netif 0; output-power -3.2")
+        self.gscli(f"transponder {device}; netif 0; tx-laser-freq 193.7thz")
+        self.gscli(f"transponder {device}; netif 0; modulation-format dp-qpsk")
+
+        self.ssh("kubectl rollout restart ds/gs-mgmt-tai")
+        check_pod(self.cli, "gs-mgmt-tai")
+
+        #    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
+        #    assert "0.9" in output
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; show" | grep output-power'
+        )
+        self.assertTrue("-3.20 dBm" in output)
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; show" | grep tx-laser-freq'
+        )
+        self.assertTrue("193.70THz" in output)
+        output = self.ssh(
+            f'gscli -c "transponder {device}; netif 0; show" | grep modulation-format'
+        )
+        self.assertTrue("dp-qpsk" in output)
+
+        self.gscli(f"transponder {device}; shutdown")
+        self.gscli(f"transponder {device}; no shutdown")
+        self.gscli("clear datastore goldstone-tai")
 
 
 def test_tacacs(host, cli):
@@ -580,508 +900,5 @@ def test_tacacs(host, cli):
     assert "192.168.208.100" not in output
 
 
-def test_logging(cli):
-    ssh(cli, 'gscli -c "show logging"')
-    ssh(cli, 'gscli -c "show logging 50"')
-    ssh(cli, 'gscli -c "show logging sonic 50"')
-    ssh(cli, 'gscli -c "show logging sonic"')
-    ssh(cli, 'gscli -c "show logging onlp 100"')
-    try:
-        ssh(cli, 'gscli -c "show logging h01"')
-    except SSHException as e:
-        assert "show logging [sonic|tai|onlp|] [<num_lines>|]" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: show logging h01")
-
-
-def test_fec(cli):
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; fec fc; show" | grep fec')
-    assert "fc" in output
-
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; fec fc; show" | grep fec')
-    assert "fc" in output
-
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; fec ff"')
-    except SSHException as e:
-        assert "usages: fec <fc|rs>" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: fec ff")
-
-
-def test_mtu(cli):
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 56"')
-    except SSHException as e:
-        assert "does not satisfy the constraint" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: mtu 56")
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 110000"')
-    except SSHException as e:
-        assert "Invalid value" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: mtu 110000")
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 10000"')
-    except SSHException as e:
-        assert "does not satisfy the constraint" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: mtu 10000")
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; mtu 3500; show" | grep mtu')
-    assert "3500" in output
-
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; no mtu; show" | grep mtu')
-    assert "9100" in output
-
-    # check multiple 'no mtu' command won't crash
-    ssh(cli, 'gscli -c "interface Ethernet1_1; no mtu"')
-    ssh(cli, 'gscli -c "interface Ethernet1_1; no mtu"')
-
-    output = ssh(cli, 'gscli -c "show datastore /goldstone-interfaces:*"')
-    assert "9100" not in output
-    assert "mtu" not in output
-
-    output = ssh(
-        cli,
-        "gscli -c \"show datastore /goldstone-interfaces:interfaces/interface[name='Ethernet1_1'] operational\"",
-    )
-    assert "9100" in output
-    assert "ipv4" in output
-
-
-def test_speed(cli):
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 100"')
-    except SSHException as e:
-        assert "Invalid" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: speed 100")
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 1000000000000000000000000000"')
-    except SSHException as e:
-        assert "Invalid" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid command: speed 1000000000000000000000000000"
-        )
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 410000"')
-    except SSHException as e:
-        assert "Invalid" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: speed 410000")
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 400000"')
-    except SSHException as e:
-        assert "Invalid" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: speed 400000")
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet1_1; speed 25G"')
-    except SSHException as e:
-        assert "Invalid" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: speed 25G")
-
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; speed 40G; show" | grep speed')
-    assert "40G" in output
-
-    output = ssh(cli, 'gscli -c "interface Ethernet1_1; no speed ; !sleep 1; show"')
-    assert "100G" in output
-
-
-def test_invalid_intf(cli):
-    ssh(cli, 'gscli -c "show interface description"')
-    try:
-        ssh(cli, 'gscli -c "interface eth1"')
-    except SSHException as e:
-        assert "no interface found" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: interface eth1")
-
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "eth1" not in output
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet79; mtu 4000"')
-    except SSHException as e:
-        assert "no interface found" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid command: interface Ethernet79")
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "Ethernet79" not in output
-    try:
-        ssh(cli, 'gscli -c "interface Ethernet111_1"')
-    except SSHException as e:
-        assert "no interface found" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid command: interface Ethernet111_1"
-        )
-    output = ssh(cli, 'gscli -c "show running-config interface"')
-    assert "Ethernet111_1" not in output
-
-
-def test_mgmt_intf(cli):
-    ssh(cli, 'gscli -c "show arp"')
-    ssh(cli, 'gscli -c "ping 10.10.10.250 -c 4"')
-    output = ssh(cli, 'gscli -c "show arp"')
-    assert "10.10.10.250" in output
-    ssh(cli, 'gscli -c "clear arp"')
-    output = ssh(cli, 'gscli -c "show arp"')
-    assert "10.10.10.250" not in output
-    ssh(cli, 'gscli -c "show arp"')
-    ssh(cli, 'gscli -c "ping 10.10.10.100 -c 4"')
-    output = ssh(cli, 'gscli -c "show arp"')
-    assert "10.10.10.100" in output
-    ssh(cli, 'gscli -c "clear arp"')
-    ssh(cli, 'gscli -c "clear arp"')
-    output = ssh(cli, 'gscli -c "show arp"')
-    assert "10.10.10.100" not in output
-
-
-def test_select_intf(cli):
-    port_num = ssh(
-        cli, 'jq ". | length" /var/lib/goldstone/device/current/usonic/interfaces.json'
-    )
-    output = ssh(cli, 'gscli -c "interface .*; selected"')
-    line = output.strip().split("\n")[-1]  # get the last line
-    assert len(line.split(",")) == int(port_num)  # all interfaces should be selected
-
-    output = ssh(cli, 'gscli -c "interface Ethernet[1-4]_1; selected"')
-    line = output.strip().split("\n")[-1]  # get the last line
-    assert len(line.split(",")) == 4  # 4 interfaces should be selected
-
-    # invalid regex
-    try:
-        output = ssh(cli, 'gscli -c "interface Ethernet[1-4_1; selected"')
-    except SSHException as e:
-        assert "failed to compile" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid command: interface Ethernet[1-4_1"
-        )
-
-
-def test_statistics(cli):
-    try:
-        ssh(cli, 'gscli -c "show interface counters Ethernet1_1 Ethernet2_2"')
-    except SSHException as e:
-        assert "Invalid interface" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid interface Ethernet2_2")
-
-    output = ssh(cli, 'gscli -c "show interface counters Ethernet1_1 Ethernet2_1"')
-    assert "Ethernet1_1" in output
-    assert "Ethernet2_1" in output
-
-    output = ssh(cli, 'gscli -c "show interface counters"')
-    # Validataing if last interface is present
-    assert "Ethernet20_1" in output
-
-    output = ssh(cli, 'gscli -c "clear interface counters"')
-    assert "Interface counters are cleared" in output
-
-
-def test_mgmt_if_cmds(cli):
-    try:
-        ssh(cli, 'gscli -c "management-interface eth0; ip address 999.999.999.999/24"')
-    except SSHException as e:
-        assert "does not satisfy the constraint" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid cmd ip address 999.999.999.999/24"
-        )
-    try:
-        ssh(cli, 'gscli -c "management-interface eth0; ip address 999.999.999.999.24"')
-    except SSHException as e:
-        assert (
-            "Entered address is not in the expected format - A.B.C.D/<mask>" in e.stderr
-        )
-    else:
-        raise Exception(
-            "failed to fail with an invalid cmd ip address 999.999.999.999/24"
-        )
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip address 20.20.20.0/24; show running-config mgmt-if"',
-    )
-    assert "ip address 20.20.20.0/24" in output
-
-    try:
-        ssh(
-            cli,
-            'gscli -c "management-interface eth0; no ip address 999.999.999.999/24"',
-        )
-    except SSHException as e:
-        assert "does not satisfy the constraint" in e.stderr
-    else:
-        raise Exception(
-            "failed to fail with an invalid cmd no ip address 999.999.999.999/24"
-        )
-    try:
-        ssh(cli, 'gscli -c "management-interface eth0; ip address 999.999.999.999.24"')
-    except SSHException as e:
-        assert (
-            "Entered address is not in the expected format - A.B.C.D/<mask>" in e.stderr
-        )
-    else:
-        raise Exception(
-            "failed to fail with an invalid cmd no ip address 999.999.999.999.24"
-        )
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; no ip address 20.20.20.0/24; show running-config mgmt-if"',
-    )
-    assert "ip address 20.20.20.0/24" not in output
-
-    try:
-        ssh(cli, 'gscli -c "management-interface eth0; ip route 10.10.10.117"')
-    except SSHException as e:
-        assert "does not satisfy the constraint" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid cmd ip route 10.10.10.117")
-    try:
-        ssh(cli, 'gscli -c "management-interface eth0; ip route 10.10.10.117/35"')
-    except SSHException as e:
-        assert "does not satisfy the constraint" in e.stderr
-    else:
-        raise Exception("failed to fail with an invalid cmd ip route 10.10.10.117/35")
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip route 30.30.30.0/24; show running-config mgmt-if"',
-    )
-    assert "ip route 30.30.30.0/24" in output
-
-    output = ssh(cli, 'gscli -c "show ip route"')
-    assert "30.30.30.0/24" in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; no ip route 30.30.30.0/24; show running-config mgmt-if"',
-    )
-    assert "ip route 30.30.30.0/24" not in output
-
-    output = ssh(cli, 'gscli -c "show ip route"')
-    assert "30.30.30.0/24" not in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip route 30.20.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip route 30.20.0.0/16" in output
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip route 20.10.20.0/24; show running-config mgmt-if"',
-    )
-    assert "ip route 20.10.20.0/24" in output
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip route 30.20.20.0/24; show running-config mgmt-if"',
-    )
-    assert "ip route 30.20.20.0/24" in output
-    output = ssh(cli, 'gscli -c "show ip route"')
-    assert "30.20.0.0/16" in output
-    assert "20.10.20.0/24" in output
-    assert "30.20.20.0/24" in output
-
-    ssh(cli, 'gscli -c "clear ip route"')
-
-    output = ssh(cli, 'gscli -c "show ip route"')
-    assert "30.20.0.0/16" not in output
-    assert "20.10.20.0/24" not in output
-    assert "30.20.20.0/24" not in output
-
-
-def test_platform(cli):
-    # ADD test for platform CLIs here
-    output = ssh(cli, 'gscli -c "show datastore /goldstone-platform:* operational"')
-    assert "piu" in output
-    assert "transceiver" in output
-    print("Component PIU and SFP found in operational-DB")
-    ssh(cli, 'gscli -c "show chassis-hardware fan"')
-    ssh(cli, 'gscli -c "show chassis-hardware led"')
-    ssh(cli, 'gscli -c "show chassis-hardware psu"')
-    ssh(cli, 'gscli -c "show chassis-hardware thermal"')
-    ssh(cli, 'gscli -c "show chassis-hardware system"')
-    ssh(cli, 'gscli -c "show chassis-hardware transceiver table"')
-    ssh(cli, 'gscli -c "show chassis-hardware transceiver"')
-    ssh(cli, 'gscli -c "show chassis-hardware piu table"')
-    output = ssh(cli, 'gscli -c "show chassis-hardware piu"')
-    assert "piu" in output
-    assert "PRESENT" in output
-    output = ssh(cli, 'gscli -c "show tech-support"')
-    assert "FAN INFORMATION" in output
-
-
-def test_system_reconcile(cli):
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip route 31.21.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip route 31.21.0.0/16" in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip address 20.21.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip address 20.21.0.0/16" in output
-
-    output = ssh(cli, 'gscli -c "show ip route"')
-    assert "31.21.0.0/16" in output
-
-    ssh(cli, "systemctl restart gs-south-system")
-    time.sleep(10)
-
-    output = ssh(cli, 'gscli -c "show ip route"')
-    assert "31.21.0.0/16" in output
-    output = ssh(cli, 'gscli -c "show running-config mgmt-if"')
-    assert "ip address 20.21.0.0/16" in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; no ip route 31.21.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip route 31.21.0.0/16" not in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; no ip address 20.21.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip address 20.21.0.0/16" not in output
-
-    # case for saving a tree without leaf address
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip address 56.10.0.0/16" in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip address 56.10.0.0/16" not in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip route 100.17.0.0/16" in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip route 100.17.0.0/16" not in output
-
-    ssh(cli, "systemctl restart gs-south-system")
-    time.sleep(10)
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip address 56.10.0.0/16" in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip address 56.10.0.0/16" not in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip route 100.17.0.0/16" in output
-
-    output = ssh(
-        cli,
-        'gscli -c "management-interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if"',
-    )
-    assert "ip route 100.17.0.0/16" not in output
-
-
-def test_subcommands(cli):
-    output = ssh(cli, 'gscli -c "show transponder summary"')
-    lines = [line for line in output.split() if "piu" in line]
-
-    if len(lines) == 0:
-        raise Exception("no transponder found on this device")
-
-    elems = [elem for elem in lines[0].split("|") if "piu" in elem]
-    if len(elems) == 0:
-        raise Exception(f"invalid output: {output}")
-    output = ssh(cli, 'gscli -c "show interface counters Ethernet1_1"')
-    assert "Ethernet1_1" in output
-    ssh(cli, 'gscli -c "show interface brief"')
-    ssh(cli, 'gscli -c "show interface description"')
-
-
-def main(host, username, password):
-    with paramiko.SSHClient() as cli:
-        cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        cli.connect(host, username=username, password=password)
-
-        try:
-            test_system(cli)
-            test_logging(cli)
-            #    test_tacacs(host, cli)
-            test_mgmt_intf(cli)
-            test_mgmt_if_cmds(cli)
-            test_system_reconcile(cli)
-        except Exception as e:
-            ssh(cli, "systemctl status gs-south-system.service")
-            ssh(cli, "journalctl -u gs-south-system.service")
-            raise e
-
-        try:
-            ssh(cli, "kubectl exec -t deploy/tai -- taish -c 'log-level debug'")
-            test_tai(cli)
-            test_subcommands(cli)
-        except Exception as e:
-            ssh(cli, "kubectl get pods -A")
-            ssh(cli, "kubectl logs -l app=gs-mgmt-tai")
-            ssh(cli, "kubectl logs deploy/tai")
-            raise e
-        finally:
-            ssh(cli, "kubectl exec -t deploy/tai -- taish -c 'log-level info'")
-
-        try:
-            test_vlan(cli)
-            test_mtu(cli)
-            test_speed(cli)
-            test_invalid_intf(cli)
-            test_select_intf(cli)
-            test_statistics(cli)
-            test_vlan_member_add_delete(cli)
-            test_auto_nego(cli)
-            test_intf_type(cli)
-            test_speed_intftype(cli)
-            test_ufd(cli)
-            test_portchannel(cli)
-            test_port_breakout(cli)
-        except Exception as e:
-            ssh(cli, "kubectl get pods -A")
-            ssh(cli, "kubectl logs -l app=gs-mgmt-sonic")
-            ssh(cli, "kubectl describe pods -l app=gs-mgmt-sonic")
-            raise e
-
-        try:
-            test_platform(cli)
-        except Exception as e:
-            ssh(cli, "kubectl get pods -A")
-            ssh(cli, "kubectl logs -l app=gs-mgmt-onlp")
-            ssh(cli, "kubectl describe pods -l app=gs-mgmt-onlp")
-            raise e
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Goldstone CI tool")
-    parser.add_argument("host")
-    parser.add_argument("--username", default="root")
-    parser.add_argument("--password", default="x1")
-
-    args = parser.parse_args()
-    main(args.host, args.username, args.password)
+    unittest.main()
