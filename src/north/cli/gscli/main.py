@@ -20,6 +20,7 @@ import logging
 import asyncio
 import json
 import time
+from natsort import natsorted
 
 from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
@@ -153,7 +154,7 @@ class Root(Object):
                 raise InvalidInput("usage: system[cr]")
             return System(conn, self)
 
-        @self.command(FuzzyWordCompleter(lambda: self.get_modules(), WORD=True))
+        @self.command(FuzzyWordCompleter(self.get_modules, WORD=True))
         def transponder(line):
             if len(line) != 1:
                 raise InvalidInput("usage: transponder <transponder name>")
@@ -335,10 +336,10 @@ class Root(Object):
         return [str(v["vlanid"]) for v in vlan_map]
 
     def get_modules(self):
-        path = "/goldstone-tai:modules"
+        path = "/goldstone-tai:modules/module/name"
         self.session.switch_datastore("operational")
-        d = self.session.get_data(path, no_subs=True)
-        return [v["name"] for v in d.get("modules", {}).get("module", {})]
+        d = self.session.get_data(path)
+        return natsorted(v["name"] for v in d["modules"]["module"])
 
     def date(self, line):
         date = " ".join(["date"] + line)
