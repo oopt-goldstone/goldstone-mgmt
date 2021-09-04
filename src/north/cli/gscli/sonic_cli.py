@@ -33,11 +33,7 @@ class Interface(Object):
         except re.error:
             raise InvalidInput(f"failed to compile {ifname} as a regular expression")
         self.sonic = Sonic(conn)
-        iflist = [
-            v["name"]
-            for v in self.sonic.port.get_interface_list("operational", no_subs=True)
-        ]
-        ifnames = [i for i in iflist if ptn.match(i)]
+        ifnames = [i for i in self.sonic.port.interface_names() if ptn.match(i)]
 
         if len(ifnames) == 0:
             raise InvalidInput(f"no interface found: {ifname}")
