@@ -247,7 +247,6 @@ class Server(object):
                 await self.watch_pods()
 
                 await self.reconcile()
-                self.update_oper_ds()
 
                 self.is_usonic_rebooting = False
 
@@ -277,10 +276,10 @@ class Server(object):
 
         return is_updated
 
-    def get_sr_data(self, xpath, datastore, default=None, no_subs=False):
+    def get_sr_data(self, xpath, datastore, default=None):
         self.sess.switch_datastore(datastore)
         try:
-            v = self.sess.get_data(xpath, no_subs=no_subs)
+            v = self.sess.get_data(xpath)
         except sysrepo.errors.SysrepoNotFoundError:
             logger.debug(
                 f"xpath: {xpath}, ds: {datastore}, not found. returning {default}"
@@ -293,12 +292,12 @@ class Server(object):
     def get_running_data(self, xpath, default=None):
         return self.get_sr_data(xpath, "running", default)
 
-    def get_operational_data(self, xpath, default=None, no_subs=False):
-        return self.get_sr_data(xpath, "operational", default, no_subs)
+    def get_operational_data(self, xpath, default=None):
+        return self.get_sr_data(xpath, "operational", default)
 
     def get_breakout_detail(self, ifname):
         xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/state/breakout"
-        data = self.get_operational_data(xpath, no_subs=True)
+        data = self.get_operational_data(xpath)
         if not data:
             return None
 
@@ -374,7 +373,7 @@ class Server(object):
     def get_configured_breakout_ports(self, ifname):
         xpath = f"/goldstone-interfaces:interfaces/interface"
         self.sess.switch_datastore("operational")
-        data = self.get_operational_data(xpath, default=[], no_subs=True)
+        data = self.get_operational_data(xpath, default=[])
         ports = []
         for intf in data:
             if intf["state"].get("breakout", {}).get("parent", None) == ifname:
@@ -456,7 +455,6 @@ class Server(object):
         valid_speeds = [40000, 100000]
         breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
 
-        update_oper_ds = False
         update_usonic = False
         intfs_need_adv_speed_config = (
             set()
@@ -473,9 +471,7 @@ class Server(object):
 
             if isinstance(change, sysrepo.ChangeCreated):
                 logger.debug("......change created......")
-                if key == "name" and event == "done":
-                    update_oper_ds = True
-                elif key in ["admin-status", "fec", "description", "alias", "mtu"]:
+                if key in ["admin-status", "fec", "description", "alias", "mtu"]:
                     self.set_config_db(event, _hash, key, change.value)
                 elif key == "interface-type":
                     iftype = change.value
@@ -702,7 +698,6 @@ class Server(object):
 
                         logger.debug(f"adding default value of {key} to redis")
                         self.pack_defaults_to_redis(ifname=ifname, leaf_node=key)
-                        update_oper_ds = True
 
                         if key == "speed":
                             self.k8s.update_bcm_portmap()
@@ -732,23 +727,12 @@ class Server(object):
                             self.k8s.run_bcmcmd_port(
                                 ifname, "if=" + DEFAULT_INTERFACE_TYPE + "4"
                             )
-                        update_oper_ds = True
                 elif key == "auto-negotiate":
                     if event == "done":
                         if attr_dict["xpath"][-1][1] == "enabled":
                             self.k8s.run_bcmcmd_port(ifname, "an=no")
                         elif attr_dict["xpath"][-1][1] == "advertised-speeds":
                             intfs_need_adv_speed_config.add(ifname)
-
-                elif "PORT|" in _hash and key == "":
-                    if event == "done":
-                        # since sysrepo wipes out the pushed entry in oper ds
-                        # when the corresponding entry in running ds is deleted,
-                        # we need to repopulate the oper ds.
-                        #
-                        # this behavior might change in the future
-                        # https://github.com/sysrepo/sysrepo/issues/1937#issuecomment-742851607
-                        update_oper_ds = True
                 else:
                     logger.warn(f"unhandled change: {change}")
 
@@ -761,9 +745,6 @@ class Server(object):
             else:
                 speeds = ""
             self.k8s.run_bcmcmd_port(ifname, f"adv={speeds}")
-
-        if update_oper_ds:
-            self.update_oper_ds()
 
         if update_usonic:
             logger.info("creating breakout task")
@@ -853,15 +834,15 @@ class Server(object):
     def interface_oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
         if self.is_usonic_rebooting:
-            logger.debug("usonic is rebooting. no handling done in oper-callback")
-            return
+            # FIXME sysrepo bug. oper cb can't raise exception
+            # see https://github.com/sysrepo/sysrepo/issues/2524
+            # or https://github.com/sysrepo/sysrepo/issues/2448
+            # raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
+            return {}
 
         # Changing to operational datastore to fetch data
         # for the unconfigurable params in the xpath, data will
         # be fetched from Redis and complete data will be returned.
-
-        # Use 'no_subs=True' parameter in oper_cb to fetch data from operational
-        # datastore and to avoid locking of sysrepo db
         statistic_leaves = [
             "in-octets",
             "in-unicast-pkts",
@@ -878,26 +859,68 @@ class Server(object):
             "out-errors",
         ]
 
-        self.sess.switch_datastore("operational")
-        req_xpath = "/".join(req_xpath.split("/")[:3])
-        try:
-            interfaces = self.sess.get_data(req_xpath, no_subs=True)
-        except Exception as e:
-            logger.error(f"failed to get pushd oper data: xpath: {req_xpath}, err: {e}")
-            return
+        req_xpath = list(libyang.xpath_split(req_xpath))
+        if (
+            len(req_xpath) == 3
+            and req_xpath[1][1] == "interface"
+            and req_xpath[2][1] == "name"
+        ):
+            interfaces = [
+                {"name": key.split("|")[1]}
+                for key in self.get_config_db_keys("PORT|Ethernet*")
+            ]
+            return {"goldstone-interfaces:interfaces": {"interface": interfaces}}
 
-        if not interfaces:
-            return {}
+        interfaces = {}
+        parent_dict = {}
+        for key in self.get_config_db_keys("PORT|Ethernet*"):
+            name = key.split("|")[1]
+            intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
+            logger.debug(f"config db entry: key: {key}, value: {intf_data}")
 
-        interfaces = interfaces.get("interfaces", {}).get("interface", [])
+            interface = {
+                "name": name,
+                "config": {"name": name},
+                "state": {"name": name},
+            }
+
+            # TODO use the parent leaf to detect if this is a sub-interface or not
+            # using "_1" is vulnerable to the interface nameing schema change
+            if not name.endswith("_1") and name.find("_") != -1:
+                _name = name.split("_")
+                parent = _name[0] + "_1"
+                if parent in parent_dict:
+                    parent_dict[parent] += 1
+                else:
+                    parent_dict[parent] = 1
+
+                logger.debug(f"parent: {parent}, parent_dict: {parent_dict}")
+                interface["state"]["breakout"] = {"parent": parent}
+
+            interfaces[name] = interface
+
+        for key, value in parent_dict.items():
+            v = self.get_redis_all("APPL_DB", f"PORT_TABLE:{key}")
+
+            if "speed" in v:
+                speed = speed_redis_to_yang(v["speed"])
+                logger.debug(f"key: {key}, speed: {speed}")
+                interfaces[key]["state"] = {
+                    "breakout": {"num-channels": value + 1, "channel-speed": speed}
+                }
+            else:
+                logger.warn(
+                    f"Breakout interface:{key} doesnt has speed attribute in Redis"
+                )
+
+        interfaces = list(interfaces.values())
+
         prefix = "/goldstone-interfaces:interfaces"
 
         bcminfo = self.k8s.bcm_ports_info(list(i["name"] for i in interfaces))
 
         for intf in interfaces:
             ifname = intf["name"]
-            if not "state" in intf:
-                intf["state"] = {}
 
             xpath = f"{prefix}/interface[name='{ifname}']"
             intf["state"]["oper-status"] = self.get_oper_status(ifname)
@@ -1161,68 +1184,6 @@ class Server(object):
                     str(self.mtu_default),
                 )
 
-    def clean_oper_ds(self, sess):
-        try:
-            v = sess.get_data("/goldstone-interfaces:*", no_subs=True)
-            logger.debug(f"interface oper ds before delete: {v}")
-            # clear the intf operational ds and build it from scratch
-            sess.delete_item("/goldstone-interfaces:interfaces")
-        except Exception as e:
-            logger.debug(f"failed to clear interface oper ds: {e}")
-
-    def update_interface_oper_ds(self, sess):
-        logger.debug("updating interface operational ds")
-
-        prefix = "/goldstone-interfaces:interfaces"
-
-        parent_dict = {}
-        for key in self.get_config_db_keys("PORT|Ethernet*"):
-            name = key.split("|")[1]
-            intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
-            logger.debug(f"config db entry: key: {key}, value: {intf_data}")
-
-            xpath = f"{prefix}/interface[name='{name}']"
-            sess.set_item(f"{xpath}/config/name", name)
-            sess.set_item(f"{xpath}/state/name", name)
-
-            xpath_subif_breakout = f"{xpath}/state/breakout"
-
-            # TODO use the parent leaf to detect if this is a sub-interface or not
-            # using "_1" is vulnerable to the interface nameing schema change
-            if not name.endswith("_1") and name.find("_") != -1:
-                _name = name.split("_")
-                parent = _name[0] + "_1"
-                if parent in parent_dict:
-                    parent_dict[parent] += 1
-                else:
-                    parent_dict[parent] = 1
-
-                logger.debug(f"parent: {parent}, parent_dict: {parent_dict}")
-
-                sess.set_item(f"{xpath_subif_breakout}/parent", parent)
-
-        for key, value in parent_dict.items():
-            xpath = f"{prefix}/interface[name='{key}']/state/breakout"
-            v = self.get_redis_all("APPL_DB", f"PORT_TABLE:{key}")
-
-            if "speed" in v:
-                speed = speed_redis_to_yang(v["speed"])
-                logger.debug(f"key: {key}, speed: {speed}")
-                sess.set_item(f"{xpath}/num-channels", value + 1)
-                sess.set_item(f"{xpath}/channel-speed", speed)
-            else:
-                logger.warn(
-                    f"Breakout interface:{key} doesnt has speed attribute in Redis"
-                )
-
-    def update_oper_ds(self):
-        self.sess.switch_datastore("operational")
-
-        self.clean_oper_ds(self.sess)
-        self.update_interface_oper_ds(self.sess)
-
-        self.sess.apply_changes()
-
     def is_ufd_port(self, port, ufd_list):
 
         for ufd_id in ufd_list:
@@ -1242,7 +1203,7 @@ class Server(object):
     def get_ufd(self):
         xpath = "/goldstone-uplink-failure-detection:ufd-groups"
         self.sess.switch_datastore("operational")
-        d = self.sess.get_data(xpath, no_subs=True)
+        d = self.sess.get_data(xpath)
         ufd_list = [v for v in d.get("ufd-groups", {}).get("ufd-group", {})]
         return ufd_list
 
@@ -1414,12 +1375,11 @@ class Server(object):
                                     )
                             except KeyError:
                                 pass
-        self.update_oper_ds()
 
     def get_portchannel(self):
         xpath = "/goldstone-portchannel:portchannel"
         self.sess.switch_datastore("operational")
-        d = self.sess.get_data(xpath, no_subs=True)
+        d = self.sess.get_data(xpath)
         portchannel_list = [
             v for v in d.get("portchannel", {}).get("portchannel-group", {})
         ]
@@ -1608,7 +1568,6 @@ class Server(object):
                 else:
                     self.cache_counters()
 
-                self.update_oper_ds()
                 await self.reconcile()
 
                 self.is_usonic_rebooting = False
@@ -1637,7 +1596,6 @@ class Server(object):
                     "goldstone-interfaces",
                     "/goldstone-interfaces:interfaces",
                     self.interface_oper_cb,
-                    oper_merge=True,
                 )
                 self.sess.subscribe_oper_data_request(
                     "goldstone-portchannel",
