@@ -194,7 +194,6 @@ class Transponder(object):
             self.show_transponder(module)
 
     def get_modules(self):
-        path = "/goldstone-tai:modules/module"
-        d = self.sr_op.get_data(path, "operational", no_subs=True)
-        d = ly.xpath_get(d, path, [])
-        return natsorted(v["name"] for v in d)
+        path = "/goldstone-tai:modules/module/name"
+        d = self.sr_op.get_data(path, "operational")
+        return natsorted(v["name"] for v in d["modules"]["module"])
