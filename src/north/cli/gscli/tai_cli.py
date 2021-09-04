@@ -7,6 +7,7 @@ from .common import sysrepo_wrap, print_tabular
 import sysrepo as sr
 import logging
 from tabulate import tabulate
+from natsort import natsorted
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
@@ -291,14 +292,10 @@ class Transponder(TAIObject):
         return self.components("host-interface")
 
     def components(self, type_):
-
-        d = self.sr_op.get_data(
-            "{}[name='{}']".format(self.XPATH, self.name),
-            "operational",
-            no_subs=True,
-        )
+        xpath = f"{self.XPATH}[name='{self.name}']/{type_}/name"
+        d = self.sr_op.get_data(xpath, "operational")
         d = d.get("modules", {}).get("module", {}).get(self.name, {})
-        return [v["name"] for v in d.get(type_, [])]
+        return natsorted(v["name"] for v in d.get(type_, []))
 
     def __str__(self):
         return "transponder({})".format(self.name)
