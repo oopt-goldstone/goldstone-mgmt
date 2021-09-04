@@ -198,16 +198,15 @@ def test_portchannel(cli):
 
 def test_tai(cli):
     output = ssh(cli, 'gscli -c "show transponder summary"')
-    lines = [line for line in output.split() if "piu" in line]
+    lines = [line for line in output.split("\n") if "piu" in line]
 
-    if len(lines) == 0:
+    for line in lines:
+        elems = [e.strip() for e in line.split("|") if e]
+        if elems[1] != "N/A":
+            device = elems[0]
+            break
+    else:
         raise Exception("no transponder found on this device")
-
-    elems = [elem for elem in lines[0].split("|") if "piu" in elem]
-    if len(elems) == 0:
-        raise Exception(f"invalid output: {output}")
-
-    device = elems[0].strip()
 
     ssh(cli, f'gscli -c "transponder {device}; netif 0; show"')
     ssh(cli, f'gscli -c "transponder {device}; netif 0; tx-laser-freq 194.5thz"')
