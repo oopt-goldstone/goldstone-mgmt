@@ -194,7 +194,7 @@ class Server(object):
             )
             m = re.search(r"/{}\[name\=\'(?P<name>.+?)\'\]".format(intf), xpath)
             if not m:
-                raise InvalidXPATH()
+                raise InvalidXPath()
             name = m.group("name")
 
             try:
@@ -259,7 +259,7 @@ class Server(object):
 
             m = re.search(r"/{}\[name\=\'(?P<name>.+?)\'\]".format(intf), xpath)
             if not m:
-                raise InvalidXPATH()
+                raise InvalidXPath()
             name = m.group("name")
 
             try:
