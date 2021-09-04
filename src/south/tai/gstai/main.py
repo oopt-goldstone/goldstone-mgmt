@@ -141,17 +141,22 @@ class Server(object):
         self.taish.close()
 
     def _get_module_from_xpath(self, xpath):
-        prefix = "/goldstone-tai:modules"
-        if not xpath.startswith(prefix):
+        xpath = list(libyang.xpath_split(xpath))
+        logger.debug(f"xpath: {xpath}")
+        if (
+            len(xpath) < 2
+            or xpath[0][0] != "goldstone-tai"
+            or xpath[0][1] != "modules"
+            or xpath[1][1] != "module"
+        ):
             raise InvalidXPath()
-        xpath = xpath[len(prefix) :]
-        if xpath == "" or xpath == "/module":
-            return xpath, None
 
-        m = re.search(r"/module\[name\=\'(?P<name>.+?)\'\]", xpath)
-        if not m:
-            raise InvalidXPath()
-        name = m.group("name")
+        cond = xpath[1][2]
+        if len(cond) != 1 or cond[0][0] != "name":
+            # no condition
+            return xpath[2:], None
+
+        name = cond[0][1]
 
         try:
             module = self.taish.get_module(self.name2location(name))
@@ -159,7 +164,9 @@ class Server(object):
             logger.error(str(e))
             raise InvalidXPath()
 
-        return xpath[m.end() :], module
+        module.name = name
+
+        return xpath[2:], module
 
     def parse_change_req(self, xpath, value):
         """
@@ -181,21 +188,20 @@ class Server(object):
 
         xpath, module = self._get_module_from_xpath(xpath)
 
-        if xpath.startswith("/config/"):
-            xpath = xpath[len("/config/") :]
-            if xpath in ignore:
+        if module == None or len(xpath) < 2 or (xpath[-1][1] in ignore):
+            return None, None
+
+        if xpath[0][1] == "config":
+            return module, {xpath[1][1]: value}
+        elif xpath[0][1] in ["network-interface", "host-interface"]:
+            if len(xpath) != 3:
                 return None, None
-            return module, {xpath: value}
-        elif any((i in xpath) for i in ["/network-interface", "/host-interface"]):
-            intf = (
-                "network-interface"
-                if "/network-interface" in xpath
-                else "host-interface"
-            )
-            m = re.search(r"/{}\[name\=\'(?P<name>.+?)\'\]".format(intf), xpath)
-            if not m:
-                raise InvalidXPath()
-            name = m.group("name")
+
+            intf = xpath[0][1]
+            if len(xpath[0][2]) == 0:
+                return None, None
+
+            name = int(xpath[0][2][0][1])
 
             try:
                 if intf == "network-interface":
@@ -206,14 +212,8 @@ class Server(object):
                 logger.error(str(e))
                 raise InvalidXPath()
 
-            xpath = xpath[m.end() :]
-            if xpath.startswith("/config/"):
-                xpath = xpath[len("/config/") :]
-
-                if xpath in ignore:
-                    return None, None
-
-                return obj, {xpath: value}
+            if xpath[1][1] == "config":
+                return obj, {xpath[2][1]: value}
 
         return None, None
 
@@ -242,7 +242,12 @@ class Server(object):
 
         xpath, module = self._get_module_from_xpath(xpath)
 
-        if xpath == "":
+        if module == None:
+            if len(xpath) == 1 and xpath[0][1] == "name":
+                return None, None, "name"
+            raise InvalidXPath()
+
+        if len(xpath) == 0:
             return module, None, None
 
         ly_ctx = self.sess.get_ly_ctx()
@@ -250,17 +255,14 @@ class Server(object):
             ly_ctx.find_path("".join("/goldstone-tai:" + v for v in l))
         )[0]
 
-        if any((i in xpath) for i in ["/network-interface", "/host-interface"]):
-            intf = (
-                "network-interface"
-                if "/network-interface" in xpath
-                else "host-interface"
-            )
+        if xpath[0][1] in ["network-interface", "host-interface"]:
 
-            m = re.search(r"/{}\[name\=\'(?P<name>.+?)\'\]".format(intf), xpath)
-            if not m:
-                raise InvalidXPath()
-            name = m.group("name")
+            intf = xpath[0][1]
+
+            if len(xpath[0][2]) == 0:
+                return module, intf, "name"
+
+            name = int(xpath[0][2][0][1])
 
             try:
                 if intf == "network-interface":
@@ -271,33 +273,23 @@ class Server(object):
                 logger.error(str(e))
                 raise InvalidXPath()
 
-            xpath = xpath[m.end() :]
-
-            if xpath == "":
+            if len(xpath) == 1:
                 return module, obj, None
 
-            if "/config" in xpath:
+            if xpath[1][1] == "config":
                 raise NoOp()
-            elif "/state" in xpath:
-                xpath = xpath[len("/state") :]
-                if xpath == "" or xpath == "/*":
+            elif xpath[1][1] == "state":
+                if len(xpath) == 2 or xpath[2][1] == "*":
                     return module, obj, None
-                elif not xpath.startswith("/"):
-                    raise InvalidXPath()
-
-                attr = get_path(["modules", "module", intf, "state", xpath[1:]])
+                attr = get_path(["modules", "module", intf, "state", xpath[2][1]])
                 return module, obj, attr
 
-        elif "/config" in xpath:
+        elif xpath[0][1] == "config":
             raise NoOp()
-        elif "/state" in xpath:
-            xpath = xpath[len("/state") :]
-            if xpath == "" or xpath == "/*":
+        elif xpath[0][1] == "state":
+            if len(xpath) == 1 or xpath[1][1] == "*":
                 return module, None, None
-            elif not xpath.startswith("/"):
-                raise InvalidXPath()
-
-            attr = get_path(["modules", "module", "state", xpath[1:]])
+            attr = get_path(["modules", "module", "state", xpath[1][1]])
             return module, None, attr
 
         raise InvalidXPath()
@@ -374,9 +366,6 @@ class Server(object):
                 else:
                     logger.warning(f"unsupported xpath: {change.xpath}, value: {value}")
 
-        if event == "done":
-            self.update_operds()
-
     def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f"oper get callback requested xpath: {req_xpath}")
 
@@ -406,6 +395,25 @@ class Server(object):
         )
 
         r = {"goldstone-tai:modules": {"module": []}}
+
+        if item == "name":
+            if module == None:
+                modules = self.taish.list()
+                modules = (location2name(key) for key in modules.keys())
+                modules = [{"name": name, "config": {"name": name}} for name in modules]
+                return {"goldstone-tai:modules": {"module": modules}}
+            elif intf in ["network-interface", "host-interface"]:
+                intfs = (
+                    module.obj.netifs
+                    if intf == "network-interface"
+                    else module.obj.hostifs
+                )
+                intfs = [{"name": str(i)} for i in range(len(intfs))]
+                return {
+                    "goldstone-tai:modules": {
+                        "module": [{"name": module.name, intf: intfs}]
+                    }
+                }
 
         try:
             ly_ctx = self.sess.get_ly_ctx()
@@ -721,8 +729,6 @@ class Server(object):
             except Exception as e:
                 logger.info(f"failed to cleanup PIU: {e}")
 
-        self.update_operds()
-
     def name2location(self, name, modules=None):
         if modules == None:
             modules = self.taish.list()
@@ -730,35 +736,6 @@ class Server(object):
         if v in modules:
             return v  # piu1 => /dev/piu1
         return name.replace("piu", "")  # piu1 => 1
-
-    def update_operds(self):
-
-        logger.info("updating operds")
-
-        self.sess.switch_datastore("operational")
-
-        modules = self.taish.list()
-        for location, m in modules.items():
-            key = location2name(location)
-
-            xpath = f"/goldstone-tai:modules/module[name='{key}']"
-            self.sess.set_item(f"{xpath}/config/name", key)
-            self.sess.set_item(f"{xpath}/state/location", location)
-
-            try:
-                module = self.taish.get_module(location)
-            except Exception as e:
-                logger.warning(f"failed to get module location: {location}. err: {e}")
-                continue
-
-            for i in range(len(m.netifs)):
-                self.sess.set_item(
-                    f"{xpath}/network-interface[name='{i}']/config/name", i
-                )
-            for i in range(len(m.hostifs)):
-                self.sess.set_item(f"{xpath}/host-interface[name='{i}']/config/name", i)
-
-        self.sess.apply_changes()
 
     async def notif_handler(self, tasks, finalizers):
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -798,8 +775,6 @@ class Server(object):
             tasks = [self.initialize_piu(config, m) for m in modules]
             await asyncio.gather(*tasks)
 
-            self.update_operds()
-
             self.sess.switch_datastore("running")
 
             # passing None to the 2nd argument is important to enable layering the running datastore
@@ -808,10 +783,7 @@ class Server(object):
 
             # passing oper_merge=True is important to enable pull/push information layering
             self.sess.subscribe_oper_data_request(
-                "goldstone-tai",
-                "/goldstone-tai:modules/module",
-                self.oper_cb,
-                oper_merge=True,
+                "goldstone-tai", "/goldstone-tai:modules/module", self.oper_cb
             )
 
             self.sess.subscribe_notification_tree(
