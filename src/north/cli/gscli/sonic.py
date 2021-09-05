@@ -975,7 +975,10 @@ class Sonic(object):
         stdout.info("\nshow vlan details:\n")
         self.vlan.show_vlan()
         stdout.info("\nshow interface description:\n")
-        self.port.show_interface()
+        try:
+            self.port.show_interface()
+        except InvalidInput as e:
+            stdout.info(e)
         stdout.info("\nshow ufd:\n")
         self.ufd.show()
         self.pc.show()
