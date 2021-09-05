@@ -184,6 +184,13 @@ class Port(object):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
 
+    def interface_names(self):
+        try:
+            data = self.sr_op.get_data(f"{self.XPATH}/name", "operational")
+        except sr.SysrepoNotFoundError:
+            raise InvalidInput("no interface found")
+        return natsorted(v["name"] for v in data["interfaces"]["interface"])
+
     def get_interface_list(
         self, datastore, include_implicit_values=True, no_subs=False
     ):
@@ -197,7 +204,14 @@ class Port(object):
 
     def show_interface(self, details="description"):
         rows = []
-        for intf in self.get_interface_list("operational"):
+        interfaces = self.get_interface_list("operational")
+        if len(interfaces) == 0:
+            # FIXME workaround for sysrepo bug
+            # Because oper cb can't raise any Exception,
+            # treat len(interfaces) == 0 as an error
+            raise InvalidInput("no interface found")
+
+        for intf in interfaces:
             state = intf.get("state", {})
             row = [
                 intf["name"],
@@ -314,9 +328,7 @@ class Port(object):
                         )
                 elif key == "name":
                     try:
-                        vlan_tree = self.sr_op.get_data_ly(
-                            "{}".format(xpath_vlan), "running"
-                        )
+                        vlan_tree = self.sr_op.get_data_ly(xpath_vlan, "running")
                         vlan_memlist = json.loads(vlan_tree.print_mem("json"))
                         vlan_memlist = vlan_memlist["goldstone-vlan:vlan"][
                             "VLAN_MEMBER"
@@ -325,21 +337,12 @@ class Port(object):
                         # No vlan configrations is a valid case
                         continue
 
-                    for vlan in range(len(vlan_memlist)):
-                        if vlan_memlist[vlan]["ifname"] == value["name"]:
-                            vlanId = (vlan_memlist[vlan]["name"]).split("Vlan", 1)[1]
-                            if vlan_memlist[vlan]["tagging_mode"] == "tagged":
-                                stdout.info(
-                                    "  switchport mode trunk vlan {}".format(
-                                        str(vlanId)
-                                    )
-                                )
-                            else:
-                                stdout.info(
-                                    "  switchport mode access vlan {}".format(
-                                        str(vlanId)
-                                    )
-                                )
+                    for vlan in vlan_memlist:
+                        if vlan["ifname"] != value:
+                            continue
+                        vid = vlan["name"].split("Vlan", 1)[1]
+                        mode = "trunk" if vlan["tagging_mode"] == "tagged" else "access"
+                        stdout.info(f"  switchport mode {mode} vlan {vid}")
 
             if ifname in ufd:
                 stdout.info(
@@ -659,7 +662,7 @@ class Port(object):
 
                 stdout.info("Sub Interfaces will be deleted")
 
-                data = self.sr_op.get_data(self.XPATH, ds="operational", no_subs=True)
+                data = self.sr_op.get_data(self.XPATH, ds="operational")
                 data = ly.xpath_get(data, self.XPATH)
 
                 interfaces = [ifname]
@@ -808,7 +811,7 @@ class UFD(object):
     def get_id(self):
         path = "/goldstone-uplink-failure-detection:ufd-groups"
         self.session.switch_datastore("operational")
-        d = self.session.get_data(path, no_subs=True)
+        d = self.session.get_data(path)
         return natsorted(
             [v["ufd-id"] for v in d.get("ufd-groups", {}).get("ufd-group", {})]
         )
@@ -1042,7 +1045,7 @@ class Portchannel(object):
         self.sr_op.set_data("{}/config/admin-status".format(self.xpath(id)), value)
 
     def get_id(self):
-        d = self.sr_op.get_data(self.XPATH, "operational", no_subs=True)
+        d = self.sr_op.get_data(self.XPATH, "operational")
         d = ly.xpath_get(d, f"{self.XPATH}/portchannel-group", [])
         return natsorted(v["portchannel-id"] for v in d)
 

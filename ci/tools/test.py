@@ -376,32 +376,33 @@ def test_port_breakout(cli):
         print("This was 'Negative Testcase' for Breakout configuration")
 
     ssh(cli, 'gscli -c "interface Ethernet5_1; breakout 4X10G"')
-    # Wait for usonic to come up
-    print("Waiting asychronosly for 'usonic' to come up ")
 
-    # the ds is locked. this must fail
     try:
         ssh(cli, 'gscli -c "interface Ethernet5_1; mtu 4000"')
     except SSHException as e:
-        assert "uSONiC is rebooting" in e.stderr or "locked" in e.stderr
+        pass
     else:
-        raise Exception("failed to fail mtu setting under ds locked")
+        raise Exception("failed to fail mtu setting while uSONiC is rebooting")
 
-    # show interface brief should work during the usonic reboot
-    output = ssh(cli, 'gscli -c "show interface brief"')
-    assert "Ethernet5_1" in output
-    assert "Ethernet5_2" not in output
+    try:
+        ssh(cli, 'gscli -c "show interface brief"')
+    except SSHException as e:
+        pass
+    else:
+        raise Exception("failed to fail showing interface brief while uSONiC is rebooting")
 
     for i in range(180):
         try:
-            ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
+            ssh(cli, 'gscli -c "show interface brief"')
         except SSHException as e:
             time.sleep(1)
         else:
             print(f"uSONiC took {i}sec to restart")
             break
     else:
-        raise Exception("Ethernet5_2 didn't appear")
+        raise Exception("uSONiC didn't come up")
+
+    ssh(cli, 'gscli -c "show interface brief" | grep "Ethernet5_2"')
 
     # Validating if 'syncd' has come up properly
     validate_str = "sending switch_shutdown_request notification to OA"
@@ -452,21 +453,28 @@ def test_port_breakout(cli):
     # Unconfigure
     ssh(cli, 'gscli -c "interface Ethernet5_1; no breakout"')
 
-    # show interface brief should work during the usonic reboot
-    output = ssh(cli, 'gscli -c "show interface brief"')
-    assert "Ethernet5_1" in output
-    assert "Ethernet5_2" in output
+    try:
+        ssh(cli, 'gscli -c "show interface brief"')
+    except SSHException as e:
+        pass
+    else:
+        raise Exception("failed to fail showing interface brief while uSONiC is rebooting")
 
-    # Wait for usonic to come up
-    print("Waiting asychronosly for 'usonic' to come up ")
     for i in range(180):
         try:
-            ssh(cli, 'gscli -c "show interface brief" | grep Ethernet5_2')
+            ssh(cli, 'gscli -c "show interface brief"')
         except SSHException as e:
+            time.sleep(1)
+        else:
             print(f"uSONiC took {i}sec to restart")
             break
-        else:
-            time.sleep(1)
+    else:
+        raise Exception("uSONiC didn't come up")
+
+    try:
+        ssh(cli, 'gscli -c "show interface brief" | grep "Ethernet5_2"')
+    except SSHException as e:
+        pass
     else:
         raise Exception("Ethernet5_2 didn't disappear")
 
