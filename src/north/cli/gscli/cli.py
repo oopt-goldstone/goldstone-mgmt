@@ -2,7 +2,7 @@ import sys
 import os
 import sysrepo
 from tabulate import tabulate
-from .sonic import Sonic
+from .sonic import Port, Vlan, UFD, Portchannel
 from .tai import Transponder
 from .system import System, TACACS, AAA, Mgmtif
 from .platform import Component
@@ -36,8 +36,7 @@ class InterfaceGroupCommand(Command):
 
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.sonic = Sonic(context.conn)
-        self.port = self.sonic.port
+        self.port = Port(context.conn)
 
     def exec(self, line):
         if len(line) < 1 or line[0] not in ["brief", "description", "counters"]:
@@ -63,8 +62,7 @@ class VlanGroupCommand(Command):
 
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.sonic = Sonic(context.conn)
-        self.vlan = self.sonic.vlan
+        self.vlan = Vlan(context.conn)
 
     def exec(self, line):
         if len(line) < 1:
@@ -78,8 +76,7 @@ class VlanGroupCommand(Command):
 class UfdGroupCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.sonic = Sonic(context.conn)
-        self.ufd = self.sonic.ufd
+        self.ufd = UFD(context.conn)
 
     def exec(self, line):
         if len(line) == 0:
@@ -94,8 +91,7 @@ class UfdGroupCommand(Command):
 class PortchannelGroupCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.sonic = Sonic(context.conn)
-        self.pc = self.sonic.pc
+        self.pc = Portchannel(context.conn)
 
     def exec(self, line):
         if len(line) == 0:
@@ -302,36 +298,31 @@ class RunningConfigCommand(Command):
         else:
             module = "all"
 
-        sonic = Sonic(self.context.conn)
         system = System(self.context.conn)
 
         if module == "all":
-            sonic.run_conf()
+            self("vlan")
+            self("ufd")
+            self("portchannel")
+            self("interface")
             self("transponder")
             system.run_conf()
-
         elif module == "aaa":
             system.run_conf()
-
         elif module == "mgmt-if":
-            stdout.info("!")
             system.mgmt_run_conf()
-
         elif module == "interface":
-            stdout.info("!")
-            sonic.port_run_conf()
-
+            port = Port(self.context.conn)
+            port.run_conf()
         elif module == "ufd":
-            stdout.info("!")
-            sonic.ufd_run_conf()
-
+            ufd = UFD(self.context.conn)
+            ufd.run_conf()
         elif module == "portchannel":
-            stdout.info("!")
-            sonic.portchannel_run_conf()
-
+            portchannel = Portchannel(self.context.conn)
+            portchannel.run_conf()
         elif module == "vlan":
-            stdout.info("!")
-            sonic.vlan_run_conf()
+            vlan = Vlan(self.context.conn)
+            vlan.run_conf()
 
 
 class GlobalShowCommand(Command):
@@ -510,14 +501,32 @@ class GlobalShowCommand(Command):
             "/goldstone-platform:components",
         ]
 
-        sonic = Sonic(self.context.conn)
+        stdout.info("\nshow vlan details:\n")
+        vlan = Vlan(self.context.conn)
+        vlan.show_vlan()
+        stdout.info("\nshow interface description:\n")
+        port = Port(self.context.conn)
+        try:
+            port.show_interface()
+        except InvalidInput as e:
+            stdout.info(e)
+        stdout.info("\nshow ufd:\n")
+        ufd = UFD(self.context.conn)
+        ufd.show()
+
+        stdout.info("\nshow portchannel:\n")
+        portchannel = Portchannel(self.context.conn)
+        portchannel.show()
+
         transponder = Transponder(self.context.conn)
-        system = System(self.context.conn)
-        component = Component(self.context.conn)
-        sonic.tech_support()
         transponder.tech_support()
+
+        system = System(self.context.conn)
         system.tech_support()
+
+        component = Component(self.context.conn)
         component.tech_support()
+
         stdout.info("\nshow datastore:\n")
 
         with self.context.conn.start_session() as session:
