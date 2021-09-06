@@ -40,6 +40,8 @@ def main(host, username, password, arch):
         if arch == "amd64":
             images.append("gs-mgmt-south-sonic")
             images.append("gs-mgmt-north-snmp")
+        elif arch == "arm64":
+            images.append("gs-mgmt-south-gearbox")
 
         # stop Goldstone Management service
         ssh(cli, "gs-mgmt.sh stop || true")  # can fail
@@ -80,6 +82,8 @@ def main(host, username, password, arch):
         apps = ["mgmt", "xlate"]
         if arch == "amd64":
             apps.append("snmp")
+        elif arch == "arm64":
+            apps.append("south-gearbox")
 
         for app in apps:
             manifest = f"/var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml"
@@ -102,6 +106,8 @@ def main(host, username, password, arch):
         if arch == "amd64":
             check_pod(cli, "gs-mgmt-sonic")
             check_pod(cli, "gs-mgmt-snmp")
+        elif arch == "arm64":
+            check_pod(cli, "gs-mgmt-gearbox")
 
         check_pod(cli, "gs-mgmt-onlp")
         check_pod(cli, "gs-mgmt-tai")

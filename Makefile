@@ -1,72 +1,27 @@
 .PHONY: builder bash init yang base-image images docker cli system
 
-ifndef ARCH
-    ARCH=amd64
-endif
+ARCH ?= amd64
 
-ifndef DOCKER_CMD
-    DOCKER_CMD=bash
-endif
+DOCKER_CMD ?= bash
 
-ifndef GS_MGMT_BUILDER_IMAGE
-    GS_MGMT_BUILDER_IMAGE=gs-mgmt-builder
-endif
+GS_MGMT_BUILDER_IMAGE ?= gs-mgmt-builder
+GS_MGMT_IMAGE ?= gs-mgmt
+GS_MGMT_DEBUG_IMAGE ?= gs-mgmt-debug
+GS_MGMT_NP2_IMAGE ?= gs-mgmt-netopeer2
+GS_MGMT_SONIC_IMAGE ?= gs-mgmt-south-sonic
+GS_MGMT_TAI_IMAGE ?= gs-mgmt-south-tai
+GS_MGMT_ONLP_IMAGE ?= gs-mgmt-south-onlp
+GS_MGMT_SYSTEM_IMAGE ?= gs-mgmt-south-system
+GS_MGMT_GEARBOX_IMAGE ?= gs-mgmt-south-gearbox
+GS_MGMT_CLI_IMAGE ?= gs-mgmt-north-cli
+GS_MGMT_SNMP_IMAGE ?= gs-mgmt-north-snmp
+GS_MGMT_SNMPD_IMAGE ?= gs-mgmt-snmpd
+GS_MGMT_OC_IMAGE ?= gs-mgmt-xlate-openconfig
+GS_MGMT_NOTIF_IMAGE ?= gs-mgmt-south-notif
 
-ifndef GS_MGMT_IMAGE
-    GS_MGMT_IMAGE := gs-mgmt
-endif
+GS_MGMT_IMAGE_TAG ?= latest-$(ARCH)
 
-ifndef GS_MGMT_DEBUG_IMAGE
-    GS_MGMT_DEBUG_IMAGE := gs-mgmt-debug
-endif
-
-ifndef GS_MGMT_NP2_IMAGE
-    GS_MGMT_NP2_IMAGE := gs-mgmt-netopeer2
-endif
-
-ifndef GS_MGMT_SONIC_IMAGE
-    GS_MGMT_SONIC_IMAGE := gs-mgmt-south-sonic
-endif
-
-ifndef GS_MGMT_TAI_IMAGE
-    GS_MGMT_TAI_IMAGE := gs-mgmt-south-tai
-endif
-
-ifndef GS_MGMT_ONLP_IMAGE
-    GS_MGMT_ONLP_IMAGE := gs-mgmt-south-onlp
-endif
-
-ifndef GS_MGMT_SYSTEM_IMAGE
-    GS_MGMT_SYSTEM_IMAGE := gs-mgmt-south-system
-endif
-
-ifndef GS_MGMT_CLI_IMAGE
-    GS_MGMT_CLI_IMAGE := gs-mgmt-north-cli
-endif
-
-ifndef GS_MGMT_SNMP_IMAGE
-    GS_MGMT_SNMP_IMAGE := gs-mgmt-north-snmp
-endif
-
-ifndef GS_MGMT_SNMPD_IMAGE
-    GS_MGMT_SNMPD_IMAGE := gs-mgmt-snmpd
-endif
-
-ifndef GS_MGMT_OC_IMAGE
-    GS_MGMT_OC_IMAGE := gs-mgmt-xlate-openconfig
-endif
-
-ifndef GS_MGMT_NOTIF_IMAGE
-    GS_MGMT_NOTIF_IMAGE := gs-mgmt-south-notif
-endif
-
-ifndef GS_MGMT_IMAGE_TAG
-    GS_MGMT_IMAGE_TAG := latest-$(ARCH)
-endif
-
-ifndef ONL_REPO
-    ONL_REPO := sm/OpenNetworkLinux/REPO/stretch/packages/binary-$(ARCH)
-endif
+ONL_REPO ?= sm/OpenNetworkLinux/REPO/stretch/packages/binary-$(ARCH)
 
 ifeq ($(ARCH), amd64)
     ONLP_PACKAGES ?= onlp onlp-dev onlp-x86-64-kvm-x86-64-r0 onlp-py3
@@ -74,33 +29,16 @@ else ifeq ($(ARCH), arm64)
     ONLP_PACKAGES ?= onlp onlp-dev onlp-arm64-wistron-wtp-01-c1-00-r0 onlp-py3
 endif
 
-ifndef ONLP_DEBS
-    ONLP_DEBS := $(foreach repo,$(ONLP_PACKAGES),$(ONL_REPO)/$(repo)_1.0.0_$(ARCH).deb)
-endif
+ONLP_DEBS ?= $(foreach repo,$(ONLP_PACKAGES),$(ONL_REPO)/$(repo)_1.0.0_$(ARCH).deb)
 
-ifndef DOCKER_REPO
-    DOCKER_REPO := docker.io/microsonic
-endif
+DOCKER_REPO ?= docker.io/microsonic
+DOCKER_IMAGE ?= $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG)
 
-ifndef DOCKER_IMAGE
-    DOCKER_IMAGE := $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG)
-endif
+GS_YANG_REPO ?= /data/yang
+OC_YANG_REPO ?= /data/sm/openconfig/release/models
+SONIC_YANG_REPO ?= /usr/local/sonic
 
-ifndef GS_YANG_REPO
-    GS_YANG_REPO := /data/yang
-endif
-
-ifndef OC_YANG_REPO
-    OC_YANG_REPO := /data/sm/openconfig/release/models
-endif
-
-ifndef SONIC_YANG_REPO
-    SONIC_YANG_REPO := /usr/local/sonic
-endif
-
-ifndef TAI_META_CUSTOM_FILES
-    TAI_META_CUSTOM_FILES := $(abspath $(wildcard scripts/tai/*))
-endif
+TAI_META_CUSTOM_FILES ?= $(abspath $(wildcard scripts/tai/*))
 
 DOCKER_BUILD_OPTION ?= --platform linux/$(ARCH)
 
@@ -125,7 +63,7 @@ base-image:
 
 images: south-images north-images xlate-images
 
-south-images: south-sonic south-tai south-onlp south-system south-notif
+south-images: south-sonic south-tai south-onlp south-system south-notif south-gearbox
 
 north-images: north-cli north-snmp np2
 
@@ -142,6 +80,12 @@ south-tai:
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_TAI_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+south-gearbox:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-gearbox.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_GEARBOX_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 south-onlp:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-onlp.Dockerfile \
