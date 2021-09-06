@@ -120,8 +120,6 @@ class ManagementInterfaceServer:
 
     async def ip_change_cb(self, event, req_id, changes, priv):
 
-        update_operds = False
-
         with pyroute2.NDB() as ndb:
             for change in changes:
                 logger.debug(f"change_cb:{change}")
@@ -159,7 +157,6 @@ class ManagementInterfaceServer:
                         "Modification is not supported"
                     )
                 if isinstance(change, sysrepo.ChangeDeleted):
-                    update_operds = True
                     logger.debug("Change delete")
                     if xpath.endswith("prefix-length"):
                         intf_name = ""
@@ -189,11 +186,8 @@ class ManagementInterfaceServer:
                         if event == "done":
                             v.commit()
 
-        if update_operds:
-            self.update_oper_db()
-
-    def get_neighbor(self):
-        intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAMES[0])
+    def get_neighbor(self, ifname):
+        intf_index = self.pyroute.link_lookup(ifname=ifname)
         tuple_of_neighbours = self.pyroute.get_neighbours(ifindex=intf_index.pop())
         neighbour_list = []
 
@@ -208,12 +202,12 @@ class ManagementInterfaceServer:
 
         return neighbour_list
 
-    def get_routes(self):
+    def get_routes(self, ifname):
         with pyroute2.NDB() as ndb:
             routes = []
             destination_prefix = "0.0.0.0/0"
             next_hop_address = ""
-            for route in ndb.interfaces[MGMT_INTF_NAMES[0]].routes.dump():
+            for route in ndb.interfaces[ifname].routes.dump():
                 if ":" not in route["dst"] and route["table"] == DEFAULT_RT_TABLE:
                     route_dic = {}
                     route_dic["next-hop"] = {}
@@ -234,32 +228,26 @@ class ManagementInterfaceServer:
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath:{xpath}, req_xpath:{req_xpath}")
 
-        if req_xpath.startswith("/goldstone-mgmt-interfaces:interfaces"):
-            self.sess.switch_datastore("operational")
+        if req_xpath.startswith("/goldstone-mgmt-interfaces"):
+            interfaces = []
+            for ifname in MGMT_INTF_NAMES:
+                interface = {"name": ifname}
+                neighbor = self.get_neighbor(ifname)
+                interface["goldstone-ip:ipv4"] = {"neighbor": neighbor}
+                interfaces.append(interface)
 
-            neighbor = self.get_neighbor()
-            ifdata = self.sess.get_data(req_xpath, no_subs=True)
-            if ifdata == {}:
-                return ifdata
-
-            for intf in ifdata["interfaces"]["interface"]:
-                intf["goldstone-ip:ipv4"] = {"neighbor": neighbor}
-
-            logger.debug("************DATA to be returned in oper_cb()*************")
-            logger.debug(ifdata)
-
-            return ifdata
-        if req_xpath.startswith("/goldstone-routing:routes"):
-            route_data = {"routes": {}}
-            route_data["routes"]["route"] = self.get_routes()
-            return route_data
+            logger.debug(f"interfaces: {interfaces}")
+            return {"interfaces": {"interface": interfaces}}
+        elif req_xpath.startswith("/goldstone-routing"):
+            return {"routes": {"route": self.get_routes(MGMT_INTF_NAMES[0])}}
 
     def clear_arp(self, xpath, input_params, event, priv):
         logger.debug(
             f"clear_arp: xpath: {xpath}, input: {input}, event: {event}, priv: {priv}"
         )
-        intf_index = self.pyroute.link_lookup(ifname=MGMT_INTF_NAMES[0]).pop()
-        for n in self.get_neighbor():
+        ifname = MGMT_INTF_NAMES[0]
+        intf_index = self.pyroute.link_lookup(ifname=ifname).pop()
+        for n in self.get_neighbor(ifname):
             dst = n["ip"]
             self.pyroute.neigh(
                 "del",
@@ -267,50 +255,6 @@ class ManagementInterfaceServer:
                 lladdr=n.get("link-layer-address", None),
                 ifindex=intf_index,
             )
-
-    def update_oper_db(self):
-        logger.debug("*********inside update oper db***************")
-        self.sess.switch_datastore("operational")
-        prefix = "/goldstone-mgmt-interfaces:interfaces"
-        with pyroute2.NDB() as ndb:
-            for ifname in MGMT_INTF_NAMES:
-                xpath = f"{prefix}/interface[name='{ifname}']"
-                intf = ndb.interfaces[ifname]
-                dhcp = get_latest_dhcp_ip_addr(ifname)
-                for ipaddr in intf.ipaddr.summary():
-                    ip = ipaddr["address"]
-                    if ":" in ip:
-                        continue
-                    mask = ipaddr["prefixlen"]
-                    prefix = f"{xpath}/goldstone-ip:ipv4/address[ip='{ip}']"
-                    self.sess.set_item(f"{prefix}/prefix-length", mask)
-                    if dhcp and "fixed-address" in dhcp and ip == dhcp["fixed-address"]:
-                        self.sess.set_item(f"{prefix}/state/origin", "dhcp")
-
-                self.sess.set_item(f"{xpath}/admin-status", intf["state"])
-                self.sess.set_item(f"{xpath}/mtu", intf["mtu"])
-
-                logger.debug("********** update oper for routing **************")
-
-                xpath = "/goldstone-routing:routing/static-routes/ipv4/route"
-                for route in intf.routes:
-                    destination_prefix = ""
-                    if (
-                        ":" not in route["dst"]
-                        and route["dst_len"] != 0
-                        and route["table"] == DEFAULT_RT_TABLE
-                    ):
-                        destination_prefix = route["dst"] + "/" + str(route["dst_len"])
-                        if destination_prefix != "":
-                            self.sess.set_item(
-                                f"{xpath}[destination-prefix='{destination_prefix}']/destination-prefix",
-                                destination_prefix,
-                            )
-
-                logger.debug("********** update oper for routing done **********")
-
-        self.sess.apply_changes()
-        logger.debug("********* update oper db done***************")
 
     def reconcile(self):
         self.sess.switch_datastore("running")
@@ -352,7 +296,6 @@ class ManagementInterfaceServer:
 
     async def start(self):
         self.reconcile()
-        self.update_oper_db()
         self.sess.switch_datastore("running")
         self.sess.subscribe_oper_data_request(
             "goldstone-mgmt-interfaces",
