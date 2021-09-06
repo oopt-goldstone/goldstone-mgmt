@@ -11,6 +11,9 @@ class SSHException(Exception):
         self.stdout = stdout
         self.stderr = stderr
 
+    def __str__(self):
+        return "".join(self.stderr)
+
 
 def ssh(cli, cmd):
     print(f'ssh: "{cmd}"')

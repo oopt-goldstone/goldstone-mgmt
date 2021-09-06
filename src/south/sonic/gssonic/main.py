@@ -933,8 +933,8 @@ class Server(object):
                     intf["state"][key] = speed_redis_to_yang(value)
                 elif key in ["mtu"]:
                     intf["ipv4"] = {key: value}
-                elif key in ["admin_status"]:
-                    intf["state"]["admin-status"] = value.upper()
+                elif key in ["admin_status", "fec"]:
+                    intf["state"][key] = value.upper()
 
             xpath = f"{xpath}/counters"
             intf["state"]["counters"] = {}

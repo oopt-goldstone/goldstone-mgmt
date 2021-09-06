@@ -111,7 +111,7 @@ class incluster_apis(object):
                         return v
 
                 info["auto-nego"] = {
-                    t.lower(): g(t) for t in ("Ability", "Local", "Remote")
+                    t.lower(): g(t) for t in ("Ability", "Local", "Remote") if g(t)
                 }
 
             return info
