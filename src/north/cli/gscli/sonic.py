@@ -42,7 +42,7 @@ class Vlan(object):
     def xpath_mem(self, vid):
         return "{}/VLAN_MEMBER_LIST[name='{}']".format(self.XPATHport, "Vlan" + vid)
 
-    def __init__(self, conn, parent):
+    def __init__(self, conn):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
         self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
@@ -146,6 +146,14 @@ class Vlan(object):
         self.sr_op.delete_data("{}/{}".format(self.xpath_vlan(vid), "members"))
         self.sr_op.delete_data(self.xpath_vlan(vid))
 
+    def get_vid(self):
+        try:
+            d = self.sr_op.get_data(f"{self.XPATH}/VLAN_LIST", "operational")
+            d = d["vlan"]["VLAN"]["VLAN_LIST"]
+            return [str(v["vlanid"]) for v in d]
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return []
+
     def show(self, vid):
         xpath = self.xpath_vlan(vid)
         tree = self.sr_op.get_data(xpath, "operational")
@@ -180,7 +188,7 @@ class Port(object):
         self.path = self.XPATH
         return "{}[name='{}']".format(self.path, ifname)
 
-    def __init__(self, conn, parent):
+    def __init__(self, conn):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
 
@@ -715,7 +723,14 @@ class Port(object):
             if len(ifnames) > 1:
                 stdout.info(f"Interface {ifname}:")
             xpath = self.xpath(ifname)
-            tree = self.sr_op.get_data(xpath, "operational")
+            try:
+                tree = self.sr_op.get_data(xpath, "operational")
+            except sr.SysrepoNotFoundError:
+                if len(ifnames) > 1:
+                    stdout.info("interface not found")
+                    continue
+                else:
+                    raise InvalidInput("interface not found")
             data = ly.xpath_get(tree, xpath)
 
             if "config" in data:
@@ -768,7 +783,7 @@ class UFD(object):
     def xpath(self, id):
         return "{}/ufd-group[ufd-id='{}']".format(self.XPATH, id)
 
-    def __init__(self, conn, parent):
+    def __init__(self, conn):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
         self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
@@ -945,45 +960,6 @@ class UFD(object):
             stdout.info("!")
 
 
-class Sonic(object):
-    def __init__(self, conn):
-        self.port = Port(conn, self)
-        self.vlan = Vlan(conn, self)
-        self.ufd = UFD(conn, self)
-        self.pc = Portchannel(conn, self)
-
-    def port_run_conf(self):
-        self.port.run_conf()
-
-    def vlan_run_conf(self):
-        self.vlan.run_conf()
-
-    def ufd_run_conf(self):
-        self.ufd.run_conf()
-
-    def portchannel_run_conf(self):
-        self.pc.run_conf()
-
-    def run_conf(self):
-        stdout.info("!")
-        self.vlan_run_conf()
-        self.port_run_conf()
-        self.ufd_run_conf()
-        self.portchannel_run_conf()
-
-    def tech_support(self):
-        stdout.info("\nshow vlan details:\n")
-        self.vlan.show_vlan()
-        stdout.info("\nshow interface description:\n")
-        try:
-            self.port.show_interface()
-        except InvalidInput as e:
-            stdout.info(e)
-        stdout.info("\nshow ufd:\n")
-        self.ufd.show()
-        self.pc.show()
-
-
 def set_attribute(sr_op, path, module, name, attr, value, no_apply=False):
     try:
         sr_op.get_data(path, "running")
@@ -1012,7 +988,7 @@ class Portchannel(object):
     def xpath(self, id):
         return "{}/portchannel-group[portchannel-id='{}']".format(self.XPATH, id)
 
-    def __init__(self, conn, parent):
+    def __init__(self, conn):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
 
