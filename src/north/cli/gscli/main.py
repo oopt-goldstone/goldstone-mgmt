@@ -26,7 +26,7 @@ from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
 from .tai_cli import Transponder
 from .sonic_cli import Interface, Vlan, Ufd, Portchannel
-from .sonic import Sonic
+from . import sonic
 from .system_cli import AAA_CLI, TACACS_CLI, ManagementInterface, System
 from .system import AAA, TACACS, Mgmtif
 
@@ -98,7 +98,12 @@ class Root(Object):
         self.notif_session = None
 
         super().__init__(None, fuzzy_completion=True)
-        self.sonic = Sonic(conn)
+
+        self.ufd = sonic.UFD(conn)
+        self.portchannel = sonic.Portchannel(conn)
+        self.vlan = sonic.Vlan(conn)
+        self.port = sonic.Port(conn)
+
         self.aaa_cli = AAA_CLI(conn)
         self.tacacs_cli = TACACS_CLI(conn)
         self.aaa_sys = AAA(conn)
@@ -111,11 +116,13 @@ class Root(Object):
             }
         }
         self.no_dict = {
-            "vlan": FuzzyWordCompleter(lambda: ["range"] + self.get_vid(), WORD=True),
+            "vlan": FuzzyWordCompleter(
+                lambda: ["range"] + self.vlan.get_vid(), WORD=True
+            ),
             "aaa": {"authentication": {"login": None}},
             "tacacs-server": {"host": None},
-            "ufd": FuzzyWordCompleter(self.sonic.ufd.get_id, WORD=True),
-            "portchannel": FuzzyWordCompleter(self.sonic.pc.get_id, WORD=True),
+            "ufd": FuzzyWordCompleter(self.ufd.get_id, WORD=True),
+            "portchannel": FuzzyWordCompleter(self.portchannel.get_id, WORD=True),
         }
         # TODO:add timer for inactive user
 
@@ -164,7 +171,13 @@ class Root(Object):
                 stderr.info(f"There is no device of name {line[0]}")
                 return
 
-        @self.command(FuzzyWordCompleter(self.get_ifnames, WORD=True))
+        def get_ifnames():
+            try:
+                return self.port.interface_names()
+            except Exception:
+                return []
+
+        @self.command(FuzzyWordCompleter(get_ifnames, WORD=True))
         def interface(line):
             if len(line) != 1:
                 raise InvalidInput("usage: interface <ifname>")
@@ -179,13 +192,13 @@ class Root(Object):
                 raise InvalidInput("usage: management-interface <ifname>")
             return ManagementInterface(conn, self, line[0])
 
-        @self.command(FuzzyWordCompleter(self.sonic.ufd.get_id, WORD=True))
+        @self.command(FuzzyWordCompleter(self.ufd.get_id, WORD=True))
         def ufd(line):
             if len(line) != 1:
                 raise InvalidInput("usage: ufd <ufd-id>")
             return Ufd(conn, self, line[0])
 
-        @self.command(FuzzyWordCompleter(self.sonic.pc.get_id, WORD=True))
+        @self.command(FuzzyWordCompleter(self.portchannel.get_id, WORD=True))
         def portchannel(line):
             if len(line) != 1:
                 raise InvalidInput("usage: portchannel <portchannel_id>")
@@ -231,7 +244,7 @@ class Root(Object):
             return True
 
         @self.command(
-            FuzzyWordCompleter(lambda: (["range"] + self.get_vid()), WORD=True)
+            FuzzyWordCompleter(lambda: (["range"] + self.vlan.get_vid()), WORD=True),
         )
         def vlan(line):
             if len(line) not in [1, 2]:
@@ -244,13 +257,13 @@ class Root(Object):
                 elif isValidVlanRange(line[1]):
                     for vlans in line[1].split(","):
                         if vlans.isdigit():
-                            self.sonic.vlan.create(vlans)
+                            self.vlan.create(vlans)
                         else:
                             vlan_limits = vlans.split("-")
                             for vid in range(
                                 int(vlan_limits[0]), int(vlan_limits[1]) + 1
                             ):
-                                self.sonic.vlan.create(str(vid))
+                                self.vlan.create(str(vid))
 
                 else:
                     stderr.info("The vlan-range entered is invalid")
@@ -261,10 +274,10 @@ class Root(Object):
         def no(line):
             if len(line) == 2:
                 if line[0] == "vlan":
-                    vlan_list = self.get_vid()
+                    vlan_list = self.vlan.get_vid()
                     if line[1].isdigit():
                         if line[1] in vlan_list:
-                            self.sonic.vlan.delete(line[1])
+                            self.vlan.delete(line[1])
                         else:
                             stderr.info("The vlan-id provided doesn't exist")
                     else:
@@ -272,10 +285,10 @@ class Root(Object):
                             "The vlan-id entered must be numbers and not letters"
                         )
                 elif line[0] == "ufd":
-                    self.sonic.ufd.delete(line[1])
+                    self.ufd.delete(line[1])
 
                 elif line[0] == "portchannel":
-                    self.sonic.pc.delete(line[1])
+                    self.portchannel.delete(line[1])
 
                 else:
                     raise InvalidInput(self.no_usage())
@@ -292,18 +305,18 @@ class Root(Object):
                         stderr.info("Enter valid no command for tacacs-server")
                 elif line[0] == "vlan" and line[1] == "range":
                     if isValidVlanRange(line[2]):
-                        vlan_list = self.get_vid()
+                        vlan_list = self.vlan.get_vid()
                         for vlans in line[2].split(","):
                             if vlans.isdigit():
                                 if vlans in vlan_list:
-                                    self.sonic.vlan.delete(vlans)
+                                    self.vlan.delete(vlans)
                             else:
                                 vlan_limits = vlans.split("-")
                                 for vid in range(
                                     int(vlan_limits[0]), int(vlan_limits[1]) + 1
                                 ):
                                     if str(vid) in vlan_list:
-                                        self.sonic.vlan.delete(str(vid))
+                                        self.vlan.delete(str(vid))
                     else:
                         stderr.info("Enter a valid range for vlan")
 
@@ -312,25 +325,8 @@ class Root(Object):
             else:
                 raise InvalidInput(self.no_usage())
 
-    def get_ifnames(self):
-        return self.sonic.port.interface_names()
-
     def get_mgmt_ifname(self):
         return [v["name"] for v in self.mgmt.get_mgmt_interface_list("operational")]
-
-    def get_vid(self):
-        path = "/goldstone-vlan:vlan/VLAN/VLAN_LIST"
-        self.session.switch_datastore("operational")
-        try:
-            data_tree = self.session.get_data_ly(path)
-            vlan_map = json.loads(data_tree.print_mem("json"))["goldstone-vlan:vlan"][
-                "VLAN"
-            ]["VLAN_LIST"]
-        except (sr.errors.SysrepoNotFoundError, KeyError):
-            return []
-
-        self.session.switch_datastore("running")
-        return [str(v["vlanid"]) for v in vlan_map]
 
     def get_modules(self):
         path = "/goldstone-tai:modules/module/name"
