@@ -7,6 +7,8 @@ import json
 import signal
 from aiohttp import web
 
+logger = logging.getLogger(__name__)
+
 
 class Server(object):
     def __init__(self, taish_server):
@@ -41,7 +43,49 @@ class Server(object):
         self.ataish.close()
         self.taish.close()
 
+    def interface_change_cb(self, event, req_id, changes, priv):
+        logger.debug(f"change_cb: event: {event}, changes: {changes}")
+
+        if event not in ["change", "done"]:
+            logger.warn("unsupported event: {event}")
+            return
+
+        raise sysrepo.SysrepoInvalArgError("nothing implemented yet")
+
+    async def interface_oper_cb(self, sess, xpath, req_xpath, parent, priv):
+        logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
+
+        modules = await self.ataish.list()
+
+        interfaces = []
+        for loc, module in modules.items():
+            m = await self.ataish.get_module(loc)
+            for hostif in m.obj.hostifs:
+                interfaces.append(f"Ethernet{loc}/0/{hostif.index+1}")
+            for netif in m.obj.netifs:
+                interfaces.append(f"Ethernet{loc}/1/{netif.index+1}")
+
+        interfaces = [{"name": n, "config": {"name": n}} for n in interfaces]
+        return {"goldstone-interfaces:interfaces": {"interface": interfaces}}
+
     async def start(self):
+
+        with self.sess.lock("goldstone-interfaces"):
+            self.sess.switch_datastore("running")
+
+            self.sess.subscribe_module_change(
+                "goldstone-interfaces",
+                None,
+                self.interface_change_cb,
+            )
+
+            self.sess.subscribe_oper_data_request(
+                "goldstone-interfaces",
+                "/goldstone-interfaces:interfaces",
+                self.interface_oper_cb,
+                asyncio_register=True,
+            )
+
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)
         await site.start()
