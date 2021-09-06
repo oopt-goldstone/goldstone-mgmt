@@ -12,6 +12,7 @@ GS_MGMT_SONIC_IMAGE ?= gs-mgmt-south-sonic
 GS_MGMT_TAI_IMAGE ?= gs-mgmt-south-tai
 GS_MGMT_ONLP_IMAGE ?= gs-mgmt-south-onlp
 GS_MGMT_SYSTEM_IMAGE ?= gs-mgmt-south-system
+GS_MGMT_GEARBOX_IMAGE ?= gs-mgmt-south-gearbox
 GS_MGMT_CLI_IMAGE ?= gs-mgmt-north-cli
 GS_MGMT_SNMP_IMAGE ?= gs-mgmt-north-snmp
 GS_MGMT_SNMPD_IMAGE ?= gs-mgmt-snmpd
@@ -62,7 +63,7 @@ base-image:
 
 images: south-images north-images xlate-images
 
-south-images: south-sonic south-tai south-onlp south-system south-notif
+south-images: south-sonic south-tai south-onlp south-system south-notif south-gearbox
 
 north-images: north-cli north-snmp np2
 
@@ -79,6 +80,12 @@ south-tai:
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_TAI_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+
+south-gearbox:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-gearbox.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t $(DOCKER_REPO)/$(GS_MGMT_GEARBOX_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 south-onlp:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-onlp.Dockerfile \
