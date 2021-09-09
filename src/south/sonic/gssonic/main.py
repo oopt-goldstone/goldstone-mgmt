@@ -875,8 +875,8 @@ class Server(object):
         parent_dict = {}
         for key in self.get_config_db_keys("PORT|Ethernet*"):
             name = key.split("|")[1]
-            intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
-            logger.debug(f"config db entry: key: {key}, value: {intf_data}")
+            config = self.get_redis_all("CONFIG_DB", key)
+            logger.debug(f"config db entry: key: {key}, value: {config}")
 
             interface = {
                 "name": name,
@@ -1164,14 +1164,12 @@ class Server(object):
                         logger.debug("interfaces not configured")
 
         for key in self.get_config_db_keys("PORT|Ethernet*"):
-            ifname = key.split("|")[1]
-            intf_data = self.sonic_db.get_all(self.sonic_db.CONFIG_DB, key)
-            intf_keys = [v.decode("ascii") for v in list(intf_data.keys())]
+            intf_keys = self.get_redis_all("CONFIG_DB", key).keys()
 
             if "admin_status" not in intf_keys:
                 self.sonic_db.set(
                     self.sonic_db.CONFIG_DB,
-                    "PORT|" + ifname,
+                    key,
                     "admin_status",
                     "down",
                 )
@@ -1179,7 +1177,7 @@ class Server(object):
             if "mtu" not in intf_keys:
                 self.sonic_db.set(
                     self.sonic_db.CONFIG_DB,
-                    "PORT|" + ifname,
+                    key,
                     "mtu",
                     str(self.mtu_default),
                 )
