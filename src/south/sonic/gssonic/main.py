@@ -121,12 +121,22 @@ class Server(object):
         if key == "mtu":
             xpath += "/goldstone-ip:ipv4"
             xpath += "/goldstone-ip:mtu"
+        else:
+            xpath += "/goldstone-interfaces:config"
+            xpath += f"/goldstone-interfaces:{key}"
+
         for node in ctx.find_path(xpath):
             return node.default()
 
     def get_config_db_keys(self, pattern):
         keys = self.sonic_db.keys(self.sonic_db.CONFIG_DB, pattern=pattern)
         return map(_decode, keys) if keys else []
+
+    def get_ifname_list(self):
+        return (n.split("|")[1] for n in self.get_config_db_keys("PORT|Ethernet*"))
+
+    def get_if_config(self, ifname):
+        return self.get_redis_all("CONFIG_DB", "PORT|" + ifname)
 
     def set_config_db(self, event, _hash, key, value):
         if event != "done":
@@ -461,7 +471,7 @@ class Server(object):
         )  # put ifname of the interfaces that need adv speed config
 
         for change in changes:
-            logger.debug(f"change_cb: {change}")
+            logger.debug(f"event: {event}, type: {type(change)}, change: {change}")
 
             key, _hash, attr_dict = self.parse_intf_change_req(change.xpath)
             if "ifname" in attr_dict:
@@ -688,18 +698,19 @@ class Server(object):
 
                 elif key in ["mtu", "speed", "fec", "admin-status"]:
 
+                    if key == "speed":
+                        # TODO remove hardcoded value
+                        value = "100G"
+                    elif key in ["fec", "admin-status", "mtu"]:
+                        value = self.get_default_from_yang(key).lower()
+
                     if event == "done":
-                        if key == "speed":
-                            # TODO remove hardcoded value
-                            value = "100G"
-                        elif key in ["fec", "admin-status", "mtu"]:
-                            value = self.get_default_from_yang(key).lower()
-
                         logger.debug(f"adding default value {value} of {key} to redis")
-                        self.set_config_db("done", "PORT|" + ifname, key, value)
 
-                        if key == "speed":
-                            self.k8s.update_bcm_portmap()
+                    self.set_config_db(event, "PORT|" + ifname, key, value)
+
+                    if event == "done" and key == "speed":
+                        self.k8s.update_bcm_portmap()
 
                 elif key == "interface-type":
                     if event == "done":
@@ -857,30 +868,35 @@ class Server(object):
         ]
 
         req_xpath = list(libyang.xpath_split(req_xpath))
+        ifnames = self.get_ifname_list()
+
         if (
             len(req_xpath) == 3
             and req_xpath[1][1] == "interface"
             and req_xpath[2][1] == "name"
         ):
-            interfaces = [
-                {"name": key.split("|")[1]}
-                for key in self.get_config_db_keys("PORT|Ethernet*")
-            ]
+            interfaces = [{"name": name} for name in ifnames]
             return {"goldstone-interfaces:interfaces": {"interface": interfaces}}
+
+        if (
+            len(req_xpath) > 1
+            and req_xpath[1][1] == "interface"
+            and len(req_xpath[1][2]) == 1
+        ):
+            cond = req_xpath[1][2][0]
+            assert cond[0] == "name"
+            if cond[1] not in ifnames:
+                return None
+            ifnames = [cond[1]]
 
         interfaces = {}
         parent_dict = {}
-        for key in self.get_config_db_keys("PORT|Ethernet*"):
-            name = key.split("|")[1]
-            config = self.get_redis_all("CONFIG_DB", key)
-            logger.debug(f"config db entry: key: {key}, value: {config}")
-
+        for name in ifnames:
             interface = {
                 "name": name,
                 "config": {"name": name},
                 "state": {"name": name},
             }
-
             # TODO use the parent leaf to detect if this is a sub-interface or not
             # using "_1" is vulnerable to the interface nameing schema change
             if not name.endswith("_1") and name.find("_") != -1:
@@ -890,8 +906,6 @@ class Server(object):
                     parent_dict[parent] += 1
                 else:
                     parent_dict[parent] = 1
-
-                logger.debug(f"parent: {parent}, parent_dict: {parent_dict}")
                 interface["state"]["breakout"] = {"parent": parent}
 
             interfaces[name] = interface
@@ -902,6 +916,8 @@ class Server(object):
             if "speed" in v:
                 speed = speed_redis_to_yang(v["speed"])
                 logger.debug(f"key: {key}, speed: {speed}")
+                if key not in interfaces:
+                    interfaces[key] = {"name": name, "config": {"name": name}}
                 interfaces[key]["state"] = {
                     "breakout": {"num-channels": value + 1, "channel-speed": speed}
                 }
