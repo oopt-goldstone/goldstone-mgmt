@@ -40,8 +40,8 @@ def speed_yang_to_redis(yang_val):
     if not yang_val:
         return None
     yang_val = yang_val.split(":")[-1]
-    yang_val = yang_val.split("_")
-    return int(yang_val[1].split("G")[0]) * 1000
+    yang_val = yang_val.split("_")[-1]
+    return int(yang_val.split("G")[0]) * 1000
 
 
 def speed_redis_to_yang(speed):
@@ -686,25 +686,22 @@ class Server(object):
 
                     update_usonic = True
 
-                elif key in ["mtu", "speed", "fec"]:
+                elif key in ["mtu", "speed", "fec", "admin-status"]:
 
                     if event == "done":
-                        if key == "mtu":
-                            value = self.mtu_default
-                        elif key == "speed":
-                            value = self.speed_default
-                        elif key == "fec":
-                            value = "none"
+                        if key == "speed":
+                            # TODO remove hardcoded value
+                            value = "100G"
+                        elif key in ["fec", "admin-status", "mtu"]:
+                            value = self.get_default_from_yang(key).lower()
 
-                        logger.debug(f"adding default value of {key} to redis")
-                        self.pack_defaults_to_redis(ifname=ifname, leaf_node=key)
+                        logger.debug(f"adding default value {value} of {key} to redis")
+                        self.set_config_db("done", "PORT|" + ifname, key, value)
 
                         if key == "speed":
                             self.k8s.update_bcm_portmap()
 
                 elif key == "interface-type":
-                    if event == "change":
-                        pass
                     if event == "done":
                         try:
                             breakout_details = self.get_breakout_detail(ifname)
@@ -1026,22 +1023,6 @@ class Server(object):
             f"clear_counters: xpath: {xpath}, input: {input}, event: {event}, priv: {priv}"
         )
         self.cache_counters()
-
-    def pack_defaults_to_redis(self, ifname, leaf_node):
-        if leaf_node == "mtu":
-            self.sonic_db.set(
-                self.sonic_db.CONFIG_DB,
-                "PORT|" + ifname,
-                "mtu",
-                str(self.mtu_default),
-            )
-        elif leaf_node == "speed" and not self.get_breakout_detail(ifname):
-            self.sonic_db.set(
-                self.sonic_db.CONFIG_DB,
-                "PORT|" + ifname,
-                "speed",
-                self.speed_default,
-            )
 
     async def reconcile(self):
         self.sess.switch_datastore("running")

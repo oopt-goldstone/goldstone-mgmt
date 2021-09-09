@@ -373,6 +373,7 @@ module goldstone-interfaces {
         enum RS;
         enum NONE;
       }
+      default NONE;
     }
 
     leaf interface-type {
