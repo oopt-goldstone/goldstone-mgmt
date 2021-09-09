@@ -934,7 +934,7 @@ class Server(object):
                 elif key in ["mtu"]:
                     intf["ipv4"] = {key: value}
                 elif key in ["admin_status", "fec"]:
-                    intf["state"][key] = value.upper()
+                    intf["state"][key.replace("_", "-")] = value.upper()
 
             xpath = f"{xpath}/counters"
             intf["state"]["counters"] = {}
