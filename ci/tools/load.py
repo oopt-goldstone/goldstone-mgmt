@@ -81,6 +81,7 @@ def main(host, username, password, arch):
 
         apps = ["mgmt", "xlate"]
         if arch == "amd64":
+            apps.append("south-sonic")
             apps.append("snmp")
         elif arch == "arm64":
             apps.append("south-gearbox")
