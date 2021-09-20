@@ -393,6 +393,7 @@ module goldstone-interfaces {
         enum KR4;
         enum SFI;
         enum XFI;
+        enum XLAUI;
       }
     }
 
