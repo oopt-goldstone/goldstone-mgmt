@@ -290,6 +290,12 @@ class TestSouthSONiC(TestBase):
         self.gscli("interface Ethernet3_1; auto-negotiate advertise 40G")
         output = self.ssh('gscli -c "interface Ethernet3_1; show" | grep advertise')
 
+    def test_auto_nego_with_interface_type(self):
+        self.gscli("interface Ethernet3_1; no auto-negotiate")
+        self.gscli("interface Ethernet3_1; interface-type CR4")
+        self.gscli("interface Ethernet3_1; auto-negotiate enable")
+        self.gscli("interface Ethernet3_1; show")
+
     def test_intf_type(self):
         self.gscli("interface Ethernet1_1; interface-type SR4")
         self.gscli("interface Ethernet1_1; interface-type KR4")
@@ -468,7 +474,9 @@ class TestSouthSONiC(TestBase):
         except SSHException as e:
             pass
         else:
-            raise Exception("failed to fail showing interface brief while uSONiC is rebooting")
+            raise Exception(
+                "failed to fail showing interface brief while uSONiC is rebooting"
+            )
 
         for i in range(180):
             try:
@@ -531,7 +539,9 @@ class TestSouthSONiC(TestBase):
         except SSHException as e:
             pass
         else:
-            raise Exception("failed to fail showing interface brief while uSONiC is rebooting")
+            raise Exception(
+                "failed to fail showing interface brief while uSONiC is rebooting"
+            )
 
         for i in range(180):
             try:
