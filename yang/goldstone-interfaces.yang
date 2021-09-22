@@ -40,7 +40,10 @@ module goldstone-interfaces {
   typedef ethernet-speed {
     type enumeration {
       enum SPEED_UNKNOWN;
-      enum SPEED_1G;
+      enum SPEED_100M;
+      enum SPEED_1000M;
+      enum SPEED_2500M;
+      enum SPEED_5000M;
       enum SPEED_10G;
       enum SPEED_20G;
       enum SPEED_25G;
