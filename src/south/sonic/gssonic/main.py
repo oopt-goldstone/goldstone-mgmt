@@ -41,7 +41,12 @@ def speed_yang_to_redis(yang_val):
         return None
     yang_val = yang_val.split(":")[-1]
     yang_val = yang_val.split("_")[-1]
-    return int(yang_val.split("G")[0]) * 1000
+    if "G" in yang_val:
+        return int(yang_val.split("G")[0]) * 1000
+    elif "M" in yang_val:
+        return int(yang_val.split("M")[0])
+    else:
+        raise sysrepo.SysrepoInvalArgError(f"unsupported speed: {yang_val}")
 
 
 def speed_redis_to_yang(speed):
@@ -59,9 +64,19 @@ def speed_redis_to_yang(speed):
         return "SPEED_40G"
     elif speed == "10000":
         return "SPEED_10G"
+    elif speed == "5000":
+        return "SPEED_5000M"
+    elif speed == "2500":
+        return "SPEED_2500M"
     elif speed == "1000":
-        return "SPEED_1G"
+        return "SPEED_1000M"
+    elif speed == "100":
+        return "SPEED_100M"
     raise sysrepo.SysrepoInvalArgError(f"unsupported speed: {speed}")
+
+
+def speed_bcm_to_yang(speed):
+    return f"SPEED_{speed[:-1]}"
 
 
 class Server(object):
@@ -969,7 +984,7 @@ class Server(object):
                 v = auto_nego.get("local", {}).get("fd")
                 if v:
                     intf["auto-negotiate"]["state"]["advertised-speeds"] = [
-                        f"SPEED_{e[:-1]}" for e in v
+                        speed_bcm_to_yang(e) for e in v
                     ]
             else:
                 intf["auto-negotiate"] = {"state": {"enabled": False}}
