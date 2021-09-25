@@ -1,4 +1,5 @@
 # sysrepo patches
+libyang/fix_packaging.patch
 sysrepo-python/support_getting_detailed_error_info.patch
 sysrepo-python/add_get_module_access_and_set_module_access.patch
 sysrepo/sysrepoctl-install.patch
