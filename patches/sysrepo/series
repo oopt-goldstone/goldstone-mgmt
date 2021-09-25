@@ -1,4 +1,3 @@
 skip_test.patch
-add_debug_log_in_locking_methods.patch
-add_log.patch
 sysrepoctl_install.patch
+fix_packaging.patch
