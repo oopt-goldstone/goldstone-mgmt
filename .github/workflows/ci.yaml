@@ -17,9 +17,7 @@ jobs:
           run: curl -sfL https://get.k3s.io | sh -s - --docker
         - name: build builder image if sm/ is updated
           run: git diff --compact-summary HEAD origin/master | (grep 'sm/\|patches/\|builder.Dockerfile' && make builder np2) || true
-        - run: make docker
-        - run: make image
-        - run: make debug-image
+        - run: make images
         - run: |
             sudo k3s kubectl create -f ./k8s
             while [ true ]
