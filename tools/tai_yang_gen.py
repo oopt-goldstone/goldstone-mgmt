@@ -70,7 +70,7 @@ if __name__ == "__main__":
         h.add_custom(c)
 
     m = Statement("module", "goldstone-tai")
-    k = Statement("yang-version", '"1.1"')
+    k = Statement("yang-version", '1')
     m.add(k)
     m.add(Statement("namespace", '"http://goldstone.net/yang/tai"'))
     m.add(Statement("prefix", '"gs-tai"'))

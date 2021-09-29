@@ -41,6 +41,12 @@ typedef enum _tai_network_interface_mld_t
     TAI_NETWORK_INTERFACE_MLD_MAX
 } tai_network_interface_mld_t;
 
+/** @custom tai_network_interface_client_signal_mapping_type_t */
+typedef enum _tai_network_interface_custom_client_signal_mapping_type_t
+{
+    TAI_NETWORK_INTERFACE_CLIENT_SIGNAL_MAPPING_TYPE_OTUC2 = 10,
+} tai_network_interface_custom_client_signal_mapping_type_t;
+
 typedef enum _custom_network_interface_attr_t
 {
     /** Custom range for the NLD0670APB adapter */
