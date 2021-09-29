@@ -33,9 +33,11 @@ class incluster_apis(object):
         output = self.run_bcmcmd("ps")
         portmap = {}
         for line in output.split("\n"):
-            m = re.search("(?P<name>\w+)\(\s*(?P<index>[0-9]+)\)", line)
+            m = re.search(
+                "(?P<name>\w+)\(\s*(?P<index>[0-9]+)\)\s+!?\w+\s+(?P<lane>[0-9])", line
+            )
             if m:
-                portmap[int(m.group("index"))] = m.group("name")
+                portmap[int(m.group("index"))] = (m.group("name"), int(m.group("lane")))
 
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = {}
@@ -43,7 +45,10 @@ class incluster_apis(object):
                 master[m["port"]] = (i + 1, m)
 
         pmap = {}
-        for index, name in portmap.items():
+        for index, v in portmap.items():
+            name = v[0]
+            lane = v[1]
+            logger.info(f"{index}: {v}")
             if index in master:
                 i, m = master[index]
                 pmap[f"{PORT_PREFIX}{i}_1"] = (index, name)
@@ -51,6 +56,8 @@ class incluster_apis(object):
                 for j in range(1, 4):
                     if index - j in master:
                         i, m = master[index - j]
+                        if lane == 2:
+                            j = 1
                         pmap[f"{PORT_PREFIX}{i}_{1+j}"] = (index, name)
                         break
 
