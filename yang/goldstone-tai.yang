@@ -1,5 +1,5 @@
 module goldstone-tai {
-  yang-version "1";
+  yang-version 1;
   namespace "http://goldstone.net/yang/tai";
   prefix gs-tai;
 
@@ -272,6 +272,17 @@ module goldstone-tai {
         "The TX laser fine tune frequency in Hz";
       type int64;
     }
+    leaf line-rate {
+      description
+        "The line rate";
+      type enumeration {
+        enum unknown;
+        enum 100g;
+        enum 200g;
+        enum 300g;
+        enum 400g;
+      }
+    }
     leaf modulation-format {
       description
         "The modulation format";
@@ -289,6 +300,27 @@ module goldstone-tai {
         enum dp-32-qam;
         enum 64-qam;
         enum dp-64-qam;
+      }
+    }
+    leaf fec-type {
+      description
+        "The FEC type";
+      type enumeration {
+        enum unknown;
+        enum sc-fec;
+        enum cfec;
+        enum ofec;
+      }
+    }
+    leaf client-signal-mapping-type {
+      description
+        "The client signal mapping type";
+      type enumeration {
+        enum unknown;
+        enum otu4-lr;
+        enum flexo-lr;
+        enum zr;
+        enum otuc2;
       }
     }
     leaf differential-encoding {
