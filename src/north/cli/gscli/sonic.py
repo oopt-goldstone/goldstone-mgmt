@@ -1,6 +1,5 @@
 import sys
 import os
-import libyang as ly
 
 from tabulate import tabulate
 import json
@@ -244,30 +243,16 @@ class Port(object):
 
         stdout.info(tabulate(rows, headers, tablefmt="pretty"))
 
-    def show_counters(self, ifname_list):
-        intf_list = self.get_interface_list("operational")
-        existing_ifname_list = [v["name"] for v in intf_list]
+    def show_counters(self, ifnames):
+        for ifname in ifnames:
+            if len(ifnames) > 1:
+                stdout.info(f"Interface {ifname}")
 
-        # Raise exception if invalid interfaces are present in list
-        for intf in ifname_list:
-            if intf not in existing_ifname_list:
-                raise InvalidInput(f"Invalid interface : {intf}")
-
-        lines = []
-        for intf in intf_list:
-            if len(ifname_list) == 0 or intf["name"] in ifname_list:
-                if "counters" in intf.get("state", {}):
-                    lines.append(f"Interface {intf['name']}")
-                    counters = intf["state"]["counters"]
-                    for key in counters:
-                        lines.append(f"  {key}: {counters[key]}")
-                    # One extra line to have readability
-                    if len(ifname_list) > 1:
-                        lines.append(f"\n")
-                else:
-                    lines.append(f"No statistics for: {intf['name']}")
-
-        stdout.info("\n".join(lines))
+            xpath = f"{self.XPATH}[name='{ifname}']/state/counters"
+            data = self.sr_op.get_data(xpath, "operational")
+            data = ly.xpath_get(data, xpath)
+            for d in data:
+                stdout.info(f"{d}: {data[d]}")
 
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
