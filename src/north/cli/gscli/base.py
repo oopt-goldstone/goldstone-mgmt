@@ -129,11 +129,12 @@ class Command(object):
         if len(line) == 0:
             return self.exec(line)
 
-        cmd = self.SUBCOMMAND_DICT.get(line[0], Command)
+        cmd = self.complete_subcommand(line[0])
+        cmd = self.SUBCOMMAND_DICT.get(cmd)
         if cmd:
             return cmd(self.context, self, line[0])(line[1:])
         else:
-            return self.exec(cmd)
+            return self.exec(line)
 
 
 class Choice(Command):
@@ -192,19 +193,22 @@ class Object(object):
                 if v["inherit"]:
                     self._commands[k] = v
 
-    def add_command(self, handler, completer=None, name=None):
-        strict = False
+    def add_command(self, handler, completer=None, name=None, strict=None):
         if isinstance(handler, Command):
-            completer = handler.completer
+            completer = lambda: handler.completer
             name = name if name else handler.name
-            strict = True
+            strict = True if strict == None else strict
+        else:
+            strict = False if strict == None else strict
         self.command(completer, name, strict=strict)(handler)
 
     def del_command(self, name):
         del self._commands[name]
 
     def get_completer(self, name):
-        return self._commands.get(name, {}).get("completer", DummyCompleter())
+        v = self._commands.get(name, {}).get("completer", DummyCompleter())
+        if callable(v):
+            return v()
 
     def close(self):
         pass
@@ -231,6 +235,8 @@ class Object(object):
         return f
 
     def help(self, text="", short=True):
+        orig = self.fuzzy_completion
+        self.fuzzy_completion = False
         text = text.lstrip()
         try:
             v = text.split()
@@ -240,6 +246,8 @@ class Object(object):
             line = self.complete_input(v)
         except InvalidInput as e:
             return ", ".join(e.candidates)
+        finally:
+            self.fuzzy_completion = orig
         return line[-1].strip()
 
     def root(self):
@@ -277,6 +285,8 @@ class Object(object):
             if not v:
                 return
             c = v["completer"]
+            if callable(c):
+                c = c()
             if c:
                 if self.fuzzy_completion and complete_event:
                     c = FuzzyCompleter(c)
@@ -286,7 +296,7 @@ class Object(object):
                 for v in c.get_completions(new_document, complete_event):
                     yield v
 
-    def complete_input(self, line):
+    def complete_input(self, line, complete_event=None):
 
         if len(line) == 0:
             raise InvalidInput(
@@ -296,7 +306,7 @@ class Object(object):
 
         for i in range(len(line)):
             doc = Document(" ".join(line[: i + 1]))
-            c = list(self.completion(doc))
+            c = list(self.completion(doc, complete_event))
             if len(c) == 0:
                 if i == 0:
                     raise InvalidInput(
@@ -308,9 +318,13 @@ class Object(object):
                     v = self._commands.get(line[0])
                     assert v
                     cmpl = v["completer"]
+                    if callable(cmpl):
+                        cmpl = cmpl()
                     if cmpl:
                         doc = Document(" ".join(line[:i] + [" "]))
-                        candidates = list(v.text for v in self.completion(doc))
+                        candidates = list(
+                            v.text for v in self.completion(doc, complete_event)
+                        )
                         # if we don't have any candidates with empty input, it means the value needs
                         # to be passed as an opaque value
                         if len(candidates) == 0:
@@ -349,6 +363,9 @@ class Object(object):
         cmd = self.complete_input(line[:1])
         cmd = self._commands[cmd[0]]
 
+        if isinstance(cmd["func"], Command):
+            return cmd, line[1:]
+
         # when strict == true, complete all inputs
         if cmd["strict"]:
             args = self.complete_input(line)[1:]
@@ -357,6 +374,7 @@ class Object(object):
 
         if cmd["argparser"]:
             args = cmd["argparser"].parse_args(line[1:])
+
         return cmd, args
 
     async def exec_async(self, cmd, no_fail=True):

@@ -20,8 +20,7 @@ pipeline {
                   env.DOCKER_REPO = 'gs-test'
                   // if sm/, patches/, builder.Dockerfile, build_onlp.sh is updated
                   // build the builder
-                  // env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile\\|build_onlp.sh'") ? 0 : 1
-                  env.BUILD_BUILDER = 0
+                  env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile\\|build_onlp.sh'") ? 0 : 1
                   sh 'echo $BUILD_BUILDER > /run/build_builder'
               } else {
                   env.SKIP = 1
@@ -45,6 +44,17 @@ pipeline {
         sh 'apk add --update docker make python2'
         sh 'make tester'
         sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test make lint"
+      }
+    }
+
+    stage('Unittest') {
+      when {
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+        sh 'apk add --update docker make python2'
+        sh 'make tester'
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test make unittest"
       }
     }
 

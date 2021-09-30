@@ -17,7 +17,7 @@ RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
 
 RUN pip install --upgrade pip
 
-RUN pip install paramiko scp black pyang
+RUN pip install paramiko scp black pyang prompt_toolkit tabulate natsort kubernetes
 
 COPY --from=docker:19.03 /usr/local/bin/docker /usr/local/bin/
 

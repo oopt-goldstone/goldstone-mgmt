@@ -243,16 +243,34 @@ class Port(object):
 
         stdout.info(tabulate(rows, headers, tablefmt="pretty"))
 
-    def show_counters(self, ifnames):
+    def show_counters(self, ifnames, table):
+        rows = []
         for ifname in ifnames:
             if len(ifnames) > 1:
-                stdout.info(f"Interface {ifname}")
+                if not table:
+                    stdout.info(f"Interface {ifname}:")
 
             xpath = f"{self.XPATH}[name='{ifname}']/state/counters"
             data = self.sr_op.get_data(xpath, "operational")
             data = ly.xpath_get(data, xpath)
-            for d in data:
-                stdout.info(f"{d}: {data[d]}")
+            if table:
+                rows.append((ifname, data))
+            else:
+                for d in data:
+                    stdout.info(f"  {d}: {data[d]}")
+
+        if table:
+            keys = rows[0][1].keys()
+            rows_ = []
+            for row in rows:
+                r = [row[0]]
+                for key in keys:
+                    r.append(row[1][key])
+                rows_.append(r)
+
+            headers = [""] + ["\n".join(k.split("-")) for k in keys]
+
+            stdout.info(tabulate(rows_, headers))
 
     def run_conf(self):
         xpath_vlan = "/goldstone-vlan:vlan/VLAN_MEMBER"
