@@ -50,6 +50,8 @@ class TAICommand(Command):
 class TAINoCommand(Command):
     def __init__(self, context, node):
         self._list = [v.name() for v in node if v.name() != "name"]
+        if "admin-status" in self._list:
+            self._list.append("shutdown")
         super().__init__(context, name="no")
 
     def exec(self, line):
@@ -59,7 +61,11 @@ class TAINoCommand(Command):
         if line[0] not in self.list():
             raise InvalidInput(self.usage())
 
-        self.context.delete(line[0])
+        # special handling for "shutdown", backward compatibility
+        if line[0] == "shutdown":
+            self.context.set("admin-status", "up")
+        else:
+            self.context.delete(line[0])
 
     def list(self):
         return self._list
@@ -252,14 +258,6 @@ class Transponder(TAIObject):
         super().__init__(conn, parent)
         self.name = name
         self.command_list = ["shutdown"]
-
-        @self.command(WordCompleter(self.command_list))
-        def no(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: shutdown")
-            if args[0] != "shutdown":
-                raise InvalidInput("usage: no shutdown")
-            self.set("admin-status", "up")
 
         @self.command(WordCompleter(self.netifs))
         def netif(args):

@@ -16,6 +16,8 @@ from aiohttp import web
 TAI_STATUS_ITEM_ALREADY_EXISTS = -6
 TAI_STATUS_FAILURE = -1
 
+DEFAULT_ADMIN_STATUS = "down"
+
 
 class InvalidXPath(Exception):
     pass
@@ -605,13 +607,22 @@ class Server(object):
 
     async def initialize_piu(self, config, location):
 
-        logger.info(f"initializing module({location})")
+        name = location2name(location)
 
-        mconfig = config.get(location, {})
+        logger.info(f"initializing module({name})")
+
+        mconfig = config.get(name, {})
         # 'name' is not a valid TAI attribute. we need to exclude it
         # we might want to invent a cleaner way by using an annotation in the YANG model
         attrs = [(k, v) for k, v in mconfig.get("config", {}).items() if k != "name"]
+        for a in attrs:
+            if a[0] == "admin-status":
+                break
+        else:
+            attrs.append(("admin-status", DEFAULT_ADMIN_STATUS))
+
         try:
+            logger.info(f"module attrs: {attrs}")
             module = await self.ataish.create_module(location, attrs=attrs)
         except taish.TAIException as e:
             if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
