@@ -129,17 +129,9 @@ class Transponder(object):
         stdout.info(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
 
     def run_conf(self):
-        transponder_run_conf_list = ["admin-status"]
-        netif_run_conf_list = [
-            "output-power",
-            "modulation-format",
-            "tx-laser-freq",
-            "voa-rx",
-            "tx-dis",
-            "differential-encoding",
-            "loopback-type",
-        ]
-        hostif_run_conf_list = ["fec-type", "loopback-type"]
+        transponder_conf_blacklist = ["name"]
+        netif_conf_blacklist = ["name"]
+        hostif_conf_blacklist = ["name"]
 
         try:
             tree = self.sr_op.get_data(self.XPATH)
@@ -156,34 +148,30 @@ class Transponder(object):
             stdout.info("transponder {}".format(module.get("name")))
 
             m = to_human(module.get("config", {}))
-            for attr in transponder_run_conf_list:
-                value = m.get(attr, None)
-                if value:
-                    if attr == "admin-status":
-                        v = "shutdown" if value == "down" else "no shutdown"
-                        stdout.info(f" {v}")
-                    else:
-                        stdout.info(f" {attr} {value}")
+            for k, v in m.items():
+                if k in transponder_conf_blacklist:
+                    continue
+                stdout.info(f"  {k} {v}")
 
             for netif in module.get("network-interface", []):
-                stdout.info(f" netif {netif['name']}")
+                stdout.info(f"  netif {netif['name']}")
                 n = to_human(netif.get("config", {}), runconf=True)
-                for attr in netif_run_conf_list:
-                    value = n.get(attr, None)
-                    if value:
-                        stdout.info(f"  {attr} {value}")
-                stdout.info(" quit")
+                for k, v in n.items():
+                    if k in netif_conf_blacklist:
+                        continue
+                    stdout.info(f"    {k} {v}")
+                stdout.info("    quit")
 
             for hostif in module.get("host-interface", []):
-                stdout.info(f" hostif {hostif['name']}")
-                n = to_human(hostif.get("config", {}), runconf=True)
-                for attr in hostif_run_conf_list:
-                    value = n.get(attr, None)
-                    if value:
-                        stdout.info(f"  {attr} {value}")
-                stdout.info(" quit")
+                stdout.info(f"  hostif {hostif['name']}")
+                h = to_human(hostif.get("config", {}), runconf=True)
+                for k, v in h.items():
+                    if k in hostif_conf_blacklist:
+                        continue
+                    stdout.info(f"    {k} {v}")
+                stdout.info("    quit")
 
-            stdout.info("quit")
+            stdout.info("  quit")
 
         stdout.info("!")
 
