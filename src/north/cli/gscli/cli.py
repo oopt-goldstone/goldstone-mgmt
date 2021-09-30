@@ -30,26 +30,29 @@ stderr = logging.getLogger("stderr")
 
 class InterfaceCounterCommand(Command):
     def list(self):
-        return self.parent.port.interface_names()
+        return ["table"] + self.parent.port.interface_names()
 
     def exec(self, line):
         ifnames = self.parent.port.interface_names()
+        table = False
         if len(line) == 1:
-            try:
-                ptn = re.compile(line[0])
-            except re.error:
-                raise InvalidInput(
-                    f"failed to compile {line[0]} as a regular expression"
-                )
-
-            ifnames = [i for i in ifnames if ptn.match(i)]
+            if line[0] == "table":
+                table = True
+            else:
+                try:
+                    ptn = re.compile(line[0])
+                except re.error:
+                    raise InvalidInput(
+                        f"failed to compile {line[0]} as a regular expression"
+                    )
+                ifnames = [i for i in ifnames if ptn.match(i)]
         elif len(line) > 1:
             for ifname in line:
                 if ifname not in ifnames:
                     raise InvalidInput(f"Invalid interface {ifname}")
             ifnames = line
 
-        self.parent.port.show_counters(ifnames)
+        self.parent.port.show_counters(ifnames, table)
 
 
 class InterfaceGroupCommand(Command):
