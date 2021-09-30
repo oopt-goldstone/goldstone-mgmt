@@ -164,7 +164,7 @@ pipeline {
       }
     }
 
-    stage('Load and Test') {
+    stage('Load') {
       failFast true
       parallel {
         stage('amd64') {
@@ -182,35 +182,6 @@ pipeline {
                 timeout(time: 30, unit: 'MINUTES') {
                     sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.load ${params.DEVICE} --arch $ARCH"
                 }
-              }
-            }
-            stage('Test') {
-              steps {
-                sh 'make tester'
-                timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthSONiC"
-                }
-                timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthTAI"
-                }
-                timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthONLP"
-                }
-                timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthSystem"
-                }
-              }
-            }
-            stage('Test NETCONF') {
-              steps {
-                sh 'make tester'
-                sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_np2 ${params.DEVICE}"
-              }
-            }
-            stage('Test SNMP') {
-              steps {
-                sh 'make tester'
-                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_snmp ${params.DEVICE}"
               }
             }
           }
@@ -233,6 +204,67 @@ pipeline {
                 }
               }
             }
+          }
+        }
+      }
+    }
+
+    stage('Test') {
+      failFast true
+      parallel {
+        stage('test south SONiC on amd64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'amd64'
+          }
+          stages {
+            stage('Test') {
+              steps {
+                sh 'make tester'
+                timeout(time: 30, unit: 'MINUTES') {
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthSONiC"
+                }
+              }
+            }
+          }
+        }
+        stage('test south TAI, ONLP and system on amd64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'amd64'
+          }
+          stages {
+            stage('Test') {
+              steps {
+                sh 'make tester'
+                timeout(time: 30, unit: 'MINUTES') {
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthTAI"
+                }
+                timeout(time: 30, unit: 'MINUTES') {
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthONLP"
+                }
+                timeout(time: 30, unit: 'MINUTES') {
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthSystem"
+                }
+              }
+            }
+          }
+        }
+        stage('test on arm64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'arm64'
+          }
+          stages {
             stage('Test') {
               steps {
                 sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
@@ -245,6 +277,29 @@ pipeline {
         }
       }
     }
+
+    stage('Test NETCONF') {
+      when {
+        branch pattern: "^PR.*", comparator: "REGEXP"
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+        sh 'make tester'
+        sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_np2 ${params.DEVICE}"
+      }
+    }
+
+    stage('Test SNMP') {
+      when {
+        branch pattern: "^PR.*", comparator: "REGEXP"
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+        sh 'make tester'
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test_snmp ${params.DEVICE}"
+      }
+    }
+
   }
 
   post {
