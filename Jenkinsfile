@@ -20,8 +20,7 @@ pipeline {
                   env.DOCKER_REPO = 'gs-test'
                   // if sm/, patches/, builder.Dockerfile, build_onlp.sh is updated
                   // build the builder
-                  // env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile\\|build_onlp.sh'") ? 0 : 1
-                  env.BUILD_BUILDER = 0
+                  env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile\\|build_onlp.sh'") ? 0 : 1
                   sh 'echo $BUILD_BUILDER > /run/build_builder'
               } else {
                   env.SKIP = 1
