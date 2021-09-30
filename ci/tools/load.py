@@ -27,6 +27,14 @@ def main(host, username, password, arch):
         # stop South system service
         ssh(cli, "systemctl stop gs-south-system || true")  # can fail
 
+        # stop Goldstone Management service
+        ssh(cli, "systemctl stop gs-mgmt.target || true")  # can fail
+        ssh(cli, "systemctl stop gs-mgmt.service || true")  # can fail
+        # stop NETOPEER2 service
+        ssh(cli, "netopeer2.sh stop || true")  # can fail
+        # stop SNMP service
+        ssh(cli, "gs-snmp.sh stop || true")  # can fail
+
         images = [
             "gs-mgmt",
             "gs-mgmt-netopeer2",
@@ -42,13 +50,6 @@ def main(host, username, password, arch):
             images.append("gs-mgmt-north-snmp")
         elif arch == "arm64":
             images.append("gs-mgmt-south-gearbox")
-
-        # stop Goldstone Management service
-        ssh(cli, "gs-mgmt.sh stop || true")  # can fail
-        # stop NETOPEER2 service
-        ssh(cli, "netopeer2.sh stop || true")  # can fail
-        # stop SNMP service
-        ssh(cli, "gs-snmp.sh stop || true")  # can fail
 
         images = " ".join(f"gs-test/{name}:latest-{arch}" for name in images)
 

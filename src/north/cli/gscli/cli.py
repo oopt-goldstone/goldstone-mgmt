@@ -7,6 +7,7 @@ from .tai import Transponder
 from .system import System, TACACS, AAA, Mgmtif
 from .platform import Component
 import json
+import re
 import libyang as ly
 import sysrepo as sr
 from sysrepo.session import DATASTORE_VALUES
@@ -27,11 +28,35 @@ stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 
+class InterfaceCounterCommand(Command):
+    def list(self):
+        return self.parent.port.interface_names()
+
+    def exec(self, line):
+        ifnames = self.parent.port.interface_names()
+        if len(line) == 1:
+            try:
+                ptn = re.compile(line[0])
+            except re.error:
+                raise InvalidInput(
+                    f"failed to compile {line[0]} as a regular expression"
+                )
+
+            ifnames = [i for i in ifnames if ptn.match(i)]
+        elif len(line) > 1:
+            for ifname in line:
+                if ifname not in ifnames:
+                    raise InvalidInput(f"Invalid interface {ifname}")
+            ifnames = line
+
+        self.parent.port.show_counters(ifnames)
+
+
 class InterfaceGroupCommand(Command):
     SUBCOMMAND_DICT = {
         "brief": Command,
         "description": Command,
-        "counters": Command,
+        "counters": InterfaceCounterCommand,
     }
 
     def __init__(self, context, parent, name):
@@ -39,15 +64,10 @@ class InterfaceGroupCommand(Command):
         self.port = Port(context.conn)
 
     def exec(self, line):
-        if len(line) < 1 or line[0] not in ["brief", "description", "counters"]:
-            raise InvalidInput(self.usage())
-        if line[0] in ["brief", "description"]:
-            if len(line) == 1:
-                return self.port.show_interface(line[0])
-            else:
-                raise InvalidInput(self.usage())
+        if len(line) == 1:
+            return self.port.show_interface(line[0])
         else:
-            self.port.show_counters(line[1:])
+            raise InvalidInput(self.usage())
 
     def usage(self):
         return (

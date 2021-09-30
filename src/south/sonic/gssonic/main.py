@@ -17,8 +17,6 @@ import queue
 
 logger = logging.getLogger(__name__)
 
-COUNTER_PORT_MAP = "COUNTERS_PORT_NAME_MAP"
-COUNTER_TABLE_PREFIX = "COUNTERS:"
 REDIS_SERVICE_HOST = os.getenv("REDIS_SERVICE_HOST")
 REDIS_SERVICE_PORT = os.getenv("REDIS_SERVICE_PORT")
 
@@ -26,6 +24,24 @@ SINGLE_LANE_INTERFACE_TYPES = ["CR", "LR", "SR", "KR"]
 DOUBLE_LANE_INTERFACE_TYPES = ["CR2", "LR2", "SR2", "KR2"]
 QUAD_LANE_INTERFACE_TYPES = ["CR4", "LR4", "SR4", "KR4"]
 DEFAULT_INTERFACE_TYPE = "KR"
+
+COUNTER_PORT_MAP = "COUNTERS_PORT_NAME_MAP"
+COUNTER_TABLE_PREFIX = "COUNTERS:"
+SAI_COUNTER_TO_YANG_MAP = {
+    "SAI_PORT_STAT_IF_IN_UCAST_PKTS": "in-unicast-pkts",
+    "SAI_PORT_STAT_IF_IN_ERRORS": "in-errors",
+    "SAI_PORT_STAT_IF_IN_DISCARDS": "in-discards",
+    "SAI_PORT_STAT_IF_IN_BROADCAST_PKTS": "in-broadcast-pkts",
+    "SAI_PORT_STAT_IF_IN_MULTICAST_PKTS": "in-multicast-pkts",
+    "SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS": "in-unknown-protos",
+    "SAI_PORT_STAT_IF_OUT_UCAST_PKTS": "out-unicast-pkts",
+    "SAI_PORT_STAT_IF_OUT_ERRORS": "out-errors",
+    "SAI_PORT_STAT_IF_OUT_DISCARDS": "out-discards",
+    "SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS": "out-broadcast-pkts",
+    "SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS": "out-multicast-pkts",
+    "SAI_PORT_STAT_IF_IN_OCTETS": "in-octets",
+    "SAI_PORT_STAT_IF_OUT_OCTETS": "out-octets",
+}
 
 
 def _decode(string):
@@ -91,22 +107,6 @@ class Server(object):
         self.is_usonic_rebooting = False
         self.k8s = incluster_apis()
         self.task_queue = queue.Queue()
-        self.counter_dict = {
-            "SAI_PORT_STAT_IF_IN_UCAST_PKTS": 0,
-            "SAI_PORT_STAT_IF_IN_ERRORS": 0,
-            "SAI_PORT_STAT_IF_IN_DISCARDS": 0,
-            "SAI_PORT_STAT_IF_IN_BROADCAST_PKTS": 0,
-            "SAI_PORT_STAT_IF_IN_MULTICAST_PKTS": 0,
-            "SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS": 0,
-            "SAI_PORT_STAT_IF_OUT_UCAST_PKTS": 0,
-            "SAI_PORT_STAT_IF_OUT_ERRORS": 0,
-            "SAI_PORT_STAT_IF_OUT_DISCARDS": 0,
-            "SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS": 0,
-            "SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS": 0,
-            "SAI_PORT_STAT_IF_OUT_UNKNOWN_PROTOS": 0,
-            "SAI_PORT_STAT_IF_IN_OCTETS": 0,
-            "SAI_PORT_STAT_IF_OUT_OCTETS": 0,
-        }
         self.counter_if_dict = {}
         self.notif_if = {}
         self.mtu_default = self.get_default_from_yang("mtu")
@@ -172,10 +172,12 @@ class Server(object):
 
         logger.debug("uSONiC deployment ready")
 
-        # Enable counters in SONiC
-        self.enable_counters()
         # Caching base values of counters
-        self.cache_counters()
+        while True:
+            if self.cache_counters():
+                break
+            logger.debug("counters not ready. waiting..")
+            await asyncio.sleep(1)
 
         logger.info("uSONiC ready")
 
@@ -341,6 +343,8 @@ class Server(object):
     def get_redis_all(self, db, key):
         db = getattr(self.sonic_db, db)
         data = self.sonic_db.get_all(db, key)
+        if not data:
+            return {}
         return {_decode(k): _decode(v) for k, v in data.items()}
 
     def validate_interface_type(self, ifname, iftype):
@@ -775,73 +779,24 @@ class Server(object):
             if updated:
                 self.task_queue.put(self.breakout_callback())
 
-    def get_counter(self, ifname, counter):
+    def get_counters(self, ifname):
         if ifname not in self.counter_if_dict:
-            return 0
-        base = self.counter_if_dict[ifname].get(counter, 0)
-        key = _decode(
+            return {}
+
+        oid = _decode(
             self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
         )
-        try:
-            key = "COUNTERS:" + key
-            present = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, key, counter)
-            )
-        except:
-            return 0
-        if base and present:
-            return int(present) - int(base)
-        return 0
-
-    def get_interface_state_data(self, xpath):
-        def delta_counter_value(base, present):
-            if base and present:
-                return int(present) - int(base)
-            else:
-                return 0
-
-        xpath = list(libyang.xpath_split(xpath))
-
-        assert xpath[0][0] == "goldstone-interfaces"
-        assert xpath[0][1] == "interfaces"
-        assert xpath[1][1] == "interface"
-        assert xpath[1][2][0][0] == "name"
-        ifname = xpath[1][2][0][1]
-
-        leaf = xpath[-1][1]
-
-        if leaf == "oper-status":
-            return _decode(
-                self.sonic_db.get(
-                    self.sonic_db.APPL_DB, f"PORT_TABLE:{ifname}", "oper_status"
+        data = self.get_redis_all("COUNTERS_DB", f"COUNTERS:{oid}")
+        ret = {}
+        for k, v in data.items():
+            if k not in SAI_COUNTER_TO_YANG_MAP:
+                logger.debug(f"skip: {k}")
+                continue
+            if k in self.counter_if_dict[ifname]:
+                ret[SAI_COUNTER_TO_YANG_MAP[k]] = int(v) - int(
+                    self.counter_if_dict[ifname][k]
                 )
-            )
-        elif leaf == "in-octets":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_OCTETS")
-        elif leaf == "in-unicast-pkts":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_UCAST_PKTS")
-        elif leaf == "in-broadcast-pkts":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_BROADCAST_PKTS")
-        elif leaf == "in-multicast-pkts":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_MULTICAST_PKTS")
-        elif leaf == "in-discards":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_DISCARDS")
-        elif leaf == "in-errors":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_ERRORS")
-        elif leaf == "in-unknown-protos":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS")
-        elif leaf == "out-octets":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_OCTETS")
-        elif leaf == "out-unicast-pkts":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_UCAST_PKTS")
-        elif leaf == "out-broadcast-pkts":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS")
-        elif leaf == "out-multicast-pkts":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS")
-        elif leaf == "out-discards":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_DISCARDS")
-        elif leaf == "out-errors":
-            return self.get_counter(ifname, "SAI_PORT_STAT_IF_OUT_ERRORS")
+        return ret
 
     def is_downlink_port(self, ifname):
         ufd_list = self.get_ufd()
@@ -863,24 +818,7 @@ class Server(object):
             # raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
             return {}
 
-        # Changing to operational datastore to fetch data
-        # for the unconfigurable params in the xpath, data will
-        # be fetched from Redis and complete data will be returned.
-        statistic_leaves = [
-            "in-octets",
-            "in-unicast-pkts",
-            "in-broadcast-pkts",
-            "in-multicast-pkts",
-            "in-discards",
-            "in-errors",
-            "in-unknown-protos",
-            "out-octets",
-            "out-unicast-pkts",
-            "out-broadcast-pkts",
-            "out-multicast-pkts",
-            "out-discards",
-            "out-errors",
-        ]
+        counter_only = "counters" in req_xpath
 
         req_xpath = list(libyang.xpath_split(req_xpath))
         ifnames = self.get_ifname_list()
@@ -943,51 +881,45 @@ class Server(object):
 
         interfaces = list(interfaces.values())
 
-        prefix = "/goldstone-interfaces:interfaces"
-
-        bcminfo = self.k8s.bcm_ports_info(list(i["name"] for i in interfaces))
+        if not counter_only:
+            bcminfo = self.k8s.bcm_ports_info(list(i["name"] for i in interfaces))
 
         for intf in interfaces:
             ifname = intf["name"]
+            intf["state"]["counters"] = self.get_counters(ifname)
 
-            xpath = f"{prefix}/interface[name='{ifname}']"
-            intf["state"]["oper-status"] = self.get_oper_status(ifname)
+            if not counter_only:
 
-            config = self.get_redis_all("APPL_DB", f"PORT_TABLE:{ifname}")
-            for key, value in config.items():
-                if key in ["alias", "lanes"]:
-                    intf["state"][key] = value
-                elif key in ["speed"]:
-                    intf["state"][key] = speed_redis_to_yang(value)
-                elif key in ["mtu"]:
-                    intf["ipv4"] = {key: value}
-                elif key in ["admin_status", "fec"]:
-                    intf["state"][key.replace("_", "-")] = value.upper()
+                intf["state"]["oper-status"] = self.get_oper_status(ifname)
 
-            xpath = f"{xpath}/counters"
-            intf["state"]["counters"] = {}
-            for sl in statistic_leaves:
-                sl_value = self.get_interface_state_data(xpath + "/" + sl)
-                if sl_value != None:
-                    intf["state"]["counters"][sl] = sl_value
+                config = self.get_redis_all("APPL_DB", f"PORT_TABLE:{ifname}")
+                for key, value in config.items():
+                    if key in ["alias", "lanes"]:
+                        intf["state"][key] = value
+                    elif key in ["speed"]:
+                        intf["state"][key] = speed_redis_to_yang(value)
+                    elif key in ["mtu"]:
+                        intf["ipv4"] = {key: value}
+                    elif key in ["admin_status", "fec"]:
+                        intf["state"][key.replace("_", "-")] = value.upper()
 
-            info = bcminfo.get(ifname, {})
-            logger.debug(f"bcminfo: {info}")
+                info = bcminfo.get(ifname, {})
+                logger.debug(f"bcminfo: {info}")
 
-            iftype = info.get("iftype")
-            if iftype:
-                intf["state"]["interface-type"] = iftype
+                iftype = info.get("iftype")
+                if iftype:
+                    intf["state"]["interface-type"] = iftype
 
-            auto_nego = info.get("auto-nego")
-            if auto_nego:
-                intf["auto-negotiate"] = {"state": {"enabled": True}}
-                v = auto_nego.get("local", {}).get("fd")
-                if v:
-                    intf["auto-negotiate"]["state"]["advertised-speeds"] = [
-                        speed_bcm_to_yang(e) for e in v
-                    ]
-            else:
-                intf["auto-negotiate"] = {"state": {"enabled": False}}
+                auto_nego = info.get("auto-nego")
+                if auto_nego:
+                    intf["auto-negotiate"] = {"state": {"enabled": True}}
+                    v = auto_nego.get("local", {}).get("fd")
+                    if v:
+                        intf["auto-negotiate"]["state"]["advertised-speeds"] = [
+                            speed_bcm_to_yang(e) for e in v
+                        ]
+                else:
+                    intf["auto-negotiate"] = {"state": {"enabled": False}}
 
         return {"goldstone-interfaces:interfaces": {"interface": interfaces}}
 
@@ -1024,25 +956,13 @@ class Server(object):
         return r
 
     def cache_counters(self):
-        self.counter_if_dict = {}
-        for key in self.get_config_db_keys("PORT|Ethernet*"):
-            ifname = key.split("|")[1]
-
-            key = _decode(
-                self.sonic_db.get(self.sonic_db.COUNTERS_DB, COUNTER_PORT_MAP, ifname)
-            )
-            if not key:
-                continue
-            tmp_counter_dict = {}
-            counter_key = COUNTER_TABLE_PREFIX + key
-            for counter_name in self.counter_dict.keys():
-                counter_data = _decode(
-                    self.sonic_db.get(
-                        self.sonic_db.COUNTERS_DB, counter_key, counter_name
-                    )
-                )
-                tmp_counter_dict[counter_name] = counter_data
-            self.counter_if_dict[ifname] = tmp_counter_dict
+        self.enable_counters()
+        for k, v in self.get_redis_all("COUNTERS_DB", COUNTER_PORT_MAP).items():
+            d = self.get_redis_all("COUNTERS_DB", f"COUNTERS:{v}")
+            if not d:
+                return False
+            self.counter_if_dict[k] = d
+        return True
 
     def enable_counters(self):
         # This is similar to "counterpoll port enable"
@@ -1492,8 +1412,12 @@ class Server(object):
                         self.sonic_db.delete(self.sonic_db.CONFIG_DB, _hash)
 
     def get_oper_status(self, ifname):
-        xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/state/oper-status"
-        oper_status = self.get_interface_state_data(xpath)
+        oper_status = _decode(
+            self.sonic_db.get(
+                self.sonic_db.APPL_DB, f"PORT_TABLE:{ifname}", "oper_status"
+            )
+        )
+
         downlink_port, uplink_port = self.is_downlink_port(ifname)
 
         if downlink_port:

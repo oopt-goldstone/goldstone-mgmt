@@ -53,6 +53,9 @@ RUN pip install pyang clang jinja2 prompt_toolkit wheel
 
 RUN mkdir -p /usr/share/wheels
 
+RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libffi-dev
+
 RUN --mount=type=bind,source=sm/libyang-python,target=/root/sm/libyang-python,rw \
     --mount=type=bind,source=patches/libyang-python,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
