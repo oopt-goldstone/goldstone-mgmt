@@ -1,57 +1,47 @@
-import sys
-import os
-
-sys.path.append("..")
-
-from gscli.base import Object, InvalidInput, Completer
-from prompt_toolkit.document import Document
-from prompt_toolkit.completion import WordCompleter, Completion
+from gscli.base import Object, InvalidInput, Completer, Command
+from prompt_toolkit.completion import WordCompleter
+import unittest
 
 
-class TestCompleter(Completer):
-    def __init__(self, word_dict):
-        self.word_dict = word_dict
+class A(Command):
+    def exec(self, line):
+        return line
 
-        super(TestCompleter, self).__init__(self.attrnames, self.valuenames)
-
-    def attrnames(self):
-        return self.word_dict.keys()
-
-    def valuenames(self, attrname):
-        return self.word_dict.get(attrname, [])
+    def list(self):
+        return ["Ethernet1_1", "Ethernet2_1"]
 
 
 class Test(Object):
     def __init__(self):
-        super(Test, self).__init__(None, None)
+        super().__init__(None, True)
 
         @self.command(WordCompleter(["a", "aaa", "b", "bbb"], sentence=True))
         def test(line):
             pass
 
-        @self.command(TestCompleter({"a": ["1", "2", "3"], "b": ["4", "5", "6"]}))
+        @self.command(WordCompleter(["a", "aaa", "b", "bbb"], sentence=True))
         def test2(line):
             pass
 
-        @self.command()
-        def a(line):
-            pass
+        self.add_command(A(self, name="a"), strict=False)
+
+
+class TestCLI(unittest.TestCase):
+    def test_basic_help(self):
+        t = Test()
+        self.assertEqual(t.help(""), "quit, exit, test, test2, a")
+        self.assertEqual(t.help("t"), "test, test2")
+        self.assertEqual(t.help("test "), "a, aaa, b, bbb")
+        self.assertEqual(t.help("test a"), "a")
+        self.assertEqual(t.help("test a "), "")
+        self.assertEqual(t.help("a"), "a")
+        self.assertEqual(t.help("a "), "Ethernet1_1, Ethernet2_1")
+        self.assertEqual(
+            t.help("a 2"), "Ethernet1_1, Ethernet2_1"
+        )  # help show candidates when no match
+        self.assertEqual(t.complete_input(["a", "2"], True), ["a", "Ethernet2_1"])
+        self.assertEqual(t.exec("a A B C", no_fail=False), ["A", "B", "C"])
 
 
 if __name__ == "__main__":
-
-    t = Test()
-
-    assert t.help("") == "quit, test, test2, a"
-    assert t.help("t") == "test, test2"
-    assert t.help("test ") == "a, aaa, b, bbb"
-    assert t.help("test a") == "a"
-    assert t.help("test a ") == ""
-    assert t.help("test2") == "test2"
-    assert t.help("test2 ") == "a, b"
-    assert t.help("test2 a") == "a"
-    assert t.help("test2 a ") == "1, 2, 3"
-    assert t.help("test2 a 1") == "1"
-    assert t.help("test2 a 1 ") == ""
-    assert t.help("test2 a 1  ") == ""
-    assert t.help("a ") == ""
+    unittest.main()

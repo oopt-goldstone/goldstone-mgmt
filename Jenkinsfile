@@ -48,6 +48,17 @@ pipeline {
       }
     }
 
+    stage('Unittest') {
+      when {
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+        sh 'apk add --update docker make python2'
+        sh 'make tester'
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test make unittest"
+      }
+    }
+
     stage('Build ONLP packages') {
       when {
         environment name: 'BUILD_BUILDER', value: '1'
