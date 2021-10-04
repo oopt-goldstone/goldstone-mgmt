@@ -36,24 +36,15 @@ module goldstone-portchannel {
         pattern 'PortChannel[0-9]{1,4}';
       }
       description "portchannel group id.";
-    } 
-  
+    }
+
+    uses gs-if:interface-common-config;
+
     leaf-list interface {
       type gs-if:interface-ref;
       description "List of interfaces to be combined";
     }
-    
-    leaf admin-status {
-      type enumeration {
-        enum up {
-          value 1;
-        }
-        enum down {
-          value 2;
-        }
-      }
-      default "up";
-    }
+
   }
 
   grouping portchannel-state {
