@@ -135,12 +135,13 @@ class Server(object):
         for node in ctx.find_path(xpath):
             return node.default()
 
-    def get_config_db_keys(self, pattern):
-        keys = self.sonic_db.keys(self.sonic_db.CONFIG_DB, pattern=pattern)
+    def get_keys(self, pattern, db="CONFIG_DB"):
+        db = getattr(self.sonic_db, db)
+        keys = self.sonic_db.keys(db, pattern=pattern)
         return map(_decode, keys) if keys else []
 
     def get_ifname_list(self):
-        return (n.split("|")[1] for n in self.get_config_db_keys("PORT|Ethernet*"))
+        return (n.split("|")[1] for n in self.get_keys("PORT|Ethernet*"))
 
     def get_if_config(self, ifname):
         return self.get_redis_all("CONFIG_DB", "PORT|" + ifname)
@@ -919,31 +920,19 @@ class Server(object):
             logger.debug("usonic is rebooting. no handling done in oper-callback")
             return
 
-        self.sess.switch_datastore("running")
-        r = self.sess.get_data(req_xpath)
-        if r == {}:
-            return r
+        keys = self.get_keys("LAG_TABLE:PortChannel*", "APPL_DB")
 
-        keys = self.sonic_db.keys(
-            self.sonic_db.APPL_DB, pattern="LAG_TABLE:PortChannel*"
-        )
-        keys = keys if keys else []
-        oper_dict = {}
+        r = []
 
         for key in keys:
-            _hash = _decode(key)
-            pc_id = _hash.split(":")[1]
-            oper_status = _decode(
-                self.sonic_db.get(self.sonic_db.APPL_DB, key, "oper_status")
-            )
-            if oper_status != None:
-                oper_dict[pc_id] = oper_status
+            name = key.split(":")[1]
+            state = self.get_redis_all("APPL_DB", key)
+            state = {k.replace("_", "-"): v.upper() for k, v in state.items()}
+            r.append({"portchannel-id": name, "state": state})
 
-        for data in r["portchannel"]["portchannel-group"]:
-            if oper_dict[data["portchannel-id"]] != None:
-                data["config"]["oper-status"] = oper_dict[data["portchannel-id"]]
+        logger.debug(f"portchannel: {r}")
 
-        return r
+        return {"goldstone-portchannel:portchannel": {"portchannel-group": r}}
 
     def cache_counters(self):
         self.enable_counters()

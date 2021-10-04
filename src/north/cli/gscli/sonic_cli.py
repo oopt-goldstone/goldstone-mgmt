@@ -97,7 +97,7 @@ class Interface(Object):
         @self.command(NestedCompleter.from_nested_dict(self.no_dict))
         def no(args):
             if len(args) < 1:
-                raise InvalidInput("usage: {}".format(self.no_usage))
+                raise InvalidInput("usage: {}".format(self.no_usage()))
             if args[0] == "shutdown":
                 self.port.set_admin_status(ifnames, "UP")
             elif args[0] == "admin-status":
@@ -109,7 +109,7 @@ class Interface(Object):
             elif args[0] == "auto-negotiate":
                 if len(args) == 2:
                     if args[1] != "advertise":
-                        raise InvalidInput("usage: {}".format(self.no_usage))
+                        raise InvalidInput("usage: {}".format(self.no_usage()))
                     self.port.set_auto_nego_adv_speed(ifnames, None)
                 else:
                     self.port.set_auto_nego(ifnames, None)
@@ -336,14 +336,28 @@ class Portchannel(Object):
         def shutdown(args):
             if len(args) != 0:
                 raise InvalidInput("usage: shutdown")
-            pc.set_admin_status(id, "down")
+            pc.set_admin_status(id, "DOWN")
 
-        @self.command(WordCompleter(["shutdown"]))
+        @self.command(WordCompleter(["shutdown", "admin-status"]))
         def no(args):
-            if len(args) == 1 and args[0] == "shutdown":
-                pc.set_admin_status(id, "up")
+            if len(args) != 1:
+                raise InvalidInput(f"usage: no [shutdown|admin-status]")
+            if args[0] == "shutdown":
+                pc.set_admin_status(id, "UP")
+            elif args[0] == "admin-status":
+                pc.set_admin_status(id, None)
             else:
-                raise InvalidInput("usage: no shutdown")
+                raise InvalidInput(f"usage: no [shutdown|admin-status]")
+
+        admin_status_list = ["up", "down"]
+
+        @self.command(WordCompleter(admin_status_list), name="admin-status")
+        def admin_status(args):
+            if len(args) != 1 or args[0] not in admin_status_list:
+                raise InvalidInput(
+                    f"usage: admin_status [{'|'.join(admin_status_list)}]"
+                )
+            pc.set_admin_status(id, args[0].upper())
 
     def __str__(self):
         return "portchannel({})".format(self.id)
