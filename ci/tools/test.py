@@ -622,7 +622,6 @@ class TestSouthSONiC(TestBase):
             "show datastore /goldstone-interfaces:interfaces/interface[name='Ethernet1_1'] operational"
         )
         self.assertTrue("9100" in output)
-        self.assertTrue("ipv4" in output)
 
     def test_speed(self):
         with self.assertRaisesRegex(

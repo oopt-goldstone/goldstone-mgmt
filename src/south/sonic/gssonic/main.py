@@ -109,8 +109,6 @@ class Server(object):
         self.task_queue = queue.Queue()
         self.counter_if_dict = {}
         self.notif_if = {}
-        self.mtu_default = self.get_default_from_yang("mtu")
-        self.speed_default = "100000"
 
         routes = web.RouteTableDef()
 
@@ -129,16 +127,10 @@ class Server(object):
         self.sess.stop()
         self.conn.disconnect()
 
-    def get_default_from_yang(self, key):
+    def get_default(self, key):
         ctx = self.sess.get_ly_ctx()
-        xpath = "/goldstone-interfaces:interfaces"
-        xpath += "/goldstone-interfaces:interface"
-        if key == "mtu":
-            xpath += "/goldstone-ip:ipv4"
-            xpath += "/goldstone-ip:mtu"
-        else:
-            xpath += "/goldstone-interfaces:config"
-            xpath += f"/goldstone-interfaces:{key}"
+        keys = ["interfaces", "interface", "config", key]
+        xpath = "".join(f"/goldstone-interfaces:{v}" for v in keys)
 
         for node in ctx.find_path(xpath):
             return node.default()
@@ -158,7 +150,7 @@ class Server(object):
             return
         if key == "speed":
             value = speed_yang_to_redis(value)
-        if type(value) == str:
+        if type(value) == str and value != "NULL":
             value = value.lower()
         key = key.replace("-", "_")
         return self.sonic_db.set(self.sonic_db.CONFIG_DB, _hash, key, str(value))
@@ -721,7 +713,7 @@ class Server(object):
                         # TODO remove hardcoded value
                         value = "100G"
                     elif key in ["fec", "admin-status", "mtu"]:
-                        value = self.get_default_from_yang(key).lower()
+                        value = self.get_default(key)
 
                     if event == "done":
                         logger.debug(f"adding default value {value} of {key} to redis")
@@ -898,9 +890,7 @@ class Server(object):
                         intf["state"][key] = value
                     elif key in ["speed"]:
                         intf["state"][key] = speed_redis_to_yang(value)
-                    elif key in ["mtu"]:
-                        intf["ipv4"] = {key: value}
-                    elif key in ["admin_status", "fec"]:
+                    elif key in ["admin_status", "fec", "mtu"]:
                         intf["state"][key.replace("_", "-")] = value.upper()
 
                 info = bcminfo.get(ifname, {})
@@ -977,20 +967,20 @@ class Server(object):
 
     async def reconcile(self):
         self.sess.switch_datastore("running")
-        intf_list = self.get_running_data(
-            "/goldstone-interfaces:interfaces/interface", []
-        )
-        for intf in intf_list:
+
+        prefix = "/goldstone-interfaces:interfaces/interface"
+        for key in self.get_ifname_list():
+            xpath = f"{prefix}[name='{key}']"
+            intf = self.get_running_data(xpath, {})
+
             config = intf.pop("config", {})
             intf.update(config)
-            name = intf.pop("name")
-            ipv4 = intf.pop("ipv4", {})
-            intf.update(ipv4)
+            name = intf.pop("name", None)
+            _hash = "PORT|" + key
 
-            logger.debug(f"interface config: {intf}")
+            logger.debug(f"{key} interface config: {intf}")
 
             for key in intf:
-                _hash = "PORT|" + name
                 if key == "auto-negotiate":
                     self.k8s.run_bcmcmd_port(
                         name, "an=" + ("yes" if intf[key] else "no")
@@ -1010,6 +1000,9 @@ class Server(object):
                     pass
                 else:
                     logger.warn(f"unhandled configuration: {key}, {intf[key]}")
+            else:
+                for leaf in ["admin-status", "mtu"]:
+                    self.set_config_db("done", _hash, leaf, self.get_default(leaf))
 
         vlan_data = self.sess.get_data("/goldstone-vlan:vlan")
         if "vlan" in vlan_data:
@@ -1049,70 +1042,23 @@ class Server(object):
                         vlan_member["tagging_mode"],
                     )
 
-        portchannel_data = self.sess.get_data("/goldstone-portchannel:portchannel")
-        if "portchannel" in portchannel_data:
-            if "portchannel-group" in portchannel_data["portchannel"]:
-                for port_channel in portchannel_data["portchannel"][
-                    "portchannel-group"
-                ]:
-                    key = port_channel["portchannel-id"]
-                    try:
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB,
-                            "PORTCHANNEL|" + key,
-                            "admin_status",
-                            port_channel["config"]["admin-status"],
-                        )
-                    except KeyError:
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB,
-                            "PORTCHANNEL|" + key,
-                            "admin_status",
-                            "up",
-                        )
-                    try:
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB,
-                            "PORTCHANNEL|" + key,
-                            "mtu",
-                            port_channel["config"]["goldstone-ip:ipv4"]["mtu"],
-                        )
-                    except KeyError:
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB,
-                            "PORTCHANNEL|" + key,
-                            "mtu",
-                            self.mtu_default,
-                        )
-                    try:
-                        for intf in port_channel["config"]["interface"]:
-                            self.sonic_db.set(
-                                self.sonic_db.CONFIG_DB,
-                                "PORTCHANNEL_MEMBER|" + key + "|" + intf,
-                                "NULL",
-                                "NULL",
-                            )
-                    except KeyError:
-                        logger.debug("interfaces not configured")
+        pc_list = self.get_running_data(
+            "/goldstone-portchannel:portchannel/portchannel-group", []
+        )
+        for pc in pc_list:
+            pid = pc["portchannel-id"]
+            key = f"PORTCHANNEL|{pid}"
 
-        for key in self.get_config_db_keys("PORT|Ethernet*"):
-            intf_keys = self.get_redis_all("CONFIG_DB", key).keys()
+            for leaf in ["admin-status", "mtu"]:
+                default = self.get_default(leaf)
+                value = pc["config"].get(leaf, default)
+                self.set_config_db("done", key, leaf, value)
 
-            if "admin_status" not in intf_keys:
-                self.sonic_db.set(
-                    self.sonic_db.CONFIG_DB,
-                    key,
-                    "admin_status",
-                    "down",
-                )
-
-            if "mtu" not in intf_keys:
-                self.sonic_db.set(
-                    self.sonic_db.CONFIG_DB,
-                    key,
-                    "mtu",
-                    str(self.mtu_default),
-                )
+            for intf in pc["config"].get("interface", []):
+                key = "PORTCHANNEL_MEMBER|" + pid + "|" + intf
+                self.set_config_db("done", key, "NULL", "NULL")
+            else:
+                logger.debug(f"no interface configured on {pid}")
 
     def is_ufd_port(self, port, ufd_list):
 
@@ -1384,18 +1330,10 @@ class Server(object):
                 ):
                     logger.debug("change created/modified")
                     if attr == "config":
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB, _hash, "mtu", self.mtu_default
-                        )
-                    if attr == "admin-status":
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB, _hash, "admin_status", change.value
-                        )
-                    if attr == "mtu":
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB, _hash, "mtu", change.value
-                        )
-                    if attr == "interface":
+                        self.set_config_db(event, _hash, "mtu", self.get_default("mtu"))
+                    elif attr in ["admin-status", "mtu"]:
+                        self.set_config_db(event, _hash, attr, change.value)
+                    elif attr == "interface":
                         self.sonic_db.set(
                             self.sonic_db.CONFIG_DB, _mem_hash, "NULL", "NULL"
                         )
@@ -1403,9 +1341,7 @@ class Server(object):
                     logger.debug(f"{change.xpath}")
                     logger.debug("change deleted")
                     if attr == "mtu":
-                        self.sonic_db.set(
-                            self.sonic_db.CONFIG_DB, _hash, "mtu", self.mtu_default
-                        )
+                        self.set_config_db(event, _hash, "mtu", self.get_default("mtu"))
                     if attr == "interface":
                         self.sonic_db.delete(self.sonic_db.CONFIG_DB, _mem_hash)
                     if attr == "config":
