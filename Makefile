@@ -21,16 +21,6 @@ GS_MGMT_NOTIF_IMAGE ?= gs-mgmt-south-notif
 
 GS_MGMT_IMAGE_TAG ?= latest-$(ARCH)
 
-ONL_REPO ?= sm/OpenNetworkLinux/REPO/stretch/packages/binary-$(ARCH)
-
-ifeq ($(ARCH), amd64)
-    ONLP_PACKAGES ?= onlp onlp-dev onlp-x86-64-kvm-x86-64-r0 onlp-py3
-else ifeq ($(ARCH), arm64)
-    ONLP_PACKAGES ?= onlp onlp-dev onlp-arm64-wistron-wtp-01-c1-00-r0 onlp-py3
-endif
-
-ONLP_DEBS ?= $(foreach repo,$(ONLP_PACKAGES),$(ONL_REPO)/$(repo)_1.0.0_$(ARCH).deb)
-
 DOCKER_REPO ?= docker.io/microsonic
 DOCKER_IMAGE ?= $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG)
 
@@ -47,14 +37,8 @@ all: builder np2 snmpd base-image images
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make cli system' $(MAKE) cmd
 
-builder: $(ONLP_DEBS)
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) --build-arg ONL_REPO=$(ONL_REPO) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
-
-onlp: $(ONLP_DEBS)
-
-
-$(ONLP_DEBS):
-	cd sm/OpenNetworkLinux && docker/tools/onlbuilder -9 --non-interactive --isolate -c "../../tools/build_onlp.sh $(ARCH)"
+builder:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
 base-image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \

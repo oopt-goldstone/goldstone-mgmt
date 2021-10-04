@@ -340,14 +340,7 @@ module goldstone-interfaces {
     }
   }
 
-  grouping interface-config {
-    description
-      "Configuration data data nodes common to physical interfaces
-      and subinterfaces";
-
-    leaf name {
-      type string;
-    }
+  grouping interface-common-config {
 
     leaf description {
       type string;
@@ -368,6 +361,30 @@ module goldstone-interfaces {
       reference
         "RFC 2863: The Interfaces Group MIB - ifAdminStatus";
     }
+
+    leaf mtu {
+      type uint16 {
+        range "1312..9216" {
+          error-message "Invalid MTU value";
+          error-app-tag mtu-invalid;
+        }
+      }
+      units "octets";
+      default 9100;
+    }
+
+  }
+
+  grouping interface-config {
+    description
+      "Configuration data data nodes common to physical interfaces
+      and subinterfaces";
+
+    leaf name {
+      type string;
+    }
+
+    uses interface-common-config;
 
     leaf fec {
       when "../../auto-negotiate/config/enabled = 'false'";

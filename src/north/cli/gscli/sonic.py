@@ -230,7 +230,7 @@ class Port(object):
                 speed = state.get("speed", "-")
                 if speed != "-":
                     speed = speed_yang_to_human(speed)
-                row += [speed, intf.get("ipv4", {}).get("mtu", "-")]
+                row += [speed, intf.get("mtu", "-")]
 
             rows.append(row)
 
@@ -286,10 +286,6 @@ class Port(object):
             ifname = data.get("name")
             config = data.get("config", {})
 
-            # TODO improve the YANG model to handle MTU
-            ipv4 = data.get("ipv4", {})
-            config["ipv4"] = ipv4
-
             an = data.get("auto-negotiate", {})
             config["auto-negotiate"] = an
 
@@ -301,16 +297,7 @@ class Port(object):
                     elif value == "UP":
                         stdout.info("  admin-status up")
 
-                elif key == "ipv4":
-                    try:
-                        mtu = value["mtu"]
-                    except:
-                        mtu = None
-
-                    if mtu:
-                        stdout.info(f"  mtu {mtu}")
-
-                elif key in ["fec", "interface-type", "speed"]:
+                elif key in ["fec", "interface-type", "speed", "mtu"]:
                     if value:
                         stdout.info(f"  {key} {value}")
 
@@ -500,27 +487,15 @@ class Port(object):
                     self.sr_op, xpath, "interface", ifname, "mtu", value, True
                 )
             else:
-                self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4/mtu", no_apply=True)
-
-                # if the mtu leaf was the only node under the ipv4 container
-                # remove the container
-                try:
-                    data = self.sr_op.get_data(f"{xpath}/goldstone-ip:ipv4")
-                except sr.errors.SysrepoNotFoundError:
-                    continue
-
-                data = data.get("interfaces", {}).get("interface", {})
-                data = data.get(ifname, {}).get("ipv4", None) if len(data) else None
-                if not data:
-                    self.sr_op.delete_data(f"{xpath}/goldstone-ip:ipv4", no_apply=True)
+                self.sr_op.delete_data(f"{xpath}/config/mtu", no_apply=True)
         self.sr_op.apply()
 
     def mtu_range(self):
         ctx = self.session.get_ly_ctx()
         xpath = "/goldstone-interfaces:interfaces"
         xpath += "/goldstone-interfaces:interface"
-        xpath += "/goldstone-ip:ipv4"
-        xpath += "/goldstone-ip:mtu"
+        xpath += "/goldstone-interfaces:config"
+        xpath += "/goldstone-interfaces:mtu"
         for node in ctx.find_path(xpath):
             return node.type().range()
 
@@ -744,10 +719,6 @@ class Port(object):
                 data.update(data["state"])
                 del data["state"]
 
-            if "ipv4" in data:
-                mtu_dict = data["ipv4"]
-                data["mtu"] = mtu_dict.get("mtu", "-")
-                del data["ipv4"]
             if "counters" in data:
                 del data["counters"]
             if "breakout" in data:
@@ -973,9 +944,7 @@ def set_attribute(sr_op, path, module, name, attr, value, no_apply=False):
             sr_op.set_data(f"{path}/name", name, no_apply=no_apply)
 
     if module == "interface":
-        if attr == "mtu":
-            xpath = f"{path}/goldstone-ip:ipv4/{attr}"
-        elif attr == "num-channels" or attr == "channel-speed":
+        if attr == "num-channels" or attr == "channel-speed":
             xpath = f"{path}/config/breakout/{attr}"
         else:
             xpath = f"{path}/config/{attr}"
@@ -1008,6 +977,16 @@ class Portchannel(object):
         self.sr_op.delete_data(self.xpath(id))
         return
 
+    def get_list(self, ds, include_implicit_values=True):
+        try:
+            tree = self.sr_op.get_data(self.XPATH, ds, False, include_implicit_values)
+            return natsorted(
+                tree["portchannel"]["portchannel-group"],
+                key=lambda x: x["portchannel-id"],
+            )
+        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
+            return []
+
     def add_interfaces(self, id, ifnames):
         prefix = "/goldstone-interfaces:interfaces"
         for ifname in ifnames:
@@ -1024,18 +1003,17 @@ class Portchannel(object):
         self.sr_op.apply()
 
     def set_admin_status(self, id, value):
-        self.sr_op.set_data("{}/config/admin-status".format(self.xpath(id)), value)
+        if value:
+            self.sr_op.set_data(f"{self.xpath(id)}/config/admin-status", value)
+        else:
+            self.sr_op.delete_data(f"{self.xpath(id)}/config/admin-status")
 
     def get_id(self):
-        d = self.sr_op.get_data(self.XPATH, "operational")
-        d = ly.xpath_get(d, f"{self.XPATH}/portchannel-group", [])
-        return natsorted(v["portchannel-id"] for v in d)
+        return [v["portchannel-id"] for v in self.get_list("operational")]
 
     def remove_interfaces(self, ifnames):
-        try:
-            data = self.sr_op.get_data(f"{self.XPATH}/portchannel-group", "running")
-            groups = data["portchannel"]["portchannel-group"]
-        except (sr.errors.SysrepoNotFoundError, KeyError):
+        groups = self.get_list("running")
+        if len(groups) == 0:
             raise InvalidInput("portchannel not configured for this interface")
 
         for ifname in ifnames:
@@ -1056,26 +1034,12 @@ class Portchannel(object):
         self.sr_op.apply()
 
     def run_conf(self):
-        try:
-            tree = self.sr_op.get_data(
-                "{}/portchannel-group".format(self.XPATH), "running"
-            )
-            id_list = tree["portchannel"]["portchannel-group"]
-        except (sr.errors.SysrepoNotFoundError, KeyError):
-            return
-
-        ids = []
-
-        for data in id_list:
-            ids.append(data["portchannel-id"])
-
-        ids = natsorted(ids)
-
-        for id in ids:
-            data = id_list[id]
+        for data in self.get_list("running", False):
             stdout.info("portchannel {}".format(data["config"]["portchannel-id"]))
-            if data["config"]["admin-status"] == "down":
-                stdout.info("  shutdown")
+            config = data.get("config", {})
+            for key, value in config.items():
+                if key == "admin-status":
+                    stdout.info(f"  {key} {value.lower()}")
             stdout.info("  quit")
             stdout.info("!")
 
@@ -1111,13 +1075,13 @@ class Portchannel(object):
 
             for id in ids:
                 data = id_list[id]
-                adm_st.append(data["config"]["admin-status"])
+                adm_st.append(data["state"]["admin-status"].lower())
                 try:
                     interface.append(natsorted(list(data["config"]["interface"])))
                 except (sr.errors.SysrepoNotFoundError, KeyError):
                     interface.append([])
                 try:
-                    op_st.append(data["config"]["oper-status"])
+                    op_st.append(data["state"]["oper-status"].lower())
                 except (sr.errors.SysrepoNotFoundError, KeyError):
                     op_st.append("-")
 
