@@ -58,16 +58,6 @@ pipeline {
       }
     }
 
-    stage('Build ONLP packages') {
-      when {
-        environment name: 'BUILD_BUILDER', value: '1'
-      }
-      steps {
-          sh 'ARCH=amd64 make onlp'
-          sh 'ARCH=arm64 make onlp'
-      }
-    }
-
     stage('Build') {
       failFast true
       parallel {

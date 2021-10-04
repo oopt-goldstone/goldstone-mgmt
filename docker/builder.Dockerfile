@@ -2,30 +2,28 @@
 
 ARG GS_MGMT_BUILDER_BASE=debian:10
 
-ARG http_proxy
-ARG https_proxy
-
-FROM $GS_MGMT_BUILDER_BASE
+FROM opennetworklinux/builder10:1.2 AS onlp
 ARG TARGETARCH
 
+SHELL ["/bin/bash", "-c"]
+RUN --mount=type=bind,source=sm/OpenNetworkLinux,target=/root/sm/OpenNetworkLinux,rw \
+    --mount=type=bind,source=.git/modules/sm/OpenNetworkLinux,target=/root/.git/modules/sm/OpenNetworkLinux \
+    cd /root/sm/OpenNetworkLinux && . ./setup.env && onlpm --rebuild-pkg-cache && mkdir -p /usr/share/onlp && \ 
+    onlpm --build onlp:arm64 onlp-dev:arm64 onlp-py3:arm64 onlp-arm64-wistron-wtp-01-c1-00-r0:arm64 && \
+    onlpm --build onlp:amd64 onlp-dev:amd64 onlp-py3:amd64 onlp-x86-64-kvm-x86-64-r0:amd64 && \
+    cp -r REPO/buster/packages/binary-$TARGETARCH/* /usr/share/onlp && ls /usr/share/onlp
+
+FROM $GS_MGMT_BUILDER_BASE AS base
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
-            if [ $TARGETARCH = arm64 ]; then \
-                apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libffi-dev; \
-            fi
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus libffi-dev
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
 RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
 
 RUN pip install --upgrade pip
 
-RUN --mount=type=bind,source=sm/OpenNetworkLinux/REPO/stretch/packages,target=/src \ 
-    mkdir -p /usr/share/onlp && cd /src/binary-$TARGETARCH && \ 
-        `([ $TARGETARCH = arm64 ] && cp onlp_1.0.0_arm64.deb onlp-dev_1.0.0_arm64.deb onlp-arm64-wistron-wtp-01-c1-00-r0_1.0.0_arm64.deb onlp-py3_1.0.0_arm64.deb /usr/share/onlp/ ) || \
-        ([ $TARGETARCH = amd64 ] && cp onlp_1.0.0_amd64.deb onlp-dev_1.0.0_amd64.deb onlp-x86-64-kvm-x86-64-r0_1.0.0_amd64.deb onlp-py3_1.0.0_amd64.deb /usr/share/onlp/ )`
-
-RUN dpkg -i /usr/share/onlp/*.deb
+FROM base AS sysrepo
 
 RUN --mount=type=bind,source=sm/libyang,target=/root/sm/libyang,rw \
     --mount=type=bind,source=patches/libyang,target=/root/patches \
@@ -45,16 +43,9 @@ RUN --mount=type=bind,source=sm/sysrepo,target=/root/sm/sysrepo,rw \
 
 RUN dpkg -i /usr/share/debs/sysrepo/*.deb
 
-RUN --mount=type=bind,source=sm/sonic-mgmt-common,target=/root/sm/sonic-mgmt-common,rw \
-    --mount=type=bind,source=patches/sonic-mgmt,target=/root/patches \
-    cd /root && quilt upgrade && quilt push -a && mkdir -p /usr/local/sonic/ && cp -r /root/sm/sonic-mgmt-common/models/yang/sonic/* /usr/local/sonic/ && ls /usr/local/sonic/
-
 RUN pip install pyang clang jinja2 prompt_toolkit wheel
 
 RUN mkdir -p /usr/share/wheels
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libffi-dev
 
 RUN --mount=type=bind,source=sm/libyang-python,target=/root/sm/libyang-python,rw \
     --mount=type=bind,source=patches/libyang-python,target=/root/patches \
@@ -69,6 +60,13 @@ RUN --mount=type=bind,source=sm/sysrepo-python,target=/root/sm/sysrepo-python,rw
     cd /root && quilt upgrade && quilt push -a && \
     cd /root/sm/sysrepo-python && python setup.py bdist_wheel \
     && mkdir -p /usr/share/wheels/sysrepo && cp dist/*.whl /usr/share/wheels/sysrepo
+
+FROM base AS pam
+ARG TARGETARCH
+
+RUN --mount=type=bind,source=sm/sonic-mgmt-common,target=/root/sm/sonic-mgmt-common,rw \
+    --mount=type=bind,source=patches/sonic-mgmt,target=/root/patches \
+    cd /root && quilt upgrade && quilt push -a && mkdir -p /usr/local/sonic/ && cp -r /root/sm/sonic-mgmt-common/models/yang/sonic/* /usr/local/sonic/ && ls /usr/local/sonic/
 
 RUN --mount=type=bind,source=sm/pam_tacplus,target=/root/sm/pam_tacplus,rw \
     --mount=type=bind,source=patches/pam,target=/root/patches \
@@ -86,30 +84,59 @@ RUN --mount=type=bind,source=sm/libnss-tacplus,target=/root/sm/libnss-tacplus,rw
     cd /root/sm/libnss-tacplus && dpkg-buildpackage -rfakeroot -b -us -uc && \
     cd /root/sm && mkdir -p /usr/share/debs/tacacs && cp *.deb /usr/share/debs/tacacs/
 
+FROM sysrepo AS python
+
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libdbus-glib-1-dev
 
 RUN pip install grpcio-tools grpclib
 
+FROM python AS tai
+
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
     cd /root/sm/oopt-tai/tools/taish && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
-    && mkdir -p /usr/share/wheels/tai && cp dist/*.whl /usr/share/wheels/tai \
-# taish package misses this to include in requirement.txt
-    && cd /usr/share/wheels/tai && pip wheel protobuf
+    && mkdir -p /usr/share/wheels/tai && cp dist/*.whl /usr/share/wheels/tai
+ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.7/dist-packages/tai.py
+
+FROM python AS cli
 
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
     cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
     && mkdir -p /usr/share/wheels/cli && cp dist/*.whl /usr/share/wheels/cli
 
+FROM python AS sonic
+
 RUN --mount=type=bind,source=src/south/sonic,target=/src,rw \
     cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
     && mkdir -p /usr/share/wheels/sonic && cp dist/*.whl /usr/share/wheels/sonic
 
+FROM python AS system
+
 RUN --mount=type=bind,source=src/south/system,target=/src,rw \
     cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && rm -f dist/multidict* \
     && mkdir -p /usr/share/wheels/system && cp dist/*.whl /usr/share/wheels/system
+
+FROM python AS final
+
+COPY --from=onlp /usr/share/onlp /usr/share/onlp
+RUN dpkg -i /usr/share/onlp/*.deb
+
+COPY --from=pam /usr/share/debs/tacacs /usr/share/debs/tacacs
+COPY --from=pam /usr/local/sonic /usr/local/sonic
+
+COPY --from=tai /usr/share/wheels/tai /usr/share/wheels/tai
+COPY --from=tai /usr/local/lib/python3.7/dist-packages/tai.py /usr/local/lib/python3.7/dist-packages/tai.py
+
+COPY --from=sysrepo /usr/share/debs/libyang /usr/share/debs/libyang
+COPY --from=sysrepo /usr/share/wheels/libyang /usr/share/wheels/libyang
+
+COPY --from=sysrepo /usr/share/debs/sysrepo /usr/share/debs/sysrepo
+COPY --from=sysrepo /usr/share/wheels/sysrepo /usr/share/wheels/sysrepo
+
+COPY --from=cli /usr/share/wheels/cli /usr/share/wheels/cli
+COPY --from=sonic /usr/share/wheels/sonic /usr/share/wheels/sonic
+COPY --from=system /usr/share/wheels/system /usr/share/wheels/system
 
 RUN --mount=type=bind,source=scripts,target=/src,rw \
     cd /src && cp /src/reload.sh /usr/local/bin/
-
-ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.7/dist-packages/tai.py
