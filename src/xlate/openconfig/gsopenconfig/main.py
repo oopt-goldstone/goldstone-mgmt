@@ -46,7 +46,7 @@ def main():
     fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, format=fmt)
-        sysrepo.configure_logging(py_logging=True)
+    #        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 
