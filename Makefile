@@ -24,10 +24,6 @@ GS_MGMT_IMAGE_TAG ?= latest-$(ARCH)
 DOCKER_REPO ?= docker.io/microsonic
 DOCKER_IMAGE ?= $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG)
 
-GS_YANG_REPO ?= /data/yang
-OC_YANG_REPO ?= /data/sm/openconfig/release/models
-SONIC_YANG_REPO ?= /usr/local/sonic
-
 TAI_META_CUSTOM_FILES ?= $(abspath $(wildcard scripts/tai/*))
 
 DOCKER_BUILD_OPTION ?= --platform linux/$(ARCH)
