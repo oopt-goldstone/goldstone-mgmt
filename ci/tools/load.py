@@ -26,10 +26,8 @@ def main(host, username, password, arch):
 
         # stop South system service
         ssh(cli, "systemctl stop gs-south-system || true")  # can fail
-
         # stop Goldstone Management service
         ssh(cli, "systemctl stop gs-mgmt.target || true")  # can fail
-        ssh(cli, "systemctl stop gs-mgmt.service || true")  # can fail
         # stop NETOPEER2 service
         ssh(cli, "netopeer2.sh stop || true")  # can fail
         # stop SNMP service
