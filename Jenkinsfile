@@ -261,6 +261,9 @@ pipeline {
                 timeout(time: 30, unit: 'MINUTES') {
                     sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthONLP"
                 }
+                timeout(time: 30, unit: 'MINUTES') {
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthGearbox"
+                }
               }
             }
           }

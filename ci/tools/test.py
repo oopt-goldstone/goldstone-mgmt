@@ -231,6 +231,39 @@ class TestSouthSystem(TestBase):
         self.assertTrue("ip route 100.17.0.0/16" not in output)
 
 
+class TestSouthGearbox(TestBase):
+    def test_interface(self):
+        output = self.gscli("show interface brief")
+        self.assertTrue("Ethernet1/1/1" in output)
+
+        output = self.gscli("interface Ethernet1/1/1; show")
+        self.assertTrue("admin-status" in output)
+        self.assertTrue("oper-status" in output)
+        self.assertTrue("fec" in output)
+        self.assertTrue("speed" in output)
+
+        self.gscli("interface Ethernet1/1/1; admin-status up")
+        output = self.gscli("interface Ethernet1/1/1; show")
+        for line in output.split("\n"):
+            if "admin-status" in line:
+                self.assertTrue("up" in line)
+                break
+
+        self.gscli("interface Ethernet1/1/1; admin-status down")
+        output = self.gscli("interface Ethernet1/1/1; show")
+        for line in output.split("\n"):
+            if "admin-status" in line:
+                self.assertTrue("down" in line)
+                break
+
+        self.gscli("interface Ethernet1/1/1; no admin-status")
+        output = self.gscli("interface Ethernet1/1/1; show")
+        for line in output.split("\n"):
+            if "admin-status" in line:
+                self.assertTrue("down" in line)
+                break
+
+
 class TestSouthSONiC(TestBase):
     def test_vlan(self):
         self.gscli("show vlan details")
