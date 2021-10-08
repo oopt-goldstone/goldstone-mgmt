@@ -729,15 +729,15 @@ class Port(object):
                     data["breakout:parent"] = data["breakout"]["parent"]
                 del data["breakout"]
 
-            autonego = data.get("auto-negotiate", {}).get("state")
-            if autonego:
-                v = "enabled" if autonego["enabled"] else "disabled"
-                data["auto-negotiate"] = v
-                v = autonego.get("advertised-speeds")
-                if v:
-                    v = ",".join(speed_yang_to_human(e) for e in v)
-                    data["advertised-speeds"] = v
-            else:
+            if "auto-negotiate" in data:
+                autonego = data["auto-negotiate"].get("state")
+                if autonego:
+                    v = "enabled" if autonego["enabled"] else "disabled"
+                    data["auto-negotiate"] = v
+                    v = autonego.get("advertised-speeds")
+                    if v:
+                        v = ",".join(speed_yang_to_human(e) for e in v)
+                        data["advertised-speeds"] = v
                 del data["auto-negotiate"]
 
             if "speed" in data:

@@ -1,0 +1,57 @@
+module goldstone-gearbox {
+
+  yang-version "1";
+
+  namespace "http://goldstone.net/yang/goldstone-gearbox";
+  prefix gs-gb;
+
+  organization
+    "Goldstone";
+
+  description
+    "This module contains a collection of YANG definitions for
+     managing gearboxes.";
+
+  revision 2021-10-08 {
+    description
+      "Initial version.";
+    reference
+      "0.1.0";
+  }
+
+  grouping gearbox-config {
+    leaf name {
+      type string;
+    }
+    leaf admin-status {
+      type enumeration {
+        enum UP;
+        enum DOWN;
+      }
+      default UP;
+    }
+  }
+
+  grouping gearbox-top {
+    container gearboxes {
+      list gearbox {
+        key "name";
+        leaf name {
+          type leafref {
+            path "../config/name";
+          }
+        }
+        container config {
+          uses gearbox-config;
+        }
+        container state {
+          config false;
+          uses gearbox-config;
+        }
+      }
+    }
+  }
+
+  uses gearbox-top;
+
+}

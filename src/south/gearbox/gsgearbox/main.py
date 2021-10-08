@@ -1,4 +1,5 @@
 import sysrepo
+import libyang
 import logging
 import taish
 import asyncio
@@ -43,34 +44,184 @@ class Server(object):
         self.ataish.close()
         self.taish.close()
 
-    def interface_change_cb(self, event, req_id, changes, priv):
+    def get_sr_data(
+        self, xpath, datastore, default=None, include_implicit_defaults=False
+    ):
+        self.sess.switch_datastore(datastore)
+        try:
+            v = self.sess.get_data(
+                xpath, include_implicit_defaults=include_implicit_defaults
+            )
+        except sysrepo.errors.SysrepoNotFoundError:
+            logger.debug(
+                f"xpath: {xpath}, ds: {datastore}, not found. returning {default}"
+            )
+            return default
+        v = libyang.xpath_get(v, xpath, default)
+        logger.debug(f"xpath: {xpath}, ds: {datastore}, value: {v}")
+        return v
+
+    def get_running_data(self, xpath, default=None, include_implicit_defaults=False):
+        return self.get_sr_data(xpath, "running", default, include_implicit_defaults)
+
+    def get_operational_data(
+        self, xpath, default=None, include_implicit_defaults=False
+    ):
+        return self.get_sr_data(
+            xpath, "operational", default, include_implicit_defaults
+        )
+
+    def get_ifname_list(self):
+        modules = self.taish.list()
+
+        interfaces = []
+        for loc, module in modules.items():
+            m = self.taish.get_module(loc)
+            for hostif in m.obj.hostifs:
+                interfaces.append(f"Ethernet{loc}/0/{hostif.index+1}")
+            for netif in m.obj.netifs:
+                interfaces.append(f"Ethernet{loc}/1/{netif.index+1}")
+
+        return interfaces
+
+    def gearbox_change_cb(self, event, req_id, changes, priv):
         logger.debug(f"change_cb: event: {event}, changes: {changes}")
 
         if event not in ["change", "done"]:
             logger.warn("unsupported event: {event}")
             return
 
-        raise sysrepo.SysrepoInvalArgError("nothing implemented yet")
+    async def gearbox_oper_cb(self, sess, xpath, req_xpath, parent, priv):
+        logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
+
+    def ifname2taiobj(self, ifname):
+        v = [int(v) for v in ifname.replace("Ethernet", "").split("/")]
+        m = self.taish.get_module(str(v[0]))
+        if v[1] == 0:  # hostif
+            return m.get_hostif(v[2] - 1)
+        elif v[1] == 1:  # netif
+            return m.get_netif(v[2] - 1)
+        return None
+
+    def parse_intf_change_req(self, xpath):
+        xpath = list(libyang.xpath_split(xpath))
+        if len(xpath) < 2:
+            return None, None
+
+        if xpath[1][2][0][0] != "name":
+            return None, None
+
+        obj = self.ifname2taiobj(xpath[1][2][0][1])
+        if not obj:
+            return None, None
+
+        if len(xpath) < 4:
+            return obj, None
+
+        if xpath[2][1] != "config":
+            return obj, None
+
+        return obj, xpath[3][1]
+
+    def interface_change_cb(self, event, req_id, changes, priv):
+        logger.debug(f"change_cb: event: {event}, changes: {changes}")
+
+        if event not in ["change"]:
+            logger.warn(f"no-op event: {event}")
+            return
+
+        for change in changes:
+            logger.debug(f"event: {event}, type: {type(change)}, change: {change}")
+            obj, key = self.parse_intf_change_req(change.xpath)
+            logger.debug(f"obj: {obj}, key: {key}")
+            if key == "admin-status":
+                key = "tx-dis"
+                value = "false" if change.value == "UP" else "true"
+                obj.set(key, value)
+            elif key in [None, "name"]:
+                pass
+            else:
+                logger.warn(f"{key} not implemented yet")
+                # raise sysrepo.SysrepoInvalArgError(f"{key} not implemented")
 
     async def interface_oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
+        xpath = list(libyang.xpath_split(req_xpath))
+        logger.debug(f"xpath: {xpath}")
 
-        modules = await self.ataish.list()
+        if len(xpath) < 2 or len(xpath[1][2]) < 1:
+            ifnames = self.get_ifname_list()
+        else:
+            if xpath[1][2][0][0] != "name":
+                logger.warn(f"invalid request: {xpath}")
+                return
+            ifnames = [xpath[1][2][0][1]]
 
         interfaces = []
-        for loc, module in modules.items():
-            m = await self.ataish.get_module(loc)
-            for hostif in m.obj.hostifs:
-                interfaces.append(f"Ethernet{loc}/0/{hostif.index+1}")
-            for netif in m.obj.netifs:
-                interfaces.append(f"Ethernet{loc}/1/{netif.index+1}")
+        for ifname in ifnames:
+            i = {"name": ifname, "config": {"name": ifname}}
+            if len(xpath) == 3 and xpath[2][1] == "name":
+                pass
+            else:
+                obj = self.ifname2taiobj(ifname)
+                state = {}
+                state["admin-status"] = "DOWN" if obj.get("tx-dis") == "true" else "UP"
+                state["oper-status"] = (
+                    "UP" if "ready" in obj.get("pcs-status") else "DOWN"
+                )
+                state["fec"] = obj.get("fec-type").upper()
+                state["speed"] = (
+                    "SPEED_100G"
+                    if obj.get("signal-rate") == "100-gbe"
+                    else "SPEED_UNKNOWN"
+                )
+                i["state"] = state
 
-        interfaces = [{"name": n, "config": {"name": n}} for n in interfaces]
+            interfaces.append(i)
+
         return {"goldstone-interfaces:interfaces": {"interface": interfaces}}
+
+    def get_default(self, key, model="goldstone-interfaces"):
+        ctx = self.sess.get_ly_ctx()
+        if model == "goldstone-interfaces":
+            keys = ["interfaces", "interface", "config", key]
+        elif model == "goldstone-gearbox":
+            keys = ["gearboxes", "gearbox", "config", key]
+        else:
+            return None
+
+        xpath = "".join(f"/{model}:{v}" for v in keys)
+
+        for node in ctx.find_path(xpath):
+            return node.default()
+
+    async def reconcile(self):
+        self.sess.switch_datastore("running")
+
+        modules = await self.ataish.list()
+        for loc in modules.keys():
+            module = await self.ataish.get_module(loc)
+            admin_status = self.get_running_data(
+                f"/goldstone-gearbox:gearboxes/gearbox[name='{loc}']/config/admin-status",
+                self.get_default("admin-status", "goldstone-gearbox"),
+            )
+            await module.set("admin-status", admin_status.lower())
+
+        ifnames = self.get_ifname_list()
+        for ifname in ifnames:
+            admin_status = self.get_running_data(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/admin-status",
+                self.get_default("admin-status"),
+            )
+            obj = self.ifname2taiobj(ifname)
+            obj.set("tx-dis", "false" if admin_status == "UP" else "true")
 
     async def start(self):
 
         with self.sess.lock("goldstone-interfaces"):
+
+            await self.reconcile()
+
             self.sess.switch_datastore("running")
 
             self.sess.subscribe_module_change(
@@ -83,6 +234,19 @@ class Server(object):
                 "goldstone-interfaces",
                 "/goldstone-interfaces:interfaces",
                 self.interface_oper_cb,
+                asyncio_register=True,
+            )
+
+            self.sess.subscribe_module_change(
+                "goldstone-gearbox",
+                None,
+                self.gearbox_change_cb,
+            )
+
+            self.sess.subscribe_oper_data_request(
+                "goldstone-gearbox",
+                "/goldstone-gearbox:gearboxes",
+                self.gearbox_oper_cb,
                 asyncio_register=True,
             )
 
