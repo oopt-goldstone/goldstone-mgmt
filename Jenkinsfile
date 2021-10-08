@@ -259,10 +259,13 @@ pipeline {
               steps {
                 sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
                 timeout(time: 30, unit: 'MINUTES') {
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthTAI"
+                }
+                timeout(time: 30, unit: 'MINUTES') {
                     sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthONLP"
                 }
                 timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthGearbox"
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e DOCKER_REPO=$DOCKER_REPO -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-mgmt-test python3 -m ci.tools.test -f -v TestSouthGearbox"
                 }
               }
             }
