@@ -249,8 +249,6 @@ class Server(object):
         if len(xpath) >= 4:
             if xpath[2][1] == "config":
                 key = xpath[-1][1]
-            elif xpath[2][1] == "ipv4":
-                key = xpath[3][1]
             elif xpath[2][1] == "auto-negotiate":
                 key = "auto-negotiate"
 
