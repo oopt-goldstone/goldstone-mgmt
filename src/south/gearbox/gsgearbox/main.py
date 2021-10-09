@@ -161,21 +161,35 @@ class Server(object):
         for ifname in ifnames:
             i = {"name": ifname, "config": {"name": ifname}}
             if len(xpath) == 3 and xpath[2][1] == "name":
-                pass
-            else:
-                obj = self.ifname2taiobj(ifname)
-                state = {}
-                state["admin-status"] = "DOWN" if obj.get("tx-dis") == "true" else "UP"
-                state["oper-status"] = (
-                    "UP" if "ready" in obj.get("pcs-status") else "DOWN"
-                )
-                state["fec"] = obj.get("fec-type").upper()
-                state["speed"] = (
-                    "SPEED_100G"
+                interfaces.append(i)
+                continue
+
+            obj = self.ifname2taiobj(ifname)
+            state = {}
+            leaves = [
+                (
+                    "admin-status",
+                    lambda: "DOWN" if obj.get("tx-dis") == "true" else "UP",
+                ),
+                (
+                    "oper-status",
+                    lambda: "UP" if "ready" in obj.get("pcs-status") else "DOWN",
+                ),
+                ("fec", lambda: obj.get("fec-type").upper()),
+                (
+                    "speed",
+                    lambda: "SPEED_100G"
                     if obj.get("signal-rate") == "100-gbe"
-                    else "SPEED_UNKNOWN"
-                )
-                i["state"] = state
+                    else "SPEED_UNKNOWN",
+                ),
+            ]
+            for l in leaves:
+                try:
+                    state[l[0]] = l[1]()
+                except taish.TAIException:
+                    pass
+
+            i["state"] = state
 
             interfaces.append(i)
 
