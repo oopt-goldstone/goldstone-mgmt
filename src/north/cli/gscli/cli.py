@@ -90,7 +90,7 @@ class VlanGroupCommand(Command):
     def exec(self, line):
         if len(line) < 1:
             raise InvalidInput(self.usage())
-        return self.vlan.show_vlan(line[0])
+        return self.vlan.show_vlans(line[0])
 
     def usage(self):
         return "usage:\n" f" {self.parent.name} {self.name} details"
@@ -512,8 +512,7 @@ class GlobalShowCommand(Command):
     def tech_support(self, line):
         datastore_list = ["operational", "running", "candidate", "startup"]
         xpath_list = [
-            "/goldstone-vlan:vlan/VLAN/VLAN_LIST",
-            "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST",
+            "/goldstone-vlan:vlan/vlans",
             "/goldstone-interfaces:interfaces/interface",
             "/goldstone-mgmt-interfaces:interfaces/interface",
             "/goldstone-uplink-failure-detection:ufd-groups/ufd-group",
@@ -526,7 +525,7 @@ class GlobalShowCommand(Command):
 
         stdout.info("\nshow vlan details:\n")
         vlan = Vlan(self.context.conn)
-        vlan.show_vlan()
+        vlan.show_vlans()
         stdout.info("\nshow interface description:\n")
         port = Port(self.context.conn)
         try:
