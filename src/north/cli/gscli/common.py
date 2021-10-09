@@ -55,7 +55,7 @@ class sysrepo_wrap(object):
     ):
         self.session.switch_datastore(ds)
         data = self.session.get_data(
-            "{}".format(xpath),
+            xpath,
             0,
             TIMEOUT_MS,
             no_subs=no_subs,
