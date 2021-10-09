@@ -481,6 +481,10 @@ class TestSouthSONiC(TestBase):
         output = self.gscli("show vlan details")
         self.assertTrue("Ethernet1_1" not in output)
 
+        self.gscli("interface Ethernet2_1; no switchport mode trunk vlan 1000")
+        output = self.gscli("show vlan details")
+        self.assertTrue("Ethernet1_1" not in output)
+
         self.gscli("show vlan details")
         self.gscli("no vlan 1000")
         self.gscli("show vlan details")
