@@ -53,8 +53,8 @@ class Interface(Object):
 
         self.switchprt_dict = {
             "mode": {
-                "trunk": {"vlan": WordCompleter(self.vlan.get_vid)},
-                "access": {"vlan": WordCompleter(self.vlan.get_vid)},
+                "trunk": {"vlan": WordCompleter(self.vlan.get_vids)},
+                "access": {"vlan": WordCompleter(self.vlan.get_vids)},
             }
         }
 
@@ -126,10 +126,8 @@ class Interface(Object):
                     raise InvalidInput(
                         "usage : no switchport mode trunk|access vlan <vid>"
                     )
-                if args[4] in self.vlan.get_vid():
-                    self.port.set_vlan_mem(ifnames, args[2], args[4], config=False)
-                else:
-                    raise InvalidInput("Entered vid does not exist")
+                self.port.set_vlan_mem(ifnames, args[2], args[4], config=False)
+
             elif args[0] == "breakout":
                 self.port.set_breakout(ifnames, None, None)
             elif args[0] == "fec" and len(args) == 1:
@@ -192,12 +190,6 @@ class Interface(Object):
 
             if args[2] != "vlan":
                 raise InvalidInput("usage: switchport mode (trunk|access) vlan <vid>")
-
-            if not args[3].isdigit():
-                raise InvalidInput("argument vid must be numbers and not letters")
-
-            if args[3] not in self.vlan.get_vid():
-                raise InvalidInput("Entered vid does not exist")
 
             self.port.set_vlan_mem(ifnames, args[1], args[3])
 
@@ -297,6 +289,12 @@ class Vlan(Object):
             if len(args) != 0:
                 return parent.show(args)
             vlan.show(self.vid)
+
+        @self.command()
+        def name(args):
+            if len(args) != 1:
+                raise InvalidInput("usage: name <name>")
+            vlan.set_name(self.vid, args[0])
 
     def __str__(self):
         return "vlan({})".format(self.vid)

@@ -117,7 +117,7 @@ class Root(Object):
         }
         self.no_dict = {
             "vlan": FuzzyWordCompleter(
-                lambda: ["range"] + self.vlan.get_vid(), WORD=True
+                lambda: ["range"] + self.vlan.get_vids(), WORD=True
             ),
             "aaa": {"authentication": {"login": None}},
             "tacacs-server": {"host": None},
@@ -244,7 +244,7 @@ class Root(Object):
             return True
 
         @self.command(
-            FuzzyWordCompleter(lambda: (["range"] + self.vlan.get_vid()), WORD=True),
+            FuzzyWordCompleter(lambda: (["range"] + self.vlan.get_vids()), WORD=True),
         )
         def vlan(line):
             if len(line) not in [1, 2]:
@@ -274,22 +274,11 @@ class Root(Object):
         def no(line):
             if len(line) == 2:
                 if line[0] == "vlan":
-                    vlan_list = self.vlan.get_vid()
-                    if line[1].isdigit():
-                        if line[1] in vlan_list:
-                            self.vlan.delete(line[1])
-                        else:
-                            stderr.info("The vlan-id provided doesn't exist")
-                    else:
-                        stderr.info(
-                            "The vlan-id entered must be numbers and not letters"
-                        )
+                    self.vlan.delete(line[1])
                 elif line[0] == "ufd":
                     self.ufd.delete(line[1])
-
                 elif line[0] == "portchannel":
                     self.portchannel.delete(line[1])
-
                 else:
                     raise InvalidInput(self.no_usage())
             elif len(line) == 3:
@@ -305,7 +294,7 @@ class Root(Object):
                         stderr.info("Enter valid no command for tacacs-server")
                 elif line[0] == "vlan" and line[1] == "range":
                     if isValidVlanRange(line[2]):
-                        vlan_list = self.vlan.get_vid()
+                        vlan_list = self.vlan.get_vids()
                         for vlans in line[2].split(","):
                             if vlans.isdigit():
                                 if vlans in vlan_list:
