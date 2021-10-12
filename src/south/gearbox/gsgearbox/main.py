@@ -175,6 +175,17 @@ class Server(object):
                     "oper-status",
                     lambda: "UP" if "ready" in obj.get("pcs-status") else "DOWN",
                 ),
+            ]
+            for l in leaves:
+                try:
+                    state[l[0]] = l[1]()
+                except taish.TAIException:
+                    pass
+            i["state"] = state
+
+            state = {}
+
+            leaves = [
                 ("fec", lambda: obj.get("fec-type").upper()),
                 (
                     "speed",
@@ -189,7 +200,7 @@ class Server(object):
                 except taish.TAIException:
                     pass
 
-            i["state"] = state
+            i["ethernet"] = {"state": state}
 
             interfaces.append(i)
 

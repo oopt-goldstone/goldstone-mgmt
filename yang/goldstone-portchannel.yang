@@ -38,7 +38,18 @@ module goldstone-portchannel {
       description "portchannel group id.";
     }
 
-    uses gs-if:interface-common-config;
+    leaf mtu {
+      type uint16 {
+        range "1312..9216" {
+          error-message "Invalid MTU value";
+          error-app-tag mtu-invalid;
+        }
+      }
+      units "octets";
+      default 9100;
+    }
+
+    uses gs-if:interface-config;
 
     leaf-list interface {
       type gs-if:interface-ref;

@@ -30,6 +30,13 @@ def speed_yang_to_human(speed):
     return speed.replace("SPEED_", "")
 
 
+def breakout_yang_to_human(breakout):
+    numch = breakout["num-channels"]
+    speed = breakout["channel-speed"]
+    speed = speed_yang_to_human(speed)
+    return f"{numch}X{speed}"
+
+
 class Vlan(object):
 
     XPATH = "/goldstone-vlan:vlans/vlan"
@@ -129,14 +136,26 @@ class Port(object):
             raise InvalidInput("no interface found")
         return natsorted(v["name"] for v in data["interfaces"]["interface"])
 
-    def get_interface_list(
-        self, datastore, include_implicit_values=True, no_subs=False
-    ):
+    def get_interface_list(self, datastore, include_implicit_values=True):
         try:
             tree = self.sr_op.get_data(
-                self.XPATH, datastore, no_subs, include_implicit_values
+                self.XPATH, datastore, include_implicit_values=include_implicit_values
             )
-            return natsorted(tree["interfaces"]["interface"], key=lambda x: x["name"])
+            if datastore == "operational":
+                interfaces = []
+                for i in tree["interfaces"]["interface"]:
+                    # FIXME since south daemons use the oper_merge flag for
+                    # operational data subscription, 'tree' can include configuration
+                    # in the running datastore, even if the operational datastore is
+                    # empty. Only include the interfaces with "oper-status" leaf.
+                    #
+                    # The root cause of this issue is the bug in sysrepo that
+                    # doesn't allow to raise any Exception in the oper cb.
+                    if i.get("state", {}).get("oper-status"):
+                        interfaces.append(i)
+            else:
+                interfaces = tree["interfaces"]["interface"]
+            return natsorted(interfaces, key=lambda x: x["name"])
         except (KeyError, sr.errors.SysrepoNotFoundError) as error:
             return []
 
@@ -158,10 +177,12 @@ class Port(object):
                 state.get("alias", "-"),
             ]
             if details == "description":
+                state = intf.get("ethernet", {}).get("state", {})
                 speed = state.get("speed", "-")
                 if speed != "-":
                     speed = speed_yang_to_human(speed)
-                row += [speed, intf.get("mtu", "-")]
+                mtu = state.get("mtu", "-")
+                row += [speed, mtu]
 
             rows.append(row)
 
@@ -213,65 +234,59 @@ class Port(object):
 
         for data in interface_list:
             ifname = data.get("name")
-            config = data.get("config", {})
+            stdout.info("interface {}".format(ifname))
 
-            an = data.get("auto-negotiate")
-            if an:
-                config["auto-negotiate"] = an
+            config = data.get("config")
+            if config:
+                for key, value in config.items():
+                    if key == "admin-status":
+                        if value == "DOWN":
+                            stdout.info("  admin-status down")
+                        elif value == "UP":
+                            stdout.info("  admin-status up")
+
+            ethernet = data.get("ethernet")
+            if ethernet:
+                config = ethernet.get("config", {})
+                for key in ["fec", "interface-type", "speed", "mtu"]:
+                    if key in config and config.get(key):
+                        value = config.get(key)
+                        if key == "fec":
+                            value = value.lower()
+                        elif key == "speed":
+                            value = speed_yang_to_human(value)
+                        stdout.info(f"  {key} {value}")
+
+                if "auto-negotiate" in ethernet:
+                    config = ethernet["auto-negotiate"].get("config", {})
+                    v = config.get("enabled")
+                    if v != None:
+                        value = "enable" if v else "disable"
+                        stdout.info(f"  auto-negotiate {value}")
+
+                    v = config.get("advertised-speeds")
+                    if v:
+                        v = ",".join(speed_yang_to_human(s) for s in v)
+                        stdout.info(f"  auto-negotiate advatise {v}")
+
+                if "breakout" in ethernet:
+                    config = ethernet["breakout"].get("config", {})
+                    breakout = breakout_yang_to_human(config)
+                    stdout.info(f"  breakout {breakout}")
 
             vlan = data.get("switched-vlan")
             if vlan:
-                config["switched-vlan"] = vlan
+                config = vlan.get("config", {})
+                mode = config.get("interface-mode", "").lower()
+                if mode == "access":
+                    vids = [config["access-vlan"]]
+                elif mode == "trunk":
+                    vids = config.get("trunk-vlans", [])
+                else:
+                    continue  # print error?
 
-            stdout.info("interface {}".format(ifname))
-            for key, value in config.items():
-                if key == "admin-status":
-                    if value == "DOWN":
-                        stdout.info("  admin-status down")
-                    elif value == "UP":
-                        stdout.info("  admin-status up")
-
-                elif key in ["fec", "interface-type", "speed", "mtu"]:
-                    if value:
-                        stdout.info(f"  {key} {value}")
-
-                elif key == "auto-negotiate":
-                    try:
-                        v = value["config"]["enabled"]
-                        if v:
-                            stdout.info("  auto-negotiate enable")
-                        else:
-                            stdout.info("  auto-negotiate disable")
-                        v = value["config"]["advertised-speeds"]
-                        if v:
-                            v = ",".join(speed_yang_to_human(s) for s in v)
-                            stdout.info(f"  auto-negotiate advatise {v}")
-                    except KeyError:
-                        pass
-
-                elif key == "breakout":
-                    if value:
-                        num_of_channels = value["num-channels"]
-                        channel_speed = value["channel-speed"]
-                        channel_speed = channel_speed.split("_")
-                        channel_speed = channel_speed[1].split("B")
-                        stdout.info(
-                            "  {} {}X{}".format(key, num_of_channels, channel_speed[0])
-                        )
-                elif key == "switched-vlan":
-                    try:
-                        mode = value["config"]["interface-mode"].lower()
-                        if mode == "access":
-                            vids = [value["config"]["access-vlan"]]
-                        elif mode == "trunk":
-                            vids = value["config"]["trunk-vlans"]
-                        else:
-                            continue  # print error?
-
-                        for vid in vids:
-                            stdout.info(f"  switchport mode {mode} vlan {vid}")
-                    except KeyError:
-                        pass
+                for vid in vids:
+                    stdout.info(f"  switchport mode {mode} vlan {vid}")
 
             if ifname in ufd:
                 stdout.info(
@@ -335,8 +350,9 @@ class Port(object):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
             if value:
-                set_attribute(
-                    self.sr_op, xpath, "interface", ifname, "admin-status", value, True
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(
+                    f"{xpath}/config/admin-status", value, no_apply=True
                 )
             else:
                 self.sr_op.delete_data(f"{xpath}/config/admin-status", no_apply=True)
@@ -347,31 +363,27 @@ class Port(object):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
             if value:
-                set_attribute(
-                    self.sr_op,
-                    xpath,
-                    "interface",
-                    ifname,
-                    "fec",
-                    value,
-                    True,
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(
+                    f"{xpath}/ethernet/config/fec", value, no_apply=True
                 )
             else:
-                self.sr_op.delete_data(f"{xpath}/config/fec", no_apply=True)
+                self.sr_op.delete_data(f"{xpath}/ethernet/config/fec", no_apply=True)
         self.sr_op.apply()
 
     def set_auto_nego(self, ifnames, mode):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
-            if mode == None:
-                self.sr_op.delete_data(
-                    f"{xpath}/auto-negotiate/config/enabled", no_apply=True
+            if mode:
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(
+                    f"{xpath}/ethernet/auto-negotiate/config/enabled",
+                    mode,
+                    no_apply=True,
                 )
             else:
-                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-                self.sr_op.set_data(f"{xpath}/name", ifname, no_apply=True)
-                self.sr_op.set_data(
-                    f"{xpath}/auto-negotiate/config/enabled", mode, no_apply=True
+                self.sr_op.delete_data(
+                    f"{xpath}/ethernet/auto-negotiate/config/enabled", no_apply=True
                 )
         self.sr_op.apply()
 
@@ -379,14 +391,14 @@ class Port(object):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
             self.sr_op.delete_data(
-                f"{xpath}/auto-negotiate/config/advertised-speeds", no_apply=True
+                f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
+                no_apply=True,
             )
             if speeds:
                 self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-                self.sr_op.set_data(f"{xpath}/name", ifname, no_apply=True)
                 for speed in speeds.split(","):
                     self.sr_op.set_data(
-                        f"{xpath}/auto-negotiate/config/advertised-speeds",
+                        f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
                         speed_human_to_yang(speed),
                         no_apply=True,
                     )
@@ -397,34 +409,33 @@ class Port(object):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
             if value:
-                set_attribute(
-                    self.sr_op,
-                    xpath,
-                    "interface",
-                    ifname,
-                    "interface-type",
-                    value,
-                    True,
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(
+                    f"{xpath}/ethernet/config/interface-type", value, no_apply=True
                 )
             else:
-                self.sr_op.delete_data(f"{xpath}/config/interface-type", no_apply=True)
+                self.sr_op.delete_data(
+                    f"{xpath}/ethernet/config/interface-type", no_apply=True
+                )
         self.sr_op.apply()
 
     def set_mtu(self, ifnames, value):
         for ifname in ifnames:
             xpath = self.xpath(ifname)
             if value:
-                set_attribute(
-                    self.sr_op, xpath, "interface", ifname, "mtu", value, True
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(
+                    f"{xpath}/ethernet/config/mtu", value, no_apply=True
                 )
             else:
-                self.sr_op.delete_data(f"{xpath}/config/mtu", no_apply=True)
+                self.sr_op.delete_data(f"{xpath}/ethernet/config/mtu", no_apply=True)
         self.sr_op.apply()
 
     def mtu_range(self):
         ctx = self.session.get_ly_ctx()
         xpath = "/goldstone-interfaces:interfaces"
         xpath += "/goldstone-interfaces:interface"
+        xpath += "/goldstone-interfaces:ethernet"
         xpath += "/goldstone-interfaces:config"
         xpath += "/goldstone-interfaces:mtu"
         for node in ctx.find_path(xpath):
@@ -434,6 +445,7 @@ class Port(object):
         ctx = self.session.get_ly_ctx()
         xpath = "/goldstone-interfaces:interfaces"
         xpath += "/goldstone-interfaces:interface"
+        xpath += "/goldstone-interfaces:ethernet"
         xpath += "/goldstone-interfaces:config"
         xpath += "/goldstone-interfaces:speed"
         leaf = list(ctx.find_path(xpath))[0]
@@ -447,17 +459,12 @@ class Port(object):
             xpath = self.xpath(ifname)
             if speed:
                 speed = speed_human_to_yang(speed)
-                set_attribute(
-                    self.sr_op,
-                    xpath,
-                    "interface",
-                    ifname,
-                    "speed",
-                    speed,
-                    no_apply=True,
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(
+                    f"{xpath}/ethernet/config/speed", speed, no_apply=True
                 )
             else:
-                self.sr_op.delete_data(f"{xpath}/config/speed", no_apply=True)
+                self.sr_op.delete_data(f"{xpath}/ethernet/config/speed", no_apply=True)
         self.sr_op.apply()
 
     def set_vlan_mem(self, ifnames, mode, vid, config=True, no_apply=False):
@@ -486,14 +493,12 @@ class Port(object):
         if not no_apply:
             self.sr_op.apply()
 
-    def set_breakout(self, ifnames, number_of_channels, speed):
+    def set_breakout(self, ifnames, numch, speed):
 
-        if (number_of_channels == None) != (speed == None):
-            raise InvalidInput(
-                f"unsupported combination: {number_of_channels}, {speed}"
-            )
+        if (numch == None) != (speed == None):
+            raise InvalidInput(f"unsupported combination: {numch}, {speed}")
 
-        is_delete = number_of_channels == None
+        is_delete = numch == None
 
         for ifname in ifnames:
 
@@ -507,7 +512,7 @@ class Port(object):
             if is_delete:
                 try:
                     xpath = self.xpath(ifname)
-                    xpath = f"{xpath}/config/breakout"
+                    xpath = f"{xpath}/ethernet/breakout/config"
                     data = self.sr_op.get_data(xpath, "running")
                     ly.xpath_get(data, xpath)
                 except (sr.errors.SysrepoNotFoundError, KeyError):
@@ -522,7 +527,10 @@ class Port(object):
                 interfaces = [ifname]
                 for intf in data:
                     parent = (
-                        intf.get("state", {}).get("breakout", {}).get("parent", None)
+                        intf.get("ethernet", {})
+                        .get("breakout", {})
+                        .get("state", {})
+                        .get("parent")
                     )
                     if ifname == parent:
                         interfaces.append(intf["name"])
@@ -539,23 +547,14 @@ class Port(object):
                 )
                 xpath = self.xpath(ifname)
                 self.sr_op.delete_data(xpath, no_apply=True)
-
-                # Set breakout configuration
-                set_attribute(
-                    self.sr_op,
-                    xpath,
-                    "interface",
-                    ifname,
-                    "num-channels",
-                    number_of_channels,
+                self.sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+                self.sr_op.set_data(
+                    f"{xpath}/ethernet/breakout/config/num-channels",
+                    numch,
                     no_apply=True,
                 )
-                set_attribute(
-                    self.sr_op,
-                    xpath,
-                    "interface",
-                    ifname,
-                    "channel-speed",
+                self.sr_op.set_data(
+                    f"{xpath}/ethernet/breakout/config/channel-speed",
                     speed_human_to_yang(speed),
                     no_apply=True,
                 )
@@ -587,29 +586,49 @@ class Port(object):
 
             if "counters" in data:
                 del data["counters"]
-            if "breakout" in data:
-                try:
-                    data["breakout:num-channels"] = data["breakout"]["num-channels"]
-                    data["breakout:channel-speed"] = data["breakout"]["channel-speed"]
-                except:
-                    data["breakout:parent"] = data["breakout"]["parent"]
-                del data["breakout"]
 
-            if "auto-negotiate" in data:
-                autonego = data["auto-negotiate"].get("state")
-                if autonego:
-                    v = "enabled" if autonego["enabled"] else "disabled"
-                    data["auto-negotiate"] = v
-                    v = autonego.get("advertised-speeds")
-                    if v:
-                        v = ",".join(speed_yang_to_human(e) for e in v)
-                        data["advertised-speeds"] = v
-                del data["auto-negotiate"]
+            if "ethernet" in data:
+                ethernet = data["ethernet"]
 
-            if "speed" in data:
-                data["speed"] = speed_yang_to_human(data["speed"])
+                if "state" in ethernet:
+                    state = ethernet["state"]
+                    if "speed" in state:
+                        data["speed"] = speed_yang_to_human(state["speed"])
+                    if "fec" in state:
+                        data["fec"] = state["fec"].lower()
+                    if "mtu" in state:
+                        data["mtu"] = state["mtu"]
+                    if "interface-type" in state:
+                        data["interface-type"] = state["interface-type"]
 
-            for key in ["admin-status", "oper-status", "fec"]:
+                if "breakout" in ethernet:
+                    state = ethernet["breakout"].get("state", {})
+                    if "num-channels" in state:
+                        data["breakout"] = breakout_yang_to_human(state)
+                    elif "parent" in state:
+                        data["parent"] = state["parent"]
+
+                if "auto-negotiate" in ethernet:
+                    autonego = ethernet["auto-negotiate"].get("state")
+                    if autonego:
+                        v = "enabled" if autonego["enabled"] else "disabled"
+                        data["auto-negotiate"] = v
+                        v = autonego.get("advertised-speeds")
+                        if v:
+                            v = ",".join(speed_yang_to_human(e) for e in v)
+                            data["advertised-speeds"] = v
+
+                if "switched-vlan" in ethernet:
+                    state = ethernet["switched-vlan"]["state"]
+                    data["vlan-mode"] = state["interface-mode"].lower()
+                    if data["vlan-mode"] == "trunk":
+                        data["trunk-vlans"] = ", ".join(state["trunk-vlans"])
+                    elif data["vlan-mode"] == "access":
+                        data["access-vlan"] = state["access-vlan"]
+
+                del data["ethernet"]
+
+            for key in ["admin-status", "oper-status"]:
                 if key in data:
                     data[key] = data[key].lower()
 
@@ -621,22 +640,14 @@ class UFD(object):
     XPATH = "/goldstone-uplink-failure-detection:ufd-groups"
 
     def xpath(self, id):
-        return "{}/ufd-group[ufd-id='{}']".format(self.XPATH, id)
+        return f"{self.XPATH}/ufd-group[ufd-id='{id}']"
 
     def __init__(self, conn):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
-        self.tree = self.sr_op.get_data_ly("{}".format(self.XPATH), "operational")
 
     def create(self, id):
-        xpath = "/goldstone-uplink-failure-detection:ufd-groups/ufd-group[ufd-id='{}']".format(
-            id
-        )
-
-        try:
-            self.sr_op.get_data(xpath, "running")
-        except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data(f"{xpath}/config/ufd-id", id)
+        self.sr_op.set_data(f"{self.xpath(id)}/config/ufd-id", id)
 
     def delete(self, id):
         self.sr_op.delete_data(self.xpath(id))
@@ -647,11 +658,7 @@ class UFD(object):
         for port in ports:
             xpath = f"{prefix}/interface[name='{port}']"
             # in order to create the interface node if it doesn't exist in running DS
-            try:
-                self.sr_op.get_data(xpath, "running")
-            except sr.SysrepoNotFoundError as e:
-                self.sr_op.set_data(f"{xpath}/config/name", port, no_apply=True)
-
+            self.sr_op.set_data(f"{xpath}/config/name", port, no_apply=True)
             self.sr_op.set_data(f"{self.xpath(id)}/config/{role}", port, no_apply=True)
         self.sr_op.apply()
 
@@ -665,11 +672,12 @@ class UFD(object):
 
     def get_id(self):
         path = "/goldstone-uplink-failure-detection:ufd-groups"
-        self.session.switch_datastore("operational")
-        d = self.session.get_data(path)
-        return natsorted(
-            [v["ufd-id"] for v in d.get("ufd-groups", {}).get("ufd-group", {})]
-        )
+        try:
+            d = self.sr_op.get_data(self.XPATH, "operational")
+            d = d.get("ufd-groups", {}).get("ufd-group", {})
+            return natsorted(v["ufd-id"] for v in d)
+        except (sr.errors.SysrepoNotFoundError, KeyError):
+            return []
 
     def check_ports(self, ports):
         try:
@@ -696,10 +704,8 @@ class UFD(object):
 
     def show(self, id=None):
         try:
-            self.tree = self.sr_op.get_data(
-                "{}/ufd-group".format(self.XPATH), "operational"
-            )
-            id_list = self.tree["ufd-groups"]["ufd-group"]
+            tree = self.sr_op.get_data(f"{self.XPATH}/ufd-group", "operational")
+            id_list = tree["ufd-groups"]["ufd-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
             id_list = []
 
@@ -779,10 +785,8 @@ class UFD(object):
 
     def run_conf(self):
         try:
-            self.tree = self.sr_op.get_data(
-                "{}/ufd-group".format(self.XPATH), "running"
-            )
-            d_list = self.tree["ufd-groups"]["ufd-group"]
+            tree = self.sr_op.get_data(f"{self.XPATH}/ufd-group", "running")
+            d_list = tree["ufd-groups"]["ufd-group"]
         except (sr.errors.SysrepoNotFoundError, KeyError):
             return
 
@@ -798,25 +802,6 @@ class UFD(object):
             stdout.info("ufd {}".format(data["config"]["ufd-id"]))
             stdout.info("  quit")
             stdout.info("!")
-
-
-def set_attribute(sr_op, path, module, name, attr, value, no_apply=False):
-    try:
-        sr_op.get_data(path, "running")
-    except sr.SysrepoNotFoundError as e:
-        if module == "interface":
-            sr_op.set_data(f"{path}/config/name", name, no_apply=no_apply)
-        if attr != "tagging_mode":
-            sr_op.set_data(f"{path}/name", name, no_apply=no_apply)
-
-    if module == "interface":
-        if attr == "num-channels" or attr == "channel-speed":
-            xpath = f"{path}/config/breakout/{attr}"
-        else:
-            xpath = f"{path}/config/{attr}"
-    else:
-        xpath = f"{path}/{attr}"
-    sr_op.set_data(xpath, value, no_apply=no_apply)
 
 
 class Portchannel(object):
@@ -943,7 +928,7 @@ class Portchannel(object):
                 data = id_list[id]
                 adm_st.append(data["state"]["admin-status"].lower())
                 try:
-                    interface.append(natsorted(list(data["config"]["interface"])))
+                    interface.append(natsorted(list(data["state"]["interface"])))
                 except (sr.errors.SysrepoNotFoundError, KeyError):
                     interface.append([])
                 try:

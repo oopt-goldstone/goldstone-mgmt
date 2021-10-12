@@ -139,17 +139,13 @@ pipeline {
         environment name: 'SKIP', value: '0'
       }
       steps {
-          sh 'rm -rf src/north/cli/dist src/south/system/dist'
-          sh 'ARCH=amd64 make docker'
           sh 'rm -rf builds/amd64/wheels && mkdir -p builds/amd64/wheels'
-          sh 'cp -r src/north/cli/dist builds/amd64/wheels/cli'
-          sh 'cp -r src/south/system/dist builds/amd64/wheels/system'
+          sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/system /data/"'
+          sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/cli /data/"'
 
-          sh 'rm -rf src/north/cli/dist src/south/system/dist'
-          sh 'ARCH=arm64 make docker'
           sh 'rm -rf builds/arm64/wheels && mkdir -p builds/arm64/wheels'
-          sh 'cp -r src/north/cli/dist builds/arm64/wheels/cli'
-          sh 'cp -r src/south/system/dist builds/arm64/wheels/system'
+          sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/system /data/"'
+          sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/cli /data/"'
       }
     }
 

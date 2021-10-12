@@ -117,10 +117,10 @@ def main(host, username, password, arch):
         def restart_gssouth_system():
             max_iteration = 3
             for i in range(max_iteration):
-                ssh(cli, "systemctl restart gs-south-system")
+                ssh(cli, "systemctl restart gs-south-system || true")
                 time.sleep(1)
-                output = ssh(cli, "systemctl status gs-south-system")
-                if "running" in output:
+                output = ssh(cli, "systemctl status gs-south-system || true")
+                if "Active: active (running)" in output:
                     print("Goldstone South System daemon is RUNNING")
                     break
                 time.sleep(5)

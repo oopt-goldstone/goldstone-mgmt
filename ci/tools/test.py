@@ -358,12 +358,10 @@ class TestSouthSONiC(TestBase):
         self.assertTrue("Ethernet2_1" in output)
         self.assertTrue("Ethernet4_1" in output)
 
-        with self.assertRaisesRegex(SSHException, "Uplink Already configured"):
+        with self.assertRaises(SSHException):
             self.gscli("interface Ethernet5_1; ufd ufd1 uplink")
 
-        with self.assertRaisesRegex(
-            SSHException, "Ethernet1_1:Port Already configured"
-        ):
+        with self.assertRaises(SSHException):
             self.gscli("interface Ethernet1_1; ufd ufd1 downlink")
 
         self.gscli("ufd 10")
@@ -609,8 +607,6 @@ class TestSouthSONiC(TestBase):
         self.gscli("show tech-support")
 
     def test_fec(self):
-        # FIXME we need interface leaf created before setting FEC
-        self.gscli("interface Ethernet1_1; admin-status up")
         self.gscli("interface Ethernet1_1; no fec")
         output = self.gscli("interface Ethernet1_1; fec fc; show")
         output = "".join(l for l in output.split("\n") if "fec" in l)
