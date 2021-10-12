@@ -37,6 +37,12 @@ module goldstone-interfaces {
        interfaces.";
   }
 
+  typedef interface-type {
+    type enumeration {
+      enum IF_ETHERNET;
+    }
+  }
+
   typedef ethernet-speed {
     type enumeration {
       enum SPEED_UNKNOWN;
@@ -59,32 +65,144 @@ module goldstone-interfaces {
    * Data nodes
    */
 
-  grouping port-breakout-config {
-    description
-      "Configuration data for the port breakout mode";
+  grouping ethernet-port-breakout-config {
+    leaf num-channels {
+      type uint8;
+      description
+        "Sets the number of channels to 'breakout' on a port
+        capable of channelization";
+    }
 
+    leaf channel-speed {
+      type ethernet-speed;
+      description
+        "Sets the channel speed on each channel -- the
+        supported values are defined by the
+        ETHERNET_SPEED identity";
+    }
+  }
+
+  grouping ethernet-port-breakout-state {
+    leaf parent {
+      must "not(../num-channels) and not(../channel-speed)" {
+        error-message "Sub-interface should not have num-channels and channel-speed configured";
+      }
+      type interface-ref;
+    }
+    leaf-list children {
+      type interface-ref;
+    }
+  }
+
+  grouping ethernet-port-breakout-top {
     container breakout {
-      leaf num-channels {
-        type uint8;
-        description
-          "Sets the number of channels to 'breakout' on a port
-          capable of channelization";
+      container config {
+        uses ethernet-port-breakout-config;
       }
-
-      leaf channel-speed {
-        type ethernet-speed;
-        description
-          "Sets the channel speed on each channel -- the
-          supported values are defined by the
-          ETHERNET_SPEED identity";
+      container state {
+        config false;
+        uses ethernet-port-breakout-config;
+        uses ethernet-port-breakout-state;
       }
+    }
+  }
 
-      leaf parent {
-        must "not(../num-channels) and not(../channel-speed)" {
-          error-message "Sub-interface should not have num-channels and channel-speed configured";
+  grouping ethernet-auto-negotiate-config {
+    leaf enabled {
+      type boolean;
+      default false;
+    }
+    leaf-list advertised-speeds {
+      type ethernet-speed;
+    }
+  }
+
+  grouping ethernet-auto-negotiate-state {
+    leaf-list capable-speeds {
+      type ethernet-speed;
+    }
+  }
+
+  grouping ethernet-auto-negotiate-top {
+    container auto-negotiate {
+      container config {
+        uses ethernet-auto-negotiate-config;
+      }
+      container state {
+        config false;
+        uses ethernet-auto-negotiate-config;
+        uses ethernet-auto-negotiate-state;
+      }
+    }
+  }
+
+  grouping ethernet-interface-config {
+
+    leaf mtu {
+      type uint16 {
+        range "1312..9216" {
+          error-message "Invalid MTU value";
+          error-app-tag mtu-invalid;
         }
-        type interface-ref;
       }
+      units "octets";
+      default 9100;
+    }
+
+    leaf fec {
+      when "../../auto-negotiate/config/enabled = 'false'";
+      type enumeration {
+        enum FC;
+        enum RS;
+        enum NONE;
+      }
+      default NONE;
+    }
+
+    leaf interface-type {
+      when "../../auto-negotiate/config/enabled = 'false'";
+      type enumeration {
+        enum SR;
+        enum SR2;
+        enum SR4;
+        enum CR;
+        enum CR2;
+        enum CR4;
+        enum LR;
+        enum LR2;
+        enum LR4;
+        enum KR;
+        enum KR2;
+        enum KR4;
+        enum SFI;
+        enum XFI;
+        enum XLAUI;
+      }
+    }
+
+    leaf speed {
+      when "../../auto-negotiate/config/enabled = 'false'";
+      type ethernet-speed;
+    }
+  }
+
+  grouping ethernet-interface-state {
+  }
+
+  grouping ethernet-top {
+    container ethernet {
+      container config {
+        uses ethernet-interface-config;
+      }
+
+      container state {
+        config false;
+        uses ethernet-interface-config;
+        uses ethernet-interface-state;
+      }
+
+      uses ethernet-port-breakout-top;
+      uses ethernet-auto-negotiate-top;
     }
   }
 
@@ -100,6 +218,10 @@ module goldstone-interfaces {
          This leaf has the same semantics as ifOperStatus.";
       reference
         "RFC 2863: The Interfaces Group MIB - ifOperStatus";
+    }
+
+    leaf interface-type {
+      type interface-type;
     }
 
     leaf lanes {
@@ -342,6 +464,17 @@ module goldstone-interfaces {
 
   grouping interface-common-config {
 
+  }
+
+  grouping interface-config {
+    description
+      "Configuration data data nodes common to physical interfaces
+      and subinterfaces";
+
+    leaf name {
+      type string;
+    }
+
     leaf description {
       type string;
       reference
@@ -362,97 +495,6 @@ module goldstone-interfaces {
         "RFC 2863: The Interfaces Group MIB - ifAdminStatus";
     }
 
-    leaf mtu {
-      type uint16 {
-        range "1312..9216" {
-          error-message "Invalid MTU value";
-          error-app-tag mtu-invalid;
-        }
-      }
-      units "octets";
-      default 9100;
-    }
-
-  }
-
-  grouping interface-config {
-    description
-      "Configuration data data nodes common to physical interfaces
-      and subinterfaces";
-
-    leaf name {
-      type string;
-    }
-
-    uses interface-common-config;
-
-    leaf fec {
-      when "../../auto-negotiate/config/enabled = 'false'";
-      type enumeration {
-        enum FC;
-        enum RS;
-        enum NONE;
-      }
-      default NONE;
-    }
-
-    leaf interface-type {
-      when "../../auto-negotiate/config/enabled = 'false'";
-      type enumeration {
-        enum SR;
-        enum SR2;
-        enum SR4;
-        enum CR;
-        enum CR2;
-        enum CR4;
-        enum LR;
-        enum LR2;
-        enum LR4;
-        enum KR;
-        enum KR2;
-        enum KR4;
-        enum SFI;
-        enum XFI;
-        enum XLAUI;
-      }
-    }
-
-    leaf speed {
-      when "../../auto-negotiate/config/enabled = 'false'";
-      type ethernet-speed;
-    }
-
-    uses port-breakout-config;
-
-  }
-
-  grouping interface-auto-negotiate-config {
-    leaf enabled {
-      type boolean;
-      default false;
-    }
-    leaf-list advertised-speeds {
-      type ethernet-speed;
-    }
-  }
-
-  grouping interface-auto-negotiate-state {
-    leaf-list capable-speeds {
-      type ethernet-speed;
-    }
-  }
-
-  grouping interface-auto-negotiate-top {
-    container auto-negotiate {
-      container config {
-        uses interface-auto-negotiate-config;
-      }
-      container state {
-        config false;
-        uses interface-auto-negotiate-config;
-        uses interface-auto-negotiate-state;
-      }
-    }
   }
 
   grouping interfaces-top {
@@ -474,7 +516,7 @@ module goldstone-interfaces {
           uses interface-counters-state;
         }
 
-        uses interface-auto-negotiate-top;
+        uses ethernet-top;
       }
     }
   }

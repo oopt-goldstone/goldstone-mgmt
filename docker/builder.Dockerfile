@@ -114,7 +114,6 @@ FROM python AS system
 
 RUN --mount=type=bind,source=src/south/system,target=/src,rw \
     cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
-    && rm -f dist/multidict* \
     && mkdir -p /usr/share/wheels/system && cp dist/*.whl /usr/share/wheels/system
 
 FROM python AS final
