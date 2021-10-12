@@ -633,6 +633,14 @@ class ClearInterfaceGroupCommand(Command):
         return "usage:\n" f" {self.parent.name} {self.name} (counters)"
 
 
+def remove_switched_vlan_configuration(sess):
+    for vlan in sess.get_items(
+        "/goldstone-interfaces:interfaces/interface/goldstone-vlan:switched-vlan"
+    ):
+        sess.delete_item(vlan.xpath)
+    sess.apply_changes()
+
+
 class ClearDatastoreGroupCommand(Command):
     def exec(self, line):
         if len(line) < 1:
@@ -651,14 +659,14 @@ class ClearDatastoreGroupCommand(Command):
                 if line[0] == "all":
                     ctx = root.conn.get_ly_ctx()
                     modules = [m.name() for m in ctx if "goldstone" in m.name()]
-                    # interface model may has dependency to other models (e.g. vlan, ufd )
+                    # the interface model has dependencies to other models (e.g. vlan, ufd )
                     # we need to the clear interface model lastly
+                    # the vlan model has dependency to switched-vlan configuration
+                    # we need to clear the switched-vlan configuration first
                     # TODO invent cleaner way when we have more dependency among models
-                    try:
-                        modules.remove("goldstone-interfaces")
-                        modules.append("goldstone-interfaces")
-                    except ValueError:
-                        pass
+                    remove_switched_vlan_configuration(sess)
+                    modules.remove("goldstone-interfaces")
+                    modules.append("goldstone-interfaces")
                 else:
                     modules = [line[0]]
 

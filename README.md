@@ -11,7 +11,18 @@ Goldstone Management Framework
 
 ### Architecture
 
-`goldstone-mgmt` framework uses [sysrepo](https://github.com/sysrepo/sysrepo) as a central configuration
+`goldstone-mgmt` is the management layer implementation of OOPT Goldstone.
+
+The management layer of Goldstone needs to meet the following requirements.
+
+- provide CLI, NETCONF, SNMP and gNMI services to operator
+- support controlling various software that controls hardware components in the networking device
+    - e.g) how to retrieve the interface information may vary among platforms
+
+In order to meet these requirements, the management layer needs a modular
+
+
+framework uses [sysrepo](https://github.com/sysrepo/sysrepo) as a central configuration
 infrastructure. sysrepo is a YANG based configuration datastore. Since it uses POSIX shared memory for
 the temporal storage, it works without a daemon which needs to be running all the time.
 Exclusive control among processes is done by FUTEX and persistent data (e.g. startup config or YANG model)
