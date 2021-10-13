@@ -221,6 +221,7 @@ class Object(object):
         inherit=False,
         argparser=None,
         strict=False,
+        hidden=False,
     ):
         def f(func):
             self._commands[name if name else func.__name__] = {
@@ -230,6 +231,7 @@ class Object(object):
                 "inherit": inherit,
                 "argparser": argparser,
                 "strict": strict,
+                "hidden": hidden,
             }
 
         return f
@@ -256,13 +258,25 @@ class Object(object):
             node = node.parent
         return node
 
-    def commands(self):
-        return list(self._commands.keys())
+    def commands(self, include_hidden=False):
+        def hide(v):
+            hidden = v.get("hidden", False)
+            if type(hidden) == bool:
+                return hidden
+            elif callable(hidden):
+                return hidden()
+
+        return list(
+            k for k, v in self._commands.items() if include_hidden or not hide(v)
+        )
 
     def completion(self, document, complete_event=None):
         # complete_event is None when this method is called by complete_input()
         if complete_event == None and len(document.text) == 0:
             return
+
+        include_hidden = complete_event == None
+
         t = document.text.split()
         if len(t) == 0 or (len(t) == 1 and document.text[-1] != " "):
             # command completion
@@ -271,7 +285,7 @@ class Object(object):
                 for v in c.get_completions(document, complete_event):
                     yield v
             else:
-                for cmd in self.commands():
+                for cmd in self.commands(include_hidden):
                     if cmd.startswith(document.text):
                         yield Completion(cmd, start_position=-len(document.text))
         else:
@@ -296,7 +310,7 @@ class Object(object):
                 for v in c.get_completions(new_document, complete_event):
                     yield v
 
-    def complete_input(self, line, complete_event=None):
+    def complete_input(self, line):
 
         if len(line) == 0:
             raise InvalidInput(
@@ -306,7 +320,7 @@ class Object(object):
 
         for i in range(len(line)):
             doc = Document(" ".join(line[: i + 1]))
-            c = list(self.completion(doc, complete_event))
+            c = list(self.completion(doc))
             if len(c) == 0:
                 if i == 0:
                     raise InvalidInput(
@@ -322,9 +336,7 @@ class Object(object):
                         cmpl = cmpl()
                     if cmpl:
                         doc = Document(" ".join(line[:i] + [" "]))
-                        candidates = list(
-                            v.text for v in self.completion(doc, complete_event)
-                        )
+                        candidates = list(v.text for v in self.completion(doc))
                         # if we don't have any candidates with empty input, it means the value needs
                         # to be passed as an opaque value
                         if len(candidates) == 0:

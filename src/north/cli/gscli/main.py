@@ -219,11 +219,11 @@ class Root(Object):
         def tacacs_server(line):
             self.tacacs_cli.tacacs_server(line)
 
-        @self.command()
+        @self.command(hidden=True)
         def reboot(line):
             stdout.info(self.session.rpc_send("/goldstone-system:reboot", {}))
 
-        @self.command()
+        @self.command(hidden=lambda: True)
         def shutdown(line):
             stdout.info(self.session.rpc_send("/goldstone-system:shutdown", {}))
 
