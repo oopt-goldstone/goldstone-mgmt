@@ -8,6 +8,7 @@ import onlp.onlp
 import json
 import re
 from pathlib import Path
+from aiohttp import web
 
 libonlp = onlp.onlp.libonlp
 
@@ -74,8 +75,20 @@ class Server(object):
         self.transceiver_presence = []
         self.components = {}
 
-    def stop(self):
+        routes = web.RouteTableDef()
+
+        @routes.get("/healthz")
+        async def probe(request):
+            return web.Response()
+
+        app = web.Application()
+        app.add_routes(routes)
+
+        self.runner = web.AppRunner(app)
+
+    async def stop(self):
         logger.info(f"stop server")
+        await self.runner.cleanup()
         self.sess.stop()
         self.conn.disconnect()
 
@@ -686,6 +699,10 @@ class Server(object):
 
         self.initialise_component_devices()
 
+        await self.runner.setup()
+        site = web.TCPSite(self.runner, "0.0.0.0", 8080)
+        await site.start()
+
         return [self.monitor_devices()]
 
 
@@ -710,7 +727,7 @@ def main():
                 if e:
                     raise e
         finally:
-            server.stop()
+            await server.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")

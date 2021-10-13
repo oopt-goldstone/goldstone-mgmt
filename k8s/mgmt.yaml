@@ -370,6 +370,21 @@ spec:
                   add:
                   - IPC_OWNER
                   - IPC_LOCK
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 1
+                periodSeconds: 10
+              startupProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 30
+                periodSeconds: 10
+              ports:
+              - name: liveness-port
+                containerPort: 8080
             volumes:
             - name: shm
               hostPath:
