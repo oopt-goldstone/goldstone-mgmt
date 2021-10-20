@@ -1,4 +1,4 @@
-from .core import *
+from goldstone.lib.core import *
 
 
 class VLANChangeHandler(ChangeHandler):

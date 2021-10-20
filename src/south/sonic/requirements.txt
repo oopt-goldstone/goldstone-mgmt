@@ -1,4 +1,4 @@
-kubernetes_asyncio
 jinja2
 kubernetes
+kubernetes_asyncio
 aioredis

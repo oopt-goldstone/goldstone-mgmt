@@ -1,15 +1,15 @@
-import sysrepo
 import logging
 import asyncio
 import argparse
 import signal
 from aiohttp import web
 import itertools
-from .sonic import SONiC
 from .interfaces import InterfaceServer
 from .vlan import VLANServer
 from .portchannel import PortChannelServer
 from .ufd import UFDServer
+from .sonic import SONiC
+import sysrepo
 
 logger = logging.getLogger(__name__)
 
