@@ -518,7 +518,7 @@ class GlobalShowCommand(Command):
             "/goldstone-uplink-failure-detection:ufd-groups/ufd-group",
             "/goldstone-portchannel:portchannel",
             "/goldstone-routing:routing/static-routes/ipv4/route",
-            "/goldstone-tai:modules",
+            "/goldstone-transponder:modules",
             "/goldstone-aaa:aaa",
             "/goldstone-platform:components",
         ]
