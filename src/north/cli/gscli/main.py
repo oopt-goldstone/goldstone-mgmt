@@ -318,7 +318,7 @@ class Root(Object):
         return [v["name"] for v in self.mgmt.get_mgmt_interface_list("operational")]
 
     def get_modules(self):
-        path = "/goldstone-tai:modules/module/name"
+        path = "/goldstone-transponder:modules/module/name"
         self.session.switch_datastore("operational")
         d = self.session.get_data(path)
         return natsorted(v["name"] for v in d["modules"]["module"])
@@ -347,7 +347,11 @@ class Root(Object):
         try:
             # TODO consider getting notification xpaths from each commands' classmethod
             self.notif_session.subscribe_notification_tree(
-                "goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb
+                "goldstone-transponder",
+                "/goldstone-transponder:*",
+                0,
+                0,
+                self.notification_cb,
             )
             self.notif_session.subscribe_notification_tree(
                 "goldstone-platform",

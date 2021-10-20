@@ -59,8 +59,8 @@ class Server(object):
 
     The TAI south server is responsible for reconciling hardware configuration, sysrepo running configuration and TAI configuration.
 
-    The main YANG model to interact is 'goldstone-tai'.
-    The TAI south server doesn't modify the running configuration of goldstone-tai.
+    The main YANG model to interact is 'goldstone-transponder'.
+    The TAI south server doesn't modify the running configuration of goldstone-transponder.
     The running configuration is always given by user and it might be empty if a user doesn't give any configuration.
     When the user doesn't give any configuration for the TAI module, TAI south server creates the module with the default configuration.
     To disable the module, the user needs to explicitly set the module admin-status to 'down'
@@ -87,7 +87,7 @@ class Server(object):
     The bottom layer is running datastore. The second layer is the operational information which is **pushed** to the datastore.
     The top layer is the operational information which is **pulled** from the taish-server.
 
-    To enable layering the running datastore, we need to subscribe to the whole goldstone-tai. For this reason, we are passing
+    To enable layering the running datastore, we need to subscribe to the whole goldstone-transponder. For this reason, we are passing
     'None' to the 2nd argument of subscribe_module_change().
 
     To enable layering the push and pull information, oper_merge=True option is passed to subscribe_oper_data_request().
@@ -100,7 +100,7 @@ class Server(object):
     To mitigate the time as much as possible, we don't want to retrieve unnecessary information.
 
     For example, if the north daemon is requesting the current modulation formation by the XPATH
-    "/goldstone-tai:modules/module[name='/dev/piu1']/network-interface[name='0']/state/modulation-format",
+    "/goldstone-transponder:modules/module[name='/dev/piu1']/network-interface[name='0']/state/modulation-format",
     we don't need to retrieve other attributes of the netif or the attributes of the parent module.
 
     Even if we return unnecessary information, sysrepo drops them before returning to the caller based on the
@@ -147,7 +147,7 @@ class Server(object):
         logger.debug(f"xpath: {xpath}")
         if (
             len(xpath) < 2
-            or xpath[0][0] != "goldstone-tai"
+            or xpath[0][0] != "goldstone-transponder"
             or xpath[0][1] != "modules"
             or xpath[1][1] != "module"
         ):
@@ -239,7 +239,7 @@ class Server(object):
             anything
         """
 
-        if xpath == "/goldstone-tai:*":
+        if xpath == "/goldstone-transponder:*":
             return None, None, None
 
         xpath, module = self._get_module_from_xpath(xpath)
@@ -254,7 +254,7 @@ class Server(object):
 
         ly_ctx = self.sess.get_ly_ctx()
         get_path = lambda l: list(
-            ly_ctx.find_path("".join("/goldstone-tai:" + v for v in l))
+            ly_ctx.find_path("".join("/goldstone-transponder:" + v for v in l))
         )[0]
 
         if xpath[0][1] in ["network-interface", "host-interface"]:
@@ -396,14 +396,14 @@ class Server(object):
             f"result of parse_oper_req: module: {module}, intf: {intf}, item: {item}"
         )
 
-        r = {"goldstone-tai:modules": {"module": []}}
+        r = {"goldstone-transponder:modules": {"module": []}}
 
         if item == "name":
             if module == None:
                 modules = self.taish.list()
                 modules = (location2name(key) for key in modules.keys())
                 modules = [{"name": name, "config": {"name": name}} for name in modules]
-                return {"goldstone-tai:modules": {"module": modules}}
+                return {"goldstone-transponder:modules": {"module": modules}}
             elif intf in ["network-interface", "host-interface"]:
                 intfs = (
                     module.obj.netifs
@@ -412,7 +412,7 @@ class Server(object):
                 )
                 intfs = [{"name": str(i)} for i in range(len(intfs))]
                 return {
-                    "goldstone-tai:modules": {
+                    "goldstone-transponder:modules": {
                         "module": [{"name": module.name, intf: intfs}]
                     }
                 }
@@ -420,7 +420,7 @@ class Server(object):
         try:
             ly_ctx = self.sess.get_ly_ctx()
             get_path = lambda l: list(
-                ly_ctx.find_path("".join("/goldstone-tai:" + v for v in l))
+                ly_ctx.find_path("".join("/goldstone-transponder:" + v for v in l))
             )[0]
 
             module_schema = get_path(["modules", "module", "state"])
@@ -498,7 +498,7 @@ class Server(object):
                                 for i, s in enumerate(hostif_states)
                             ]
 
-                r["goldstone-tai:modules"]["module"].append(v)
+                r["goldstone-transponder:modules"]["module"].append(v)
 
         except Exception as e:
             logger.error(f"oper get callback failed: {str(e)}")
@@ -521,7 +521,7 @@ class Server(object):
         if type_ == "module":
             location = await obj.get("location")
             key = location2name(location)
-            xpath = f"/goldstone-tai:modules/module[name='{key}']/config/enable-{attr_meta.short_name}"
+            xpath = f"/goldstone-transponder:modules/module[name='{key}']/config/enable-{attr_meta.short_name}"
         else:
             type_ = type_ + "-interface"
             m_oid = obj.obj.module_oid
@@ -537,9 +537,9 @@ class Server(object):
 
             key = location2name(module_location)
             index = await obj.get("index")
-            xpath = f"/goldstone-tai:modules/module[name='{key}']/{type_}[name='{index}']/config/enable-{attr_meta.short_name}"
+            xpath = f"/goldstone-transponder:modules/module[name='{key}']/{type_}[name='{index}']/config/enable-{attr_meta.short_name}"
 
-        eventname = f"goldstone-tai:{type_}-{attr_meta.short_name}-event"
+        eventname = f"goldstone-transponder:{type_}-{attr_meta.short_name}-event"
 
         v = {"module-name": key}
         if type_ != "module":
@@ -727,7 +727,7 @@ class Server(object):
 
         if piu_present and cfp_status == "PRESENT":
             self.sess.switch_datastore("running")
-            config = self.sess.get_data("/goldstone-tai:*")
+            config = self.sess.get_data("/goldstone-transponder:*")
             config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
             logger.debug(f"running configuration for {location}: {config}")
             try:
@@ -777,9 +777,9 @@ class Server(object):
         ]
         self.sess.switch_datastore("running")
 
-        with self.sess.lock("goldstone-tai"):
+        with self.sess.lock("goldstone-transponder"):
 
-            config = self.sess.get_data("/goldstone-tai:*")
+            config = self.sess.get_data("/goldstone-transponder:*")
             config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
             logger.debug(f"sysrepo running configuration: {config}")
 
@@ -790,11 +790,15 @@ class Server(object):
 
             # passing None to the 2nd argument is important to enable layering the running datastore
             # as the bottom layer of the operational datastore
-            self.sess.subscribe_module_change("goldstone-tai", None, self.change_cb)
+            self.sess.subscribe_module_change(
+                "goldstone-transponder", None, self.change_cb
+            )
 
             # passing oper_merge=True is important to enable pull/push information layering
             self.sess.subscribe_oper_data_request(
-                "goldstone-tai", "/goldstone-tai:modules/module", self.oper_cb
+                "goldstone-transponder",
+                "/goldstone-transponder:modules/module",
+                self.oper_cb,
             )
 
             self.sess.subscribe_notification_tree(
@@ -843,7 +847,7 @@ class Server(object):
             for attr in msg.attrs:
                 meta = await obj.get_attribute_metadata(attr.attr_id)
                 try:
-                    xpath = f"/{eventname}/goldstone-tai:{meta.short_name}"
+                    xpath = f"/{eventname}/goldstone-transponder:{meta.short_name}"
                     schema = list(ly_ctx.find_path(xpath))[0]
                     data = attr_tai2yang(attr.value, meta, schema)
                     keys.append(meta.short_name)

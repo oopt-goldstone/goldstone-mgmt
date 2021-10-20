@@ -852,7 +852,7 @@ class TestSouthTAI(TestBase):
 
         self.gscli(f"transponder {device}; shutdown")
         self.gscli(f"transponder {device}; no shutdown")
-        self.gscli("clear datastore goldstone-tai")
+        self.gscli("clear datastore goldstone-transponder")
 
 
 def test_tacacs(host, cli):

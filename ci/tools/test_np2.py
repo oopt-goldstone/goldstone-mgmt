@@ -40,7 +40,7 @@ EOF
     run("chmod +x /tmp/check_np2.sh && /tmp/check_np2.sh")
 
 def test_get(cli, host):
-    run_np2_cli(cli, host, ["status", "get --filter-xpath '/goldstone-interfaces:*'", "get-config --source running --filter-xpath '/goldstone-tai:modules'"])
+    run_np2_cli(cli, host, ["status", "get --filter-xpath '/goldstone-interfaces:*'", "get-config --source running --filter-xpath '/goldstone-transponder:modules'"])
 
 
 def test_interface_admin_set(cli, host):
