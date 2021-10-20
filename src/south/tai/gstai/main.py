@@ -320,7 +320,7 @@ class Server(object):
 
                         # leaf that doesn't need to be passed to TAI
                         # TODO invent cleaner way to detect this
-                        if "enable" in k and "notification" in k:
+                        if "enable" in k and ("notification" in k or "notify" in k):
                             continue
 
                         # check if we can get metadata of this attribute
