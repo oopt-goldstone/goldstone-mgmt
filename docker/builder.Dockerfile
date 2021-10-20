@@ -91,6 +91,10 @@ RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/
 
 RUN pip install grpcio-tools grpclib
 
+RUN --mount=type=bind,source=src/lib,target=/src,rw \
+    cd /src && python setup.py bdist_wheel \
+    && mkdir -p /usr/share/wheels/lib && cp dist/*.whl /usr/share/wheels/lib
+
 FROM python AS tai
 
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \

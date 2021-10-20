@@ -1,4 +1,4 @@
-from .core import *
+from goldstone.lib.core import *
 from .sonic import *
 import queue
 import os

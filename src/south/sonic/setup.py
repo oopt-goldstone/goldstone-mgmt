@@ -4,7 +4,7 @@ with open("requirements.txt", "r") as f:
     install_requires = f.read().split()
 
 setuptools.setup(
-    name="gssonic",
+    name="goldstone_south_sonic",
     version="0.1.0",
     install_requires=install_requires,
     description="Goldstone Python sonic south daemon",
@@ -12,9 +12,9 @@ setuptools.setup(
     python_requires=">=3.7",
     entry_points={
         "console_scripts": [
-            "gssouthd-sonic = gssonic.main:main",
+            "gssouthd-sonic = goldstone.south.sonic.main:main",
         ],
     },
-    packages=setuptools.find_packages(),
+    packages=["goldstone.south.sonic"],
     zip_safe=False,
 )
