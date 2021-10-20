@@ -69,11 +69,11 @@ if __name__ == "__main__":
     for c in args.custom:
         h.add_custom(c)
 
-    m = Statement("module", "goldstone-tai")
+    m = Statement("module", "goldstone-transponder")
     k = Statement("yang-version", '1')
     m.add(k)
-    m.add(Statement("namespace", '"http://goldstone.net/yang/tai"'))
-    m.add(Statement("prefix", '"gs-tai"'))
+    m.add(Statement("namespace", '"http://goldstone.net/yang/transponder"'))
+    m.add(Statement("prefix", '"gs-transponder"'))
     v = Statement("reference", '"0.1.0"')
     m.add(Statement("revision", '"2019-11-01"', [v]))
 
@@ -81,7 +81,7 @@ if __name__ == "__main__":
 
     for obj in h.objects:
         objname = obj.name.replace("_", "-")
-        prefix = "tai-" + objname
+        prefix = "transponder-" + objname
         config = Statement("grouping", prefix + "-config")
         state = Statement("grouping", prefix + "-state")
 
@@ -197,7 +197,7 @@ if __name__ == "__main__":
         )
         o.add(
             Statement(
-                "container", "config", Statement("uses", "tai-{}-config".format(name))
+                "container", "config", Statement("uses", "transponder-{}-config".format(name))
             )
         )
         o.add(
@@ -206,8 +206,8 @@ if __name__ == "__main__":
                 "state",
                 [
                     Statement("config", "false"),
-                    Statement("uses", "tai-{}-config".format(name)),
-                    Statement("uses", "tai-{}-state".format(name)),
+                    Statement("uses", "transponder-{}-config".format(name)),
+                    Statement("uses", "transponder-{}-state".format(name)),
                 ],
             )
         )
@@ -221,10 +221,10 @@ if __name__ == "__main__":
     module.add(hostif)
 
     modules = Statement("container", "modules", module)
-    top = Statement("grouping", "tai-component-top", modules)
+    top = Statement("grouping", "transponder-component-top", modules)
 
     m.add(top)
-    m.add(Statement("uses", "tai-component-top"))
+    m.add(Statement("uses", "transponder-component-top"))
 
     for n in notifications:
         m.add(n)

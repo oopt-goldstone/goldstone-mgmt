@@ -1,14 +1,14 @@
-module goldstone-tai {
+module goldstone-transponder {
   yang-version 1;
-  namespace "http://goldstone.net/yang/tai";
-  prefix gs-tai;
+  namespace "http://goldstone.net/yang/transponder";
+  prefix gs-transponder;
 
   revision 2019-11-01 {
     reference
       "0.1.0";
   }
 
-  grouping tai-module-config {
+  grouping transponder-module-config {
     leaf name {
       type string;
     }
@@ -28,7 +28,7 @@ module goldstone-tai {
     }
   }
 
-  grouping tai-module-state {
+  grouping transponder-module-state {
     leaf id {
       type uint64;
     }
@@ -125,7 +125,7 @@ module goldstone-tai {
     }
   }
 
-  grouping tai-host-interface-config {
+  grouping transponder-host-interface-config {
     leaf name {
       type string;
     }
@@ -170,7 +170,7 @@ module goldstone-tai {
     }
   }
 
-  grouping tai-host-interface-state {
+  grouping transponder-host-interface-state {
     leaf id {
       type uint64;
     }
@@ -246,7 +246,7 @@ module goldstone-tai {
     }
   }
 
-  grouping tai-network-interface-config {
+  grouping transponder-network-interface-config {
     leaf name {
       type string;
     }
@@ -433,7 +433,7 @@ module goldstone-tai {
     }
   }
 
-  grouping tai-network-interface-state {
+  grouping transponder-network-interface-state {
     leaf id {
       type uint64;
     }
@@ -698,7 +698,7 @@ module goldstone-tai {
     }
   }
 
-  grouping tai-component-top {
+  grouping transponder-component-top {
     container modules {
       list module {
         key "name";
@@ -708,12 +708,12 @@ module goldstone-tai {
           }
         }
         container config {
-          uses tai-module-config;
+          uses transponder-module-config;
         }
         container state {
           config false;
-          uses tai-module-config;
-          uses tai-module-state;
+          uses transponder-module-config;
+          uses transponder-module-state;
         }
         list network-interface {
           key "name";
@@ -723,12 +723,12 @@ module goldstone-tai {
             }
           }
           container config {
-            uses tai-network-interface-config;
+            uses transponder-network-interface-config;
           }
           container state {
             config false;
-            uses tai-network-interface-config;
-            uses tai-network-interface-state;
+            uses transponder-network-interface-config;
+            uses transponder-network-interface-state;
           }
         }
         list host-interface {
@@ -739,19 +739,19 @@ module goldstone-tai {
             }
           }
           container config {
-            uses tai-host-interface-config;
+            uses transponder-host-interface-config;
           }
           container state {
             config false;
-            uses tai-host-interface-config;
-            uses tai-host-interface-state;
+            uses transponder-host-interface-config;
+            uses transponder-host-interface-state;
           }
         }
       }
     }
   }
 
-  uses tai-component-top;
+  uses transponder-component-top;
 
   notification module-notify-event {
     leaf-list keys {
@@ -762,8 +762,8 @@ module goldstone-tai {
     leaf module-name {
       type string;
     }
-    uses tai-module-config;
-    uses tai-module-state;
+    uses transponder-module-config;
+    uses transponder-module-state;
   }
 
   notification host-interface-notify-event {
@@ -775,8 +775,8 @@ module goldstone-tai {
     leaf module-name {
       type string;
     }
-    uses tai-host-interface-config;
-    uses tai-host-interface-state;
+    uses transponder-host-interface-config;
+    uses transponder-host-interface-state;
   }
 
   notification host-interface-alarm-notification-event {
@@ -788,8 +788,8 @@ module goldstone-tai {
     leaf module-name {
       type string;
     }
-    uses tai-host-interface-config;
-    uses tai-host-interface-state;
+    uses transponder-host-interface-config;
+    uses transponder-host-interface-state;
   }
 
   notification network-interface-notify-event {
@@ -801,8 +801,8 @@ module goldstone-tai {
     leaf module-name {
       type string;
     }
-    uses tai-network-interface-config;
-    uses tai-network-interface-state;
+    uses transponder-network-interface-config;
+    uses transponder-network-interface-state;
   }
 
   notification network-interface-alarm-notification-event {
@@ -814,7 +814,7 @@ module goldstone-tai {
     leaf module-name {
       type string;
     }
-    uses tai-network-interface-config;
-    uses tai-network-interface-state;
+    uses transponder-network-interface-config;
+    uses transponder-network-interface-state;
   }
 }
