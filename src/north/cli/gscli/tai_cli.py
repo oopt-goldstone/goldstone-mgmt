@@ -194,7 +194,8 @@ class ModuleShowCommand(TAIShowCommand):
 
 class HostIf(TAIObject):
     CONFIG_XPATH = "".join(
-        f"/goldstone-tai:{v}" for v in ["modules", "module", "host-interface", "config"]
+        f"/goldstone-transponder:{v}"
+        for v in ["modules", "module", "host-interface", "config"]
     )
 
     def module_xpath(self):
@@ -217,7 +218,7 @@ class HostIf(TAIObject):
 
 class NetIf(TAIObject):
     CONFIG_XPATH = "".join(
-        f"/goldstone-tai:{v}"
+        f"/goldstone-transponder:{v}"
         for v in ["modules", "module", "network-interface", "config"]
     )
 
@@ -240,9 +241,9 @@ class NetIf(TAIObject):
 
 
 class Transponder(TAIObject):
-    XPATH = "/goldstone-tai:modules/module"
+    XPATH = "/goldstone-transponder:modules/module"
     CONFIG_XPATH = "".join(
-        f"/goldstone-tai:{v}" for v in ["modules", "module", "config"]
+        f"/goldstone-transponder:{v}" for v in ["modules", "module", "config"]
     )
 
     def module_xpath(self):

@@ -71,9 +71,9 @@ jobs:
               auth hostkey-check disable
               connect --host $NP2_ADDR
               status
-              get-config --source running --filter-xpath "/goldstone-tai:modules"
+              get-config --source running --filter-xpath "/goldstone-transponder:modules"
               edit-config --target candidate --config=/data/config.xml
-              get-config --source candidate --filter-xpath "/goldstone-tai:modules"
+              get-config --source candidate --filter-xpath "/goldstone-transponder:modules"
               commit
 
               EOF2

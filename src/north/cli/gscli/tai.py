@@ -61,7 +61,7 @@ def to_human(d, runconf=False):
 
 
 class Transponder(object):
-    XPATH = "/goldstone-tai:modules/module"
+    XPATH = "/goldstone-transponder:modules/module"
 
     def xpath(self, transponder_name):
         return "{}[name='{}']".format(self.XPATH, transponder_name)
@@ -182,6 +182,6 @@ class Transponder(object):
             self.show_transponder(module)
 
     def get_modules(self):
-        path = "/goldstone-tai:modules/module/name"
+        path = "/goldstone-transponder:modules/module/name"
         d = self.sr_op.get_data(path, "operational")
         return natsorted(v["name"] for v in d["modules"]["module"])
