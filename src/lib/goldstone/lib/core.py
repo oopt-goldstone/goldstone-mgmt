@@ -138,7 +138,7 @@ class ServerBase(object):
                 handler.apply(user)
             except Exception as e:
                 for done in reversed(handlers[:i]):
-                    handler.revert(user)
+                    done.revert(user)
                 raise e
 
         self.post(user)
