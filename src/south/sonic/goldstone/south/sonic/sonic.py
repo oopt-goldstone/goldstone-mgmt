@@ -142,7 +142,6 @@ class SONiC(object):
             await asyncio.sleep(1)
 
         logger.info("uSONiC ready")
-        self.is_rebooting = False
 
     def hgetall(self, db, key):
         db = getattr(self.sonic_db, db)
