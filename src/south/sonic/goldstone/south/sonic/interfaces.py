@@ -86,19 +86,7 @@ class IfTypeHandler(IfChangeHandler):
         if self.type in ["created", "modified"]:
             value = self.change.value
         else:
-            try:
-                v = self.server.get_breakout_detail(self.ifname)
-                if not v:
-                    raise KeyError
-                if int(v["num-channels"]) == 4:
-                    value = DEFAULT_INTERFACE_TYPE
-                elif int(v["num-channels"]) == 2:
-                    value = DEFAULT_INTERFACE_TYPE + "2"
-                else:
-                    raise sysrepo.SysrepoInvalArgError("Unsupported interface type")
-            except (sysrepo.errors.SysrepoNotFoundError, KeyError):
-                value = DEFAULT_INTERFACE_TYPE + "4"
-
+            value = self.server.sonic.k8s.get_default_iftype(self.ifname)
         self.server.sonic.k8s.run_bcmcmd_port(self.ifname, "if=" + value)
 
 
@@ -186,9 +174,10 @@ class TrunkVLANsHandler(IfChangeHandler):
 class AutoNegotiateHandler(IfChangeHandler):
     def apply(self, user):
         if self.type in ["created", "modified"]:
-            value = "yes" if self.change.value else "no"
+            v = self.change.value
         else:
-            value = "no"  # default
+            v = self.server.get_default("enabled")
+        value = "yes" if v else "no"
 
         self.server.sonic.k8s.run_bcmcmd_port(self.ifname, "an=" + value)
 
@@ -338,32 +327,57 @@ class InterfaceServer(ServerBase):
             await self.sonic.wait()
         else:
             self.sonic.cache_counters()
-        self.sonic.is_rebooting = False
 
         prefix = "/goldstone-interfaces:interfaces/interface"
         for ifname in self.sonic.get_ifnames():
             xpath = f"{prefix}[name='{ifname}']"
             data = self.get_running_data(xpath, {})
-            config = data.get("config", {})
+            logger.debug(f"{ifname} interface config: {data}")
 
-            logger.debug(f"{ifname} interface config: {config}")
+            autoneg = (
+                data.get("ethernet", {}).get("auto-negotiate", {}).get("config", {})
+            )
 
             # default setting
-            for key in ["admin-status", "mtu"]:
-                if key not in config:
-                    config[key] = self.get_default(key)
+            if "enabled" not in autoneg:
+                autoneg["enabled"] = self.get_default("enabled") == "true"
+
+            for key, value in autoneg.items():
+                if key == "enabled":
+                    v = "yes" if value else "no"
+                    self.sonic.k8s.run_bcmcmd_port(ifname, "an=" + v)
+                elif key == "advertised-speeds":
+                    speeds = ",".join(v.replace("SPEED_", "").lower() for v in value)
+                    self.sonic.k8s.run_bcmcmd_port(ifname, f"adv={speeds}")
+
+            ethernet = data.get("ethernet", {}).get("config", {})
+            # default setting
+            for key in ["mtu", "fec"]:
+                if key not in ethernet:
+                    ethernet[key] = self.get_default(key)
+
+            key = "interface-type"
+            if key not in ethernet:
+                iftype = self.sonic.k8s.get_default_iftype(ifname)
+                if iftype:
+                    ethernet[key] = iftype
+
+            for key in ethernet:
+                if key == "interface-type":
+                    self.sonic.k8s.run_bcmcmd_port(ifname, "if=" + ethernet[key])
+                elif key in ["mtu", "fec", "speed"]:
+                    self.sonic.set_config_db(ifname, key, ethernet[key])
+                else:
+                    logger.warn(f"unhandled configuration: {key}, {config[key]}")
+
+            config = data.get("config", {})
+
+            # default setting
+            if "admin-status" not in config:
+                config["admin-status"] = self.get_default("admin-status")
 
             for key in config:
-                if key == "interface-type":
-                    self.sonic.k8s.run_bcmcmd_port(ifname, "if=" + config[key])
-                elif key in [
-                    "admin-status",
-                    "fec",
-                    "description",
-                    "alias",
-                    "mtu",
-                    "speed",
-                ]:
+                if key in ["admin-status", "description"]:
                     self.sonic.set_config_db(ifname, key, config[key])
                 elif key in ["name"]:
                     pass
@@ -373,19 +387,25 @@ class InterfaceServer(ServerBase):
         for server in self.servers:
             await server.reconcile()
 
+        self.sonic.is_rebooting = False
+
     def get_default(self, key):
         ctx = self.sess.get_ly_ctx()
-        keys = ["interfaces", "interface", "config", key]
-        xpath = "".join(f"/goldstone-interfaces:{v}" for v in keys)
+        keys = [
+            ["interfaces", "interface", "config", key],
+            ["interfaces", "interface", "ethernet", "config", key],
+            ["interfaces", "interface", "ethernet", "auto-negotiate", "config", key],
+        ]
 
-        try:
-            for node in ctx.find_path(xpath):
-                return node.default()
-        except libyang.util.LibyangError:
-            keys = ["interfaces", "interface", "ethernet", "config", key]
-            xpath = "".join(f"/goldstone-interfaces:{v}" for v in keys)
-            for node in ctx.find_path(xpath):
-                return node.default()
+        for k in keys:
+            xpath = "".join(f"/goldstone-interfaces:{v}" for v in k)
+            try:
+                for node in ctx.find_path(xpath):
+                    return node.default()
+            except libyang.util.LibyangError:
+                pass
+
+        raise Exception(f"default value not found for {key}")
 
     async def handle_tasks(self):
         while True:

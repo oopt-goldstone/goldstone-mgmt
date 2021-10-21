@@ -29,6 +29,10 @@ class incluster_apis(object):
         self.usonic_core = self.get_podname("usonic-core")
         self.update_bcm_portmap()
 
+    def get_default_iftype(self, ifname):
+        _, _, iftype = self.bcm_portmap.get(ifname)
+        return iftype
+
     def update_bcm_portmap(self):
         output = self.run_bcmcmd("ps")
         portmap = {}
@@ -42,7 +46,7 @@ class incluster_apis(object):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
             master = {}
             for i, m in enumerate(json.loads(f.read())):
-                master[m["port"]] = (i + 1, m)
+                master[m["port"]] = (i + 1, m, m.get("interface-type"))
 
         pmap = {}
         for index, v in portmap.items():
@@ -50,15 +54,19 @@ class incluster_apis(object):
             lane = v[1]
             logger.info(f"{index}: {v}")
             if index in master:
-                i, m = master[index]
-                pmap[f"{PORT_PREFIX}{i}_1"] = (index, name)
+                i, m, iftype = master[index]
+                if iftype:
+                    iftype = f"{iftype.upper()}{lane if lane != 1 else ''}"
+                pmap[f"{PORT_PREFIX}{i}_1"] = (index, name, iftype)
             else:
                 for j in range(1, 4):
                     if index - j in master:
-                        i, m = master[index - j]
+                        i, m, iftype = master[index - j]
                         if lane == 2:
                             j = 1
-                        pmap[f"{PORT_PREFIX}{i}_{1+j}"] = (index, name)
+                        if iftype:
+                            iftype = f"{iftype.upper()}{lane if lane != 1 else ''}"
+                        pmap[f"{PORT_PREFIX}{i}_{1+j}"] = (index, name, iftype)
                         break
 
         logger.debug(pmap)
@@ -134,7 +142,7 @@ class incluster_apis(object):
 
         w = {}
         for port in ports:
-            _, name = self.bcm_portmap[port]
+            _, name, _ = self.bcm_portmap[port]
             if name in v:
                 w[port] = v[name]
 
@@ -151,21 +159,8 @@ class incluster_apis(object):
             ports = [ports]
 
         for port in ports:
-            if not port.startswith(PORT_PREFIX):
-                raise Exception(f"invalid port name: {port}")
-
-            port = port[len(PORT_PREFIX) :]
-            elems = port.split("_")
-            if len(elems) != 2:
-                raise Exception(f"invalid port name: {port}")
-
-            idx = int(elems[0])
-            sub_idx = int(elems[1])
-
-            port_no = int(interface_config[idx - 1]["port"])
-            port_no += sub_idx - 1
-
-            ports_no.append(str(port_no))
+            _, name, _ = self.bcm_portmap.get(port)
+            ports_no.append(name)
 
         ports_no = ",".join(ports_no)
 
