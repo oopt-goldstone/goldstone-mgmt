@@ -2,7 +2,6 @@ import logging
 import asyncio
 import argparse
 import signal
-from aiohttp import web
 import itertools
 from .interfaces import InterfaceServer
 from .vlan import VLANServer
@@ -10,27 +9,9 @@ from .portchannel import PortChannelServer
 from .ufd import UFDServer
 from .sonic import SONiC
 import sysrepo
+from goldstone.lib.core import start_probe
 
 logger = logging.getLogger(__name__)
-
-
-async def start_probe(route, host, port):
-    routes = web.RouteTableDef()
-
-    @routes.get(route)
-    async def probe(request):
-        return web.Response()
-
-    app = web.Application()
-    app.add_routes(routes)
-
-    runner = web.AppRunner(app)
-
-    await runner.setup()
-    site = web.TCPSite(runner, host, port)
-    await site.start()
-
-    return runner
 
 
 def main():
