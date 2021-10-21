@@ -12,8 +12,6 @@ FROM $GS_MGMT_BASE
 
 RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
 
-RUN --mount=type=bind,source=src/lib,target=/src,rw pip install /src
-
 RUN --mount=type=bind,source=src/south/sonic,target=/src,rw pip install /src
 
 # vim:filetype=dockerfile

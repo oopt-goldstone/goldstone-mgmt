@@ -38,4 +38,6 @@ RUN --mount=type=bind,source=scripts,target=/src,rw \
 
 RUN pip install setuptools
 
+RUN --mount=type=bind,source=src/lib,target=/src,rw pip install /src
+
 # vim:filetype=dockerfile
