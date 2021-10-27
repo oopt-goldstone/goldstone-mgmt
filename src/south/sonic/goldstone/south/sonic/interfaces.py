@@ -314,13 +314,8 @@ class InterfaceServer(ServerBase):
             await self.sonic.k8s.run_bcmcmd_port(ifname, f"adv={speeds}")
 
     async def reconcile(self):
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            with sess.lock("goldstone-interfaces"):
-                with sess.lock("goldstone-vlan"):
-                    await self._reconcile()
+        self.sonic.is_rebooting = True
 
-    async def _reconcile(self):
         config = self.get_running_data(self.top, default={}, strip=False)
         is_updated = self.breakout_update_usonic(config)
         if is_updated:
