@@ -1,32 +1,33 @@
 # https://github.com/CESNET/libyang/issues/937
+import unittest
+import libyang as ly
 
-import yang as ly
 
-schema = '''module a {
-    namespace "a";
-    prefix "a";
+class TestLibYANG(unittest.TestCase):
+    def test_enum(self):
+        schema = """module a {
+            namespace "a";
+            prefix "a";
 
-    leaf test {
-        type enumeration {
-        enum A;
-        enum B;
-        enum C;
-        enum D;
-        }
-    }
-}'''
+            leaf test {
+                type enumeration {
+                enum A;
+                enum B;
+                enum C;
+                enum D;
+                }
+            }
+        }"""
 
-ctx = ly.Context()
-ly.set_log_verbosity(ly.LY_LLDBG)
-m = ctx.parse_module_mem(schema, ly.LYS_IN_YANG)
-d = m.data()
-s = d.find_path('/a:test')
-t = s.schema()[0]
-v = t.subtype()
-if v.type().base() == ly.LY_TYPE_ENUM:
-    enums = v.type().info().enums()
-    count = enums.count()
-    e = enums.enm()
-    assert(count == len(e))
-    for i in range(count):
-        assert(e[i].name() == (chr(ord('A') + i)))
+        ctx = ly.Context()
+        m = ctx.parse_module_str(schema)
+        s = ctx.find_path("/a:test")
+        t = list(s)[0]
+        v = t.type().enums()
+        self.assertEqual(len(list(v)), 4)
+        for i, e in enumerate(t.type().enums()):
+            self.assertEqual(e[0], (chr(ord("A") + i)))
+
+
+if __name__ == "__main__":
+    unittest.main()
