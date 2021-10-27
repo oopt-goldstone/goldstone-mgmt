@@ -114,8 +114,9 @@ snmpd:
 
 tester: np2
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f ci/docker/gs-mgmt-test.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_NP2_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t gs-mgmt-test ci
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      --build-arg GS_MGMT_NP2_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_NP2_IMAGE):$(GS_MGMT_IMAGE_TAG) \
+							      -t gs-mgmt-test .
 
 yang: yang/goldstone-transponder.yang
 
@@ -140,4 +141,5 @@ lint:
 	grep -rnI 'print(' src || exit 0 && exit 1
 
 unittest:
+	python -m tests.test_libyang
 	$(MAKE) -C src/north/cli test
