@@ -527,9 +527,9 @@ class InterfaceServer(ServerBase):
             ufd_list = self.get_ufd()
 
         for ufd_id in ufd_list:
-            if port in ufd_id.get("config", {}).get("uplink", []):
+            if ifname in ufd_id.get("config", {}).get("uplink", []):
                 return True
-            if port in ufd_id.get("config", {}).get("downlink", []):
+            if ifname in ufd_id.get("config", {}).get("downlink", []):
                 return True
         return False
 
