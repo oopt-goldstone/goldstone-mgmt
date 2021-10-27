@@ -2,6 +2,7 @@ import sysrepo
 import libyang
 import logging
 from aiohttp import web
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,13 @@ async def start_probe(route, host, port):
     await site.start()
 
     return runner
+
+
+async def call(f, *args, **kwargs):
+    if inspect.iscoroutinefunction(f):
+        return await f(*args, **kwargs)
+    else:
+        return f(*args, **kwargs)
 
 
 class ChangeHandler(object):
@@ -108,9 +116,17 @@ class ServerBase(object):
 
     async def start(self):
         self.sess.switch_datastore("running")
-        self.sess.subscribe_module_change(self.module, None, self.change_cb)
+        asyncio_register = inspect.iscoroutinefunction(self.change_cb)
+        self.sess.subscribe_module_change(
+            self.module, None, self.change_cb, asyncio_register=asyncio_register
+        )
+        asyncio_register = inspect.iscoroutinefunction(self.oper_cb)
         self.sess.subscribe_oper_data_request(
-            self.module, self.top, self.oper_cb, oper_merge=True
+            self.module,
+            self.top,
+            self.oper_cb,
+            oper_merge=True,
+            asyncio_register=asyncio_register,
         )
 
         return []
@@ -127,7 +143,7 @@ class ServerBase(object):
     # 'change' event handling
     # 1. iterate through the changes, do basic validation, degenerate changes if possible
     # 2. do the actual change handling, if any error happens, revert the changes made in advance and raise error
-    def change_cb(self, event, req_id, changes, priv):
+    async def change_cb(self, event, req_id, changes, priv):
 
         if event not in ["change", "done"]:
             logger.warn(f"unsupported event: {event}, id: {req_id}, changes: {changes}")
@@ -142,7 +158,7 @@ class ServerBase(object):
 
         user = {"changes": changes}
 
-        self.pre(user)
+        await call(self.pre, user)
 
         for change in changes:
             cls = self.get_handler(change.xpath)
@@ -150,18 +166,18 @@ class ServerBase(object):
                 raise sysrepo.SysrepoUnsupportedError(f"{change.xpath} not supported")
 
             h = cls(self, change)
-            h.validate(user)
+            await call(h.validate, user)
             handlers.append(h)
 
         for i, handler in enumerate(handlers):
             try:
-                handler.apply(user)
+                await call(handler.apply, user)
             except Exception as e:
                 for done in reversed(handlers[:i]):
-                    done.revert(user)
+                    await call(done.revert, user)
                 raise e
 
-        self.post(user)
+        await call(self.post, user)
 
     def pre(self, user):
         pass
