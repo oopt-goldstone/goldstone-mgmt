@@ -18,6 +18,7 @@ GS_MGMT_SNMP_IMAGE ?= gs-mgmt-north-snmp
 GS_MGMT_SNMPD_IMAGE ?= gs-mgmt-snmpd
 GS_MGMT_OC_IMAGE ?= gs-mgmt-xlate-openconfig
 GS_MGMT_NOTIF_IMAGE ?= gs-mgmt-south-notif
+GS_MGMT_TEST_IMAGE ?= gs-mgmt-test
 
 GS_MGMT_IMAGE_TAG ?= latest-$(ARCH)
 
@@ -116,7 +117,7 @@ tester: np2
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f ci/docker/gs-mgmt-test.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      --build-arg GS_MGMT_NP2_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_NP2_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t gs-mgmt-test .
+							      -t $(GS_MGMT_TEST_IMAGE) .
 
 yang: yang/goldstone-transponder.yang
 
@@ -125,6 +126,9 @@ yang/goldstone-transponder.yang: ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h
 
 bash:
 	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd
+
+tester-bash:
+	DOCKER_RUN_OPTION='-it' DOCKER_IMAGE=$(GS_MGMT_TEST_IMAGE) $(MAKE) cmd
 
 cmd:
 	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_IMAGE) $(DOCKER_CMD)
@@ -141,5 +145,6 @@ lint:
 	grep -rnI 'print(' src || exit 0 && exit 1
 
 unittest:
-	python -m tests.test_libyang
-	$(MAKE) -C src/north/cli test
+	python -m unittest -v
+	# unittest package can't search namespace packages
+	cd src/north/cli && python -m unittest -v
