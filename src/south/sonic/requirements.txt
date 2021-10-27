@@ -2,3 +2,5 @@ jinja2
 kubernetes
 kubernetes_asyncio
 aioredis
+grpclib
+protobuf

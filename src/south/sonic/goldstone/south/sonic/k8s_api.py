@@ -9,6 +9,11 @@ import re
 import kubernetes as k
 import kubernetes_asyncio as k_async
 
+from grpclib.client import Channel
+
+from . import bcmd_pb2
+from . import bcmd_grpc
+
 from jinja2 import Template
 
 USONIC_SELECTOR = os.getenv("USONIC_SELECTOR", "app=usonic")
@@ -27,14 +32,15 @@ class incluster_apis(object):
         k_async.config.load_incluster_config()
         self.usonic_deleted = 0
         self.usonic_core = self.get_podname("usonic-core")
-        self.update_bcm_portmap()
+        ch = Channel("bcmd", 50051)
+        self.bcmd = bcmd_grpc.BCMDStub(ch)
 
     def get_default_iftype(self, ifname):
         _, _, iftype = self.bcm_portmap.get(ifname)
         return iftype
 
-    def update_bcm_portmap(self):
-        output = self.run_bcmcmd("ps")
+    async def update_bcm_portmap(self):
+        output = await self.run_bcmcmd("ps")
         portmap = {}
         for line in output.split("\n"):
             m = re.search(
@@ -82,25 +88,13 @@ class incluster_apis(object):
                 return n
         raise Exception(f"{name} not found")
 
-    def run_bcmcmd(self, cmd):
-        api = k.client.api.CoreV1Api()
-        exec_command = ["bcmcmd", cmd]
-        logger.debug(f"exec command: {exec_command}")
-        resp = k.stream.stream(
-            api.connect_get_namespaced_pod_exec,
-            self.usonic_core,
-            USONIC_NAMESPACE,
-            command=exec_command,
-            container="syncd",
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        logger.debug(f"response: {resp}")
-        return resp
+    async def run_bcmcmd(self, cmd):
+        logger.debug(f"bcm command: {cmd}")
+        reply = await self.bcmd.Exec(bcmd_pb2.ExecRequest(command=cmd))
+        logger.debug(f"response: {reply.response}")
+        return reply.response
 
-    def bcm_ports_info(self, ports):
+    async def bcm_ports_info(self, ports):
         def parse(output):
             info = {}
             m = re.search("IF\((?P<iftype>.*?)\)", output)
@@ -132,7 +126,7 @@ class incluster_apis(object):
             return info
 
         logger.debug(f"ports: {list(ports)}")
-        output = self.run_bcmcmd_port(ports)
+        output = await self.run_bcmcmd_port(ports)
         v = {}
         for line in output.split("\n"):
             m = re.search(f"\s+\*?(?P<name>\w+)\s+", line)
@@ -148,7 +142,7 @@ class incluster_apis(object):
 
         return w
 
-    def run_bcmcmd_port(self, ports, cmd=""):
+    async def run_bcmcmd_port(self, ports, cmd=""):
 
         ports_no = []
 
@@ -164,7 +158,7 @@ class incluster_apis(object):
 
         ports_no = ",".join(ports_no)
 
-        return self.run_bcmcmd(f"port {ports_no} {cmd}")
+        return await self.run_bcmcmd(f"port {ports_no} {cmd}")
 
     def create_usonic_config_bcm(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
@@ -377,7 +371,7 @@ class incluster_apis(object):
                 if self.usonic_deleted == 1 and phase == "Running":
                     logger.debug("uSONiC reached running state, exiting")
                     self.usonic_core = self.get_podname("usonic-core")
-                    self.update_bcm_portmap()
+                    await self.update_bcm_portmap()
                     self.usonic_deleted = 0
                     return
                 if self.usonic_deleted != 1 and event["type"] == "DELETED":
