@@ -6,6 +6,8 @@ module goldstone-platform {
 
   prefix "gs-platform";
 
+  import goldstone-interfaces { prefix gs-if; }
+
   revision "2019-11-01" {
       reference "0.1.0";
   }
@@ -690,6 +692,14 @@ module goldstone-platform {
     uses platform-component-config;
     uses platform-transceiver-top-state;
   }
+
+  augment "/gs-if:interfaces/gs-if:interface/gs-if:state" {
+    leaf hardware-port {
+      type leafref {
+        path "/gs-platform:components/gs-platform:component/" +
+          "gs-platform:name";
+      }
+    }
+  }
+
 }
-
-
