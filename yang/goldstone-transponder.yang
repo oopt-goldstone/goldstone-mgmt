@@ -3,6 +3,8 @@ module goldstone-transponder {
   namespace "http://goldstone.net/yang/transponder";
   prefix gs-transponder;
 
+  import goldstone-interfaces { prefix gs-if; }
+
   revision 2019-11-01 {
     reference
       "0.1.0";
@@ -817,4 +819,14 @@ module goldstone-transponder {
     uses transponder-network-interface-config;
     uses transponder-network-interface-state;
   }
+
+  augment "/gs-if:interfaces/gs-if:interface/gs-if:state" {
+    leaf transponder-host-interface {
+      type leafref {
+        path "/gs-transponder:modules/gs-transponder:module/" +
+          "gs-transponder:host-interface/gs-transponder:name";
+      }
+    }
+  }
+
 }

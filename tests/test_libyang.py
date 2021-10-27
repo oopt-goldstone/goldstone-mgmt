@@ -1,4 +1,3 @@
-# https://github.com/CESNET/libyang/issues/937
 import unittest
 import libyang as ly
 
