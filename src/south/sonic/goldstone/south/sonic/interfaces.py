@@ -13,7 +13,6 @@ REDIS_SERVICE_PORT = os.getenv("REDIS_SERVICE_PORT")
 SINGLE_LANE_INTERFACE_TYPES = ["CR", "LR", "SR", "KR"]
 DOUBLE_LANE_INTERFACE_TYPES = ["CR2", "LR2", "SR2", "KR2"]
 QUAD_LANE_INTERFACE_TYPES = ["CR4", "LR4", "SR4", "KR4"]
-DEFAULT_INTERFACE_TYPE = "KR"
 
 
 class IfChangeHandler(ChangeHandler):
@@ -37,7 +36,7 @@ class IfChangeHandler(ChangeHandler):
     def valid_speeds(self):
         valid_speeds = [40000, 100000]
         breakout_valid_speeds = []  # no speed change allowed for sub-interfaces
-        if self.server.get_breakout_detail(self.ifname):
+        if not self.ifname.endswith("_1"):
             return breakout_valid_speeds
         else:
             return valid_speeds
@@ -82,12 +81,12 @@ class IfTypeHandler(IfChangeHandler):
         if self.type in ["created", "modified"]:
             self.server.validate_interface_type(self.ifname, self.change.value)
 
-    def apply(self, user):
+    async def apply(self, user):
         if self.type in ["created", "modified"]:
             value = self.change.value
         else:
             value = self.server.sonic.k8s.get_default_iftype(self.ifname)
-        self.server.sonic.k8s.run_bcmcmd_port(self.ifname, "if=" + value)
+        await self.server.sonic.k8s.run_bcmcmd_port(self.ifname, "if=" + value)
 
 
 class SpeedHandler(IfChangeHandler):
@@ -101,13 +100,13 @@ class SpeedHandler(IfChangeHandler):
                     f"Invalid speed: {self.change.value}, candidates: {','.join(valids)}"
                 )
 
-    def apply(self, user):
+    async def apply(self, user):
         if self.type in ["created", "modified"]:
             value = self.change.value
         else:
             value = "100G"
         self.server.sonic.set_config_db(self.ifname, "speed", value)
-        self.server.sonic.k8s.update_bcm_portmap()
+        await self.server.sonic.k8s.update_bcm_portmap()
 
 
 class VLANIfModeHandler(IfChangeHandler):
@@ -172,14 +171,14 @@ class TrunkVLANsHandler(IfChangeHandler):
 
 
 class AutoNegotiateHandler(IfChangeHandler):
-    def apply(self, user):
+    async def apply(self, user):
         if self.type in ["created", "modified"]:
             v = self.change.value
         else:
             v = self.server.get_default("enabled")
         value = "yes" if v else "no"
 
-        self.server.sonic.k8s.run_bcmcmd_port(self.ifname, "an=" + value)
+        await self.server.sonic.k8s.run_bcmcmd_port(self.ifname, "an=" + value)
 
 
 class AutoNegotiateAdvertisedSpeedsHandler(IfChangeHandler):
@@ -297,7 +296,7 @@ class InterfaceServer(ServerBase):
         if self.sonic.is_rebooting:
             raise sysrepo.SysrepoLockedError("uSONiC is rebooting")
 
-    def post(self, user):
+    async def post(self, user):
         logger.info(f"post: {user}")
         if user.get("update-sonic"):
             self.sonic.is_rebooting = True
@@ -312,13 +311,14 @@ class InterfaceServer(ServerBase):
                 logger.debug(f"speeds: {speeds}")
             else:
                 speeds = ""
-            self.sonic.k8s.run_bcmcmd_port(ifname, f"adv={speeds}")
+            await self.sonic.k8s.run_bcmcmd_port(ifname, f"adv={speeds}")
 
     async def reconcile(self):
-        self.sess.switch_datastore("running")
-        with self.sess.lock("goldstone-interfaces"):
-            with self.sess.lock("goldstone-vlan"):
-                await self._reconcile()
+        with self.conn.start_session() as sess:
+            sess.switch_datastore("running")
+            with sess.lock("goldstone-interfaces"):
+                with sess.lock("goldstone-vlan"):
+                    await self._reconcile()
 
     async def _reconcile(self):
         config = self.get_running_data(self.top, default={}, strip=False)
@@ -345,10 +345,10 @@ class InterfaceServer(ServerBase):
             for key, value in autoneg.items():
                 if key == "enabled":
                     v = "yes" if value else "no"
-                    self.sonic.k8s.run_bcmcmd_port(ifname, "an=" + v)
+                    await self.sonic.k8s.run_bcmcmd_port(ifname, "an=" + v)
                 elif key == "advertised-speeds":
                     speeds = ",".join(v.replace("SPEED_", "").lower() for v in value)
-                    self.sonic.k8s.run_bcmcmd_port(ifname, f"adv={speeds}")
+                    await self.sonic.k8s.run_bcmcmd_port(ifname, f"adv={speeds}")
 
             ethernet = data.get("ethernet", {}).get("config", {})
             # default setting
@@ -364,7 +364,7 @@ class InterfaceServer(ServerBase):
 
             for key in ethernet:
                 if key == "interface-type":
-                    self.sonic.k8s.run_bcmcmd_port(ifname, "if=" + ethernet[key])
+                    await self.sonic.k8s.run_bcmcmd_port(ifname, "if=" + ethernet[key])
                 elif key in ["mtu", "fec", "speed"]:
                     self.sonic.set_config_db(ifname, key, ethernet[key])
                 else:
@@ -473,7 +473,7 @@ class InterfaceServer(ServerBase):
 
     def get_breakout_detail(self, ifname):
         xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/breakout/state"
-        data = self.get_operational_data(xpath)
+        data = self.get_running_data(xpath)
         if not data:
             return None
 
@@ -483,9 +483,10 @@ class InterfaceServer(ServerBase):
                 "num-channels": data["num-channels"],
                 "channel-speed": data["channel-speed"],
             }
-
-        if "parent" in data:
-            return self.get_breakout_detail(data["parent"])
+        elif not name.endswith("_1"):
+            _name = name.split("_")
+            parent = _name[0] + "_1"
+            return self.get_breakout_detail(parent)
 
         return None
 
@@ -555,7 +556,7 @@ class InterfaceServer(ServerBase):
         if oper_status != None:
             return oper_status.upper()
 
-    def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
         if self.sonic.is_rebooting:
             # FIXME sysrepo bug. oper cb can't raise exception
@@ -612,7 +613,9 @@ class InterfaceServer(ServerBase):
             interfaces.append(interface)
 
         if not counter_only:
-            bcminfo = self.sonic.k8s.bcm_ports_info(list(i["name"] for i in interfaces))
+            bcminfo = await self.sonic.k8s.bcm_ports_info(
+                list(i["name"] for i in interfaces)
+            )
 
         for intf in interfaces:
             ifname = intf["name"]
