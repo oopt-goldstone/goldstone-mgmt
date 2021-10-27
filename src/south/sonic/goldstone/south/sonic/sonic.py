@@ -92,6 +92,9 @@ class SONiC(object):
         self.sonic_db.connect(self.sonic_db.APPL_DB)
         self.sonic_db.connect(self.sonic_db.COUNTERS_DB)
 
+    async def init(self):
+        await self.k8s.update_bcm_portmap()
+
     def restart(self):
         self.is_rebooting = True
         self.k8s.restart_usonic()

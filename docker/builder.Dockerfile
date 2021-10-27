@@ -110,8 +110,11 @@ RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
 
 FROM python AS sonic
 
+RUN pip install --upgrade pip
+RUN pip install wheel grpcio-tools grpclib
 RUN --mount=type=bind,source=src/south/sonic,target=/src,rw \
-    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    cd /src && python -m grpc_tools.protoc -Iproto --python_out=. --python_grpc_out=. ./proto/goldstone/south/sonic/bcmd.proto \
+    && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
     && mkdir -p /usr/share/wheels/sonic && cp dist/*.whl /usr/share/wheels/sonic
 
 FROM python AS system

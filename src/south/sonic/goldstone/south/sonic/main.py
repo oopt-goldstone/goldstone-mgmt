@@ -24,6 +24,8 @@ def main():
         conn = sysrepo.SysrepoConnection()
         sonic = SONiC()
 
+        await sonic.init()
+
         vlan = VLANServer(conn, sonic)
         pc = PortChannelServer(conn, sonic)
         ufd = UFDServer(conn, sonic)
