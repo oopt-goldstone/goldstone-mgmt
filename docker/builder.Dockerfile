@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 
-ARG GS_MGMT_BUILDER_BASE=debian:10
+ARG GS_MGMT_BUILDER_BASE=python:3-buster
 
 FROM opennetworklinux/builder10:1.2 AS onlp
 ARG TARGETARCH
@@ -16,10 +16,7 @@ RUN --mount=type=bind,source=sm/OpenNetworkLinux,target=/root/sm/OpenNetworkLinu
 FROM $GS_MGMT_BUILDER_BASE AS base
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config python3 curl python3-distutils python3-pip libclang1-6.0 doxygen libi2c-dev git python3-dev cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus libffi-dev
-
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
-RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config curl libclang1-6.0 doxygen libi2c-dev git cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus libffi-dev build-essential
 
 RUN pip install --upgrade pip
 

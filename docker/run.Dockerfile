@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:experimental
 
 ARG GS_MGMT_BUILDER_IMAGE=docker.io/microsonic/gs-mgmt-builder:latest
-ARG GS_MGMT_BASE=debian:10
+ARG GS_MGMT_BASE=python:3-slim-buster
 
 FROM $GS_MGMT_BUILDER_IMAGE as builder
 
@@ -11,10 +11,7 @@ ARG https_proxy
 FROM $GS_MGMT_BASE
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
-            apt update && apt install -qy --no-install-recommends python3 python3-pip libatomic1
-
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
-RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
+            apt update && apt install -qy --no-install-recommends libatomic1
 
 RUN pip install --upgrade pip
 
