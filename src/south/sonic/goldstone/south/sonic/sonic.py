@@ -1,5 +1,4 @@
 from .k8s_api import incluster_apis
-import redis
 import swsssdk
 import logging
 import asyncio
