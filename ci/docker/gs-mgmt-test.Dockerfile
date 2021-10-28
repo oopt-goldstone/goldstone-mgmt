@@ -1,24 +1,18 @@
 # syntax=docker/dockerfile:experimental
 
 ARG GS_MGMT_BUILDER_IMAGE=docker.io/microsonic/gs-mgmt-builder:latest
-ARG GS_MGMT_NP2_IMAGE=docker.io/microsonic/gs-mgmt-netopeer2:latest
 
 FROM $GS_MGMT_BUILDER_IMAGE AS builder
 
-FROM $GS_MGMT_NP2_IMAGE
+FROM python:3-buster
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends python3 python3-pip python3-setuptools snmp software-properties-common
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp software-properties-common make pkg-config curl git cmake libssh-4 libssh-dev libpcre3-dev quilt
 
 RUN apt-add-repository non-free
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp-mibs-downloader
-
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
-RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
-
-RUN pip install --upgrade pip
 
 RUN pip install paramiko scp black pyang prompt_toolkit tabulate natsort kubernetes setuptools
 
@@ -26,9 +20,20 @@ COPY ci/docker/snmp.conf /etc/snmp/snmp.conf
 
 RUN rm /usr/share/snmp/mibs/ietf/SNMPv2-PDU
 
-RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i
 
-RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | xargs dpkg -i
+
+RUN --mount=type=bind,source=sm/libnetconf2,target=/root/sm/libnetconf2,rw cd /root && mkdir -p /build/libnetconf2 && cd /build/libnetconf2 && \
+            cmake /root/sm/libnetconf2 && make && make install
+
+RUN --mount=type=bind,source=sm/netopeer2,target=/root/sm/netopeer2,rw \
+    --mount=type=bind,source=patches/np2,target=/root/patches \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && mkdir -p /build/netopeer2 && cd /build/netopeer2 && \
+    cmake /root/sm/netopeer2 && make && make install && mkdir -p /usr/local/share/netopeer2 && cp -r /root/sm/netopeer2/scripts /usr/local/share/netopeer2
+
+RUN ldconfig
 
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
             pip install /usr/share/wheels/libyang/*.whl /usr/share/wheels/sysrepo/*.whl
@@ -45,6 +50,10 @@ RUN --mount=type=bind,source=scripts,target=/src,rw \
 
 RUN --mount=type=bind,source=src/lib,target=/src,rw pip install /src
 
-COPY --from=docker:19.03 /usr/local/bin/docker /usr/local/bin/
+COPY --from=docker:20.10 /usr/local/bin/docker /usr/local/bin/
+
+RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
+
+RUN --mount=type=bind,source=src/south/sonic,target=/src,rw pip install -r /src/requirements.txt
 
 # vim:filetype=dockerfile
