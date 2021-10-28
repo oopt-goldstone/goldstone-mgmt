@@ -91,17 +91,13 @@ def main(host, username, password, arch):
             ssh(cli, f"kubectl apply -f {manifest}")
 
         ssh(cli, "rm -rf /tmp/wheels")
-        ssh(cli, "mkdir -p /tmp/wheels/cli /tmp/wheels/system")
+        ssh(cli, "pip uninstall -y gscli gssystem libyang sysrepo")
 
-        for v in ["cli", "system"]:
+        for v in ["libyang", "sysrepo", "cli", "system"]:
+            ssh(cli, f"mkdir -p /tmp/wheels/{v}")
             path = f"builds/{arch}/wheels/{v}"
             scp.put(path, recursive=True, remote_path="/tmp/wheels")
-
-        ssh(cli, "pip uninstall -y gscli gssystem")
-        ssh(cli, "pip install /tmp/wheels/cli/*.whl")
-        ssh(cli, "pip install /tmp/wheels/system/*.whl")
-
-        # ssh(cli, 'gscli -c "show version"')
+            ssh(cli, f"pip install /tmp/wheels/{v}/*.whl")
 
         if arch == "amd64":
             check_pod(cli, "gs-mgmt-sonic")

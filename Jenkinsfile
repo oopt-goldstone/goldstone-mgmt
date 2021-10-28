@@ -140,10 +140,16 @@ pipeline {
       }
       steps {
           sh 'rm -rf builds/amd64/wheels && mkdir -p builds/amd64/wheels'
+          sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/libyang /data/"'
+          sh 'docker run -v `pwd`/builds/amd64/wheels/libyang:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "pip wheel cffi -w /data"'
+          sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/sysrepo /data/"'
           sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/system /data/"'
           sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/cli /data/"'
 
           sh 'rm -rf builds/arm64/wheels && mkdir -p builds/arm64/wheels'
+          sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/libyang /data/"'
+          sh 'docker run -v `pwd`/builds/arm64/wheels/libyang:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "pip wheel cffi -w /data"'
+          sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/sysrepo /data/"'
           sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/system /data/"'
           sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/cli /data/"'
       }
