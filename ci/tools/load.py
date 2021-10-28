@@ -97,9 +97,9 @@ def main(host, username, password, arch):
             path = f"builds/{arch}/wheels/{v}"
             scp.put(path, recursive=True, remote_path="/tmp/wheels")
 
-        ssh(cli, "pip3 uninstall -y gscli gssystem")
-        ssh(cli, "pip3 install /tmp/wheels/cli/*.whl")
-        ssh(cli, "pip3 install /tmp/wheels/system/*.whl")
+        ssh(cli, "pip uninstall -y gscli gssystem")
+        ssh(cli, "pip install /tmp/wheels/cli/*.whl")
+        ssh(cli, "pip install /tmp/wheels/system/*.whl")
 
         # ssh(cli, 'gscli -c "show version"')
 
