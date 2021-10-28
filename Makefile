@@ -113,10 +113,9 @@ snmpd:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/snmpd.Dockerfile \
 							      -t $(DOCKER_REPO)/$(GS_MGMT_SNMPD_IMAGE):$(GS_MGMT_IMAGE_TAG) .
 
-tester: np2
+tester:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f ci/docker/gs-mgmt-test.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_NP2_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_NP2_IMAGE):$(GS_MGMT_IMAGE_TAG) \
 							      -t $(GS_MGMT_TEST_IMAGE) .
 
 yang: yang/goldstone-transponder.yang
