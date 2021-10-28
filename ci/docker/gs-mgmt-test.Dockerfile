@@ -56,4 +56,6 @@ RUN --mount=type=bind,source=sm/sonic-py-swsssdk,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=src/south/sonic,target=/src,rw pip install -r /src/requirements.txt
 
+RUN pip install grpcio-tools
+
 # vim:filetype=dockerfile

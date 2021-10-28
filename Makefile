@@ -147,3 +147,5 @@ unittest:
 	python -m unittest -v
 	# unittest package can't search namespace packages
 	cd src/north/cli && python -m unittest -v
+	cd src/south/sonic && make proto && python -m unittest -v
+	cd src/south/sonic && make clean
