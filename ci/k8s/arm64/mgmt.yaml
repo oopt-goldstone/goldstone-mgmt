@@ -186,6 +186,9 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-onlp']
               args: ['--verbose']
+              env:
+              - name: PYTHONPATH
+                value: /usr/lib/python3/dist-packages
               volumeMounts:
               - name: dev
                 mountPath: /dev
