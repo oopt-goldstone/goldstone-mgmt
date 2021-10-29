@@ -12,7 +12,7 @@ RUN pip install --upgrade pip
 RUN pip install wheel grpcio-tools grpclib
 RUN --mount=type=bind,source=src/south/sonic,target=/src,rw \
     cd /src && python -m grpc_tools.protoc -Iproto --python_out=. --python_grpc_out=. ./proto/goldstone/south/sonic/bcmd.proto \
-    && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && python setup.py bdist_wheel \
     && mkdir -p /usr/share/wheels/sonic && cp dist/*.whl /usr/share/wheels/sonic
 
 FROM $GS_MGMT_BASE
