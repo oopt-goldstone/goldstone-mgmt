@@ -15,9 +15,9 @@ class Agent:
         self.loop = loop
 
         # synchronization events
-        self.run_enabled = asyncio.Event(loop=loop)
-        self.oid_updaters_enabled = asyncio.Event(loop=loop)
-        self.stopped = asyncio.Event(loop=loop)
+        self.run_enabled = asyncio.Event()
+        self.oid_updaters_enabled = asyncio.Event()
+        self.stopped = asyncio.Event()
 
         # Initialize our MIB
         self.mib_table = MIBTable(mib_cls, update_frequency)
