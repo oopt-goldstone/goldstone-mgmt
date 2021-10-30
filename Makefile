@@ -144,8 +144,8 @@ lint:
 	grep -rnI 'print(' src || exit 0 && exit 1
 
 unittest:
-	python -m unittest -v
+	python -m unittest -v -f
 	# unittest package can't search namespace packages
-	cd src/north/cli && python -m unittest -v
-	cd src/south/sonic && make proto && python -m unittest -v
+	cd src/north/cli && python -m unittest -v -f
+	cd src/south/sonic && make proto && python -m unittest -v -f
 	cd src/south/sonic && make clean
