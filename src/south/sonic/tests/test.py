@@ -116,6 +116,39 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(admin_status, "UP")
 
+    async def test_clear_ds(self):
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+
+                name = "Ethernet1_1"
+                prefix = (
+                    f"/goldstone-interfaces:interfaces/interface[name='{name}']/config"
+                )
+
+                sess.set_item(f"{prefix}/name", name)
+                sess.set_item(f"{prefix}/admin-status", "UP")
+                sess.apply_changes()
+
+                self.sonic.logs = []
+
+                async def post(*args):
+                    user = args[0]
+                    self.assertFalse(user.get("update-sonic"))
+
+                self.server.post = post
+
+                sess.replace_config({}, "goldstone-interfaces")
+                sess.apply_changes()
+
+        self.tasks.append(asyncio.create_task(asyncio.to_thread(test)))
+
+        done, _ = await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            e = task.exception()
+            if e:
+                raise e
+
     async def asyncTearDown(self):
         self.server.stop()
         self.tasks = []
