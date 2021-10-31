@@ -402,6 +402,8 @@ class InterfaceServer(ServerBase):
             xpath = "".join(f"/goldstone-interfaces:{v}" for v in k)
             try:
                 for node in ctx.find_path(xpath):
+                    if node.type().name() == "boolean":
+                        return node.default() == "true"
                     return node.default()
             except libyang.util.LibyangError:
                 pass

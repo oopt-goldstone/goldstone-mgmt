@@ -149,6 +149,9 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             if e:
                 raise e
 
+    async def test_get_default(self):
+        self.assertFalse(self.server.get_default("enabled"))
+
     async def asyncTearDown(self):
         self.server.stop()
         self.tasks = []
