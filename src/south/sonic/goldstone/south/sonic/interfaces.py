@@ -224,7 +224,13 @@ class BreakoutHandler(IfChangeHandler):
                 )
 
     def apply(self, user):
-        user["update-sonic"] = True
+        if self.type == "deleted":
+            xpath = self.change.xpath
+            data = self.server.get_running_data(xpath)
+            if data:
+                user["update-sonic"] = True
+        else:
+            user["update-sonic"] = True
 
 
 class InterfaceServer(ServerBase):
