@@ -11,6 +11,6 @@ ARG https_proxy
 FROM $GS_MGMT_BASE
 
 
-RUN --mount=type=bind,source=src/south/notif,target=/src,rw pip install /src
+RUN --mount=type=bind,source=src/north/notif,target=/src,rw pip install /src
 
 # vim:filetype=dockerfile

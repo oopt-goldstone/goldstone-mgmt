@@ -39,7 +39,7 @@ def main(host, username, password, arch):
             "gs-mgmt-snmpd",
             "gs-mgmt-south-onlp",
             "gs-mgmt-south-tai",
-            "gs-mgmt-south-notif",
+            "gs-mgmt-north-notif",
             "gs-mgmt-xlate-openconfig",
         ]
 

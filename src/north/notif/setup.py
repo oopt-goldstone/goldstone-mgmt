@@ -12,7 +12,7 @@ setuptools.setup(
     python_requires=">=3.7",
     entry_points={
         "console_scripts": [
-            "gssouthd-notif = gsnotif.main:main",
+            "gsnorthd-notif = gsnotif.main:main",
         ],
     },
     packages=setuptools.find_packages(),
