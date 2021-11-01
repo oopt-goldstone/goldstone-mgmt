@@ -78,10 +78,10 @@ def main(host, username, password, arch):
 
         ssh(cli, "sysrepoctl -l | grep goldstone")  # goldstone models must be loaded
 
-        apps = ["mgmt", "xlate"]
+        apps = ["north-netconf", "north-notif", "south-onlp", "south-tai", "xlate-oc"]
         if arch == "amd64":
             apps.append("south-sonic")
-            apps.append("snmp")
+            apps.append("north-snmp")
         elif arch == "arm64":
             apps.append("south-gearbox")
 
@@ -100,15 +100,15 @@ def main(host, username, password, arch):
             ssh(cli, f"pip install /tmp/wheels/{v}/*.whl")
 
         if arch == "amd64":
-            check_pod(cli, "gs-mgmt-sonic")
-            check_pod(cli, "gs-mgmt-snmp")
+            check_pod(cli, "south-sonic")
+            check_pod(cli, "north-snmp")
         elif arch == "arm64":
-            check_pod(cli, "gs-mgmt-gearbox")
+            check_pod(cli, "south-gearbox")
 
-        check_pod(cli, "gs-mgmt-onlp")
-        check_pod(cli, "gs-mgmt-tai")
-        check_pod(cli, "gs-mgmt-openconfig")
-        check_pod(cli, "gs-mgmt-notif")
+        check_pod(cli, "south-onlp")
+        check_pod(cli, "south-tai")
+        check_pod(cli, "north-notif")
+        check_pod(cli, "xlate-oc")
 
         def restart_gssouth_system():
             max_iteration = 3

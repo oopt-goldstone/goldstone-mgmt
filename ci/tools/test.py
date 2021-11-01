@@ -296,8 +296,8 @@ class TestSouthSONiC(TestBase):
         self.gscli("interface Ethernet3_1; auto-negotiate disable")
 
         self.gscli("interface Ethernet3_1; auto-negotiate enable")
-        self.ssh("kubectl rollout restart ds/gs-mgmt-sonic")
-        check_pod(self.cli, "gs-mgmt-sonic")
+        self.ssh("kubectl rollout restart ds/south-sonic")
+        check_pod(self.cli, "south-sonic")
         output = self.gscli("show running-config interface")
         self.assertTrue("auto-negotiate enable" in output)
         self.gscli("interface Ethernet3_1; no auto-negotiate")
@@ -334,8 +334,8 @@ class TestSouthSONiC(TestBase):
         self.gscli("interface Ethernet1_1; interface-type KR4")
 
         self.gscli("interface Ethernet1_1; interface-type CR4")
-        self.ssh("kubectl rollout restart ds/gs-mgmt-sonic")
-        check_pod(self.cli, "gs-mgmt-sonic")
+        self.ssh("kubectl rollout restart ds/south-sonic")
+        check_pod(self.cli, "south-sonic")
         output = self.gscli("show running-config interface")
         self.assertTrue("interface-type CR4" in output)
         self.gscli("interface Ethernet1_1; no interface-type")
@@ -832,8 +832,8 @@ class TestSouthTAI(TestBase):
         self.gscli(f"transponder {device}; netif 0; tx-laser-freq 193.7thz")
         self.gscli(f"transponder {device}; netif 0; modulation-format dp-qpsk")
 
-        self.ssh("kubectl rollout restart ds/gs-mgmt-tai")
-        check_pod(self.cli, "gs-mgmt-tai")
+        self.ssh("kubectl rollout restart ds/south-tai")
+        check_pod(self.cli, "south-tai")
 
         #    output = ssh(cli, f'gscli -c "transponder {device}; netif 0; show" | grep voa-rx')
         #    assert "0.9" in output

@@ -1,94 +1,78 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-    name: south-sonic
+    name: south-onlp
     labels:
-        gs-mgmt: south-sonic
+        gs-mgmt: south-onlp
 
 ---
-
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-    name: south-sonic
+    name: south-onlp
     labels:
-        gs-mgmt: south-sonic
+        gs-mgmt: south-onlp
 roleRef:
-  kind: ClusterRole
-  name: usonic-manage
-  apiGroup: rbac.authorization.k8s.io
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: view
 subjects:
- - kind: ServiceAccount
-   name: south-sonic
-   namespace: default
-
----
-
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-    name: usonic-manage
-    labels:
-        gs-mgmt: south-sonic
-rules:
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get","update","patch"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get","list","watch"]
-- apiGroups: [""]
-  resources: ["pods/exec"]
-  verbs: ["get","list","watch"]
-- apiGroups: ["extensions", "apps"]
-  resources: ["deployments"]
-  verbs: ["*"]
-- apiGroups: ["batch", "extensions"]
-  resources: ["jobs"]
-  verbs: ["*"]
+- kind: ServiceAccount
+  name: south-onlp
+  namespace: default
 
 ---
 
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-    name: south-sonic
+    name: south-onlp
     labels:
         app: gs-mgmt
-        gs-mgmt: south-sonic
+        gs-mgmt: south-onlp
 spec:
     selector:
         matchLabels:
-            app: south-sonic
+            app: south-onlp
     template:
         metadata:
             labels:
-                app: south-sonic
+                app: south-onlp
         spec:
-            serviceAccountName: south-sonic
+            serviceAccountName: south-onlp
             initContainers:
             - name: wait-prep
               image: docker.io/bitnami/kubectl:latest
               imagePullPolicy: IfNotPresent
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
-            - name: sonic
-              image: docker.io/gs-test/gs-mgmt-south-sonic:latest-amd64
+            - name: onlp
+              image: docker.io/gs-test/gs-mgmt-south-onlp:latest-amd64
               imagePullPolicy: IfNotPresent
-              command: ['gssouthd-sonic']
+              command: ['gssouthd-onlp']
               args: ['--verbose']
               env:
-              - name: USONIC_TEMPLATE_DIR
-                value: /var/lib/current
+              - name: PYTHONPATH
+                value: /usr/lib/python3/dist-packages
               volumeMounts:
+              - name: dev
+                mountPath: /dev
               - name: shm
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
-              - name: sonic-db-config
-                mountPath: /var/run/redis/sonic-db/
-              - name: current
-                mountPath: /var/lib/current
+              - name: onl
+                mountPath: /etc/onl/
+              - name: host-lib
+                mountPath: /lib/x86_64-linux-gnu/libonlp-platform.so.1
+              - name: host-i2c-lib
+                mountPath: /lib/x86_64-linux-gnu/libi2c.so.0
+              securityContext:
+                privileged: true
+                capabilities:
+                  add:
+                  - IPC_OWNER
+                  - IPC_LOCK
               livenessProbe:
                 httpGet:
                   path: /healthz
@@ -105,15 +89,21 @@ spec:
               - name: liveness-port
                 containerPort: 8080
             volumes:
+            - name: dev
+              hostPath:
+                  path: /dev
             - name: shm
               hostPath:
                   path: /dev/shm
             - name: sysrepo
               hostPath:
                   path: /var/lib/sysrepo
-            - name: current
+            - name: onl
               hostPath:
-                  path: /var/lib/goldstone/device/current/usonic
-            - name: sonic-db-config
-              configMap:
-                  name: sonic-db-config
+                path: /etc/onl
+            - name: host-lib
+              hostPath:
+                path: /lib/x86_64-linux-gnu/libonlp-platform.so
+            - name: host-i2c-lib
+              hostPath:
+                path: /usr/lib/x86_64-linux-gnu/libi2c.so.0.1.1

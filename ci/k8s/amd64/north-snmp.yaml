@@ -15,50 +15,75 @@ data:
 apiVersion: v1
 kind: Service
 metadata:
-  name: gs-mgmt-snmp
+  name: north-snmp
 spec:
   type: LoadBalancer
+  selector:
+    app: north-snmp
   ports:
     - port: 161
       targetPort: 161
       protocol: UDP
       name: snmp
-  selector:
-    app: gs-mgmt-snmp
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: north-snmp
+    labels:
+        gs-mgmt: north-snmp
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+    name: north-snmp
+    labels:
+        gs-mgmt: north-snmp
+roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: view
+subjects:
+- kind: ServiceAccount
+  name: north-snmp
+  namespace: default
 
 ---
 
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-    name: gs-mgmt-snmp
+    name: north-snmp
     labels:
         app: gs-mgmt
+        gs-mgmt: north-snmp
 spec:
     selector:
         matchLabels:
-            app: gs-mgmt-snmp
+            app: north-snmp
     template:
         metadata:
             labels:
-                app: gs-mgmt-snmp
+                app: north-snmp
         spec:
-            serviceAccountName: gs-mgmt
+            serviceAccountName: north-snmp
             initContainers:
             - name: wait-prep
-              image: docker.io/library/kubectl:latest-arm64
+              image: docker.io/bitnami/kubectl:latest
               imagePullPolicy: IfNotPresent
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: snmpd
-              image: docker.io/gs-test/gs-mgmt-snmpd:latest-arm64
+              image: docker.io/gs-test/gs-mgmt-snmpd:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['snmpd', '-f', '-C', '-c', '/etc/snmp/snmpd.conf']
               volumeMounts:
               - name: snmpd-config
                 mountPath: /etc/snmp
             - name: agentx
-              image: docker.io/gs-test/gs-mgmt-north-snmp:latest-arm64
+              image: docker.io/gs-test/gs-mgmt-north-snmp:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gsnorthd-snmp', '-v']
               volumeMounts:
