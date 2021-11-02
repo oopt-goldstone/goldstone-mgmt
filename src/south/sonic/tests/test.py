@@ -40,7 +40,7 @@ class MockSONiC(object):
         self.logs.append((ifname, key, value))
 
     def get_counters(self, ifname):
-        pass
+        return {}
 
     def get_oper_status(self, ifname):
         return "up"
