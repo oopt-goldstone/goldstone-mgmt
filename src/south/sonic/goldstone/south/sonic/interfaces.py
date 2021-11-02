@@ -273,6 +273,7 @@ class InterfaceServer(ServerBase):
                             "trunk-vlans": TrunkVLANsHandler,
                         }
                     },
+                    "component-connection": NoOp,
                 }
             }
         }

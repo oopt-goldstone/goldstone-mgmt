@@ -1,0 +1,45 @@
+module goldstone-component-connection {
+  yang-version 1;
+  namespace "http://goldstone.net/yang/component-connection";
+  prefix gs-cc;
+
+  import goldstone-interfaces { prefix gs-if; }
+  import goldstone-transponder { prefix gs-transponder; }
+  import goldstone-platform { prefix gs-platform; }
+
+  revision 2021-11-01 {
+    reference
+      "0.1.0";
+  }
+
+  augment "/gs-if:interfaces/gs-if:interface" {
+    container component-connection {
+      container transponder {
+        leaf module {
+          type leafref {
+            path "/gs-transponder:modules/gs-transponder:module/" +
+              "gs-transponder:name";
+          }
+        }
+
+        leaf host-interface {
+          type leafref {
+            path "/gs-transponder:modules/gs-transponder:module/" +
+              "gs-transponder:host-interface/gs-transponder:name";
+          }
+        }
+      }
+
+      container platform {
+        leaf component {
+          type leafref {
+            path "/gs-platform:components/gs-platform:component/" +
+              "gs-platform:name";
+          }
+        }
+      }
+
+    }
+  }
+
+}

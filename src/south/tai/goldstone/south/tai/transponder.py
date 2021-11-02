@@ -445,11 +445,17 @@ class TransponderServer(ServerBase):
     async def start(self):
         # get hardware configuration from platform datastore ( ONLP south must be running )
         self.sess.switch_datastore("operational")
-        d = self.sess.get_data("/goldstone-platform:components/component", no_subs=True)
+        try:
+            d = self.sess.get_data(
+                "/goldstone-platform:components/component", no_subs=True
+            )
+        except sysrepo.SysrepoNotFoundError:
+            d = {}
+
         ms = self.taish.list()
         modules = [
             self.name2location(c["name"], ms)
-            for c in d["components"]["component"]
+            for c in d.get("components", {}).get("component", [])
             if c["state"]["type"] == "PIU"
             and c["piu"]["state"]["status"] == ["PRESENT"]
         ]
@@ -660,7 +666,7 @@ class TransponderServer(ServerBase):
 
         raise InvalidXPath()
 
-    def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f"oper get callback requested xpath: {req_xpath}")
 
         def get(obj, schema):
@@ -692,7 +698,7 @@ class TransponderServer(ServerBase):
 
         if item == "name":
             if module == None:
-                modules = self.taish.list()
+                modules = await self.ataish.list()
                 modules = (location2name(key) for key in modules.keys())
                 modules = [{"name": name, "config": {"name": name}} for name in modules]
                 return {"goldstone-transponder:modules": {"module": modules}}
