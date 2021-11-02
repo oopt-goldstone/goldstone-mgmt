@@ -91,4 +91,3 @@ module goldstone-uplink-failure-detection {
   uses ufd-top;
 
 }
-       

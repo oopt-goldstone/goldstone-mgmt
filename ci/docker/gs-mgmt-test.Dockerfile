@@ -58,4 +58,7 @@ RUN --mount=type=bind,source=src/south/sonic,target=/src,rw pip install -r /src/
 
 RUN pip install grpcio-tools
 
+RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
+            pip install /usr/share/wheels/tai/*.whl
+
 # vim:filetype=dockerfile
