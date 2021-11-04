@@ -517,7 +517,7 @@ class InterfaceServer(ServerBase):
 
     def get_ufd(self):
         xpath = "/goldstone-uplink-failure-detection:ufd-groups/ufd-group"
-        return self.get_operational_data(xpath, [])
+        return self.get_running_data(xpath, [])
 
     def is_ufd_port(self, ifname, ufd_list=None):
         if ufd_list == None:
@@ -556,11 +556,7 @@ class InterfaceServer(ServerBase):
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
         if self.sonic.is_rebooting:
-            # FIXME sysrepo bug. oper cb can't raise exception
-            # see https://github.com/sysrepo/sysrepo/issues/2524
-            # or https://github.com/sysrepo/sysrepo/issues/2448
-            # raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
-            return {}
+            raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
 
         counter_only = "counters" in req_xpath
 

@@ -136,38 +136,23 @@ class Port(object):
             raise InvalidInput("no interface found")
         return natsorted(v["name"] for v in data["interfaces"]["interface"])
 
-    def get_interface_list(self, datastore, include_implicit_values=True):
+    def get_interface_list(self, datastore):
         try:
+            imp = datastore == "operational"
             tree = self.sr_op.get_data(
-                self.XPATH, datastore, include_implicit_values=include_implicit_values
+                self.XPATH, datastore, include_implicit_values=imp
             )
+        except sr.SysrepoError as e:
             if datastore == "operational":
-                interfaces = []
-                for i in tree["interfaces"]["interface"]:
-                    # FIXME since south daemons use the oper_merge flag for
-                    # operational data subscription, 'tree' can include configuration
-                    # in the running datastore, even if the operational datastore is
-                    # empty. Only include the interfaces with "oper-status" leaf.
-                    #
-                    # The root cause of this issue is the bug in sysrepo that
-                    # doesn't allow to raise any Exception in the oper cb.
-                    if i.get("state", {}).get("oper-status"):
-                        interfaces.append(i)
+                raise InvalidInput(e.details[0][1] if e.details else str(e))
             else:
-                interfaces = tree["interfaces"]["interface"]
-            return natsorted(interfaces, key=lambda x: x["name"])
-        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
-            return []
+                return []
+        interfaces = tree["interfaces"]["interface"]
+        return natsorted(interfaces, key=lambda x: x["name"])
 
     def show_interface(self, details="description"):
         rows = []
         interfaces = self.get_interface_list("operational")
-        if len(interfaces) == 0:
-            # FIXME workaround for sysrepo bug
-            # Because oper cb can't raise any Exception,
-            # treat len(interfaces) == 0 as an error
-            raise InvalidInput("no interface found")
-
         for intf in interfaces:
             state = intf.get("state", {})
             row = [
@@ -225,7 +210,7 @@ class Port(object):
             stdout.info(tabulate(rows_, headers))
 
     def run_conf(self):
-        interface_list = self.get_interface_list("running", False)
+        interface_list = self.get_interface_list("running")
         if not interface_list:
             return
 
