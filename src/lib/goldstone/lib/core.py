@@ -188,3 +188,9 @@ class ServerBase(object):
     def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
         return
+
+    def send_notification(self, name, notification):
+        ly_ctx = self.sess.get_ly_ctx()
+        n = json.dumps({name: notification})
+        dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
+        return self.sess.notification_send_ly(dnode)
