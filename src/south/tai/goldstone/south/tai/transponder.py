@@ -422,18 +422,19 @@ class TransponderServer(ServerBase):
     def name2location(self, name, modules=None):
         if modules == None:
             modules = self.taish.list()
-        logger.debug(f"modules: {modules}, name: {name}")
         v = f"/dev/{name}"
         if v in modules:
             return v  # piu1 => /dev/piu1
         return name.replace("piu", "")  # piu1 => 1
 
     async def notif_handler(self, tasks, finalizers):
+        tasks = [asyncio.create_task(t) for t in tasks]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         logger.debug(f"done: {done}, pending: {pending}")
         for task in pending:
             task.cancel()
         logger.debug("waiting for finalizer tasks")
+        finalizers = [asyncio.create_task(f) for f in finalizers]
         done, pending = await asyncio.wait(
             finalizers, return_when=asyncio.ALL_COMPLETED, timeout=5
         )
