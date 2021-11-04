@@ -830,7 +830,7 @@ class Portchannel(object):
 
     def get_list(self, ds, include_implicit_values=True):
         try:
-            tree = self.sr_op.get_data(self.XPATH, ds, False, include_implicit_values)
+            tree = self.sr_op.get_data(self.XPATH, ds, include_implicit_values)
             return natsorted(
                 tree["portchannel"]["portchannel-group"],
                 key=lambda x: x["portchannel-id"],
