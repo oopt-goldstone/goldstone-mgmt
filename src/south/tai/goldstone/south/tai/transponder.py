@@ -467,8 +467,10 @@ class TransponderServer(ServerBase):
         config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
         logger.debug(f"sysrepo running configuration: {config}")
 
-        tasks = [self.initialize_piu(config, m) for m in modules]
-        await asyncio.gather(*tasks)
+        # TODO initializing one by one due to a taish_server bug
+        # revert this change once the bug is fixed in taish_server.
+        for m in modules:
+            await self.initialize_piu(config, m)
 
         self.sess.subscribe_notification_tree(
             "goldstone-platform",
