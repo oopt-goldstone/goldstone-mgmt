@@ -50,27 +50,16 @@ class sysrepo_wrap(object):
     def __init__(self, session):
         self.session = session
 
-    def get_data(
-        self, xpath, ds="running", no_subs=False, include_implicit_values=True
-    ):
+    def get_data(self, xpath, ds="running", include_implicit_values=True):
         self.session.switch_datastore(ds)
         data = self.session.get_data(
             xpath,
             0,
             TIMEOUT_MS,
-            no_subs=no_subs,
             include_implicit_defaults=include_implicit_values,
         )
         self.session.switch_datastore("running")
         return data
-
-    def get_data_ly(self, xpath, ds="running", no_subs=False):
-        self.session.switch_datastore(ds)
-        data_ly = self.session.get_data_ly(
-            "{}".format(xpath), 0, TIMEOUT_MS, no_subs=no_subs
-        )
-        self.session.switch_datastore("running")
-        return data_ly
 
     @wrap_sysrepo_error
     def set_data(self, xpath, value, ds="running", no_apply=False):
