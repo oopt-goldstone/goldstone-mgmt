@@ -142,14 +142,12 @@ class PlatformServer(ServerBase):
                 else:
                     cfp2_presence = "UNPLUGGED"
                 notif = {
-                    eventname: {
-                        "name": name,
-                        "status": ["PRESENT"],
-                        "piu-type": piu_type,
-                        "cfp2-presence": cfp2_presence,
-                    }
+                    "name": name,
+                    "status": ["PRESENT"],
+                    "piu-type": piu_type,
+                    "cfp2-presence": cfp2_presence,
                 }
-            self.send_notifcation(notif)
+            self.send_notifcation(eventname, notif)
 
             if piu_sts_change != 0:
                 self.sess.delete_item(f"{xpath}/piu/state/status")
@@ -236,21 +234,11 @@ class PlatformServer(ServerBase):
                 presence = "UNPLUGGED"
 
             self.sess.set_item(f"{xpath}/transceiver/state/presence", presence)
-            notif = {eventname: {"name": name, "presence": presence}}
-            self.send_notifcation(notif)
+            notif = {"name": name, "presence": presence}
+            self.send_notifcation(eventname, notif)
 
         if update:
             self.sess.apply_changes()
-
-    def send_notifcation(self, notif):
-        ly_ctx = self.sess.get_ly_ctx()
-        if len(notif) == 0:
-            logger.warning(f"nothing to notify")
-        else:
-            n = json.dumps(notif)
-            logger.info(f"Notification: {n}")
-            dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-            self.sess.notification_send_ly(dnode)
 
     async def monitor_devices(self):
         while True:
