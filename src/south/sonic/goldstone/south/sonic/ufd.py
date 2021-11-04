@@ -100,3 +100,5 @@ class UFDServer(ServerBase):
 
     def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
+        if self.sonic.is_rebooting:
+            raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
