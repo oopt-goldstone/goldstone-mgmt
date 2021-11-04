@@ -34,7 +34,7 @@ def main():
                     raise e
         finally:
             await runner.cleanup()
-            await server.stop()
+            server.stop()
             conn.disconnect()
 
     parser = argparse.ArgumentParser()
