@@ -1,14 +1,10 @@
 import sysrepo
+import libyang
 import logging
 import asyncio
-import argparse
-import signal
 import ctypes
 import onlp.onlp
-import json
-import re
-from pathlib import Path
-from aiohttp import web
+from goldstone.lib.core import ServerBase
 
 libonlp = onlp.onlp.libonlp
 
@@ -83,15 +79,17 @@ class PlatformServer(ServerBase):
     def parse_oper_req(self, xpath):
         if xpath == "/goldstone-platform:*":
             return None
-        prefix = "/goldstone-platform:components"
-        if not xpath.startswith(prefix):
-            raise InvalidXPath()
-        xpath = xpath[len(prefix) :]
-        if xpath == "" or xpath == "/component":
+
+        xpath = list(libyang.xpath_split(xpath))
+        if (
+            len(xpath) < 2
+            or xpath[0][0] != "goldstone-platform"
+            or xpath[0][1] != "components"
+            or xpath[1][1] != "component"
+        ):
             return None
-        c = re.search(r"/component\[state/type\=\'(?P<item>.+?)\'\]", xpath)
-        item = c.group("item")
-        return item
+        if len(xpath[1][2]) > 0 and xpath[1][2][0][0] == "state/type":
+            return xpath[1][2][0][1]
 
     # monitor_piu() monitor PIU status periodically and change the operational data store
     # accordingly.
@@ -147,98 +145,23 @@ class PlatformServer(ServerBase):
                     "piu-type": piu_type,
                     "cfp2-presence": cfp2_presence,
                 }
-            self.send_notifcation(eventname, notif)
-
-            if piu_sts_change != 0:
-                self.sess.delete_item(f"{xpath}/piu/state/status")
-                if piu_presence == "PRESENT":
-                    self.sess.set_item(f"{xpath}/piu/state/piu-type", piu_type)
-                    if piu_type in ["ACO", "DCO"]:
-                        self.sess.set_item(
-                            f"{xpath}/piu/state/cfp2-presence", cfp2_presence
-                        )
-                else:
-                    self.sess.delete_item(f"{xpath}/piu/state/piu-type")
-                    self.sess.delete_item(f"{xpath}/piu/state/cfp2-presence")
-
-                self.sess.set_item(f"{xpath}/piu/state/status", piu_presence)
-
-            if cfp_sts_change != 0 and sts.value != STATUS_UNPLUGGED:
-                self.sess.set_item(f"{xpath}/piu/state/cfp2-presence", cfp2_presence)
-
-        self.sess.apply_changes()
+            self.send_notification(eventname, notif)
 
     # monitor_transceiver() monitor transceiver presence periodically and
     # change the operational data store accordingly.
     def monitor_transceiver(self):
-        self.sess.switch_datastore("operational")
         eventname = "goldstone-platform:transceiver-notify-event"
-
-        update = False
-
         for i in range(len(self.transceiver_presence)):
             port = i + 1
             name = f"port{port}"
-            xpath = f"/goldstone-platform:components/component[name='{name}']"
-
             presence = libonlp.onlp_sfp_is_present(port)
-
             if not (presence ^ self.transceiver_presence[i]):
-                continue
-
-            update = True
-
-            self.transceiver_presence[i] = presence
-
-            self.sess.set_item(f"{xpath}/config/name", name)
-            self.sess.set_item(f"{xpath}/state/type", "TRANSCEIVER")
-
-            if presence:
-                presence = "PRESENT"
-                eeprom = get_eeprom(port)
-                logger.debug(f"port{port} eeprom: {eeprom}")
-                if "vendor" in eeprom:
-                    self.sess.set_item(
-                        f"{xpath}/transceiver/state/vendor", eeprom["vendor"]
-                    )
-                if "model" in eeprom:
-                    self.sess.set_item(
-                        f"{xpath}/transceiver/state/model", eeprom["model"]
-                    )
-                if "serial" in eeprom:
-                    self.sess.set_item(
-                        f"{xpath}/transceiver/state/serial", eeprom["serial"]
-                    )
-                if "sfp_type_name" in eeprom:
-                    try:
-                        self.sess.set_item(
-                            f"{xpath}/transceiver/state/form-factor",
-                            eeprom["sfp_type_name"],
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"failed to set sff-type: {eeprom['sfp_type_name']}, {e}"
-                        )
-
-                if "module_type_name" in eeprom:
-                    try:
-                        self.sess.set_item(
-                            f"{xpath}/transceiver/state/sff-module-type",
-                            module_type2yang_value(eeprom["module_type_name"]),
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"failed to set module-type: {eeprom['module_type_name']}, {e}"
-                        )
-            else:
-                presence = "UNPLUGGED"
-
-            self.sess.set_item(f"{xpath}/transceiver/state/presence", presence)
-            notif = {"name": name, "presence": presence}
-            self.send_notifcation(eventname, notif)
-
-        if update:
-            self.sess.apply_changes()
+                self.transceiver_presence[i] = presence
+                notif = {
+                    "name": name,
+                    "presence": "PRESENT" if presence else "UNPLUGGED",
+                }
+                self.send_notification(eventname, notif)
 
     async def monitor_devices(self):
         while True:
@@ -263,25 +186,11 @@ class PlatformServer(ServerBase):
         return onlp.onlp.onlp_oid_iterate_f(_v)
 
     def initialise_component_piu(self):
-        self.sess.switch_datastore("operational")
-
         # Component : PIU
-        for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
-            piuId = oid & 0xFFFFFF
-            name = f"piu{piuId}"
-
-            xpath = f"/goldstone-platform:components/component[name='{name}']"
-            self.sess.set_item(f"{xpath}/config/name", "piu" + str(piuId))
-            self.sess.set_item(f"{xpath}/state/type", "PIU")
-            self.sess.set_item(f"{xpath}/piu/state/status", "UNPLUGGED")
-
-            self.onlp_piu_status.append(0)
-
-        self.sess.apply_changes()
+        v = len(self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE])
+        self.onlp_piu_status = [0 for _ in range(v)]
 
     def initialise_component_transceiver(self):
-        self.sess.switch_datastore("operational")
-
         # Component : SFP
         libonlp.onlp_sfp_init()
 
@@ -292,18 +201,8 @@ class PlatformServer(ServerBase):
         total_ports = 0
         for port in range(1, 256):
             if onlp.onlp.aim_bitmap_get(bitmap.hdr, port):
-                name = f"port{port}"
-                xpath = f"/goldstone-platform:components/component[name='{name}']"
-
-                self.sess.set_item(f"{xpath}/config/name", name)
-                self.sess.set_item(f"{xpath}/state/type", "TRANSCEIVER")
-                self.sess.set_item(f"{xpath}/transceiver/state/presence", "UNPLUGGED")
-
-                self.transceiver_presence.append(0)
                 total_ports += 1
-
-        self.sess.apply_changes()
-        logger.debug(f"Total ports supported: {total_ports}")
+        self.transceiver_presence = [0 for _ in range(total_ports)]
 
     def initialise_component_devices(self):
         # Read all the OID's , which would be used as handles to invoke ONLP API's
@@ -628,16 +527,91 @@ class PlatformServer(ServerBase):
         }
         self.components["goldstone-platform:components"]["component"].append(r)
 
+    def get_piu_info(self):
+        for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
+            piuId = oid & 0xFFFFFF
+            name = f"piu{piuId}"
+            r = {
+                "name": name,
+                "config": {"name": name},
+                "state": {"type": "PIU"},
+                "piu": {"state": {}},
+            }
+
+            sts = ctypes.c_uint()
+            libonlp.onlp_module_status_get(oid, ctypes.byref(sts))
+
+            piu_type = "UNKNOWN"
+            cfp2_presence = "UNPLUGGED"
+
+            if sts.value == STATUS_UNPLUGGED:
+                piu_presence = "UNPLUGGED"
+            else:
+                piu_presence = "PRESENT"
+                if sts.value & STATUS_ACO_PRESENT:
+                    piu_type = "ACO"
+                elif sts.value & STATUS_DCO_PRESENT:
+                    piu_type = "DCO"
+                elif sts.value & STATUS_QSFP28_PRESENT:
+                    piu_type = "QSFP28"
+
+                if sts.value & CFP2_STATUS_PRESENT:
+                    cfp2_presence = "PRESENT"
+                else:
+                    cfp2_presence = "UNPLUGGED"
+
+            r["piu"]["state"]["status"] = [piu_presence]
+            r["piu"]["state"]["piu-type"] = piu_type
+            r["piu"]["state"]["cfp2-presence"] = cfp2_presence
+            self.components["goldstone-platform:components"]["component"].append(r)
+
+    def get_transceiver_info(self):
+        for i in range(len(self.transceiver_presence)):
+            port = i + 1
+            name = f"port{port}"
+            r = {
+                "name": name,
+                "config": {"name": name},
+                "state": {"type": "TRANSCEIVER"},
+                "transceiver": {"state": {}},
+            }
+
+            presence = libonlp.onlp_sfp_is_present(port)
+
+            if presence:
+                presence = "PRESENT"
+                eeprom = get_eeprom(port)
+                logger.debug(f"port{port} eeprom: {eeprom}")
+                if "vendor" in eeprom:
+                    r["transceiver"]["state"]["vendor"] = eeprom["vendor"]
+                if "model" in eeprom:
+                    r["transceiver"]["state"]["model"] = eeprom["model"]
+                if "serial" in eeprom:
+                    r["transceiver"]["state"]["serial"] = eeprom["serial"]
+                if "sfp_type_name" in eeprom:
+                    r["transceiver"]["state"]["form-factor"] = eeprom["sfp_type_name"]
+                if "module_type_name" in eeprom:
+                    t = module_type2yang_value(eeprom["module_type_name"])
+                    r["transceiver"]["state"]["sff-module-type"] = t
+            else:
+                presence = "UNPLUGGED"
+
+            r["transceiver"]["state"]["presence"] = presence
+            self.components["goldstone-platform:components"]["component"].append(r)
+
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         self.components = {"goldstone-platform:components": {"component": []}}
         logger.debug(f"oper_cb: {xpath}, {req_xpath}")
         item = self.parse_oper_req(req_xpath)
+        logger.debug(f"parse_oper_req: item: {item}")
         if item == None:
             self.get_thermal_info()
             self.get_fan_info()
             self.get_psu_info()
             self.get_led_info()
             self.get_sys_info()
+            self.get_piu_info()
+            self.get_transceiver_info()
         elif item == "THERMAL":
             self.get_thermal_info()
         elif item == "FAN":
@@ -648,6 +622,9 @@ class PlatformServer(ServerBase):
             self.get_led_info()
         elif item == "SYS":
             self.get_sys_info()
-        elif item == "PIU" or "TRANSCEIVER":
-            pass
+        elif item == "PIU":
+            self.get_piu_info()
+        elif item == "TRANSCEIVER":
+            self.get_transceiver_info()
+        logger.info(f"components: {self.components}")
         return self.components

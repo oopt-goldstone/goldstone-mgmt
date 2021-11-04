@@ -3,6 +3,7 @@ import libyang
 import logging
 from aiohttp import web
 import inspect
+import json
 
 logger = logging.getLogger(__name__)
 

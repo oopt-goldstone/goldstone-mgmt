@@ -450,19 +450,14 @@ class TransponderServer(ServerBase):
     async def start(self):
         # get hardware configuration from platform datastore ( ONLP south must be running )
         self.sess.switch_datastore("operational")
-        try:
-            d = self.sess.get_data(
-                "/goldstone-platform:components/component", no_subs=True
-            )
-        except sysrepo.SysrepoNotFoundError:
-            d = {}
+        xpath = "/goldstone-platform:components/component[state/type='PIU']"
+        components = self.get_operational_data(xpath, [])
 
         ms = self.taish.list()
         modules = [
             self.name2location(c["name"], ms)
-            for c in d.get("components", {}).get("component", [])
-            if c["state"]["type"] == "PIU"
-            and c["piu"]["state"]["status"] == ["PRESENT"]
+            for c in components
+            if c["piu"]["state"]["status"] == ["PRESENT"]
         ]
 
         self.sess.switch_datastore("running")
