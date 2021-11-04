@@ -149,8 +149,10 @@ unittest:
 	sysrepoctl -i yang/goldstone-transponder.yang
 	sysrepoctl -i yang/goldstone-component-connection.yang
 	sysrepoctl -i yang/goldstone-uplink-failure-detection.yang
-	cd src/south/sonic && make proto && python -m unittest -v -f
+	cd src/south/sonic && make proto
 	PYTHONPATH=src/south/sonic:src/south/tai python -m unittest -v -f
 #	# unittest package can't search namespace packages
 	cd src/north/cli && python -m unittest -v -f
+	cd src/south/sonic && python -m unittest -v -f
+	cd src/south/tai && python -m unittest -v -f
 	cd src/south/sonic && make clean
