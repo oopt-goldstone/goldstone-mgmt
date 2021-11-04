@@ -161,6 +161,7 @@ class TransponderServer(ServerBase):
         self.taish = taish.Client(*taish_server.split(":"))
         self.notif_q = asyncio.Queue()
         self.event_obj = {}
+        self.is_initializing = True
         self.handlers = {
             "modules": {
                 "module": {
@@ -442,6 +443,10 @@ class TransponderServer(ServerBase):
         else:
             logger.debug("finalizer done")
 
+    def pre(self, user):
+        if self.is_initializing:
+            raise sysrepo.SysrepoLockedError("initializing")
+
     async def start(self):
         # get hardware configuration from platform datastore ( ONLP south must be running )
         self.sess.switch_datastore("operational")
@@ -459,16 +464,14 @@ class TransponderServer(ServerBase):
             if c["state"]["type"] == "PIU"
             and c["piu"]["state"]["status"] == ["PRESENT"]
         ]
+
         self.sess.switch_datastore("running")
+        config = self.sess.get_data("/goldstone-transponder:*")
+        config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
+        logger.debug(f"sysrepo running configuration: {config}")
 
-        with self.sess.lock("goldstone-transponder"):
-
-            config = self.sess.get_data("/goldstone-transponder:*")
-            config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
-            logger.debug(f"sysrepo running configuration: {config}")
-
-            tasks = [self.initialize_piu(config, m) for m in modules]
-            await asyncio.gather(*tasks)
+        tasks = [self.initialize_piu(config, m) for m in modules]
+        await asyncio.gather(*tasks)
 
         self.sess.subscribe_notification_tree(
             "goldstone-platform",
@@ -548,6 +551,7 @@ class TransponderServer(ServerBase):
                 self.notif_q.task_done()
 
         tasks = await super().start()
+        self.is_initializing = False
 
         return tasks + [ping(), notif_loop()]
 
