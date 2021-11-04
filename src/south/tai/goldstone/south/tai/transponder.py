@@ -283,10 +283,9 @@ class TransponderServer(ServerBase):
 
         logger.info(f"initializing module({name})")
 
-        mconfig = config.get(name, {})
         attrs = [
             (k, v)
-            for k, v in mconfig.get("config", {}).items()
+            for k, v in config.get("config", {}).items()
             if k not in IGNORE_LEAVES
         ]
         for a in attrs:
@@ -311,7 +310,7 @@ class TransponderServer(ServerBase):
                 await module.set(k, v)
 
         nconfig = {
-            n["name"]: n.get("config", {}) for n in mconfig.get("network-interface", [])
+            n["name"]: n.get("config", {}) for n in config.get("network-interface", [])
         }
         for index in range(int(await module.get("num-network-interfaces"))):
             attrs = [
@@ -351,7 +350,7 @@ class TransponderServer(ServerBase):
                     )
 
         hconfig = {
-            n["name"]: n.get("config", {}) for n in mconfig.get("host-interface", [])
+            n["name"]: n.get("config", {}) for n in config.get("host-interface", [])
         }
         for index in range(int(await module.get("num-host-interfaces"))):
             attrs = [
@@ -398,7 +397,8 @@ class TransponderServer(ServerBase):
         assert "piu-notify-event" in data
 
         data = data["piu-notify-event"]
-        location = self.name2location(data["name"])
+        name = data["name"]
+        location = self.name2location(name)
         status = [v for v in data.get("status", [])]
         piu_present = "PRESENT" in status
         cfp_status = data.get("cfp2-presence", "UNPLUGGED")
@@ -406,7 +406,7 @@ class TransponderServer(ServerBase):
         if piu_present and cfp_status == "PRESENT":
             self.sess.switch_datastore("running")
             config = self.get_running_data(
-                f"/goldstone-transponder:modules/module[name='{location}']"
+                f"/goldstone-transponder:modules/module[name='{name}']", {}
             )
             logger.debug(f"running configuration for {location}: {config}")
             try:
@@ -422,6 +422,7 @@ class TransponderServer(ServerBase):
     def name2location(self, name, modules=None):
         if modules == None:
             modules = self.taish.list()
+        logger.debug(f"modules: {modules}, name: {name}")
         v = f"/dev/{name}"
         if v in modules:
             return v  # piu1 => /dev/piu1
