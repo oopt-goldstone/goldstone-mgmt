@@ -58,7 +58,7 @@ class VLANServer(ServerBase):
     def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
         if self.sonic.is_rebooting:
-            return {}
+            raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
 
         vlans = [
             {"vlan-id": vid, "config": {"vlan-id": vid}, "state": {"vlan-id": vid}}
