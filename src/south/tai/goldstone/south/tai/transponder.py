@@ -534,15 +534,7 @@ class TransponderServer(ServerBase):
                 return
 
             v["keys"] = keys
-
-            notif = {eventname: v}
-
-            # FIXME adding '/' at the prefix or giving wrong module causes Segmentation fault
-            # needs a fix in sysrepo
-            n = json.dumps(notif)
-            logger.debug(f"notification: {n}")
-            dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-            self.sess.notification_send_ly(dnode)
+            self.send_notification(eventname, v)
 
         async def notif_loop():
             while True:

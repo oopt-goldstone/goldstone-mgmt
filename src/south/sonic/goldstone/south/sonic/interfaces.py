@@ -440,17 +440,10 @@ class InterfaceServer(ServerBase):
 
             eventname = "goldstone-interfaces:interface-link-state-notify-event"
             notif = {
-                eventname: {
-                    "if-name": ifname,
-                    "oper-status": self.get_oper_status(ifname),
-                }
+                "if-name": ifname,
+                "oper-status": self.get_oper_status(ifname),
             }
-
-            ly_ctx = self.sess.get_ly_ctx()
-            n = json.dumps(notif)
-            logger.info(f"notification: {n}")
-            dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-            self.sess.notification_send_ly(dnode)
+            self.send_notification(eventname, notif)
             self.sonic.notif_if[ifname] = oper_status
 
     def clear_counters(self, xpath, input_params, event, priv):
