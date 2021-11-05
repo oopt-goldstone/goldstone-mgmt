@@ -525,20 +525,31 @@ class GlobalShowCommand(Command):
 
         stdout.info("\nshow vlan details:\n")
         vlan = Vlan(self.context.conn)
-        vlan.show_vlans()
+        try:
+            vlan.show_vlans()
+        except InvalidInput as e:
+            stderr.info(e)
+
         stdout.info("\nshow interface description:\n")
         port = Port(self.context.conn)
         try:
             port.show_interface()
         except InvalidInput as e:
-            stdout.info(e)
+            stderr.info(e)
+
         stdout.info("\nshow ufd:\n")
         ufd = UFD(self.context.conn)
-        ufd.show()
+        try:
+            ufd.show()
+        except InvalidInput as e:
+            stderr.info(e)
 
         stdout.info("\nshow portchannel:\n")
         portchannel = Portchannel(self.context.conn)
-        portchannel.show()
+        try:
+            portchannel.show()
+        except InvalidInput as e:
+            stderr.info(e)
 
         transponder = Transponder(self.context.conn)
         transponder.tech_support()
