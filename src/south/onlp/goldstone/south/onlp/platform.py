@@ -93,7 +93,7 @@ class PlatformServer(ServerBase):
 
     # monitor_piu() monitor PIU status periodically and change the operational data store
     # accordingly.
-    def monitor_piu(self):
+    async def monitor_piu(self):
         self.sess.switch_datastore("operational")
 
         eventname = "goldstone-platform:piu-notify-event"
@@ -146,11 +146,11 @@ class PlatformServer(ServerBase):
                     "cfp2-presence": cfp2_presence,
                 }
             self.send_notification(eventname, notif)
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
 
     # monitor_transceiver() monitor transceiver presence periodically and
     # change the operational data store accordingly.
-    def monitor_transceiver(self):
+    async def monitor_transceiver(self):
         eventname = "goldstone-platform:transceiver-notify-event"
         for i in range(len(self.transceiver_presence)):
             port = i + 1
@@ -165,14 +165,14 @@ class PlatformServer(ServerBase):
                 "presence": "PRESENT" if presence else "UNPLUGGED",
             }
             self.send_notification(eventname, notif)
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
 
     async def monitor_devices(self):
         while True:
             # Monitor change in PIU status
-            self.monitor_piu()
+            await self.monitor_piu()
             # Monitor change in QSFP28 presence
-            self.monitor_transceiver()
+            await self.monitor_transceiver()
 
             await asyncio.sleep(1)
 
@@ -221,7 +221,7 @@ class PlatformServer(ServerBase):
 
         # Extend here for other devices[FAN,PSU,LED etc]
 
-    def get_thermal_info(self):
+    async def get_thermal_info(self):
         thermal = onlp.onlp.onlp_thermal_info()
         threshold = onlp.onlp.onlp_thermal_info_thresholds()
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.THERMAL]:
@@ -285,9 +285,9 @@ class PlatformServer(ServerBase):
                 },
             }
             self.components["goldstone-platform:components"]["component"].append(r)
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
 
-    def get_fan_info(self):
+    async def get_fan_info(self):
         fan = onlp.onlp.onlp_fan_info()
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.FAN]:
             libonlp.onlp_fan_info_get(oid, ctypes.byref(fan))
@@ -351,9 +351,9 @@ class PlatformServer(ServerBase):
             }
 
             self.components["goldstone-platform:components"]["component"].append(r)
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
 
-    def get_psu_info(self):
+    async def get_psu_info(self):
         psu = onlp.onlp.onlp_psu_info()
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.PSU]:
             libonlp.onlp_psu_info_get(oid, ctypes.byref(psu))
@@ -434,9 +434,9 @@ class PlatformServer(ServerBase):
                     "psu": {"state": {"psu-state": state}},
                 }
             self.components["goldstone-platform:components"]["component"].append(r)
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
 
-    def get_led_info(self):
+    async def get_led_info(self):
         led = onlp.onlp.onlp_led_info()
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.LED]:
             libonlp.onlp_led_info_get(oid, ctypes.byref(led))
@@ -501,7 +501,7 @@ class PlatformServer(ServerBase):
             }
 
             self.components["goldstone-platform:components"]["component"].append(r)
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
 
     def get_onie_fields_from_schema(self):
         xpath = ["components", "component", "sys", "state", "onie-info"]
@@ -510,7 +510,7 @@ class PlatformServer(ServerBase):
         o = list(ctx.find_path(xpath)).pop()
         return [child.name() for child in o.children()]
 
-    def get_sys_info(self):
+    async def get_sys_info(self):
         sys = onlp.onlp.onlp_sys_info()
         libonlp.onlp_sys_info_get(ctypes.byref(sys))
         onie = {}
@@ -535,7 +535,7 @@ class PlatformServer(ServerBase):
         }
         self.components["goldstone-platform:components"]["component"].append(r)
 
-    def get_piu_info(self):
+    async def get_piu_info(self):
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
             piuId = oid & 0xFFFFFF
             name = f"piu{piuId}"
@@ -572,9 +572,9 @@ class PlatformServer(ServerBase):
             r["piu"]["state"]["piu-type"] = piu_type
             r["piu"]["state"]["cfp2-presence"] = cfp2_presence
             self.components["goldstone-platform:components"]["component"].append(r)
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
 
-    def get_transceiver_info(self):
+    async def get_transceiver_info(self):
         for i in range(len(self.transceiver_presence)):
             port = i + 1
             name = f"port{port}"
@@ -607,7 +607,7 @@ class PlatformServer(ServerBase):
 
             r["transceiver"]["state"]["presence"] = presence
             self.components["goldstone-platform:components"]["component"].append(r)
-            asyncio.sleep(0)
+            await asyncio.sleep(0)
 
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         self.components = {"goldstone-platform:components": {"component": []}}
@@ -615,32 +615,32 @@ class PlatformServer(ServerBase):
         item = self.parse_oper_req(req_xpath)
         logger.debug(f"parse_oper_req: item: {item}")
         if item == None:
-            self.get_thermal_info()
-            asyncio.sleep(0)
-            self.get_fan_info()
-            asyncio.sleep(0)
-            self.get_psu_info()
-            asyncio.sleep(0)
-            self.get_led_info()
-            asyncio.sleep(0)
-            self.get_sys_info()
-            asyncio.sleep(0)
-            self.get_piu_info()
-            asyncio.sleep(0)
-            self.get_transceiver_info()
+            await self.get_thermal_info()
+            await asyncio.sleep(0)
+            await self.get_fan_info()
+            await asyncio.sleep(0)
+            await self.get_psu_info()
+            await asyncio.sleep(0)
+            await self.get_led_info()
+            await asyncio.sleep(0)
+            await self.get_sys_info()
+            await asyncio.sleep(0)
+            await self.get_piu_info()
+            await asyncio.sleep(0)
+            await self.get_transceiver_info()
         elif item == "THERMAL":
-            self.get_thermal_info()
+            await self.get_thermal_info()
         elif item == "FAN":
-            self.get_fan_info()
+            await self.get_fan_info()
         elif item == "PSU":
-            self.get_psu_info()
+            await self.get_psu_info()
         elif item == "LED":
-            self.get_led_info()
+            await self.get_led_info()
         elif item == "SYS":
-            self.get_sys_info()
+            await self.get_sys_info()
         elif item == "PIU":
-            self.get_piu_info()
+            await self.get_piu_info()
         elif item == "TRANSCEIVER":
-            self.get_transceiver_info()
+            await self.get_transceiver_info()
         logger.info(f"components: {self.components}")
         return self.components
