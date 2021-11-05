@@ -100,7 +100,7 @@ class PortChannelServer(ServerBase):
 
     def get_portchannels(self):
         xpath = "/goldstone-portchannel:portchannel/portchannel-group"
-        return self.get_operational_data(xpath, [])
+        return self.get_running_data(xpath, [])
 
     def is_portchannel_intf(self, intf):
         portchannel_list = self.get_portchannels()

@@ -425,7 +425,10 @@ class TransponderServer(ServerBase):
         v = f"/dev/{name}"
         if v in modules:
             return v  # piu1 => /dev/piu1
-        return name.replace("piu", "")  # piu1 => 1
+        v = name.replace("piu", "")
+        if v in modules:
+            return v  # piu1 => 1
+        return None
 
     async def notif_handler(self, tasks, finalizers):
         tasks = [asyncio.create_task(t) for t in tasks]
@@ -451,16 +454,23 @@ class TransponderServer(ServerBase):
 
     async def start(self):
         # get hardware configuration from platform datastore ( ONLP south must be running )
-        self.sess.switch_datastore("operational")
         xpath = "/goldstone-platform:components/component[state/type='PIU']"
         components = self.get_operational_data(xpath, [])
 
         ms = self.taish.list()
-        modules = [
-            self.name2location(c["name"], ms)
-            for c in components
-            if c["piu"]["state"]["status"] == ["PRESENT"]
-        ]
+        try:
+            modules = list(
+                filter(
+                    None,
+                    (
+                        self.name2location(c["name"], ms)
+                        for c in components
+                        if c["piu"]["state"]["status"] == ["PRESENT"]
+                    ),
+                )
+            )
+        except KeyError:
+            modules = []
 
         self.sess.switch_datastore("running")
         config = self.sess.get_data("/goldstone-transponder:*")
