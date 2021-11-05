@@ -7,9 +7,35 @@ import logging
 import json
 import time
 import itertools
+from goldstone.lib.core import ServerBase
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
+
+logger = logging.getLogger(__name__)
+
+
+class MockPlatformServer(ServerBase):
+    def __init__(self, conn):
+        super().__init__(conn, "goldstone-platform")
+
+    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+        components = []
+        for i in range(4):
+            name = f"piu{i+1}"
+            components.append(
+                {
+                    "name": name,
+                    "config": {"name": name},
+                    "state": {"type": "PIU"},
+                    "piu": {"state": {"status": ["PRESENT"]}},
+                }
+            )
+
+        return {"goldstone-platform:components": {"component": components}}
+
+    async def start(self):
+        return await super().start()
 
 
 class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
@@ -22,7 +48,6 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
             sess.replace_config({}, "goldstone-transponder")
             sess.apply_changes()
 
-    async def test_tai_hotplug(self):
         ataish = mock.AsyncMock()
         ataish.list.return_value = {"/dev/piu1": None}
 
@@ -34,7 +59,7 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
 
         async def monitor(*args, **kwargs):
             while True:
-                print("monitoring..")
+                logger.debug("monitoring..")
                 await asyncio.sleep(1)
 
         async def get(*args, **kwargs):
@@ -63,74 +88,141 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
         cap.min = ""
         cap.max = ""
 
-        with (
+        self.patchers = [
             mock.patch("taish.AsyncClient", return_value=ataish),
             mock.patch("taish.Client", return_value=taish),
-        ):
-            self.server = TransponderServer(self.conn, "127.0.0.1:50051")
+        ]
 
-            servers = [self.server]
+        [p.start() for p in self.patchers]
 
-            tasks = list(
-                asyncio.create_task(c)
-                for c in itertools.chain.from_iterable(
-                    [await s.start() for s in servers]
-                )
-            )
+    async def test_tai_init(self):
 
-            def test():
+        self.alive = True
 
-                with self.conn.start_session() as sess:
-                    name = "piu1"
-                    sess.set_item(
-                        f"/goldstone-transponder:modules/module[name='{name}']/config/name",
-                        name,
+        def p_server():
+            conn = sysrepo.SysrepoConnection()
+            pserver = MockPlatformServer(conn)
+
+            async def f():
+                await pserver.start()
+                while self.alive:
+                    await asyncio.sleep(1)
+
+            asyncio.run(f())
+            conn.close()
+
+        asyncio.create_task(asyncio.to_thread(p_server))
+
+        for _ in range(10):
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("operational")
+                try:
+                    logger.debug(
+                        sess.get_data("/goldstone-platform:components/component")
                     )
-                    sess.set_item(
-                        f"/goldstone-transponder:modules/module[name='{name}']/config/admin-status",
-                        "up",
-                    )
-                    sess.apply_changes()
+                except sysrepo.SysrepoError as e:
+                    logger.error(e)
+                else:
+                    break
+                await asyncio.sleep(1)
 
+        self.server = TransponderServer(self.conn, "")
+        tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+        def test():
+            for _ in range(10):
                 with self.conn.start_session() as sess:
                     sess.switch_datastore("operational")
+                    v = sess.get_data("/goldstone-transponder:modules/module/name")
+                    logger.info(v)
+                    if list(v["modules"]["module"])[0]["name"] == "piu1":
+                        break
+            else:
+                self.assertTrue(False, f"piu1 didn't show up in oper ds")
 
-                    ly_ctx = sess.get_ly_ctx()
-                    name = "goldstone-platform:piu-notify-event"
-                    notification = {
-                        "name": "piu1",
-                        "status": ["PRESENT"],
-                        "cfp2-presence": "PRESENT",
-                    }
+        await asyncio.to_thread(test)
 
-                    n = json.dumps({name: notification})
-                    dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-                    sess.notification_send_ly(dnode)
+        async def test2():
+            # one PIU must be initialized in the server
+            self.assertEqual(len(self.server.event_obj), 1)
 
-                    time.sleep(2)
+        tasks.append(asyncio.create_task(test2()))
 
-                    print(sess.get_data("/goldstone-transponder:modules/module/name"))
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            e = task.exception()
+            if e:
+                raise e
 
-                    notification = {
-                        "name": "piu1",
-                    }
-                    n = json.dumps({name: notification})
-                    dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-                    sess.notification_send_ly(dnode)
+        await self.server.stop()
 
-                    time.sleep(2)
+        self.alive = False
 
-            tasks.append(asyncio.create_task(asyncio.to_thread(test)))
+    async def test_tai_hotplug(self):
+        self.server = TransponderServer(self.conn, "")
 
-            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in done:
-                e = task.exception()
-                if e:
-                    raise e
+        servers = [self.server]
 
-            await self.server.stop()
+        tasks = list(
+            asyncio.create_task(c)
+            for c in itertools.chain.from_iterable([await s.start() for s in servers])
+        )
+
+        def test():
+
+            with self.conn.start_session() as sess:
+                name = "piu1"
+                sess.set_item(
+                    f"/goldstone-transponder:modules/module[name='{name}']/config/name",
+                    name,
+                )
+                sess.set_item(
+                    f"/goldstone-transponder:modules/module[name='{name}']/config/admin-status",
+                    "up",
+                )
+                sess.apply_changes()
+
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("operational")
+
+                ly_ctx = sess.get_ly_ctx()
+                name = "goldstone-platform:piu-notify-event"
+                notification = {
+                    "name": "piu1",
+                    "status": ["PRESENT"],
+                    "cfp2-presence": "PRESENT",
+                }
+
+                n = json.dumps({name: notification})
+                dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
+                sess.notification_send_ly(dnode)
+
+                time.sleep(2)
+
+                logger.info(sess.get_data("/goldstone-transponder:modules/module/name"))
+
+                notification = {
+                    "name": "piu1",
+                }
+                n = json.dumps({name: notification})
+                dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
+                sess.notification_send_ly(dnode)
+
+                time.sleep(2)
+
+        tasks.append(asyncio.create_task(asyncio.to_thread(test)))
+
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            e = task.exception()
+            if e:
+                raise e
+
+        await self.server.stop()
 
     async def asyncTearDown(self):
+        self.alive = False
+        [p.stop() for p in self.patchers]
         self.conn.disconnect()
 
 
