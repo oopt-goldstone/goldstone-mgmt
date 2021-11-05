@@ -146,6 +146,7 @@ class PlatformServer(ServerBase):
                     "cfp2-presence": cfp2_presence,
                 }
             self.send_notification(eventname, notif)
+            asyncio.sleep(0)
 
     # monitor_transceiver() monitor transceiver presence periodically and
     # change the operational data store accordingly.
@@ -164,6 +165,7 @@ class PlatformServer(ServerBase):
                 "presence": "PRESENT" if presence else "UNPLUGGED",
             }
             self.send_notification(eventname, notif)
+            asyncio.sleep(0)
 
     async def monitor_devices(self):
         while True:
@@ -283,6 +285,7 @@ class PlatformServer(ServerBase):
                 },
             }
             self.components["goldstone-platform:components"]["component"].append(r)
+            asyncio.sleep(0)
 
     def get_fan_info(self):
         fan = onlp.onlp.onlp_fan_info()
@@ -348,6 +351,7 @@ class PlatformServer(ServerBase):
             }
 
             self.components["goldstone-platform:components"]["component"].append(r)
+            asyncio.sleep(0)
 
     def get_psu_info(self):
         psu = onlp.onlp.onlp_psu_info()
@@ -430,6 +434,7 @@ class PlatformServer(ServerBase):
                     "psu": {"state": {"psu-state": state}},
                 }
             self.components["goldstone-platform:components"]["component"].append(r)
+            asyncio.sleep(0)
 
     def get_led_info(self):
         led = onlp.onlp.onlp_led_info()
@@ -496,6 +501,7 @@ class PlatformServer(ServerBase):
             }
 
             self.components["goldstone-platform:components"]["component"].append(r)
+            asyncio.sleep(0)
 
     def get_onie_fields_from_schema(self):
         xpath = ["components", "component", "sys", "state", "onie-info"]
@@ -566,6 +572,7 @@ class PlatformServer(ServerBase):
             r["piu"]["state"]["piu-type"] = piu_type
             r["piu"]["state"]["cfp2-presence"] = cfp2_presence
             self.components["goldstone-platform:components"]["component"].append(r)
+            asyncio.sleep(0)
 
     def get_transceiver_info(self):
         for i in range(len(self.transceiver_presence)):
@@ -600,6 +607,7 @@ class PlatformServer(ServerBase):
 
             r["transceiver"]["state"]["presence"] = presence
             self.components["goldstone-platform:components"]["component"].append(r)
+            asyncio.sleep(0)
 
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         self.components = {"goldstone-platform:components": {"component": []}}
@@ -608,11 +616,17 @@ class PlatformServer(ServerBase):
         logger.debug(f"parse_oper_req: item: {item}")
         if item == None:
             self.get_thermal_info()
+            asyncio.sleep(0)
             self.get_fan_info()
+            asyncio.sleep(0)
             self.get_psu_info()
+            asyncio.sleep(0)
             self.get_led_info()
+            asyncio.sleep(0)
             self.get_sys_info()
+            asyncio.sleep(0)
             self.get_piu_info()
+            asyncio.sleep(0)
             self.get_transceiver_info()
         elif item == "THERMAL":
             self.get_thermal_info()
