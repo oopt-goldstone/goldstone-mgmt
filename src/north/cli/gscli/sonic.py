@@ -57,6 +57,8 @@ class Vlan(object):
         except sr.SysrepoNotFoundError:
             stderr.info("no vlan configured")
             return
+        except sr.SysrepoCallbackFailedError as e:
+            raise InvalidInput(e.details[0][1] if e.details else str(e))
 
         data = ly.xpath_get(data, self.XPATH)
         rows = []
@@ -691,8 +693,10 @@ class UFD(object):
         try:
             tree = self.sr_op.get_data(f"{self.XPATH}/ufd-group", "operational")
             id_list = tree["ufd-groups"]["ufd-group"]
-        except (sr.errors.SysrepoNotFoundError, KeyError):
+        except (sr.SysrepoNotFoundError, KeyError):
             id_list = []
+        except sr.SysrepoCallbackFailedError as e:
+            raise InvalidInput(e.details[0][1] if e.details else str(e))
 
         if len(id_list) == 0:
             stdout.info(
@@ -883,8 +887,10 @@ class Portchannel(object):
         try:
             tree = self.sr_op.get_data(self.XPATH, "operational")
             id_list = tree["portchannel"]["portchannel-group"]
-        except (sr.errors.SysrepoNotFoundError, KeyError):
+        except (sr.SysrepoNotFoundError, KeyError):
             id_list = []
+        except sr.SysrepoCallbackFailedError as e:
+            raise InvalidInput(e.details[0][1] if e.details else str(e))
 
         if len(id_list) == 0:
             stdout.info(
