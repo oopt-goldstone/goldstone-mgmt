@@ -93,7 +93,7 @@ class ServerBase(object):
             )
             return default
         if strip:
-            v = libyang.xpath_get(v, xpath, default)
+            v = libyang.xpath_get(v, xpath, default, filter=datastore == "operational")
         logger.debug(f"xpath: {xpath}, ds: {datastore}, value: {v}")
         return v
 
