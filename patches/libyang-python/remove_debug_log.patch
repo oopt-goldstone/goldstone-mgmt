@@ -1,0 +1,12 @@
+Index: goldstone-mgmt/sm/libyang-python/libyang/xpath.py
+===================================================================
+--- goldstone-mgmt.orig/sm/libyang-python/libyang/xpath.py
++++ goldstone-mgmt/sm/libyang-python/libyang/xpath.py
+@@ -173,7 +173,6 @@ def _xpath_find(
+     """
+     xparts = list(xparts)
+     for i, (_, name, keys) in enumerate(xparts):
+-        print(f"name: {name}, keys: {keys}, data: {data}, rec: {recursive_call}")
+         if isinstance(data, list):
+             if create_if_missing:
+                 raise TypeError("expected a dict")
