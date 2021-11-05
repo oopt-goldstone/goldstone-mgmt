@@ -294,16 +294,12 @@ class TransponderServer(ServerBase):
         else:
             attrs.append(("admin-status", DEFAULT_ADMIN_STATUS))
 
+        logger.info(f"module attrs: {attrs}")
         try:
-            logger.info(f"module attrs: {attrs}")
-            module = await self.ataish.create_module(location, attrs=attrs)
-        except taish.TAIException as e:
-            if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
-                if e.code == TAI_STATUS_FAILURE:
-                    logger.debug(f"Failed to intialize module {location}")
-                    return
-                raise e
             module = await self.ataish.get_module(location)
+        except:
+            module = await self.ataish.create_module(location, attrs=attrs)
+        else:
             # reconcile with the sysrepo configuration
             logger.debug(f"module({location}) already exists. updating attributes..")
             for k, v in attrs:
@@ -314,56 +310,39 @@ class TransponderServer(ServerBase):
         }
         for index in range(int(await module.get("num-network-interfaces"))):
             attrs = [
-                (k, v)
+                (k, v if type(v) != bool else "true" if v else "false")
                 for k, v in nconfig.get(str(index), {}).items()
                 if k not in IGNORE_LEAVES
             ]
-            try:
-                netif = await module.create_netif(index)
-                for k, v in attrs:
-                    try:
-                        meta = await netif.get_attribute_metadata(k)
-                        if meta.usage == "<bool>":
-                            v = "true" if v else "false"
-                    except taish.TAIException:
-                        continue
-                    await netif.set(k, v)
+            logger.debug(f"module({location})/netif({index}) attrs: {attrs}")
 
-            except taish.TAIException as e:
-                if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
-                    raise e
+            try:
                 netif = module.get_netif(index)
+            except:
+                netif = await module.create_netif(index, attrs=attrs)
+            else:
                 # reconcile with the sysrepo configuration
                 logger.debug(
                     f"module({location})/netif({index}) already exists. updating attributes.."
                 )
                 for k, v in attrs:
-                    try:
-                        meta = await netif.get_attribute_metadata(k)
-                        if meta.usage == "<bool>":
-                            v = "true" if v else "false"
-                    except taish.TAIException:
-                        continue
-                    ret = await netif.set(k, v)
-                    logger.debug(
-                        f"module({location})/netif({index}) {k}:{v}, ret: {ret}"
-                    )
+                    await netif.set(k, v)
 
         hconfig = {
             n["name"]: n.get("config", {}) for n in config.get("host-interface", [])
         }
         for index in range(int(await module.get("num-host-interfaces"))):
             attrs = [
-                (k, v)
+                (k, v if type(v) != bool else "true" if v else "false")
                 for k, v in hconfig.get(str(index), {}).items()
                 if k not in IGNORE_LEAVES
             ]
+            logger.debug(f"module({location})/hostif({index}) attrs: {attrs}")
             try:
-                hostif = await module.create_hostif(index, attrs=attrs)
-            except taish.TAIException as e:
-                if e.code != TAI_STATUS_ITEM_ALREADY_EXISTS:
-                    raise e
                 hostif = module.get_hostif(index)
+            except:
+                hostif = await module.create_hostif(index, attrs=attrs)
+            else:
                 # reconcile with the sysrepo configuration
                 logger.debug(
                     f"module({location})/hostif({index}) already exists. updating attributes.."
