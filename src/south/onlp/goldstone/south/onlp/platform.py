@@ -156,12 +156,14 @@ class PlatformServer(ServerBase):
             name = f"port{port}"
             presence = libonlp.onlp_sfp_is_present(port)
             if not (presence ^ self.transceiver_presence[i]):
-                self.transceiver_presence[i] = presence
-                notif = {
-                    "name": name,
-                    "presence": "PRESENT" if presence else "UNPLUGGED",
-                }
-                self.send_notification(eventname, notif)
+                continue
+
+            self.transceiver_presence[i] = presence
+            notif = {
+                "name": name,
+                "presence": "PRESENT" if presence else "UNPLUGGED",
+            }
+            self.send_notification(eventname, notif)
 
     async def monitor_devices(self):
         while True:
