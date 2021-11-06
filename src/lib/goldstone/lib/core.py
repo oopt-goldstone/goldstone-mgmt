@@ -194,4 +194,5 @@ class ServerBase(object):
         ly_ctx = self.sess.get_ly_ctx()
         n = json.dumps({name: notification})
         dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
+        logger.debug(dnode.print_dict())
         return self.sess.notification_send_ly(dnode)
