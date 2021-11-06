@@ -122,11 +122,12 @@ class PlatformServer(ServerBase):
             piu_type = "UNKNOWN"
             cfp2_presence = "UNPLUGGED"
 
+            notif = {"name": name}
+
             if sts.value == STATUS_UNPLUGGED:
-                piu_presence = "UNPLUGGED"
-                notif = {eventname: {"name": name, "status": ["UNPLUGGED"]}}
+                notif["status"] = ["UNPLUGGED"]
             else:
-                piu_presence = "PRESENT"
+                notif["status"] = ["PRESENT"]
                 if sts.value & STATUS_ACO_PRESENT:
                     piu_type = "ACO"
                 elif sts.value & STATUS_DCO_PRESENT:
@@ -135,16 +136,14 @@ class PlatformServer(ServerBase):
                     piu_type = "QSFP28"
                 else:
                     piu_type = "UNKNOWN"
+                notif["piu-type"] = piu_type
+
                 if sts.value & CFP2_STATUS_PRESENT:
                     cfp2_presence = "PRESENT"
                 else:
                     cfp2_presence = "UNPLUGGED"
-                notif = {
-                    "name": name,
-                    "status": ["PRESENT"],
-                    "piu-type": piu_type,
-                    "cfp2-presence": cfp2_presence,
-                }
+                notif["cfp2-presence"] = cfp2_presence
+
             self.send_notification(eventname, notif)
             await asyncio.sleep(0)
 
