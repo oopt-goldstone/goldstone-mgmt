@@ -119,23 +119,21 @@ class TestConcurrentAccess(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_update(self):
         self.sonic = MockSONiC()
         self.if_server = InterfaceServer(self.conn, self.sonic, [])
-        ataish = mock.AsyncMock()
-        ataish.list.return_value = {"piu1": None}
+        taish = mock.AsyncMock()
+        taish.list.return_value = {"piu1": None}
 
         def noop():
             pass
 
-        ataish.close = noop
+        taish.close = noop
 
-        taish = mock.MagicMock()
         module = taish.get_module.return_value
         cap = module.get_attribute_capability.return_value
         cap.min = ""
         cap.max = ""
 
         with (
-            mock.patch("taish.AsyncClient", return_value=ataish),
-            mock.patch("taish.Client", return_value=taish),
+            mock.patch("taish.AsyncClient", return_value=taish),
         ):
             self.xp_server = TransponderServer(self.conn, "127.0.0.1:50051")
 
