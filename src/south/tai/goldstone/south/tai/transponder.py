@@ -695,8 +695,6 @@ class TransponderServer(ServerBase):
             f"result of parse_oper_req: module: {module}, intf: {intf}, item: {item}"
         )
 
-        r = {"goldstone-transponder:modules": {"module": []}}
-
         if item == "name":
             if module == None:
                 modules = await self.taish.list()
@@ -716,92 +714,85 @@ class TransponderServer(ServerBase):
                     }
                 }
 
-        try:
-            ly_ctx = self.sess.get_ly_ctx()
-            get_path = lambda l: list(
-                ly_ctx.find_path("".join("/goldstone-transponder:" + v for v in l))
-            )[0]
+        ly_ctx = self.sess.get_ly_ctx()
+        get_path = lambda l: list(
+            ly_ctx.find_path("".join("/goldstone-transponder:" + v for v in l))
+        )[0]
 
-            module_schema = get_path(["modules", "module", "state"])
-            netif_schema = get_path(["modules", "module", "network-interface", "state"])
-            hostif_schema = get_path(["modules", "module", "host-interface", "state"])
+        module_schema = get_path(["modules", "module", "state"])
+        netif_schema = get_path(["modules", "module", "network-interface", "state"])
+        hostif_schema = get_path(["modules", "module", "host-interface", "state"])
 
-            if module:
-                keys = [await module.get("location")]
-            else:
-                # if module is None, get all modules information
-                modules = await self.taish.list()
-                keys = modules.keys()
+        if module:
+            keys = [await module.get("location")]
+        else:
+            # if module is None, get all modules information
+            modules = await self.taish.list()
+            keys = modules.keys()
 
-            for location in keys:
-                try:
-                    module = await self.taish.get_module(location)
-                except Exception as e:
-                    logger.warning(
-                        f"failed to get module location: {location}. err: {e}"
-                    )
-                    continue
+        r = []
+        for location in keys:
+            try:
+                module = await self.taish.get_module(location)
+            except Exception as e:
+                logger.warning(f"failed to get module location: {location}. err: {e}")
+                continue
 
-                name = location2name(location)
-                v = {
-                    "name": name,
-                    "config": {"name": name},
-                }
+            name = location2name(location)
+            v = {
+                "name": name,
+                "config": {"name": name},
+            }
 
-                if intf:
-                    index = await intf.get("index")
-                    vv = {"name": index, "config": {"name": index}}
+            if intf:
+                index = await intf.get("index")
+                vv = {"name": index, "config": {"name": index}}
 
-                    if item:
-                        attr = await get(intf, item)
-                        vv["state"] = {item.name(): attr}
-                    else:
-                        if isinstance(intf, taish.NetIf):
-                            schema = netif_schema
-                        elif isinstance(intf, taish.HostIf):
-                            schema = hostif_schema
-
-                        state = await get_attrs(intf, schema)
-                        vv["state"] = state
-
-                    if isinstance(intf, taish.NetIf):
-                        v["network-interface"] = [vv]
-                    elif isinstance(intf, taish.HostIf):
-                        v["host-interface"] = [vv]
-
+                if item:
+                    attr = await get(intf, item)
+                    vv["state"] = {item.name(): attr}
                 else:
+                    if isinstance(intf, taish.NetIf):
+                        schema = netif_schema
+                    elif isinstance(intf, taish.HostIf):
+                        schema = hostif_schema
 
-                    if item:
-                        attr = await get(module, item)
-                        v["state"] = {item.name(): attr}
-                    else:
-                        v["state"] = await get_attrs(module, module_schema)
+                    state = await get_attrs(intf, schema)
+                    vv["state"] = state
 
-                        netif_states = [
-                            await get_attrs(module.get_netif(index), netif_schema)
-                            for index in range(len(module.obj.netifs))
+                if isinstance(intf, taish.NetIf):
+                    v["network-interface"] = [vv]
+                elif isinstance(intf, taish.HostIf):
+                    v["host-interface"] = [vv]
+
+            else:
+
+                if item:
+                    attr = await get(module, item)
+                    v["state"] = {item.name(): attr}
+                else:
+                    v["state"] = await get_attrs(module, module_schema)
+
+                    netif_states = [
+                        await get_attrs(module.get_netif(index), netif_schema)
+                        for index in range(len(module.obj.netifs))
+                    ]
+                    if len(netif_states):
+                        v["network-interface"] = [
+                            {"name": i, "config": {"name": i}, "state": s}
+                            for i, s in enumerate(netif_states)
                         ]
-                        if len(netif_states):
-                            v["network-interface"] = [
-                                {"name": i, "config": {"name": i}, "state": s}
-                                for i, s in enumerate(netif_states)
-                            ]
 
-                        hostif_states = [
-                            await get_attrs(module.get_hostif(index), hostif_schema)
-                            for index in range(len(module.obj.hostifs))
+                    hostif_states = [
+                        await get_attrs(module.get_hostif(index), hostif_schema)
+                        for index in range(len(module.obj.hostifs))
+                    ]
+                    if len(hostif_states):
+                        v["host-interface"] = [
+                            {"name": i, "config": {"name": i}, "state": s}
+                            for i, s in enumerate(hostif_states)
                         ]
-                        if len(hostif_states):
-                            v["host-interface"] = [
-                                {"name": i, "config": {"name": i}, "state": s}
-                                for i, s in enumerate(hostif_states)
-                            ]
 
-                r["goldstone-transponder:modules"]["module"].append(v)
+            r.append(v)
 
-        except Exception as e:
-            logger.error(f"oper get callback failed: {str(e)}")
-            traceback.print_exc()
-            return {}
-
-        return r
+        return {"goldstone-transponder:modules": {"module": r}}
