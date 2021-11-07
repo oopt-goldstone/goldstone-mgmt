@@ -25,7 +25,9 @@ IGNORE_LEAVES = ["name", "enable-notify", "enable-alarm-notification"]
 class TAIHandler(ChangeHandler):
     def __init__(self, server, change):
         super().__init__(server, change)
-        xpath, module = self.server.get_module_from_xpath(change.xpath)
+
+    async def _init(self, user):
+        xpath, module = await self.server.get_module_from_xpath(self.change.xpath)
 
         if module == None:
             raise sysrepo.SysrepoInvalArgError("Invalid Transponder name")
@@ -37,11 +39,11 @@ class TAIHandler(ChangeHandler):
         self.value = None
         self.original_value = None
 
-    def validate(self, user):
+    async def validate(self, user):
         if not self.attr_name:
             return
         try:
-            cap = self.obj.get_attribute_capability(self.attr_name)
+            cap = await self.obj.get_attribute_capability(self.attr_name)
         except taish.TAIException as e:
             raise sysrepo.SysrepoInvalArgError(e.msg)
 
@@ -74,28 +76,28 @@ class TAIHandler(ChangeHandler):
                     f"supported values are {valids}. given {v}"
                 )
 
-            meta = self.obj.get_attribute_metadata(self.attr_name)
+            meta = await self.obj.get_attribute_metadata(self.attr_name)
             if meta.usage == "<bool>":
                 v = "true" if v else "false"
 
             self.value = v
 
-    def apply(self, user):
+    async def apply(self, user):
         if not self.attr_name:
             return
-        self.original_value = self.obj.get(self.attr_name)
-        self.obj.set(self.attr_name, self.value)
+        self.original_value = await self.obj.get(self.attr_name)
+        await self.obj.set(self.attr_name, self.value)
 
-    def revert(self, user):
-        logger.warn(
+    async def revert(self, user):
+        logger.warning(
             f"reverting: {self.attr_name} {self.value} => {self.original_value}"
         )
-        self.obj.set(self.attr_name, self.original_value)
+        await self.obj.set(self.attr_name, self.original_value)
 
 
 class ModuleHandler(TAIHandler):
-    def __init__(self, server, change):
-        super().__init__(server, change)
+    async def _init(self, user):
+        await super()._init(user)
         self.obj = self.module
 
         logger.info(f"obj: {self.obj}, xpath: {self.xpath}")
@@ -107,8 +109,8 @@ class ModuleHandler(TAIHandler):
 
 
 class InterfaceHandler(TAIHandler):
-    def __init__(self, server, change):
-        super().__init__(server, change)
+    async def _init(self, user):
+        await super()._init(user)
         assert self.xpath[0][1] in ["network-interface", "host-interface"]
         assert self.xpath[0][2][0][0] == "name"
         idx = int(self.xpath[0][2][0][1])
@@ -157,8 +159,7 @@ def attr_tai2yang(attr, meta, schema):
 class TransponderServer(ServerBase):
     def __init__(self, conn, taish_server):
         super().__init__(conn, "goldstone-transponder")
-        self.ataish = taish.AsyncClient(*taish_server.split(":"))
-        self.taish = taish.Client(*taish_server.split(":"))
+        self.taish = taish.AsyncClient(*taish_server.split(":"))
         self.notif_q = asyncio.Queue()
         self.event_obj = {}
         self.is_initializing = True
@@ -197,7 +198,7 @@ class TransponderServer(ServerBase):
         else:
             type_ = type_ + "-interface"
             m_oid = obj.obj.module_oid
-            modules = await self.ataish.list()
+            modules = await self.taish.list()
 
             for location, m in modules.items():
                 if m.oid == m_oid:
@@ -238,7 +239,7 @@ class TransponderServer(ServerBase):
             finalizers.append(finalizer(obj, attr))
 
         try:
-            module = await self.ataish.get_module(location)
+            module = await self.taish.get_module(location)
         except Exception as e:
             logger.warning(f"failed to get module location: {location}. err: {e}")
             return
@@ -284,7 +285,7 @@ class TransponderServer(ServerBase):
         if location not in self.event_obj:
             # this happens if south-onlp is not running when south-tai starts
             # allow this situtation for now. might need reconsideration
-            logger.warn(
+            logger.warning(
                 f"registering module({name}). somehow failed to do this during initialization"
             )
             self.event_obj[location] = {"lock": asyncio.Lock()}
@@ -306,9 +307,9 @@ class TransponderServer(ServerBase):
 
             logger.info(f"module attrs: {attrs}")
             try:
-                module = await self.ataish.get_module(location)
+                module = await self.taish.get_module(location)
             except:
-                module = await self.ataish.create_module(location, attrs=attrs)
+                module = await self.taish.create_module(location, attrs=attrs)
             else:
                 # reconcile with the sysrepo configuration
                 logger.debug(
@@ -375,15 +376,15 @@ class TransponderServer(ServerBase):
             self.event_obj[location]["event"].set()
             await self.event_obj[location]["task"]
 
-            m = await self.ataish.get_module(location)
+            m = await self.taish.get_module(location)
             for v in m.obj.hostifs:
                 logger.debug("removing hostif oid")
-                await self.ataish.remove(v.oid)
+                await self.taish.remove(v.oid)
             for v in m.obj.netifs:
                 logger.debug("removing netif oid")
-                await self.ataish.remove(v.oid)
+                await self.taish.remove(v.oid)
             logger.debug("removing module oid")
-            await self.ataish.remove(m.oid)
+            await self.taish.remove(m.oid)
 
             logger.info(f"cleanup done for {location}")
 
@@ -394,7 +395,7 @@ class TransponderServer(ServerBase):
 
         data = data["piu-notify-event"]
         name = data["name"]
-        location = self.name2location(name)
+        location = await self.name2location(name)
         status = [v for v in data.get("status", [])]
         piu_present = "PRESENT" in status
         cfp_status = data.get("cfp2-presence", "UNPLUGGED")
@@ -414,9 +415,9 @@ class TransponderServer(ServerBase):
             except Exception as e:
                 logger.error(f"failed to cleanup PIU: {e}")
 
-    def name2location(self, name, modules=None):
+    async def name2location(self, name, modules=None):
         if modules == None:
-            modules = self.taish.list()
+            modules = await self.taish.list()
         v = f"/dev/{name}"
         if v in modules:
             return v  # piu1 => /dev/piu1
@@ -454,12 +455,12 @@ class TransponderServer(ServerBase):
 
         assert len(self.event_obj) == 0  # this must be empty
 
-        ms = await self.ataish.list()
+        ms = await self.taish.list()
         modules = []
         for c in components:
-            location = self.name2location(c["name"], ms)
+            location = await self.name2location(c["name"], ms)
             if location == None:
-                logger.warn(f"no location found for {c['name']}")
+                logger.warning(f"no location found for {c['name']}")
                 continue
             self.event_obj[location] = {"lock": asyncio.Lock()}
             try:
@@ -490,7 +491,7 @@ class TransponderServer(ServerBase):
             while True:
                 await asyncio.sleep(5)
                 try:
-                    await asyncio.wait_for(self.ataish.list(), timeout=2)
+                    await asyncio.wait_for(self.taish.list(), timeout=2)
                 except Exception as e:
                     logger.error(f"ping failed {e}")
                     return
@@ -558,11 +559,10 @@ class TransponderServer(ServerBase):
                 v["event"].set()
                 await v["task"]
 
-        self.ataish.close()
         self.taish.close()
         super().stop()
 
-    def get_module_from_xpath(self, xpath):
+    async def get_module_from_xpath(self, xpath):
         xpath = list(libyang.xpath_split(xpath))
         logger.debug(f"xpath: {xpath}")
         if (
@@ -581,7 +581,7 @@ class TransponderServer(ServerBase):
         name = cond[0][1]
 
         try:
-            module = self.taish.get_module(self.name2location(name))
+            module = await self.taish.get_module(await self.name2location(name))
         except Exception as e:
             logger.error(str(e))
             raise InvalidXPath()
@@ -590,7 +590,7 @@ class TransponderServer(ServerBase):
 
         return xpath[2:], module
 
-    def parse_oper_req(self, xpath):
+    async def parse_oper_req(self, xpath):
         """
         Helper method to parse a xpath of an operational datastore pull request
         and return objects and an attribute which is requested
@@ -613,7 +613,7 @@ class TransponderServer(ServerBase):
         if xpath == "/goldstone-transponder:*":
             return None, None, None
 
-        xpath, module = self.get_module_from_xpath(xpath)
+        xpath, module = await self.get_module_from_xpath(xpath)
 
         if module == None:
             if len(xpath) == 1 and xpath[0][1] == "name":
@@ -670,21 +670,21 @@ class TransponderServer(ServerBase):
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.info(f"oper get callback requested xpath: {req_xpath}")
 
-        def get(obj, schema):
-            attr, meta = obj.get(schema.name(), with_metadata=True, json=True)
+        async def get(obj, schema):
+            attr, meta = await obj.get(schema.name(), with_metadata=True, json=True)
             return attr_tai2yang(attr, meta, schema)
 
-        def get_attrs(obj, schema):
+        async def get_attrs(obj, schema):
             attrs = {}
             for item in schema:
                 try:
-                    attrs[item.name()] = get(obj, item)
+                    attrs[item.name()] = await get(obj, item)
                 except taish.TAIException:
                     pass
             return attrs
 
         try:
-            module, intf, item = self.parse_oper_req(req_xpath)
+            module, intf, item = await self.parse_oper_req(req_xpath)
         except InvalidXPath:
             logger.error(f"invalid xpath: {req_xpath}")
             return {}
@@ -699,7 +699,7 @@ class TransponderServer(ServerBase):
 
         if item == "name":
             if module == None:
-                modules = await self.ataish.list()
+                modules = await self.taish.list()
                 modules = (location2name(key) for key in modules.keys())
                 modules = [{"name": name, "config": {"name": name}} for name in modules]
                 return {"goldstone-transponder:modules": {"module": modules}}
@@ -727,15 +727,15 @@ class TransponderServer(ServerBase):
             hostif_schema = get_path(["modules", "module", "host-interface", "state"])
 
             if module:
-                keys = [module.get("location")]
+                keys = [await module.get("location")]
             else:
                 # if module is None, get all modules information
-                modules = self.taish.list()
+                modules = await self.taish.list()
                 keys = modules.keys()
 
             for location in keys:
                 try:
-                    module = self.taish.get_module(location)
+                    module = await self.taish.get_module(location)
                 except Exception as e:
                     logger.warning(
                         f"failed to get module location: {location}. err: {e}"
@@ -749,11 +749,11 @@ class TransponderServer(ServerBase):
                 }
 
                 if intf:
-                    index = intf.get("index")
+                    index = await intf.get("index")
                     vv = {"name": index, "config": {"name": index}}
 
                     if item:
-                        attr = get(intf, item)
+                        attr = await get(intf, item)
                         vv["state"] = {item.name(): attr}
                     else:
                         if isinstance(intf, taish.NetIf):
@@ -761,7 +761,7 @@ class TransponderServer(ServerBase):
                         elif isinstance(intf, taish.HostIf):
                             schema = hostif_schema
 
-                        state = get_attrs(intf, schema)
+                        state = await get_attrs(intf, schema)
                         vv["state"] = state
 
                     if isinstance(intf, taish.NetIf):
@@ -772,13 +772,13 @@ class TransponderServer(ServerBase):
                 else:
 
                     if item:
-                        attr = get(module, item)
+                        attr = await get(module, item)
                         v["state"] = {item.name(): attr}
                     else:
-                        v["state"] = get_attrs(module, module_schema)
+                        v["state"] = await get_attrs(module, module_schema)
 
                         netif_states = [
-                            get_attrs(module.get_netif(index), netif_schema)
+                            await get_attrs(module.get_netif(index), netif_schema)
                             for index in range(len(module.obj.netifs))
                         ]
                         if len(netif_states):
@@ -788,7 +788,7 @@ class TransponderServer(ServerBase):
                             ]
 
                         hostif_states = [
-                            get_attrs(module.get_hostif(index), hostif_schema)
+                            await get_attrs(module.get_hostif(index), hostif_schema)
                             for index in range(len(module.obj.hostifs))
                         ]
                         if len(hostif_states):

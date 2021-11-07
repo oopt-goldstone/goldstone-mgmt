@@ -48,14 +48,14 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
             sess.replace_config({}, "goldstone-transponder")
             sess.apply_changes()
 
-        ataish = mock.AsyncMock()
-        ataish.list.return_value = {"/dev/piu1": None}
+        taish = mock.AsyncMock()
+        taish.list.return_value = {"/dev/piu1": None}
 
         def noop():
             pass
 
-        ataish.close = noop
-        module = ataish.get_module.return_value
+        taish.close = noop
+        module = taish.get_module.return_value
 
         async def monitor(*args, **kwargs):
             while True:
@@ -81,16 +81,12 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
         module.get_netif = f
         module.get_hostif = f
 
-        taish = mock.MagicMock()
-        taish.list.return_value = {"/dev/piu1": None}
-        module = taish.get_module.return_value
         cap = module.get_attribute_capability.return_value
         cap.min = ""
         cap.max = ""
 
         self.patchers = [
-            mock.patch("taish.AsyncClient", return_value=ataish),
-            mock.patch("taish.Client", return_value=taish),
+            mock.patch("taish.AsyncClient", return_value=taish),
         ]
 
         [p.start() for p in self.patchers]
