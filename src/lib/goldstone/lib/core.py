@@ -167,6 +167,12 @@ class ServerBase(object):
                 raise sysrepo.SysrepoUnsupportedError(f"{change.xpath} not supported")
 
             h = cls(self, change)
+
+            # to support async initialization
+            init = getattr(h, "_init", None)
+            if init:
+                await call(init, user)
+
             await call(h.validate, user)
             handlers.append(h)
 
