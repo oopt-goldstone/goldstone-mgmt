@@ -118,7 +118,7 @@ class Transponder(object):
                 try:
                     v = self.sr_op.get_data(xpath, "operational")
                     v = ly.xpath_get(v, xpath, "N/A")
-                except sr.SysrepoNotFoundError:
+                except (sr.SysrepoNotFoundError, sr.SysrepoCallbackFailedError):
                     v = "N/A"
                 data.append(v)
             rows.append(data)
