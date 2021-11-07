@@ -2,21 +2,14 @@ import sysrepo
 import logging
 import taish
 import asyncio
-import argparse
 import json
 import signal
 import struct
 import base64
-import re
 import libyang
-import traceback
 from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
 
 logger = logging.getLogger(__name__)
-
-# TODO improve taish library
-TAI_STATUS_ITEM_ALREADY_EXISTS = -6
-TAI_STATUS_FAILURE = -1
 
 DEFAULT_ADMIN_STATUS = "down"
 IGNORE_LEAVES = ["name", "enable-notify", "enable-alarm-notification"]
@@ -126,10 +119,6 @@ class InterfaceHandler(TAIHandler):
 
 
 class InvalidXPath(Exception):
-    pass
-
-
-class EmptyReturn(Exception):
     pass
 
 
