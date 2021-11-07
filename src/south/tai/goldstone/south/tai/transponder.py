@@ -281,98 +281,115 @@ class TransponderServer(ServerBase):
 
         name = location2name(location)
 
-        logger.info(f"initializing module({name})")
+        if location not in self.event_obj:
+            # this happens if south-onlp is not running when south-tai starts
+            # allow this situtation for now. might need reconsideration
+            logger.warn(
+                f"registering module({name}). somehow failed to do this during initialization"
+            )
+            self.event_obj[location] = {"lock": asyncio.Lock()}
 
-        attrs = [
-            (k, v)
-            for k, v in config.get("config", {}).items()
-            if k not in IGNORE_LEAVES
-        ]
-        for a in attrs:
-            if a[0] == "admin-status":
-                break
-        else:
-            attrs.append(("admin-status", DEFAULT_ADMIN_STATUS))
+        async with self.event_obj[location]["lock"]:
 
-        logger.info(f"module attrs: {attrs}")
-        try:
-            module = await self.ataish.get_module(location)
-        except:
-            module = await self.ataish.create_module(location, attrs=attrs)
-        else:
-            # reconcile with the sysrepo configuration
-            logger.debug(f"module({location}) already exists. updating attributes..")
-            for k, v in attrs:
-                await module.set(k, v)
+            logger.info(f"initializing module({name})")
 
-        nconfig = {
-            n["name"]: n.get("config", {}) for n in config.get("network-interface", [])
-        }
-        for index in range(int(await module.get("num-network-interfaces"))):
             attrs = [
-                (k, v if type(v) != bool else "true" if v else "false")
-                for k, v in nconfig.get(str(index), {}).items()
+                (k, v)
+                for k, v in config.get("config", {}).items()
                 if k not in IGNORE_LEAVES
             ]
-            logger.debug(f"module({location})/netif({index}) attrs: {attrs}")
+            for a in attrs:
+                if a[0] == "admin-status":
+                    break
+            else:
+                attrs.append(("admin-status", DEFAULT_ADMIN_STATUS))
 
+            logger.info(f"module attrs: {attrs}")
             try:
-                netif = module.get_netif(index)
+                module = await self.ataish.get_module(location)
             except:
-                netif = await module.create_netif(index, attrs=attrs)
+                module = await self.ataish.create_module(location, attrs=attrs)
             else:
                 # reconcile with the sysrepo configuration
                 logger.debug(
-                    f"module({location})/netif({index}) already exists. updating attributes.."
+                    f"module({location}) already exists. updating attributes.."
                 )
                 for k, v in attrs:
-                    await netif.set(k, v)
+                    await module.set(k, v)
 
-        hconfig = {
-            n["name"]: n.get("config", {}) for n in config.get("host-interface", [])
-        }
-        for index in range(int(await module.get("num-host-interfaces"))):
-            attrs = [
-                (k, v if type(v) != bool else "true" if v else "false")
-                for k, v in hconfig.get(str(index), {}).items()
-                if k not in IGNORE_LEAVES
-            ]
-            logger.debug(f"module({location})/hostif({index}) attrs: {attrs}")
-            try:
-                hostif = module.get_hostif(index)
-            except:
-                hostif = await module.create_hostif(index, attrs=attrs)
-            else:
-                # reconcile with the sysrepo configuration
-                logger.debug(
-                    f"module({location})/hostif({index}) already exists. updating attributes.."
-                )
-                for k, v in attrs:
-                    await hostif.set(k, v)
+            nconfig = {
+                n["name"]: n.get("config", {})
+                for n in config.get("network-interface", [])
+            }
+            for index in range(int(await module.get("num-network-interfaces"))):
+                attrs = [
+                    (k, v if type(v) != bool else "true" if v else "false")
+                    for k, v in nconfig.get(str(index), {}).items()
+                    if k not in IGNORE_LEAVES
+                ]
+                logger.debug(f"module({location})/netif({index}) attrs: {attrs}")
 
-        tasks, finalizers = await self.get_tai_notification_tasks(location)
-        event = asyncio.Event()
-        tasks.append(event.wait())
-        task = asyncio.create_task(self.notif_handler(tasks, finalizers))
-        self.event_obj[location] = {"event": event, "task": task}
+                try:
+                    netif = module.get_netif(index)
+                except:
+                    netif = await module.create_netif(index, attrs=attrs)
+                else:
+                    # reconcile with the sysrepo configuration
+                    logger.debug(
+                        f"module({location})/netif({index}) already exists. updating attributes.."
+                    )
+                    for k, v in attrs:
+                        await netif.set(k, v)
+
+            hconfig = {
+                n["name"]: n.get("config", {}) for n in config.get("host-interface", [])
+            }
+            for index in range(int(await module.get("num-host-interfaces"))):
+                attrs = [
+                    (k, v if type(v) != bool else "true" if v else "false")
+                    for k, v in hconfig.get(str(index), {}).items()
+                    if k not in IGNORE_LEAVES
+                ]
+                logger.debug(f"module({location})/hostif({index}) attrs: {attrs}")
+                try:
+                    hostif = module.get_hostif(index)
+                except:
+                    hostif = await module.create_hostif(index, attrs=attrs)
+                else:
+                    # reconcile with the sysrepo configuration
+                    logger.debug(
+                        f"module({location})/hostif({index}) already exists. updating attributes.."
+                    )
+                    for k, v in attrs:
+                        await hostif.set(k, v)
+
+            tasks, finalizers = await self.get_tai_notification_tasks(location)
+            event = asyncio.Event()
+            tasks.append(event.wait())
+            task = asyncio.create_task(self.notif_handler(tasks, finalizers))
+            self.event_obj[location]["event"] = event
+            self.event_obj[location]["task"] = task
 
     async def cleanup_piu(self, location):
-        self.event_obj[location]["event"].set()
-        await self.event_obj[location]["task"]
+        async with self.event_obj[location]["lock"]:
+            self.event_obj[location]["event"].set()
+            await self.event_obj[location]["task"]
 
-        m = await self.ataish.get_module(location)
-        for v in m.obj.hostifs:
-            logger.debug("removing hostif oid")
-            await self.ataish.remove(v.oid)
-        for v in m.obj.netifs:
-            logger.debug("removing netif oid")
-            await self.ataish.remove(v.oid)
-        logger.debug("removing module oid")
-        await self.ataish.remove(m.oid)
+            m = await self.ataish.get_module(location)
+            for v in m.obj.hostifs:
+                logger.debug("removing hostif oid")
+                await self.ataish.remove(v.oid)
+            for v in m.obj.netifs:
+                logger.debug("removing netif oid")
+                await self.ataish.remove(v.oid)
+            logger.debug("removing module oid")
+            await self.ataish.remove(m.oid)
+
+            logger.info(f"cleanup done for {location}")
 
     async def notification_cb(self, notif_name, value, timestamp, priv):
-        logger.info(value.print_dict())
         data = value.print_dict()
+        logger.info(data)
         assert "piu-notify-event" in data
 
         data = data["piu-notify-event"]
@@ -383,7 +400,6 @@ class TransponderServer(ServerBase):
         cfp_status = data.get("cfp2-presence", "UNPLUGGED")
 
         if piu_present and cfp_status == "PRESENT":
-            self.sess.switch_datastore("running")
             config = self.get_running_data(
                 f"/goldstone-transponder:modules/module[name='{name}']", {}
             )
@@ -391,12 +407,12 @@ class TransponderServer(ServerBase):
             try:
                 await self.initialize_piu(config, location)
             except Exception as e:
-                logger.info(f"failed to initialize PIU: {e}")
+                logger.error(f"failed to initialize PIU: {e}")
         else:
             try:
                 await self.cleanup_piu(location)
             except Exception as e:
-                logger.info(f"failed to cleanup PIU: {e}")
+                logger.error(f"failed to cleanup PIU: {e}")
 
     def name2location(self, name, modules=None):
         if modules == None:
@@ -436,30 +452,30 @@ class TransponderServer(ServerBase):
         xpath = "/goldstone-platform:components/component[state/type='PIU']"
         components = self.get_operational_data(xpath, [])
 
-        ms = self.taish.list()
-        try:
-            modules = list(
-                filter(
-                    None,
-                    (
-                        self.name2location(c["name"], ms)
-                        for c in components
-                        if c["piu"]["state"]["status"] == ["PRESENT"]
-                    ),
-                )
-            )
-        except KeyError:
-            modules = []
+        assert len(self.event_obj) == 0  # this must be empty
 
-        self.sess.switch_datastore("running")
-        config = self.sess.get_data("/goldstone-transponder:*")
-        config = {m["name"]: m for m in config.get("modules", {}).get("module", [])}
-        logger.debug(f"sysrepo running configuration: {config}")
+        ms = await self.ataish.list()
+        modules = []
+        for c in components:
+            location = self.name2location(c["name"], ms)
+            if location == None:
+                logger.warn(f"no location found for {c['name']}")
+                continue
+            self.event_obj[location] = {"lock": asyncio.Lock()}
+            try:
+                if "PRESENT" in c["piu"]["state"]["status"]:
+                    modules.append((c["name"], location))
+            except KeyError:
+                pass
 
         # TODO initializing one by one due to a taish_server bug
         # revert this change once the bug is fixed in taish_server.
-        for m in modules:
-            await self.initialize_piu(config, m)
+        for name, location in modules:
+            config = self.get_running_data(
+                f"/goldstone-transponder:modules/module[name='{name}']", {}
+            )
+            logger.debug(f"running configuration for {location}: {config}")
+            await self.initialize_piu(config, location)
 
         self.sess.subscribe_notification_tree(
             "goldstone-platform",
@@ -538,8 +554,9 @@ class TransponderServer(ServerBase):
     async def stop(self):
         logger.info(f"stop server")
         for v in self.event_obj.values():
-            v["event"].set()
-            await v["task"]
+            if "event" in v:
+                v["event"].set()
+                await v["task"]
 
         self.ataish.close()
         self.taish.close()
