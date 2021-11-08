@@ -3,7 +3,6 @@ import logging
 import taish
 import asyncio
 import json
-import signal
 import struct
 import base64
 import libyang
@@ -16,9 +15,6 @@ IGNORE_LEAVES = ["name", "enable-notify", "enable-alarm-notification"]
 
 
 class TAIHandler(ChangeHandler):
-    def __init__(self, server, change):
-        super().__init__(server, change)
-
     async def _init(self, user):
         xpath, module = await self.server.get_module_from_xpath(self.change.xpath)
 
