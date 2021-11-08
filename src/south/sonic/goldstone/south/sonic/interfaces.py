@@ -2,7 +2,6 @@ from goldstone.lib.core import *
 from .sonic import *
 import queue
 import os
-import json
 import aioredis
 
 logger = logging.getLogger(__name__)

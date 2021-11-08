@@ -151,8 +151,9 @@ unittest:
 	sysrepoctl -i yang/goldstone-uplink-failure-detection.yang
 	cd src/south/sonic && make proto
 	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f
-#	# unittest package can't search namespace packages
-	cd src/north/cli   && PYTHONPATH=../../lib python -m unittest -v -f
-	cd src/south/sonic && PYTHONPATH=../../lib python -m unittest -v -f
-	cd src/south/tai   && PYTHONPATH=../../lib python -m unittest -v -f
-	cd src/south/sonic && make clean
+	# unittest package can't search namespace packages
+	cd src/north/cli     && PYTHONPATH=../../lib python -m unittest -v -f
+	cd src/south/sonic   && PYTHONPATH=../../lib python -m unittest -v -f
+	cd src/south/tai     && PYTHONPATH=../../lib python -m unittest -v -f
+	cd src/south/gearbox && PYTHONPATH=../../lib python -m unittest -v -f
+	cd src/south/sonic   && make clean
