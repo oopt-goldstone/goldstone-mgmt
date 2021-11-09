@@ -4,6 +4,7 @@ import argparse
 import signal
 import itertools
 import sysrepo
+import json
 from goldstone.lib.core import start_probe
 from .interfaces import InterfaceServer
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    async def _main(taish_server):
+    async def _main(taish_server, platform_info):
         loop = asyncio.get_event_loop()
         stop_event = asyncio.Event()
         loop.add_signal_handler(signal.SIGINT, stop_event.set)
@@ -21,7 +22,7 @@ def main():
 
         conn = sysrepo.SysrepoConnection()
 
-        intf = InterfaceServer(conn, taish_server)
+        intf = InterfaceServer(conn, taish_server, platform_info)
         #        gb = GearboxServer(conn, tai)
         servers = [intf]  # , gb]
 
@@ -49,6 +50,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-s", "--taish-server", default="127.0.0.1:50051")
+    parser.add_argument("platform_file", metavar="platform-file")
 
     args = parser.parse_args()
 
@@ -62,7 +64,10 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO)
 
-    asyncio.run(_main(args.taish_server))
+    with open(args.platform_file) as f:
+        platform_info = json.loads(f.read())
+
+    asyncio.run(_main(args.taish_server, platform_info))
 
 
 if __name__ == "__main__":

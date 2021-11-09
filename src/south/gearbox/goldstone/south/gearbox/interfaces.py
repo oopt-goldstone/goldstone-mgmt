@@ -4,6 +4,7 @@ import taish
 import asyncio
 import sysrepo
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,14 @@ class AdminStatusHandler(IfChangeHandler):
 
 
 class InterfaceServer(ServerBase):
-    def __init__(self, conn, taish_server):
+    def __init__(self, conn, taish_server, platform_info):
         super().__init__(conn, "goldstone-interfaces")
+        info = {}
+        for i in platform_info:
+            if "interface" in i:
+                ifname = f"Ethernet{i['interface']['suffix']}"
+                info[ifname] = i
+        self.platform_info = info
         self.conn = conn
         self.taish = taish.AsyncClient(*taish_server.split(":"))
         self.is_initializing = True
@@ -146,6 +153,19 @@ class InterfaceServer(ServerBase):
             if len(xpath) == 3 and xpath[2][1] == "name":
                 interfaces.append(i)
                 continue
+
+            p = self.platform_info.get(ifname)
+            if p:
+                v = {}
+                if "component" in p:
+                    v["platform"] = {"component": p["component"]["name"]}
+                if "tai" in p:
+                    t = {
+                        "module": p["tai"]["module"]["name"],
+                        "host-interface": p["tai"]["hostif"]["name"],
+                    }
+                    v["transponder"] = t
+                i["component-connection"] = v
 
             obj = await self.ifname2taiobj(ifname)
             state = {}

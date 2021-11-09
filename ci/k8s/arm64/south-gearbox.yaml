@@ -50,12 +50,17 @@ spec:
               image: docker.io/gs-test/gs-mgmt-south-gearbox:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-gearbox']
-              args: ['--taish-server', "$(TAI_GEARBOX_SERVICE_HOST):$(TAI_GEARBOX_SERVICE_PORT)", "--verbose"]
+              args: ['--taish-server', "$(TAI_GEARBOX_SERVICE_HOST):$(TAI_GEARBOX_SERVICE_PORT)", "--verbose", "$(PLATFORM_FILE)"]
+              env:
+              - name: PLATFORM_FILE
+                value: /current/platform.json
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+              - name: current
+                mountPath: /current
               livenessProbe:
                 httpGet:
                   path: /healthz
@@ -78,3 +83,6 @@ spec:
             - name: sysrepo
               hostPath:
                   path: /var/lib/sysrepo
+            - name: current
+              hostPath:
+                  path: /var/lib/goldstone/device/current

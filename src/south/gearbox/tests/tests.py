@@ -5,6 +5,7 @@ import sysrepo
 import libyang
 import asyncio
 import logging
+import os
 import json
 import time
 import itertools
@@ -43,6 +44,14 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         async def get(*args, **kwargs):
             if args[0] in ["alarm-notification", "notify"]:
                 return "(nil)"
+            elif args[0] == "pcs-status":
+                return ["ready"]
+            elif args[0] == "tx-dis":
+                return "true"
+            elif args[0] == "fec-type":
+                return "none"
+            elif args[0] == "signal-rate":
+                return "100-gbe"
             else:
                 return mock.MagicMock()
 
@@ -75,7 +84,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_basic(self):
 
-        self.server = InterfaceServer(self.conn, "")
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        self.server = InterfaceServer(self.conn, "", platform_info)
         tasks = list(asyncio.create_task(c) for c in await self.server.start())
 
         def test():
@@ -84,6 +96,25 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 v = sess.get_data("/goldstone-interfaces:interfaces/interface/name")
                 v = libyang.xpath_get(v, "interfaces/interface/name")
                 self.assertEqual(v, ["Ethernet1/0/1", "Ethernet1/1/1"])
+                v = sess.get_data("/goldstone-interfaces:interfaces/interface")
+                self.assertEqual(
+                    v["interfaces"]["interface"]["Ethernet1/0/1"][
+                        "component-connection"
+                    ]["platform"]["component"],
+                    "port1",
+                )
+                self.assertEqual(
+                    v["interfaces"]["interface"]["Ethernet1/1/1"][
+                        "component-connection"
+                    ]["transponder"]["module"],
+                    "piu1",
+                )
+                self.assertEqual(
+                    v["interfaces"]["interface"]["Ethernet1/1/1"][
+                        "component-connection"
+                    ]["transponder"]["host-interface"],
+                    "0",
+                )
 
         tasks.append(asyncio.to_thread(test))
 
