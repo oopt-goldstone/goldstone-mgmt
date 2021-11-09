@@ -24,6 +24,8 @@ def main(host, username, password, arch):
         if arch == "amd64":
             ssh(cli, "systemctl restart usonic")
 
+        # restart TAI service
+        ssh(cli, "systemctl restart tai || true") # can fail
         # stop South system service
         ssh(cli, "systemctl stop gs-south-system || true")  # can fail
         # stop Goldstone Management service
