@@ -233,8 +233,14 @@ class BreakoutHandler(IfChangeHandler):
 
 
 class InterfaceServer(ServerBase):
-    def __init__(self, conn, sonic, servers):
+    def __init__(self, conn, sonic, servers, platform_info):
         super().__init__(conn, "goldstone-interfaces")
+        info = {}
+        for i in platform_info:
+            if "interface" in i:
+                ifname = f"Ethernet{i['interface']['suffix']}"
+                info[ifname] = i
+        self.platform_info = info
         self.conn = conn
         self.task_queue = queue.Queue()
         self.sonic = sonic
@@ -589,6 +595,19 @@ class InterfaceServer(ServerBase):
                 "state": {"name": name},
                 "ethernet": {"state": {}, "breakout": {"state": {}}},
             }
+
+            p = self.platform_info.get(name)
+            if p:
+                v = {}
+                if "component" in p:
+                    v["platform"] = {"component": p["component"]["name"]}
+                if "tai" in p:
+                    t = {
+                        "module": p["tai"]["module"]["name"],
+                        "host-interface": p["tai"]["hostif"]["name"],
+                    }
+                    v["transponder"] = t
+                interface["component-connection"] = v
 
             # FIXME using "_1" is vulnerable to the interface nameing schema change
             if not name.endswith("_1") and name.find("_") != -1:

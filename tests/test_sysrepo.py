@@ -118,7 +118,7 @@ class TestConcurrentAccess(unittest.IsolatedAsyncioTestCase):
 
     async def test_concurrent_update(self):
         self.sonic = MockSONiC()
-        self.if_server = InterfaceServer(self.conn, self.sonic, [])
+        self.if_server = InterfaceServer(self.conn, self.sonic, [], [])
         taish = mock.AsyncMock()
         taish.list.return_value = {"piu1": None}
 

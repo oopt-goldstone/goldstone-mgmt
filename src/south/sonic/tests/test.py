@@ -1,8 +1,11 @@
 import unittest
 from goldstone.south.sonic.interfaces import InterfaceServer
 import sysrepo
+import libyang
 import asyncio
 import logging
+import os
+import json
 
 
 class MockK8S(object):
@@ -34,7 +37,7 @@ class MockSONiC(object):
         pass
 
     def get_ifnames(self):
-        return ["Ethernet1_1", "Ethernet2_1"]
+        return ["Ethernet1_1", "Ethernet2_1", "Ethernet13_1"]
 
     def set_config_db(self, ifname, key, value):
         self.logs.append((ifname, key, value))
@@ -59,8 +62,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             sess.replace_config({}, "goldstone-interfaces")
             sess.apply_changes()
 
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
         self.sonic = MockSONiC()
-        self.server = InterfaceServer(self.conn, self.sonic, [])
+        self.server = InterfaceServer(self.conn, self.sonic, [], platform_info)
 
         async def event_handler(*args):
             await asyncio.sleep(10)
@@ -151,6 +157,31 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_default(self):
         self.assertFalse(self.server.get_default("enabled"))
+
+    async def test_component_connection(self):
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("operational")
+                data = sess.get_data("/goldstone-interfaces:interfaces/interface")
+                v = libyang.xpath_get(data, "interfaces/interface[name='Ethernet1_1']")
+                self.assertEqual(
+                    v["component-connection"]["platform"]["component"], "port1"
+                )
+                v = libyang.xpath_get(data, "interfaces/interface[name='Ethernet13_1']")
+                self.assertEqual(
+                    v["component-connection"]["transponder"]["module"], "piu1"
+                )
+                self.assertEqual(
+                    v["component-connection"]["transponder"]["host-interface"], "0"
+                )
+
+        self.tasks.append(asyncio.create_task(asyncio.to_thread(test)))
+
+        done, _ = await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            e = task.exception()
+            if e:
+                raise e
 
     async def asyncTearDown(self):
         self.server.stop()
