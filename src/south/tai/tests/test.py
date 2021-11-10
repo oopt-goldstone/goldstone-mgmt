@@ -53,7 +53,7 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
             sess.apply_changes()
 
         taish = mock.AsyncMock()
-        taish.list.return_value = {"/dev/piu1": None}
+        taish.list.return_value = {"1": None}
 
         def noop():
             pass
@@ -136,7 +136,11 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
                     break
                 await asyncio.sleep(1)
 
-        self.server = TransponderServer(self.conn, "", [])
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        self.server = TransponderServer(self.conn, "", platform_info)
+
         tasks = list(asyncio.create_task(c) for c in await self.server.start())
 
         def test():
@@ -169,7 +173,10 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
         self.alive = False
 
     async def test_tai_hotplug(self):
-        self.server = TransponderServer(self.conn, "", [])
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        self.server = TransponderServer(self.conn, "", platform_info)
 
         servers = [self.server]
 
@@ -245,7 +252,9 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
                 sess.switch_datastore("operational")
                 name = "piu1"
                 data = sess.get_data("/goldstone-transponder:modules/module")
-                data = libyang.xpath_get(data, "modules/module/component-connection/platform/component")
+                data = libyang.xpath_get(
+                    data, "modules/module/component-connection/platform/component"
+                )
                 self.assertEqual(data, ["piu1"])
 
         tasks.append(asyncio.create_task(asyncio.to_thread(test)))
