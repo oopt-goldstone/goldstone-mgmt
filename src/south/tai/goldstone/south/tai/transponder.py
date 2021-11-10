@@ -118,12 +118,6 @@ class InvalidXPath(Exception):
     pass
 
 
-def location2name(loc):
-    if loc.isdigit():
-        return f"piu{loc}"  # 1 => piu1
-    return loc.split("/")[-1]  # /dev/piu1 => piu1
-
-
 def attr_tai2yang(attr, meta, schema):
     if meta.usage != "<float>":
         return json.loads(attr)
@@ -185,7 +179,7 @@ class TransponderServer(ServerBase):
 
         if type_ == "module":
             location = await obj.get("location")
-            key = location2name(location)
+            key = self.location2name(location)
             xpath = f"/goldstone-transponder:modules/module[name='{key}']/config/enable-{attr_meta.short_name}"
         else:
             type_ = type_ + "-interface"
@@ -200,7 +194,7 @@ class TransponderServer(ServerBase):
                 logger.error(f"module not found: {m_oid}")
                 return
 
-            key = location2name(module_location)
+            key = self.location2name(module_location)
             index = await obj.get("index")
             xpath = f"/goldstone-transponder:modules/module[name='{key}']/{type_}[name='{index}']/config/enable-{attr_meta.short_name}"
 
@@ -272,7 +266,7 @@ class TransponderServer(ServerBase):
 
     async def initialize_piu(self, config, location):
 
-        name = location2name(location)
+        name = self.location2name(location)
 
         if location not in self.event_obj:
             # this happens if south-onlp is not running when south-tai starts
@@ -407,15 +401,23 @@ class TransponderServer(ServerBase):
             except Exception as e:
                 logger.error(f"failed to cleanup PIU: {e}")
 
+    def location2name(self, loc):
+        for info in self.platform_info.values():
+            if info["tai"]["module"]["location"] == loc:
+                return info["tai"]["module"]["name"]
+        return None
+
     async def name2location(self, name, modules=None):
         if modules == None:
             modules = await self.taish.list()
-        v = f"/dev/{name}"
+        info = self.platform_info.get(name)
+        if not info:
+            logger.warning(f"no info in platform-info about module({name})")
+            return None
+        v = info["tai"]["module"]["location"]
         if v in modules:
-            return v  # piu1 => /dev/piu1
-        v = name.replace("piu", "")
-        if v in modules:
-            return v  # piu1 => 1
+            return v
+        logger.warning(f"taish doesn't know module({v}). wrong info in platform_info?")
         return None
 
     async def notif_handler(self, tasks, finalizers):
@@ -571,9 +573,12 @@ class TransponderServer(ServerBase):
             return xpath[2:], None
 
         name = cond[0][1]
+        n = await self.name2location(name)
+        if not n:
+            raise InvalidXPath()
 
         try:
-            module = await self.taish.get_module(await self.name2location(name))
+            module = await self.taish.get_module(n)
         except Exception as e:
             logger.error(str(e))
             raise InvalidXPath()
@@ -690,7 +695,7 @@ class TransponderServer(ServerBase):
         if item == "name":
             if module == None:
                 modules = await self.taish.list()
-                modules = (location2name(key) for key in modules.keys())
+                modules = (self.location2name(key) for key in modules.keys())
                 modules = [{"name": name, "config": {"name": name}} for name in modules]
                 return {"goldstone-transponder:modules": {"module": modules}}
             elif intf in ["network-interface", "host-interface"]:
@@ -730,7 +735,7 @@ class TransponderServer(ServerBase):
                 logger.warning(f"failed to get module location: {location}. err: {e}")
                 continue
 
-            name = location2name(location)
+            name = self.location2name(location)
             data = {
                 "name": name,
                 "config": {"name": name},
