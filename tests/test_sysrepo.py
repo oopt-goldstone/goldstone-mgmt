@@ -7,6 +7,10 @@ import itertools
 import logging
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
+import os
+import json
+import sys
+
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -94,7 +98,7 @@ def update_xp():
             sess.apply_changes()
 
         with conn.start_session() as sess:
-            name = "/dev/piu1"
+            name = "piu1"
             sess.set_item(
                 f"/goldstone-transponder:modules/module[name='{name}']/config/name",
                 name,
@@ -117,10 +121,14 @@ class TestConcurrentAccess(unittest.IsolatedAsyncioTestCase):
             sess.apply_changes()
 
     async def test_concurrent_update(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
         self.sonic = MockSONiC()
-        self.if_server = InterfaceServer(self.conn, self.sonic, [], [])
+        self.if_server = InterfaceServer(self.conn, self.sonic, [], platform_info)
         taish = mock.AsyncMock()
-        taish.list.return_value = {"piu1": None}
+        taish.list.return_value = {"/dev/piu1": None}
 
         def noop():
             pass
@@ -132,10 +140,10 @@ class TestConcurrentAccess(unittest.IsolatedAsyncioTestCase):
         cap.min = ""
         cap.max = ""
 
-        with (
-            mock.patch("taish.AsyncClient", return_value=taish),
-        ):
-            self.xp_server = TransponderServer(self.conn, "127.0.0.1:50051")
+        with (mock.patch("taish.AsyncClient", return_value=taish),):
+            self.xp_server = TransponderServer(
+                self.conn, "127.0.0.1:50051", platform_info
+            )
 
             async def event_handler(*args):
                 await asyncio.sleep(10)
