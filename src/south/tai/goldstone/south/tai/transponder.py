@@ -142,8 +142,14 @@ def attr_tai2yang(attr, meta, schema):
 
 
 class TransponderServer(ServerBase):
-    def __init__(self, conn, taish_server):
+    def __init__(self, conn, taish_server, platform_info):
         super().__init__(conn, "goldstone-transponder")
+        info = {}
+        for i in platform_info:
+            if "component" in i and "tai" in i:
+                name = i["tai"]["module"]["name"]
+                info[name] = i
+        self.platform_info = info
         self.taish = taish.AsyncClient(*taish_server.split(":"))
         self.notif_q = asyncio.Queue()
         self.event_obj = {}
@@ -161,6 +167,7 @@ class TransponderServer(ServerBase):
                         "name": NoOp,
                         "config": InterfaceHandler,
                     },
+                    "component-connection": NoOp,
                 }
             }
         }
@@ -603,7 +610,7 @@ class TransponderServer(ServerBase):
         if module == None:
             if len(xpath) == 1 and xpath[0][1] == "name":
                 return None, None, "name"
-            raise InvalidXPath()
+            return None, None, None
 
         if len(xpath) == 0:
             return module, None, None
@@ -724,18 +731,25 @@ class TransponderServer(ServerBase):
                 continue
 
             name = location2name(location)
-            v = {
+            data = {
                 "name": name,
                 "config": {"name": name},
             }
 
+            p = self.platform_info.get(name)
+            if p:
+                v = {}
+                if "component" in p:
+                    v["platform"] = {"component": p["component"]["name"]}
+                data["component-connection"] = v
+
             if intf:
                 index = await intf.get("index")
-                vv = {"name": index, "config": {"name": index}}
+                v = {"name": index, "config": {"name": index}}
 
                 if item:
                     attr = await get(intf, item)
-                    vv["state"] = {item.name(): attr}
+                    v["state"] = {item.name(): attr}
                 else:
                     if isinstance(intf, taish.NetIf):
                         schema = netif_schema
@@ -743,27 +757,27 @@ class TransponderServer(ServerBase):
                         schema = hostif_schema
 
                     state = await get_attrs(intf, schema)
-                    vv["state"] = state
+                    v["state"] = state
 
                 if isinstance(intf, taish.NetIf):
-                    v["network-interface"] = [vv]
+                    data["network-interface"] = [v]
                 elif isinstance(intf, taish.HostIf):
-                    v["host-interface"] = [vv]
+                    data["host-interface"] = [v]
 
             else:
 
                 if item:
                     attr = await get(module, item)
-                    v["state"] = {item.name(): attr}
+                    data["state"] = {item.name(): attr}
                 else:
-                    v["state"] = await get_attrs(module, module_schema)
+                    data["state"] = await get_attrs(module, module_schema)
 
                     netif_states = [
                         await get_attrs(module.get_netif(index), netif_schema)
                         for index in range(len(module.obj.netifs))
                     ]
                     if len(netif_states):
-                        v["network-interface"] = [
+                        data["network-interface"] = [
                             {"name": i, "config": {"name": i}, "state": s}
                             for i, s in enumerate(netif_states)
                         ]
@@ -773,11 +787,11 @@ class TransponderServer(ServerBase):
                         for index in range(len(module.obj.hostifs))
                     ]
                     if len(hostif_states):
-                        v["host-interface"] = [
+                        data["host-interface"] = [
                             {"name": i, "config": {"name": i}, "state": s}
                             for i, s in enumerate(hostif_states)
                         ]
 
-            r.append(v)
+            r.append(data)
 
         return {"goldstone-transponder:modules": {"module": r}}

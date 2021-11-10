@@ -7,7 +7,11 @@ import logging
 import json
 import time
 import itertools
+import libyang
 from goldstone.lib.core import ServerBase
+import os
+import json
+from taish import TAIException
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -64,9 +68,19 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
 
         async def get(*args, **kwargs):
             if args[0] in ["alarm-notification", "notify"]:
-                return "(nil)"
+                ret = "(nil)"
+            elif args[0] == "admin-status":
+                ret = '"up"'
+            elif args[0] == "num-network-interfaces":
+                ret = "1"
+            elif args[0] == "num-host-interfaces":
+                ret = "2"
             else:
-                return mock.MagicMock()
+                raise TAIException(0, "mock")
+
+            if kwargs.get("with_metadata"):
+                return ret, mock.MagicMock()
+            return ret
 
         module.monitor = monitor
         module.get = get
@@ -122,7 +136,7 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
                     break
                 await asyncio.sleep(1)
 
-        self.server = TransponderServer(self.conn, "")
+        self.server = TransponderServer(self.conn, "", [])
         tasks = list(asyncio.create_task(c) for c in await self.server.start())
 
         def test():
@@ -155,7 +169,7 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
         self.alive = False
 
     async def test_tai_hotplug(self):
-        self.server = TransponderServer(self.conn, "")
+        self.server = TransponderServer(self.conn, "", [])
 
         servers = [self.server]
 
@@ -215,6 +229,34 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
                 raise e
 
         await self.server.stop()
+
+    async def test_component_connection(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        server = TransponderServer(self.conn, "", platform_info)
+
+        tasks = list(asyncio.create_task(c) for c in await server.start())
+
+        def test():
+
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("operational")
+                name = "piu1"
+                data = sess.get_data("/goldstone-transponder:modules/module")
+                data = libyang.xpath_get(data, "modules/module/component-connection/platform/component")
+                self.assertEqual(data, ["piu1"])
+
+        tasks.append(asyncio.create_task(asyncio.to_thread(test)))
+
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            e = task.exception()
+            if e:
+                raise e
+
+        await server.stop()
 
     async def asyncTearDown(self):
         self.alive = False

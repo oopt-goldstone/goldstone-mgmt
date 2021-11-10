@@ -42,4 +42,17 @@ module goldstone-component-connection {
     }
   }
 
+  augment "/gs-transponder:modules/gs-transponder:module" {
+    container component-connection {
+      container platform {
+        leaf component {
+          type leafref {
+            path "/gs-platform:components/gs-platform:component/" +
+              "gs-platform:name";
+          }
+        }
+      }
+    }
+  }
+
 }
