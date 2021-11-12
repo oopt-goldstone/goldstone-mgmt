@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 
-ARG GS_MGMT_BUILDER_IMAGE=docker.io/microsonic/gs-mgmt-builder:latest
+ARG GS_MGMT_BUILDER_IMAGE=ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-builder:latest
 
 FROM $GS_MGMT_BUILDER_IMAGE AS builder
 
@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,
 
 RUN pip install paramiko scp black pyang prompt_toolkit tabulate natsort kubernetes setuptools
 
-COPY ci/docker/snmp.conf /etc/snmp/snmp.conf
+COPY scripts/snmp.conf /etc/snmp/snmp.conf
 
 RUN rm /usr/share/snmp/mibs/ietf/SNMPv2-PDU
 

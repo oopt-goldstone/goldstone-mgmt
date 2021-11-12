@@ -3,120 +3,98 @@
 ARCH ?= amd64
 
 DOCKER_CMD ?= bash
+DOCKER_BUILD_OPTION ?= --platform linux/$(ARCH)
+DOCKER_IMAGE ?= $(BUILDER)
 
-GS_MGMT_BUILDER_IMAGE ?= gs-mgmt-builder
-GS_MGMT_IMAGE ?= gs-mgmt
-GS_MGMT_DEBUG_IMAGE ?= gs-mgmt-debug
-GS_MGMT_NP2_IMAGE ?= gs-mgmt-netopeer2
-GS_MGMT_SONIC_IMAGE ?= gs-mgmt-south-sonic
-GS_MGMT_TAI_IMAGE ?= gs-mgmt-south-tai
-GS_MGMT_ONLP_IMAGE ?= gs-mgmt-south-onlp
-GS_MGMT_SYSTEM_IMAGE ?= gs-mgmt-south-system
-GS_MGMT_GEARBOX_IMAGE ?= gs-mgmt-south-gearbox
-GS_MGMT_CLI_IMAGE ?= gs-mgmt-north-cli
-GS_MGMT_SNMP_IMAGE ?= gs-mgmt-north-snmp
-GS_MGMT_SNMPD_IMAGE ?= gs-mgmt-snmpd
-GS_MGMT_OC_IMAGE ?= gs-mgmt-xlate-openconfig
-GS_MGMT_NOTIF_IMAGE ?= gs-mgmt-north-notif
-GS_MGMT_TEST_IMAGE ?= gs-mgmt-test
-
+GS_MGMT_IMAGE_PREFIX ?= ghcr.io/oopt-goldstone/goldstone-mgmt/
 GS_MGMT_IMAGE_TAG ?= latest-$(ARCH)
 
-DOCKER_REPO ?= docker.io/microsonic
-DOCKER_IMAGE ?= $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG)
+GS_MGMT_BUILDER_IMAGE ?= gs-mgmt-builder
+GS_MGMT_BASE_IMAGE    ?= gs-mgmt
+GS_MGMT_NP2_IMAGE     ?= gs-mgmt-netopeer2
+GS_MGMT_SONIC_IMAGE   ?= gs-mgmt-south-sonic
+GS_MGMT_TAI_IMAGE     ?= gs-mgmt-south-tai
+GS_MGMT_ONLP_IMAGE    ?= gs-mgmt-south-onlp
+GS_MGMT_SYSTEM_IMAGE  ?= gs-mgmt-south-system
+GS_MGMT_GEARBOX_IMAGE ?= gs-mgmt-south-gearbox
+GS_MGMT_CLI_IMAGE     ?= gs-mgmt-north-cli
+GS_MGMT_SNMP_IMAGE    ?= gs-mgmt-north-snmp
+GS_MGMT_SNMPD_IMAGE   ?= gs-mgmt-snmpd
+GS_MGMT_OC_IMAGE      ?= gs-mgmt-xlate-openconfig
+GS_MGMT_NOTIF_IMAGE   ?= gs-mgmt-north-notif
+GS_MGMT_TEST_IMAGE    ?= gs-mgmt-test
+
+define image_name
+$(GS_MGMT_IMAGE_PREFIX)$1:$(GS_MGMT_IMAGE_TAG)
+endef
+
+BUILDER ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
+BASE ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
 
 TAI_META_CUSTOM_FILES ?= $(abspath $(wildcard scripts/tai/*))
 
-DOCKER_BUILD_OPTION ?= --platform linux/$(ARCH)
-
-all: builder np2 snmpd base-image images
+all: builder base-image images tester
 
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make cli system' $(MAKE) cmd
 
 builder:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/builder.Dockerfile -t $(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/builder.Dockerfile -t $(BUILDER) .
 
 base-image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
+							      -t $(call image_name,$(GS_MGMT_BASE_IMAGE)) .
 
 images: south-images north-images xlate-images
 
-south-images: south-sonic south-tai south-onlp south-system north-notif south-gearbox
+south-images: south-sonic south-tai south-onlp south-system south-gearbox
 
-north-images: north-cli north-snmp np2
+north-images: north-cli north-snmp north-netconf north-notif
 
-xlate-images: xlate-openconfig
+xlate-images: xlate-oc
+
+image:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f $(DOCKER_FILE) \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
+							      --build-arg GS_MGMT_BASE=$(call image_name,$(GS_MGMT_BASE_IMAGE)) \
+							      -t $(call image_name,$(IMAGE_NAME)) .
 
 south-sonic:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-sonic.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_SONIC_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+	IMAGE_NAME=$(GS_MGMT_SONIC_IMAGE) DOCKER_FILE=docker/south-sonic.Dockerfile $(MAKE) image
 
 south-tai:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-tai.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_TAI_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+	IMAGE_NAME=$(GS_MGMT_TAI_IMAGE) DOCKER_FILE=docker/south-tai.Dockerfile $(MAKE) image
 
 south-gearbox:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-gearbox.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_GEARBOX_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+	IMAGE_NAME=$(GS_MGMT_GEARBOX_IMAGE) DOCKER_FILE=docker/south-gearbox.Dockerfile $(MAKE) image
 
 south-onlp:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-onlp.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_ONLP_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+	IMAGE_NAME=$(GS_MGMT_ONLP_IMAGE) DOCKER_FILE=docker/south-onlp.Dockerfile $(MAKE) image
 
 south-system:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/south-system.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_SYSTEM_IMAGE):$(GS_MGMT_IMAGE_TAG) .
-north-notif:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/north-notif.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_NOTIF_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+	IMAGE_NAME=$(GS_MGMT_SYSTEM_IMAGE) DOCKER_FILE=docker/south-system.Dockerfile $(MAKE) image
+
 north-cli:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/north-cli.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_CLI_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+	IMAGE_NAME=$(GS_MGMT_CLI_IMAGE) DOCKER_FILE=docker/north-cli.Dockerfile $(MAKE) image
 
-north-snmp:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/north-snmp.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_SNMP_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+north-notif:
+	IMAGE_NAME=$(GS_MGMT_NOTIF_IMAGE) DOCKER_FILE=docker/north-notif.Dockerfile $(MAKE) image
 
-xlate-openconfig:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/xlate-openconfig.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      --build-arg GS_MGMT_BASE=$(DOCKER_REPO)/$(GS_MGMT_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_OC_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+north-snmp: snmpd
+	IMAGE_NAME=$(GS_MGMT_SNMP_IMAGE) DOCKER_FILE=docker/north-snmp.Dockerfile $(MAKE) image
 
+north-netconf:
+	IMAGE_NAME=$(GS_MGMT_NP2_IMAGE) DOCKER_FILE=docker/netopeer2.Dockerfile $(MAKE) image
 
-
-np2:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/netopeer2.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_NP2_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+xlate-oc:
+	IMAGE_NAME=$(GS_MGMT_OC_IMAGE) DOCKER_FILE=docker/xlate-openconfig.Dockerfile $(MAKE) image
 
 snmpd:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/snmpd.Dockerfile \
-							      -t $(DOCKER_REPO)/$(GS_MGMT_SNMPD_IMAGE):$(GS_MGMT_IMAGE_TAG) .
+	IMAGE_NAME=$(GS_MGMT_SNMPD_IMAGE) DOCKER_FILE=docker/snmpd.Dockerfile $(MAKE) image
 
 tester:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f ci/docker/gs-mgmt-test.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(DOCKER_REPO)/$(GS_MGMT_BUILDER_IMAGE):$(GS_MGMT_IMAGE_TAG) \
-							      -t $(GS_MGMT_TEST_IMAGE) .
+	IMAGE_NAME=$(GS_MGMT_TEST_IMAGE) DOCKER_FILE=docker/tester.Dockerfile $(MAKE) image
 
 yang: yang/goldstone-transponder.yang
 
@@ -127,7 +105,7 @@ bash:
 	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd
 
 tester-bash:
-	DOCKER_RUN_OPTION='-it' DOCKER_IMAGE=$(GS_MGMT_TEST_IMAGE) $(MAKE) cmd
+	DOCKER_RUN_OPTION='-it' DOCKER_IMAGE=$(call image_name,$(GS_MGMT_TEST_IMAGE)) $(MAKE) cmd
 
 cmd:
 	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_IMAGE) $(DOCKER_CMD)

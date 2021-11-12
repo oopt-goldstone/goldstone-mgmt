@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:experimental
 
-ARG GS_MGMT_BUILDER_IMAGE=docker.io/microsonic/gs-mgmt-builder:latest
-ARG GS_MGMT_BASE=docker.io/microsonic/gs-mgmt:latest
+ARG GS_MGMT_BUILDER_IMAGE=ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-builder:latest
+ARG GS_MGMT_BASE=ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt:latest
 
 FROM $GS_MGMT_BUILDER_IMAGE as builder
 
