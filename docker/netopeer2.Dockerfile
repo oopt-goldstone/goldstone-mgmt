@@ -2,7 +2,7 @@
 
 # ubuntu:20.04's libssh won't work
 
-ARG GS_MGMT_BUILDER_IMAGE=docker.io/microsonic/gs-mgmt-builder:latest
+ARG GS_MGMT_BUILDER_IMAGE=ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-builder:latest
 ARG GS_NETOPEER2_BUILDER_BASE=debian:10
 
 FROM $GS_MGMT_BUILDER_IMAGE as builder

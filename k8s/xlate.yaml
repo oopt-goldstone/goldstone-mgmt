@@ -22,7 +22,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: xlate-openconfig
-              image: docker.io/microsonic/gs-mgmt-xlate-openconfig:latest
+              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-xlate-openconfig:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gsxlated-openconfig', '-v']
               volumeMounts:
