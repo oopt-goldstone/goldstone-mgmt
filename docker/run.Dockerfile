@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 
-ARG GS_MGMT_BUILDER_IMAGE=docker.io/microsonic/gs-mgmt-builder:latest
+ARG GS_MGMT_BUILDER_IMAGE=ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-builder:latest
 ARG GS_MGMT_BASE=python:3-slim-buster
 
 FROM $GS_MGMT_BUILDER_IMAGE as builder

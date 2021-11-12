@@ -51,7 +51,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: snmpd
-              image: docker.io/microsonic/gs-mgmt-snmpd:latest
+              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-snmpd:latest-amd64
               imagePullPolicy: IfNotPresent
               ports:
               - containerPort: 161
@@ -64,7 +64,7 @@ spec:
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
             - name: agentx
-              image: docker.io/microsonic/gs-mgmt-north-snmp:latest
+              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-north-snmp:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gsnorthd-snmp', '-v']
               volumeMounts:
