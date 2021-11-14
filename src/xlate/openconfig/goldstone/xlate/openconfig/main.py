@@ -5,8 +5,7 @@ import argparse
 import signal
 import itertools
 
-from .interface import InterfaceServer
-from .platform import PlatformServer
+from .interfaces import InterfaceServer
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ def main():
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
         conn = sysrepo.SysrepoConnection()
-        servers = [InterfaceServer(conn), PlatformServer(conn)]
+        servers = [InterfaceServer(conn)]
 
         try:
             tasks = list(
