@@ -131,7 +131,7 @@ unittest:
 	sysrepoctl -s sm/openconfig -i sm/openconfig/release/models/interfaces/openconfig-if-ethernet.yang
 	cd src/south/sonic && make proto
 	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f
-#	# unittest package can't search namespace packages
+	# unittest package can't search namespace packages
 	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f
 	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f
 	cd src/south/tai        && PYTHONPATH=../../lib python -m unittest -v -f
