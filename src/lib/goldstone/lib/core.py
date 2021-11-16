@@ -82,6 +82,7 @@ class ServerBase(object):
         self.module = module
         self.top = f"/{self.module}:{v[0]}"
         self.handlers = {}
+        self._current_handlers = None  # (req_id, handlers, user)
 
     def get_sr_data(self, xpath, datastore, default=None, strip=True):
         self.sess.switch_datastore(datastore)
@@ -138,22 +139,39 @@ class ServerBase(object):
     async def reconcile(self):
         logger.debug("reconcile")
 
-    # no 'abort' event handing since this is the only subscriber of the module
-    # do the actual change handing in 'change' event
-    # 'done' event is no-op
-    # 'change' event handling
-    # 1. iterate through the changes, do basic validation, degenerate changes if possible
-    # 2. do the actual change handling, if any error happens, revert the changes made in advance and raise error
+    # In Goldstone Management Layer, one model is subcribed by one Server.
+    # When a sysrepo transction only includes changes for one model, 'abort' event
+    # never happens. However, when a sysrepo transaction includes changes for more than one model,
+    # change_cb() may get an 'abort' event if error happens in a change_cb() of other servers.
+    #
+    # We store the handlers created in the 'change' event, and discard them if we get a succeeding 'done' event.
+    # If we get 'abort' event, call revert() of the stored handlers then discard them.
+    #
+    # - 'change' event handling
+    #   - 1. iterate through the changes, do basic validation, degenerate changes if possible
+    #   - 2. do the actual change handling, if any error happens, revert the changes made in advance and raise error
+    #   - 3. store the handlers for 'abort' event
+    # - 'done' event handling
+    #   - 1. discard the stored handlers
+    # - 'abort' event handling
+    #   - 1. call revert() of the stored handlers
+    #   - 2. discard the stored handlers
     async def change_cb(self, event, req_id, changes, priv):
-
-        if event not in ["change", "done"]:
-            logger.warn(f"unsupported event: {event}, id: {req_id}, changes: {changes}")
+        logger.debug(f"id: {req_id}, event: {event}, changes: {changes}")
+        if event not in ["change", "done", "abort"]:
+            logger.warning(f"unsupported event: {event}")
             return
 
-        if event == "done":
+        if event in ["done", "abort"]:
+            id, handlers, user = self._current_handlers
+            assert id == req_id
+            if event == "abort":
+                for done in reversed(handlers):
+                    await call(done.revert, user)
+            self._current_handlers = None
             return
 
-        logger.debug(f"id: {req_id}, changes: {changes}")
+        assert self._current_handlers == None
 
         handlers = []
 
@@ -185,6 +203,7 @@ class ServerBase(object):
                 raise e
 
         await call(self.post, user)
+        self._current_handlers = (req_id, handlers, user)
 
     def pre(self, user):
         pass
