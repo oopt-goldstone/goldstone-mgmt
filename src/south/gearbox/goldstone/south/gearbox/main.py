@@ -7,8 +7,7 @@ import sysrepo
 import json
 from goldstone.lib.core import start_probe
 from .interfaces import InterfaceServer
-
-# from .gearbox import GearboxServer
+from .gearbox import GearboxServer
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +21,9 @@ def main():
 
         conn = sysrepo.SysrepoConnection()
 
-        intf = InterfaceServer(conn, taish_server, platform_info)
-        #        gb = GearboxServer(conn, tai)
-        servers = [intf]  # , gb]
+        ifserver = InterfaceServer(conn, taish_server, platform_info)
+        gb = GearboxServer(conn, ifserver)
+        servers = [ifserver, gb]
 
         try:
             tasks = list(

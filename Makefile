@@ -125,6 +125,7 @@ unittest:
 	sysrepoctl -i yang/goldstone-interfaces.yang
 	sysrepoctl -i yang/goldstone-platform.yang
 	sysrepoctl -i yang/goldstone-transponder.yang
+	sysrepoctl -i yang/goldstone-gearbox.yang
 	sysrepoctl -i yang/goldstone-component-connection.yang
 	sysrepoctl -i yang/goldstone-uplink-failure-detection.yang
 	sysrepoctl -s sm/openconfig -i sm/openconfig/release/models/interfaces/openconfig-interfaces.yang
