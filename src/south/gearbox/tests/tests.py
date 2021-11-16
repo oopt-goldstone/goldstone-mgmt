@@ -1,6 +1,7 @@
 import unittest
 from unittest import mock
 from goldstone.south.gearbox.interfaces import InterfaceServer
+from goldstone.south.gearbox.gearbox import GearboxServer
 import sysrepo
 import libyang
 import asyncio
@@ -25,6 +26,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         with self.conn.start_session() as sess:
             sess.switch_datastore("running")
             sess.replace_config({}, "goldstone-interfaces")
+            sess.replace_config({}, "goldstone-gearbox")
             sess.apply_changes()
 
         taish = mock.AsyncMock()
@@ -41,6 +43,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 logger.debug("monitoring..")
                 await asyncio.sleep(1)
 
+        self.set_logs = []
+
+        async def set_(*args):
+            self.set_logs.append(args)
+
         async def get(*args, **kwargs):
             if args[0] in ["alarm-notification", "notify"]:
                 return "(nil)"
@@ -52,15 +59,19 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return "none"
             elif args[0] == "signal-rate":
                 return "100-gbe"
+            elif args[0] == "oper-status":
+                return "ready"
             else:
                 return mock.MagicMock()
 
         module.monitor = monitor
         module.get = get
+        module.set = set_
 
         obj = mock.AsyncMock()
         obj.monitor = monitor
         obj.get = get
+        obj.set = set_
         obj.index = 0
 
         def f(*args):
@@ -125,6 +136,100 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 raise e
 
         await self.server.stop()
+
+    async def test_reconcile(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        self.set_logs = []
+
+        await gbserver.start()
+
+        self.assertEqual(
+            self.set_logs,
+            [("admin-status", "up"), ("tx-dis", "true"), ("tx-dis", "true")],
+        )
+        gbserver.stop()
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        self.set_logs = []
+
+        def setup():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
+                )
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/admin-status",
+                    "DOWN",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(setup)
+
+        await gbserver.start()
+
+        self.assertEqual(
+            self.set_logs,
+            [("admin-status", "down"), ("tx-dis", "true"), ("tx-dis", "true")],
+        )
+        gbserver.stop()
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        self.set_logs = []
+
+        def setup():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
+                )
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/admin-status",
+                    "UP",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(setup)
+
+        await gbserver.start()
+
+        self.assertEqual(
+            self.set_logs,
+            [("admin-status", "up"), ("tx-dis", "true"), ("tx-dis", "true")],
+        )
+
+        gbserver.stop()
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        self.set_logs = []
+
+        def setup():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/name",
+                    "Ethernet1/0/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/admin-status",
+                    "UP",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(setup)
+
+        await gbserver.start()
+
+        self.assertEqual(
+            self.set_logs,
+            [("admin-status", "up"), ("tx-dis", "false"), ("tx-dis", "true")],
+        )
 
     async def asyncTearDown(self):
         [p.stop() for p in self.patchers]

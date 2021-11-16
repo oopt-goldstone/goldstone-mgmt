@@ -87,6 +87,17 @@ class InterfaceServer(ServerBase):
         for node in ctx.find_path(xpath):
             return node.default()
 
+    async def reconcile(self):
+        prefix = "/goldstone-interfaces:interfaces/interface"
+        for ifname in await self.get_ifname_list():
+            xpath = f"{prefix}[name='{ifname}']/config/admin-status"
+            admin_status = self.get_running_data(xpath)
+            if admin_status == None:
+                admin_status == "DOWN"
+            value = "false" if admin_status == "UP" else "true"
+            obj = await self.ifname2taiobj(ifname)
+            await obj.set("tx-dis", value)
+
     async def start(self):
         async def ping():
             while True:
