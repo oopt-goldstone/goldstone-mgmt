@@ -188,9 +188,15 @@ class InterfaceServer(ServerBase):
                 pass
 
             try:
-                state["oper-status"] = (
-                    "UP" if "ready" in await obj.get("pcs-status") else "DOWN"
-                )
+                pcs = await obj.get("pcs-status")
+                status = "DOWN"
+                if (
+                    "ready" in pcs
+                    and ("rx-remote-fault" not in pcs)
+                    and ("rx-local-fault" not in pcs)
+                ):
+                    status = "UP"
+                state["oper-status"] = status
             except taish.TAIException:
                 pass
             i["state"] = state
