@@ -64,6 +64,16 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             else:
                 return mock.MagicMock()
 
+        async def get_attribute_capability(*args, **kwargs):
+            m = mock.MagicMock()
+            m.min = ""
+            m.max = ""
+            if args[0] == "tx-dis":
+                m.default_value = "false"
+            elif args[0] == "fec-type":
+                m.default_value = "none"
+            return m
+
         module.monitor = monitor
         module.get = get
         module.set = set_
@@ -72,6 +82,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         obj.monitor = monitor
         obj.get = get
         obj.set = set_
+        obj.get_attribute_capability = get_attribute_capability
         obj.index = 0
 
         def f(*args):
@@ -230,6 +241,68 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             self.set_logs,
             [("admin-status", "up"), ("tx-dis", "false"), ("tx-dis", "true")],
         )
+
+    async def test_fec(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                ifname = "Ethernet1/0/1"
+                sess.set_item(
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
+                    ifname,
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                ifname = "Ethernet1/0/1"
+                sess.delete_item(
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                ifname = "Ethernet1/0/1"
+                sess.set_item(
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
+                    ifname,
+                )
+                sess.set_item(
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/config/fec",
+                    "RS",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                ifname = "Ethernet1/0/1"
+                sess.delete_item(
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        [task.cancel() for task in tasks]
+
+        await ifserver.stop()
 
     async def asyncTearDown(self):
         [p.stop() for p in self.patchers]

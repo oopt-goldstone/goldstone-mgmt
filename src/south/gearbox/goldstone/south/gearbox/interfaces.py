@@ -27,22 +27,76 @@ class IfChangeHandler(ChangeHandler):
 
         self.ifname = ifname
 
+    async def validate(self, user):
+        if not self.tai_attr_name:
+            return
+        try:
+            cap = await self.obj.get_attribute_capability(self.tai_attr_name)
+        except taish.TAIException as e:
+            raise sysrepo.SysrepoInvalArgError(e.msg)
 
-class AdminStatusHandler(IfChangeHandler):
-    async def apply(self, user):
-        if self.type in ["created", "modified"]:
-            value = self.change.value
+        logger.info(f"cap: {cap}")
+
+        if self.type == "deleted":
+            leaf = self.xpath[-1][1]
+            d = self.server.get_default(leaf)
+            if d:
+                self.value = self.to_tai_value(d)
+            elif cap.default_value == "":  # and is_deleted
+                raise sysrepo.SysrepoInvalArgError(
+                    f"no default value. cannot remove the configuration"
+                )
+            else:
+                self.value = cap.default_value
         else:
-            value = self.server.get_default("admin-status")
-        logger.debug(f"set {self.ifname}'s admin-status to {value}")
-        key = "tx-dis"
-        self.value = "false" if self.change.value == "UP" else "true"
-        self.original_value = await self.obj.get(key)
-        await self.obj.set(key, self.value)
+            v = self.to_tai_value(self.change.value)
+            if cap.min != "" and float(cap.min) > float(v):
+                raise sysrepo.SysrepoInvalArgError(
+                    f"minimum {k} value is {cap.min}. given {v}"
+                )
+
+            if cap.max != "" and float(cap.max) < float(v):
+                raise sysrepo.SysrepoInvalArgError(
+                    f"maximum {k} value is {cap.max}. given {v}"
+                )
+
+            valids = cap.supportedvalues
+            if len(valids) > 0 and v not in valids:
+                raise sysrepo.SysrepoInvalArgError(
+                    f"supported values are {valids}. given {v}"
+                )
+
+            self.value = v
+
+    async def apply(self, user):
+        if not self.tai_attr_name:
+            return
+        self.original_value = await self.obj.get(self.tai_attr_name)
+        await self.obj.set(self.tai_attr_name, self.value)
 
     async def revert(self, user):
-        logger.warning(f"reverting: tx-dis {self.value} => {self.original_value}")
-        await self.obj.set("tx-dis", self.original_value)
+        logger.warning(
+            f"reverting: {self.tai_attr_name} {self.value} => {self.original_value}"
+        )
+        await self.obj.set(self.tai_attr_name, self.original_value)
+
+
+class AdminStatusHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "tx-dis"
+
+    def to_tai_value(self, v):
+        return "false" if v == "UP" else "true"
+
+
+class FECHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "fec-type"
+
+    def to_tai_value(self, v):
+        return v.lower()
 
 
 class InterfaceServer(ServerBase):
@@ -66,9 +120,17 @@ class InterfaceServer(ServerBase):
                         "name": NoOp,
                         "description": NoOp,
                     },
-                    "ethernet": NoOp,
-                    "switched-vlan": NoOp,
-                    "component-connection": NoOp,
+                    "ethernet": {
+                        "config": {
+                            "fec": FECHandler,
+                            "mtu": NoOp,
+                        },
+                        "auto-negotiate": {
+                            "config": {
+                                "enabled": NoOp,
+                            }
+                        },
+                    },
                 }
             }
         }
@@ -76,16 +138,34 @@ class InterfaceServer(ServerBase):
     def get_default(self, key, model="goldstone-interfaces"):
         ctx = self.sess.get_ly_ctx()
         if model == "goldstone-interfaces":
-            keys = ["interfaces", "interface", "config", key]
+            keys = [
+                ["interfaces", "interface", "config", key],
+                ["interfaces", "interface", "ethernet", "config", key],
+                [
+                    "interfaces",
+                    "interface",
+                    "ethernet",
+                    "auto-negotiate",
+                    "config",
+                    key,
+                ],
+            ]
         elif model == "goldstone-gearbox":
-            keys = ["gearboxes", "gearbox", "config", key]
+            keys = [["gearboxes", "gearbox", "config", key]]
         else:
             return None
 
-        xpath = "".join(f"/{model}:{v}" for v in keys)
+        for k in keys:
+            xpath = "".join(f"/{model}:{v}" for v in k)
+            try:
+                for node in ctx.find_path(xpath):
+                    if node.type().name() == "boolean":
+                        return node.default() == "true"
+                    return node.default()
+            except libyang.util.LibyangError:
+                pass
 
-        for node in ctx.find_path(xpath):
-            return node.default()
+        raise None
 
     async def reconcile(self):
         prefix = "/goldstone-interfaces:interfaces/interface"
