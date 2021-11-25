@@ -182,6 +182,8 @@ class ServerBase(object):
         for change in changes:
             cls = self.get_handler(change.xpath)
             if not cls:
+                if isinstance(change, sysrepo.ChangeDeleted):
+                    continue
                 raise sysrepo.SysrepoUnsupportedError(f"{change.xpath} not supported")
 
             h = cls(self, change)
