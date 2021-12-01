@@ -8,6 +8,9 @@ import json
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_ADMIN_STATUS = "DOWN"
+DEFAULT_FEC_TYPE = "RS"
+
 
 class IfChangeHandler(ChangeHandler):
     async def _init(self, user):
@@ -170,13 +173,22 @@ class InterfaceServer(ServerBase):
     async def reconcile(self):
         prefix = "/goldstone-interfaces:interfaces/interface"
         for ifname in await self.get_ifname_list():
-            xpath = f"{prefix}[name='{ifname}']/config/admin-status"
-            admin_status = self.get_running_data(xpath)
+            xpath = f"{prefix}[name='{ifname}']"
+            config = self.get_running_data(
+                xpath, default={}, include_implicit_defaults=True
+            )
+            admin_status = config.get("config", {}).get("admin-status")
             if admin_status == None:
-                admin_status == "DOWN"
+                admin_status = DEFAULT_ADMIN_STATUS
             value = "false" if admin_status == "UP" else "true"
+
             obj = await self.ifname2taiobj(ifname)
             await obj.set("tx-dis", value)
+
+            fec = config.get("ethernet", {}).get("config", {}).get("fec")
+            if fec == None:
+                fec = DEFAULT_FEC_TYPE
+            await obj.set("fec-type", fec.lower())
 
     async def start(self):
         async def ping():
