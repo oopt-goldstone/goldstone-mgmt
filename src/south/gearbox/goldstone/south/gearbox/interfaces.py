@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ADMIN_STATUS = "DOWN"
 DEFAULT_FEC_TYPE = "RS"
+DEFAULT_MTU = 9100
 
 
 class IfChangeHandler(ChangeHandler):
@@ -102,6 +103,15 @@ class FECHandler(IfChangeHandler):
         return v.lower()
 
 
+class MTUHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "mtu"
+
+    def to_tai_value(self, v):
+        return v
+
+
 class InterfaceServer(ServerBase):
     def __init__(self, conn, taish_server, platform_info):
         super().__init__(conn, "goldstone-interfaces")
@@ -126,7 +136,7 @@ class InterfaceServer(ServerBase):
                     "ethernet": {
                         "config": {
                             "fec": FECHandler,
-                            "mtu": NoOp,
+                            "mtu": MTUHandler,
                         },
                         "auto-negotiate": {
                             "config": {
@@ -189,6 +199,11 @@ class InterfaceServer(ServerBase):
             if fec == None:
                 fec = DEFAULT_FEC_TYPE
             await obj.set("fec-type", fec.lower())
+
+            mtu = config.get("ethernet", {}).get("config", {}).get("mtu")
+            if mtu == None:
+                mtu = DEFAULT_MTU
+            await obj.set("mtu", mtu)
 
     async def start(self):
         async def ping():
@@ -296,6 +311,11 @@ class InterfaceServer(ServerBase):
             state = {}
             try:
                 state["fec"] = (await obj.get("fec-type")).upper()
+            except taish.TAIException:
+                pass
+
+            try:
+                state["mtu"] = int(await obj.get("mtu"))
             except taish.TAIException:
                 pass
 

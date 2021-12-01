@@ -263,6 +263,18 @@ class TestSouthGearbox(TestBase):
                 self.assertTrue("down" in line)
                 break
 
+    def test_mtu(self):
+        ifname = "Ethernet1/1/1"
+        self.gscli(f"interface {ifname}; no mtu")
+        output = self.gscli(f"interface {ifname}; show")
+        self.assertTrue("9100" in output)
+        self.gscli(f"interface {ifname}; mtu 9000")
+        output = self.gscli(f"interface {ifname}; show")
+        self.assertTrue("9000" in output)
+        self.gscli(f"interface {ifname}; mtu 9216")
+        output = self.gscli(f"interface {ifname}; show")
+        self.assertTrue("9216" in output)
+
 
 class TestSouthSONiC(TestBase):
     def test_vlan(self):
