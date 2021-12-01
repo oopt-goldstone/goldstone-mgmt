@@ -84,10 +84,19 @@ class ServerBase(object):
         self.handlers = {}
         self._current_handlers = None  # (req_id, handlers, user)
 
-    def get_sr_data(self, xpath, datastore, default=None, strip=True):
+    def get_sr_data(
+        self,
+        xpath,
+        datastore,
+        default=None,
+        strip=True,
+        include_implicit_defaults=False,
+    ):
         self.sess.switch_datastore(datastore)
         try:
-            v = self.sess.get_data(xpath)
+            v = self.sess.get_data(
+                xpath, include_implicit_defaults=include_implicit_defaults
+            )
         except sysrepo.errors.SysrepoNotFoundError:
             logger.debug(
                 f"xpath: {xpath}, ds: {datastore}, not found. returning {default}"
@@ -98,8 +107,12 @@ class ServerBase(object):
         logger.debug(f"xpath: {xpath}, ds: {datastore}, value: {v}")
         return v
 
-    def get_running_data(self, xpath, default=None, strip=True):
-        return self.get_sr_data(xpath, "running", default, strip)
+    def get_running_data(
+        self, xpath, default=None, strip=True, include_implicit_defaults=False
+    ):
+        return self.get_sr_data(
+            xpath, "running", default, strip, include_implicit_defaults
+        )
 
     def get_operational_data(self, xpath, default=None, strip=True):
         return self.get_sr_data(xpath, "operational", default, strip)
