@@ -61,6 +61,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return "100-gbe"
             elif args[0] == "oper-status":
                 return "ready"
+            elif args[0] == "mtu":
+                return 9100
             else:
                 return mock.MagicMock()
 
@@ -162,8 +164,17 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             self.set_logs,
-            [("admin-status", "up"), ("tx-dis", "true"), ("tx-dis", "true")],
+            [
+                ("admin-status", "up"),
+                ("tx-dis", "true"),
+                ("fec-type", "rs"),
+                ("mtu", 9100),
+                ("tx-dis", "true"),
+                ("fec-type", "rs"),
+                ("mtu", 9100),
+            ],
         )
+
         gbserver.stop()
         gbserver = GearboxServer(self.conn, ifserver)
 
@@ -187,7 +198,15 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             self.set_logs,
-            [("admin-status", "down"), ("tx-dis", "true"), ("tx-dis", "true")],
+            [
+                ("admin-status", "down"),
+                ("tx-dis", "true"),
+                ("fec-type", "rs"),
+                ("mtu", 9100),
+                ("tx-dis", "true"),
+                ("fec-type", "rs"),
+                ("mtu", 9100),
+            ],
         )
         gbserver.stop()
         gbserver = GearboxServer(self.conn, ifserver)
@@ -212,7 +231,15 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             self.set_logs,
-            [("admin-status", "up"), ("tx-dis", "true"), ("tx-dis", "true")],
+            [
+                ("admin-status", "up"),
+                ("tx-dis", "true"),
+                ("fec-type", "rs"),
+                ("mtu", 9100),
+                ("tx-dis", "true"),
+                ("fec-type", "rs"),
+                ("mtu", 9100),
+            ],
         )
 
         gbserver.stop()
@@ -239,7 +266,15 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             self.set_logs,
-            [("admin-status", "up"), ("tx-dis", "false"), ("tx-dis", "true")],
+            [
+                ("admin-status", "up"),
+                ("tx-dis", "false"),
+                ("fec-type", "rs"),
+                ("mtu", 9100),
+                ("tx-dis", "true"),
+                ("fec-type", "rs"),
+                ("mtu", 9100),
+            ],
         )
 
     async def test_fec(self):
