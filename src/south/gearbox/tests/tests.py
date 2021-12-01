@@ -11,11 +11,36 @@ import json
 import time
 import itertools
 from goldstone.lib.core import ServerBase
+from concurrent.futures import ProcessPoolExecutor
+from taish import NetIf
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
 
 logger = logging.getLogger(__name__)
+
+
+async def to_subprocess(func):
+    loop = asyncio.get_running_loop()
+    executor = ProcessPoolExecutor(max_workers=1)
+    return await loop.run_in_executor(executor, func)
+
+
+def test_monitor():
+    def cb(a, b, c, d):
+        logger.info(b.print_dict())
+
+    conn = sysrepo.SysrepoConnection()
+    with conn.start_session() as sess:
+        sess.subscribe_notification_tree(
+            "goldstone-interfaces",
+            "/goldstone-interfaces:*",
+            0,
+            0,
+            cb,
+        )
+
+        time.sleep(5)
 
 
 class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
@@ -29,19 +54,12 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             sess.replace_config({}, "goldstone-gearbox")
             sess.apply_changes()
 
-        taish = mock.AsyncMock()
-        taish.list.return_value = {"1": None}
-
         def noop():
             pass
 
+        taish = mock.AsyncMock()
         taish.close = noop
         module = taish.get_module.return_value
-
-        async def monitor(*args, **kwargs):
-            while True:
-                logger.debug("monitoring..")
-                await asyncio.sleep(1)
 
         self.set_logs = []
 
@@ -63,6 +81,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return "ready"
             elif args[0] == "mtu":
                 return 9100
+            elif args[0] == "index":
+                return 0
             else:
                 return mock.MagicMock()
 
@@ -76,9 +96,39 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 m.default_value = "none"
             return m
 
+        async def get_attribute_metadata(*args, **kwargs):
+            m = mock.MagicMock()
+            m.short_name = "pcs-status"
+            return m
+
+        async def monitor(*args, **kwargs):
+            logger.debug("monitoring..")
+            await asyncio.sleep(1)
+
+            obj = mock.MagicMock(spec=NetIf)
+            obj.obj = mock.MagicMock()
+            obj.obj.module_oid = 1
+            obj.get = get
+            obj.get_attribute_metadata = get_attribute_metadata
+
+            msg = mock.MagicMock()
+            attr = mock.MagicMock()
+            attr.value = '["ready"]'
+            msg.attrs = [attr]
+            await args[1](obj, None, msg)
+
+            await asyncio.sleep(1)
+
+            attr.value = '["ready", "rx-remote-fault"]'
+            msg.attrs = [attr]
+            await args[1](obj, None, msg)
+
         module.monitor = monitor
         module.get = get
         module.set = set_
+        module.oid = 1
+
+        taish.list.return_value = {"1": module}
 
         obj = mock.AsyncMock()
         obj.monitor = monitor
@@ -338,6 +388,21 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         [task.cancel() for task in tasks]
 
         await ifserver.stop()
+
+    async def test_monitor(self):
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        tasks.append(asyncio.create_task(to_subprocess(test_monitor)))
+
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            e = task.exception()
+            if e:
+                raise e
 
     async def asyncTearDown(self):
         [p.stop() for p in self.patchers]

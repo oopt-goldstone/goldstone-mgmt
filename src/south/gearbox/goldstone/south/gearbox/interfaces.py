@@ -112,6 +112,17 @@ class MTUHandler(IfChangeHandler):
         return v
 
 
+def pcs_status2oper_status(pcs):
+    status = "DOWN"
+    if (
+        "ready" in pcs
+        and ("rx-remote-fault" not in pcs)
+        and ("rx-local-fault" not in pcs)
+    ):
+        status = "UP"
+    return status
+
+
 class InterfaceServer(ServerBase):
     def __init__(self, conn, taish_server, platform_info):
         super().__init__(conn, "goldstone-interfaces")
@@ -123,6 +134,7 @@ class InterfaceServer(ServerBase):
         self.platform_info = info
         self.conn = conn
         self.taish = taish.AsyncClient(*taish_server.split(":"))
+        self.notif_q = asyncio.Queue()
         self.is_initializing = True
         self.handlers = {
             "interfaces": {
@@ -205,6 +217,49 @@ class InterfaceServer(ServerBase):
                 mtu = DEFAULT_MTU
             await obj.set("mtu", mtu)
 
+    async def tai_cb(self, obj, attr_meta, msg):
+        if isinstance(obj, taish.NetIf):
+            type_ = 1
+        elif isinstance(obj, taish.HostIf):
+            type_ = 0
+        else:
+            logger.error(f"invalid object: {obj}")
+            return
+
+        m_oid = obj.obj.module_oid
+        modules = await self.taish.list()
+
+        for location, m in modules.items():
+            if m.oid == m_oid:
+                loc = location
+                break
+        else:
+            logger.error(f"module not found: {m_oid}")
+            return
+
+        index = int(await obj.get("index"))
+        ifname = f"Ethernet{loc}/{type_}/{index+1}"
+
+        await self.notif_q.put({"ifname": ifname, "msg": msg, "obj": obj})
+
+    async def notification_tasks(self):
+        async def task(obj, attr):
+            try:
+                await obj.monitor(attr, self.tai_cb, json=True)
+            except asyncio.exceptions.CancelledError as e:
+                while True:
+                    await asyncio.sleep(0.1)
+                    v = await obj.get(attr)
+                    logger.debug(v)
+                    if "(nil)" in v:
+                        return
+                raise e
+
+        return [
+            task(await self.ifname2taiobj(ifname), "alarm-notification")
+            for ifname in await self.get_ifname_list()
+        ]
+
     async def start(self):
         async def ping():
             while True:
@@ -215,11 +270,31 @@ class InterfaceServer(ServerBase):
                     logger.error(f"ping failed {e}")
                     return
 
+        async def handle_notification(notification):
+            logger.info(notification)
+            ifname = notification["ifname"]
+            msg = notification["msg"]
+            obj = notification["obj"]
+            eventname = "goldstone-interfaces:interface-link-state-notify-event"
+
+            for attr in msg.attrs:
+                meta = await obj.get_attribute_metadata(attr.attr_id)
+                if meta.short_name != "pcs-status":
+                    continue
+                status = pcs_status2oper_status(json.loads(attr.value))
+                notif = {"if-name": ifname, "oper-status": status}
+                self.send_notification(eventname, notif)
+
+        async def notif_loop():
+            while True:
+                notification = await self.notif_q.get()
+                await handle_notification(notification)
+                self.notif_q.task_done()
+
         tasks = await super().start()
-        tasks.append(ping())
         self.is_initializing = False
 
-        return tasks
+        return tasks + [ping(), notif_loop()] + await self.notification_tasks()
 
     async def stop(self):
         logger.info(f"stop server")
@@ -296,14 +371,7 @@ class InterfaceServer(ServerBase):
 
             try:
                 pcs = await obj.get("pcs-status")
-                status = "DOWN"
-                if (
-                    "ready" in pcs
-                    and ("rx-remote-fault" not in pcs)
-                    and ("rx-local-fault" not in pcs)
-                ):
-                    status = "UP"
-                state["oper-status"] = status
+                state["oper-status"] = pcs_status2oper_status(pcs)
             except taish.TAIException:
                 pass
             i["state"] = state
