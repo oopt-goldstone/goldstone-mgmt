@@ -1,4 +1,4 @@
-from gscli.base import Object, InvalidInput, Completer, Command
+from goldstone.north.cli.base import Object, InvalidInput, Completer, Command
 from prompt_toolkit.completion import WordCompleter
 import unittest
 

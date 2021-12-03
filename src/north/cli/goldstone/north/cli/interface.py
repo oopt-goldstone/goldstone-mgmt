@@ -215,13 +215,13 @@ class SwitchportModeCommand(Command):
         port = self.context.port
         if (
             len(line) < 3
-            or (line[1] not in self.SUBCOMMAND_DICT)
-            or (line[2] != "vlan")
+            or (line[0] not in self.SUBCOMMAND_DICT)
+            or (line[1] != "vlan")
         ):
             raise InvalidInput(f"usage : {self.name_all()} [trunk|access] vlan <vid>")
 
         port.set_vlan_mem(
-            self.context.ifnames, line[1], line[3], config=self.root.name != "no"
+            self.context.ifnames, line[0], line[2], config=self.root.name != "no"
         )
 
 

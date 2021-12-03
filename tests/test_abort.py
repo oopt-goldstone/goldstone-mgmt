@@ -114,3 +114,6 @@ class TestAbort(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(xpserver.apply_called)
         self.assertTrue(xpserver.revert_called)
+
+        ifserver.stop()
+        xpserver.stop()
