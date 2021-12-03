@@ -84,13 +84,23 @@ class Vlan(object):
     def xpath(self, vid):
         return f"{self.XPATH}[vlan-id='{vid}']"
 
-    def create(self, vid):
-        self.sr_op.set_data(f"{self.xpath(vid)}/config/vlan-id", vid)
+    def create(self, vids: int | list[int]):
+        if type(vids) == int:
+            vids = [vids]
 
-    def delete(self, vid):
-        if vid not in self.get_vids():
-            raise InvalidInput(f"vlan {vid} not found")
-        self.sr_op.delete_data(self.xpath(vid))
+        for vid in vids:
+            self.sr_op.set_data(f"{self.xpath(vid)}/config/vlan-id", vid, no_apply=True)
+        self.sr_op.apply()
+
+    def delete(self, vids: int | list[int]):
+        if type(vids) == int:
+            vids = [vids]
+
+        for vid in vids:
+            if str(vid) not in self.get_vids():
+                raise InvalidInput(f"vlan {vid} not found")
+            self.sr_op.delete_data(self.xpath(vid), no_apply=True)
+        self.sr_op.apply()
 
     def get_vids(self):
         xpath = f"{self.XPATH}/vlan-id"

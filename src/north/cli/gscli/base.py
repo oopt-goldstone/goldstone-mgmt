@@ -10,10 +10,12 @@ from prompt_toolkit.completion import (
 from prompt_toolkit.completion import Completer as PromptCompleter
 from prompt_toolkit.completion import merge_completers
 from enum import Enum
+from itertools import chain
 
 import sys
 import subprocess
 import logging
+import typing
 
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
@@ -67,7 +69,11 @@ class Completer(PromptCompleter):
                     yield v
 
 
-class Command(object):
+class BaseCommand(object):
+    pass
+
+
+class Command(BaseCommand):
 
     SUBCOMMAND_DICT = {}
 
@@ -80,6 +86,10 @@ class Command(object):
         self.parent = parent
         self.name = name
         self.options = set()
+        self.subcommand_dict = {}  # per-instance sub-commands
+
+    def add_sub_command(self, name: str, cmd: typing.Type[BaseCommand]):
+        self.subcommand_dict[name] = cmd
 
     @property
     def completer(self):
@@ -107,6 +117,11 @@ class Command(object):
             return None
         cmd = self.SUBCOMMAND_DICT.get(elected, Command)(self.context, self, elected)
 
+        if cmd == None:
+            cmd = self.subcommand_dict.get(elected, Command)(
+                self.context, self, elected
+            )
+
         if isinstance(cmd, Option):
             self.options.add(elected)
 
@@ -116,12 +131,28 @@ class Command(object):
             return cmd
 
     def list(self):
-        return [v for v in self.SUBCOMMAND_DICT.keys() if v not in self.options]
+        return [
+            v
+            for v in chain(self.SUBCOMMAND_DICT.keys(), self.subcommand_dict.keys())
+            if v not in self.options
+        ]
 
     def exec(self, line):
         if self.parent:
             line.insert(0, self.name)
-            self.parent.exec(line)
+            return self.parent.exec(line)
+
+    def hidden(self):
+        return False
+
+    def name_all(self):
+        r = []
+        cmd = self
+        while cmd != None:
+            r.append(cmd.name)
+            cmd = cmd.parent
+
+        return " ".join(reversed(r))
 
     def __call__(self, line):
         if type(line) == str:
@@ -129,8 +160,11 @@ class Command(object):
         if len(line) == 0:
             return self.exec(line)
 
-        cmd = self.complete_subcommand(line[0])
-        cmd = self.SUBCOMMAND_DICT.get(cmd)
+        elected = self.complete_subcommand(line[0])
+        cmd = self.SUBCOMMAND_DICT.get(elected)
+        if cmd == None:
+            cmd = self.subcommand_dict.get(elected)
+
         if cmd:
             return cmd(self.context, self, line[0])(line[1:])
         else:
@@ -193,14 +227,17 @@ class Object(object):
                 if v["inherit"]:
                     self._commands[k] = v
 
-    def add_command(self, handler, completer=None, name=None, strict=None):
+    def add_command(self, handler, completer=None, name=None, strict=None, hidden=None):
         if isinstance(handler, Command):
             completer = lambda: handler.completer
             name = name if name else handler.name
             strict = True if strict == None else strict
+            if hidden == None:
+                hidden = handler.hidden
         else:
             strict = False if strict == None else strict
-        self.command(completer, name, strict=strict)(handler)
+            hidden = False if hidden == None else hidden
+        self.command(completer, name, strict=strict, hidden=hidden)(handler)
 
     def del_command(self, name):
         del self._commands[name]

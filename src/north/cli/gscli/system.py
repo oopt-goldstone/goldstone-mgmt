@@ -139,14 +139,21 @@ class TACACS(object):
     def __init__(self, conn):
         self.session = conn.start_session()
         self.sr_op = sysrepo_wrap(self.session)
+        self.name = "TACACS+"
 
     def set_tacacs_server(self, ipAddress, key, port, timeout):
-        xpath = self.xpath("TACACS+", ipAddress)
-        create_group(self.sr_op, "TACACS+")
-        self.sr_op.set_data(f"{xpath}/config/address", ipAddress)
-        self.sr_op.set_data(f"{xpath}/tacacs/config/secret-key", key)
-        self.sr_op.set_data(f"{xpath}/tacacs/config/port", port)
-        self.sr_op.set_data(f"{xpath}/config/timeout", timeout)
+
+        xpath = self.xpath(self.name, ipAddress)
+        self.sr_op.set_data(
+            f"{self.xpath_server_group(self.name)}/config/name",
+            self.name,
+            no_apply=True,
+        )
+        self.sr_op.set_data(f"{xpath}/config/address", ipAddress, no_apply=True)
+        self.sr_op.set_data(f"{xpath}/tacacs/config/secret-key", key, no_apply=True)
+        self.sr_op.set_data(f"{xpath}/tacacs/config/port", port, no_apply=True)
+        self.sr_op.set_data(f"{xpath}/config/timeout", timeout, no_apply=True)
+        self.sr_op.apply()
 
     def set_no_tacacs(self, address):
         xpath = self.xpath("TACACS+", address)
