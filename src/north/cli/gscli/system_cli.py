@@ -7,6 +7,9 @@ from .common import sysrepo_wrap
 import re
 import logging
 
+from .tacacs import TACACSCommand
+from .aaa import AAACommand
+
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
@@ -156,6 +159,12 @@ class System(Object):
             if len(line) != 0:
                 raise InvalidInput("usage: netconf[cr]")
             return Netconf(conn, self)
+
+        self.add_command(TACACSCommand(self))
+        self.no.add_sub_command("tacacs-server", TACACSCommand)
+
+        self.add_command(AAACommand(self))
+        self.no.add_sub_command("aaa", AAACommand)
 
     def __str__(self):
         return "system"
