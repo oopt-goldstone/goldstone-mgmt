@@ -99,6 +99,8 @@ class Root(Object):
         self.conn = conn
         self.session = conn.start_session()
         self.notif_session = None
+        ctx = self.conn.get_ly_ctx()
+        self.installed_modules = [m.name() for m in ctx]
 
         super().__init__(None, fuzzy_completion=True)
 
@@ -109,14 +111,71 @@ class Root(Object):
         self.add_command(SetCommand(self, name="set"))
         self.add_command(SaveCommand(self, name="save"))
 
-        self.add_command(UFDCommand(self))
-        self.no.add_sub_command("ufd", UFDCommand)
+        if "goldstone-uplink-failure-detection" in self.installed_modules:
+            self.add_command(UFDCommand(self))
+            self.no.add_sub_command("ufd", UFDCommand)
 
-        self.add_command(VLANCommand(self))
-        self.no.add_sub_command("vlan", VLANCommand)
+        if "goldstone-vlan" in self.installed_modules:
+            self.add_command(VLANCommand(self))
+            self.no.add_sub_command("vlan", VLANCommand)
 
-        self.add_command(PortchannelCommand(self))
-        self.no.add_sub_command("portchannel", PortchannelCommand)
+        if "goldstone-portchannel" in self.installed_modules:
+            self.add_command(PortchannelCommand(self))
+            self.no.add_sub_command("portchannel", PortchannelCommand)
+
+        if "goldstone-system" in self.installed_modules:
+
+            @self.command()
+            def system(line):
+                if len(line) != 0:
+                    raise InvalidInput("usage: system[cr]")
+                return System(conn, self)
+
+            @self.command(hidden=True)
+            def reboot(line):
+                stdout.info(self.session.rpc_send("/goldstone-system:reboot", {}))
+
+            @self.command(hidden=True)
+            def shutdown(line):
+                stdout.info(self.session.rpc_send("/goldstone-system:shutdown", {}))
+
+        if "goldstone-transponder" in self.installed_modules:
+
+            @self.command(FuzzyWordCompleter(self.get_modules, WORD=True))
+            def transponder(line):
+                if len(line) != 1:
+                    raise InvalidInput("usage: transponder <transponder name>")
+                elif line[0] in self.get_modules():
+                    return Transponder(conn, self, line[0])
+                else:
+                    stderr.info(f"There is no device of name {line[0]}")
+                    return
+
+        def get_ifnames():
+            try:
+                return self.port.interface_names()
+            except Exception:
+                return []
+
+        if "goldstone-interfaces" in self.installed_modules:
+
+            @self.command(FuzzyWordCompleter(get_ifnames, WORD=True))
+            def interface(line):
+                if len(line) != 1:
+                    raise InvalidInput("usage: interface <ifname>")
+                return Interface(conn, self, line[0])
+
+        if "goldstone-mgmt-interfaces" in self.installed_modules:
+
+            @self.command(
+                FuzzyWordCompleter(self.get_mgmt_ifname, WORD=True),
+                name="management-interface",
+                hidden=True,  # hide it because not well implemented
+            )
+            def management_interface(line):
+                if len(line) != 1:
+                    raise InvalidInput("usage: management-interface <ifname>")
+                return ManagementInterface(conn, self, line[0])
 
         @self.command()
         def ping(line):
@@ -145,53 +204,8 @@ class Root(Object):
                 stderr.info("Unexpected error:", sys.exc_info()[0])
 
         @self.command()
-        def system(line):
-            if len(line) != 0:
-                raise InvalidInput("usage: system[cr]")
-            return System(conn, self)
-
-        @self.command(FuzzyWordCompleter(self.get_modules, WORD=True))
-        def transponder(line):
-            if len(line) != 1:
-                raise InvalidInput("usage: transponder <transponder name>")
-            elif line[0] in self.get_modules():
-                return Transponder(conn, self, line[0])
-            else:
-                stderr.info(f"There is no device of name {line[0]}")
-                return
-
-        def get_ifnames():
-            try:
-                return self.port.interface_names()
-            except Exception:
-                return []
-
-        @self.command(FuzzyWordCompleter(get_ifnames, WORD=True))
-        def interface(line):
-            if len(line) != 1:
-                raise InvalidInput("usage: interface <ifname>")
-            return Interface(conn, self, line[0])
-
-        @self.command(
-            FuzzyWordCompleter(self.get_mgmt_ifname, WORD=True),
-            name="management-interface",
-        )
-        def management_interface(line):
-            if len(line) != 1:
-                raise InvalidInput("usage: management-interface <ifname>")
-            return ManagementInterface(conn, self, line[0])
-
-        @self.command()
         def date(line):
             self.date(line)
-
-        @self.command(hidden=True)
-        def reboot(line):
-            stdout.info(self.session.rpc_send("/goldstone-system:reboot", {}))
-
-        @self.command(hidden=lambda: True)
-        def shutdown(line):
-            stdout.info(self.session.rpc_send("/goldstone-system:shutdown", {}))
 
     def get_mgmt_ifname(self):
         return [v["name"] for v in self.mgmt.get_mgmt_interface_list("operational")]
