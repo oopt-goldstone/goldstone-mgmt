@@ -16,6 +16,7 @@ from kubernetes import client, config
 import pydoc
 import logging
 from prompt_toolkit.completion import merge_completers
+from itertools import chain
 
 from .base import *
 
@@ -613,7 +614,7 @@ class ClearIpGroupCommand(Command):
             raise InvalidInput(self.usage())
 
     def usage(self):
-        return "usage:\n" f" {self.parent.name} {self.name} (route)"
+        return "usage:\n" f" {self.name_all()} (route)"
 
 
 class ClearArpGroupCommand(Command):
@@ -722,8 +723,31 @@ class GlobalClearCommand(Command):
     }
 
 
+class NoCommand(Command):
+    def exec(self, line):
+        raise InvalidInput(self.usage())
+
+    def usage(self):
+        n = self.name_all()
+        l = []
+        for k, cls in chain(self.SUBCOMMAND_DICT.items(), self.subcommand_dict.items()):
+            v = cls(self.context, self)
+            l.append(f"  {n} {k} {v.usage()}")
+
+        return "usage:\n" + "\n".join(l)
+
+    # hide no command if no sub-command is registerd
+    def hidden(self):
+        return (
+            len(list(chain(self.SUBCOMMAND_DICT.items(), self.subcommand_dict.items())))
+            == 0
+        )
+
+
 class GSObject(Object):
     def __init__(self, parent, fuzzy_completion=False):
         super().__init__(parent, fuzzy_completion)
         self.add_command(GlobalShowCommand(self, name="show"))
         self.add_command(GlobalClearCommand(self, name="clear"))
+        self.no = NoCommand(self, name="no")
+        self.add_command(self.no)

@@ -8,7 +8,6 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.completion import (
     Completer,
-    NestedCompleter,
     FuzzyWordCompleter,
 )
 from prompt_toolkit import patch_stdout
@@ -25,10 +24,16 @@ from natsort import natsorted
 from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
 from .tai_cli import Transponder
-from .sonic_cli import Interface, Vlan, Ufd, Portchannel
+from .sonic_cli import Interface
 from . import sonic
-from .system_cli import AAA_CLI, TACACS_CLI, ManagementInterface, System
-from .system import AAA, TACACS, Mgmtif
+from .system_cli import ManagementInterface, System
+from .system import Mgmtif
+
+from .ufd import UFDCommand
+from .vlan import VLANCommand
+from .portchannel import PortchannelCommand
+from .tacacs import TACACSCommand
+from .aaa import AAACommand
 
 logger = logging.getLogger(__name__)
 
@@ -99,35 +104,27 @@ class Root(Object):
 
         super().__init__(None, fuzzy_completion=True)
 
-        self.ufd = sonic.UFD(conn)
-        self.portchannel = sonic.Portchannel(conn)
-        self.vlan = sonic.Vlan(conn)
         self.port = sonic.Port(conn)
 
-        self.aaa_cli = AAA_CLI(conn)
-        self.tacacs_cli = TACACS_CLI(conn)
-        self.aaa_sys = AAA(conn)
-        self.tacacs_sys = TACACS(conn)
         self.mgmt = Mgmtif(conn)
-        self.tacacs_complete = {"host": None}
-        self.aaa_completion = {
-            "authentication": {
-                "login": {"default": {"group": {"tacacs": None}, "local": None}}
-            }
-        }
-        self.no_dict = {
-            "vlan": FuzzyWordCompleter(
-                lambda: ["range"] + self.vlan.get_vids(), WORD=True
-            ),
-            "aaa": {"authentication": {"login": None}},
-            "tacacs-server": {"host": None},
-            "ufd": FuzzyWordCompleter(self.ufd.get_id, WORD=True),
-            "portchannel": FuzzyWordCompleter(self.portchannel.get_id, WORD=True),
-        }
-        # TODO:add timer for inactive user
 
         self.add_command(SetCommand(self, name="set"))
         self.add_command(SaveCommand(self, name="save"))
+
+        self.add_command(UFDCommand(self))
+        self.no.add_sub_command("ufd", UFDCommand)
+
+        self.add_command(VLANCommand(self))
+        self.no.add_sub_command("vlan", VLANCommand)
+
+        self.add_command(PortchannelCommand(self))
+        self.no.add_sub_command("portchannel", PortchannelCommand)
+
+        self.add_command(TACACSCommand(self))
+        self.no.add_sub_command("tacacs-server", TACACSCommand)
+
+        self.add_command(AAACommand(self))
+        self.no.add_sub_command("aaa", AAACommand)
 
         @self.command()
         def ping(line):
@@ -192,32 +189,9 @@ class Root(Object):
                 raise InvalidInput("usage: management-interface <ifname>")
             return ManagementInterface(conn, self, line[0])
 
-        @self.command(FuzzyWordCompleter(self.ufd.get_id, WORD=True))
-        def ufd(line):
-            if len(line) != 1:
-                raise InvalidInput("usage: ufd <ufd-id>")
-            return Ufd(conn, self, line[0])
-
-        @self.command(FuzzyWordCompleter(self.portchannel.get_id, WORD=True))
-        def portchannel(line):
-            if len(line) != 1:
-                raise InvalidInput("usage: portchannel <portchannel_id>")
-            return Portchannel(conn, self, line[0])
-
         @self.command()
         def date(line):
             self.date(line)
-
-        # SYSTEM CLIs  -- START
-        @self.command(NestedCompleter.from_nested_dict(self.aaa_completion))
-        def aaa(line):
-            self.aaa_cli.aaa(line)
-
-        @self.command(
-            NestedCompleter.from_nested_dict(self.tacacs_complete), name="tacacs-server"
-        )
-        def tacacs_server(line):
-            self.tacacs_cli.tacacs_server(line)
 
         @self.command(hidden=True)
         def reboot(line):
@@ -226,93 +200,6 @@ class Root(Object):
         @self.command(hidden=lambda: True)
         def shutdown(line):
             stdout.info(self.session.rpc_send("/goldstone-system:shutdown", {}))
-
-        # SYSTEM CLIs  -- END
-
-        def isValidVlanRange(Range):
-            for vlans in Range.split(","):
-                vlan_limits = vlans.split("-")
-                if vlans.isdigit() or (
-                    len(vlan_limits) == 2
-                    and vlan_limits[0].isdigit()
-                    and vlan_limits[1].isdigit()
-                    and vlan_limits[0] < vlan_limits[1]
-                ):
-                    pass
-                else:
-                    return False
-            return True
-
-        @self.command(
-            FuzzyWordCompleter(lambda: (["range"] + self.vlan.get_vids()), WORD=True),
-        )
-        def vlan(line):
-            if len(line) not in [1, 2]:
-                raise InvalidInput("usage: vlan <vlan-id>")
-            if len(line) == 1 and line[0].isdigit():
-                return Vlan(conn, self, line[0])
-            elif line[0] == "range":
-                if len(line) != 2:
-                    raise InvalidInput("usage: vlan range <range-list>")
-                elif isValidVlanRange(line[1]):
-                    for vlans in line[1].split(","):
-                        if vlans.isdigit():
-                            self.vlan.create(vlans)
-                        else:
-                            vlan_limits = vlans.split("-")
-                            for vid in range(
-                                int(vlan_limits[0]), int(vlan_limits[1]) + 1
-                            ):
-                                self.vlan.create(str(vid))
-
-                else:
-                    stderr.info("The vlan-range entered is invalid")
-            else:
-                stderr.info("The vlan-id entered must be numbers and not letters")
-
-        @self.command(NestedCompleter.from_nested_dict(self.no_dict))
-        def no(line):
-            if len(line) == 2:
-                if line[0] == "vlan":
-                    self.vlan.delete(line[1])
-                elif line[0] == "ufd":
-                    self.ufd.delete(line[1])
-                elif line[0] == "portchannel":
-                    self.portchannel.delete(line[1])
-                else:
-                    raise InvalidInput(self.no_usage())
-            elif len(line) == 3:
-                if line[0] == "aaa":
-                    if line[1] == "authentication" and line[2] == "login":
-                        self.aaa_sys.set_no_aaa()
-                    else:
-                        stderr.info("Enter the valid no command for aaa")
-                elif line[0] == "tacacs-server":
-                    if line[1] == "host":
-                        self.tacacs_sys.set_no_tacacs(line[2])
-                    else:
-                        stderr.info("Enter valid no command for tacacs-server")
-                elif line[0] == "vlan" and line[1] == "range":
-                    if isValidVlanRange(line[2]):
-                        vlan_list = self.vlan.get_vids()
-                        for vlans in line[2].split(","):
-                            if vlans.isdigit():
-                                if vlans in vlan_list:
-                                    self.vlan.delete(vlans)
-                            else:
-                                vlan_limits = vlans.split("-")
-                                for vid in range(
-                                    int(vlan_limits[0]), int(vlan_limits[1]) + 1
-                                ):
-                                    if str(vid) in vlan_list:
-                                        self.vlan.delete(str(vid))
-                    else:
-                        stderr.info("Enter a valid range for vlan")
-
-                else:
-                    raise InvalidInput(self.no_usage())
-            else:
-                raise InvalidInput(self.no_usage())
 
     def get_mgmt_ifname(self):
         return [v["name"] for v in self.mgmt.get_mgmt_interface_list("operational")]
@@ -326,17 +213,6 @@ class Root(Object):
     def date(self, line):
         date = " ".join(["date"] + line)
         subprocess.call(date, shell=True)
-
-    def no_usage(self):
-        return (
-            "usage:\n"
-            "no vlan <vid>\n"
-            "no vlan range <range>\n"
-            "no aaa authentication login\n"
-            "no tacacs-server host <address>\n"
-            "no ufd <ufd-id>\n"
-            "no portchannel <portchannel-id>"
-        )
 
     def enable_notification(self):
         if self.notif_session:
