@@ -224,33 +224,18 @@ class Root(Object):
         if self.notif_session:
             logger.warning("notification already enabled")
             return
-        self.notif_session = self.conn.start_session()
+        self.notif_session = self.conn.start_session("running")
+        ctx = self.conn.get_ly_ctx()
+        for model in ctx:
+            if "goldstone" not in model.name():
+                continue
 
-        try:
-            # TODO consider getting notification xpaths from each commands' classmethod
-            self.notif_session.subscribe_notification_tree(
-                "goldstone-transponder",
-                "/goldstone-transponder:*",
-                0,
-                0,
-                self.notification_cb,
-            )
-            self.notif_session.subscribe_notification_tree(
-                "goldstone-platform",
-                "/goldstone-platform:*",
-                0,
-                0,
-                self.notification_cb,
-            )
-            self.notif_session.subscribe_notification_tree(
-                "goldstone-interfaces",
-                "/goldstone-interfaces:*",
-                0,
-                0,
-                self.notification_cb,
-            )
-        except sr.SysrepoNotFoundError as e:
-            logger.warning(f"mgmt daemons not running?: {e}")
+            module = self.ctx.get_module(model.name())
+            notif = list(module.children(types=(SNode.NOTIF,)))
+            if len(notif) > 0:
+                self.notif_session.subscribe_notification_tree(
+                    model.name(), f"/{model.name()}:*", 0, 0, self.notification_cb
+                )
 
     def disable_notification(self):
         if not self.notif_session:
