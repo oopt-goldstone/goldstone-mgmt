@@ -23,7 +23,6 @@ from natsort import natsorted
 
 from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
-from .tai_cli import Transponder
 from . import sonic
 from .system_cli import ManagementInterface, System
 from .system import Mgmtif
@@ -32,6 +31,7 @@ from .ufd import UFDCommand
 from .vlan import VLANCommand
 from .portchannel import PortchannelCommand
 from .interface import InterfaceObject
+from .transponder_cli import TransponderObject
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ class Root(Object):
                 if len(line) != 1:
                     raise InvalidInput("usage: transponder <transponder name>")
                 elif line[0] in self.get_modules():
-                    return Transponder(conn, self, line[0])
+                    return TransponderObject(conn, self, line[0])
                 else:
                     stderr.info(f"There is no device of name {line[0]}")
                     return

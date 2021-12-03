@@ -1,63 +1,15 @@
-import re
-import base64
-import struct
+from .base import InvalidInput
+from .common import sysrepo_wrap, print_tabular
 import sysrepo as sr
 import libyang as ly
 import logging
 from tabulate import tabulate
-from .common import sysrepo_wrap, print_tabular
-from .base import InvalidInput
 from natsort import natsorted
 
-_FREQ_RE = re.compile(r".+[kmgt]?hz$")
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
-
-
-def human_freq(item):
-    if type(item) == str:
-        try:
-            int(item)
-            return item
-        except ValueError:
-            item = item.lower()
-            if not _FREQ_RE.match(item):
-                raise InvalidInput("invalid frequency input. (e.g 193.50THz)")
-            item = item[:-2]
-            multiplier = 1
-            if item[-1] == "t":
-                multiplier = 1e12
-            elif item[-1] == "g":
-                multiplier = 1e9
-            elif item[-1] == "m":
-                multiplier = 1e6
-            elif item[-1] == "k":
-                multiplier = 1e3
-            return str(round(float(item[:-1]) * multiplier))
-    else:
-        return "{0:.2f}THz".format(int(item) / 1e12)
-
-
-def human_ber(item):
-    return "{0:.2e}".format(struct.unpack(">f", base64.b64decode(item))[0])
-
-
-def to_human(d, runconf=False):
-    for key in d:
-        if key.endswith("-ber"):
-            d[key] = human_ber(d[key])
-        elif "freq" in key:
-            d[key] = human_freq(d[key])
-        elif type(d[key]) == bool:
-            d[key] = "true" if d[key] else "false"
-        elif not runconf and key.endswith("power"):
-            d[key] = f"{d[key]:.2f} dBm"
-        elif type(d[key]) == ly.keyed_list.KeyedList:
-            d[key] = ", ".join(d[key])
-
-    return d
 
 
 class Transponder(object):
