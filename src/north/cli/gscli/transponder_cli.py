@@ -1,20 +1,69 @@
-from .tai import Transponder, human_freq, to_human
 from .base import InvalidInput, Completer, Command
 from .cli import GSObject as Object
 from .cli import ShowCommand
-from prompt_toolkit.completion import WordCompleter, NestedCompleter
+from prompt_toolkit.completion import WordCompleter
 from .common import sysrepo_wrap, print_tabular
 import sysrepo as sr
+import libyang as ly
 import logging
 from tabulate import tabulate
 from natsort import natsorted
+import re
+import base64
+import struct
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
+_FREQ_RE = re.compile(r".+[kmgt]?hz$")
 
-class TAICommand(Command):
+
+def human_freq(item):
+    if type(item) == str:
+        try:
+            int(item)
+            return item
+        except ValueError:
+            item = item.lower()
+            if not _FREQ_RE.match(item):
+                raise InvalidInput("invalid frequency input. (e.g 193.50THz)")
+            item = item[:-2]
+            multiplier = 1
+            if item[-1] == "t":
+                multiplier = 1e12
+            elif item[-1] == "g":
+                multiplier = 1e9
+            elif item[-1] == "m":
+                multiplier = 1e6
+            elif item[-1] == "k":
+                multiplier = 1e3
+            return str(round(float(item[:-1]) * multiplier))
+    else:
+        return "{0:.2f}THz".format(int(item) / 1e12)
+
+
+def human_ber(item):
+    return "{0:.2e}".format(struct.unpack(">f", base64.b64decode(item))[0])
+
+
+def to_human(d, runconf=False):
+    for key in d:
+        if key.endswith("-ber"):
+            d[key] = human_ber(d[key])
+        elif "freq" in key:
+            d[key] = human_freq(d[key])
+        elif type(d[key]) == bool:
+            d[key] = "true" if d[key] else "false"
+        elif not runconf and key.endswith("power"):
+            d[key] = f"{d[key]:.2f} dBm"
+        elif type(d[key]) == ly.keyed_list.KeyedList:
+            d[key] = ", ".join(d[key])
+
+    return d
+
+
+class TransponderCommand(Command):
     def __init__(self, context, node):
         self.node = node
         super().__init__(context, name=node.name())
@@ -47,7 +96,7 @@ class TAICommand(Command):
         return f"usage: {self.node.name()} {v}"
 
 
-class TAINoCommand(Command):
+class TransponderNoCommand(Command):
     def __init__(self, context, node):
         self._list = [v.name() for v in node if v.name() != "name"]
         if "admin-status" in self._list:
@@ -74,7 +123,7 @@ class TAINoCommand(Command):
         return f"usage: no [{'|'.join(self.list())}]"
 
 
-class TAIObject(Object):
+class TransponderBaseObject(Object):
     def __init__(self, conn, parent):
         super().__init__(parent, fuzzy_completion=True)
 
@@ -89,9 +138,9 @@ class TAIObject(Object):
         for v in node:
             if v.name() == "name":
                 continue
-            self.add_command(TAICommand(self, v))
+            self.add_command(TransponderCommand(self, v))
 
-        self.add_command(TAINoCommand(self, node))
+        self.add_command(TransponderNoCommand(self, node))
 
     def set(self, node, value):
         if type(node) == str:
@@ -116,7 +165,7 @@ class TAIObject(Object):
         self.sr_op.delete_data(f"{self.xpath()}/config/{name}")
 
 
-class TAIShowCommand(ShowCommand):
+class TransponderShowCommand(ShowCommand):
     SUBCOMMAND_DICT = {
         "details": Command,
     }
@@ -166,11 +215,11 @@ class TAIShowCommand(ShowCommand):
             return
 
 
-class HostIfShowCommand(TAIShowCommand):
+class HostIfShowCommand(TransponderShowCommand):
     OBJECT_TYPE = "host-interface"
 
 
-class NetIfShowCommand(TAIShowCommand):
+class NetIfShowCommand(TransponderShowCommand):
     OBJECT_TYPE = "network-interface"
     DETAILED_ATTRS = [
         "pulse-shaping-tx",
@@ -188,11 +237,11 @@ class NetIfShowCommand(TAIShowCommand):
     ]
 
 
-class ModuleShowCommand(TAIShowCommand):
+class ModuleShowCommand(TransponderShowCommand):
     OBJECT_TYPE = "module"
 
 
-class HostIf(TAIObject):
+class HostIf(TransponderBaseObject):
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}"
         for v in ["modules", "module", "host-interface", "config"]
@@ -216,7 +265,7 @@ class HostIf(TAIObject):
         return "hostif({})".format(self.name)
 
 
-class NetIf(TAIObject):
+class NetIf(TransponderBaseObject):
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}"
         for v in ["modules", "module", "network-interface", "config"]
@@ -240,7 +289,7 @@ class NetIf(TAIObject):
         return "netif({})".format(self.name)
 
 
-class Transponder(TAIObject):
+class TransponderObject(TransponderBaseObject):
     XPATH = "/goldstone-transponder:modules/module"
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}" for v in ["modules", "module", "config"]
