@@ -24,7 +24,6 @@ from natsort import natsorted
 from .base import InvalidInput, BreakLoop, Command, CLIException
 from .cli import GSObject as Object
 from .tai_cli import Transponder
-from .sonic_cli import Interface
 from . import sonic
 from .system_cli import ManagementInterface, System
 from .system import Mgmtif
@@ -32,6 +31,7 @@ from .system import Mgmtif
 from .ufd import UFDCommand
 from .vlan import VLANCommand
 from .portchannel import PortchannelCommand
+from .interface import InterfaceObject
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ class Root(Object):
             def interface(line):
                 if len(line) != 1:
                     raise InvalidInput("usage: interface <ifname>")
-                return Interface(conn, self, line[0])
+                return InterfaceObject(conn, self, line[0])
 
         if "goldstone-mgmt-interfaces" in self.installed_modules:
 
