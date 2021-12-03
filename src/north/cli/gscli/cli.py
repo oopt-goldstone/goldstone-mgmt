@@ -3,7 +3,7 @@ import os
 import sysrepo
 from tabulate import tabulate
 from .sonic import Port, Vlan, UFD, Portchannel
-from .tai import Transponder
+from .transponder import Transponder
 from .system import System, TACACS, AAA, Mgmtif
 from .platform import Component
 import json
