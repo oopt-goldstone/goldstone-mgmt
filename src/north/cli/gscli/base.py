@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import (
     Completion,
@@ -69,11 +71,7 @@ class Completer(PromptCompleter):
                     yield v
 
 
-class BaseCommand(object):
-    pass
-
-
-class Command(BaseCommand):
+class Command(object):
 
     SUBCOMMAND_DICT = {}
 
@@ -88,7 +86,7 @@ class Command(BaseCommand):
         self.options = set()
         self.subcommand_dict = {}  # per-instance sub-commands
 
-    def add_sub_command(self, name: str, cmd: typing.Type[BaseCommand]):
+    def add_sub_command(self, name: str, cmd: typing.Type[Command]):
         self.subcommand_dict[name] = cmd
 
     @property
@@ -111,7 +109,7 @@ class Command(BaseCommand):
                 return None  # no match
         return elected
 
-    def get(self, arg):
+    def get(self, arg) -> Type[Command]:
         elected = self.complete_subcommand(arg)
         if elected == None:
             return None
@@ -130,7 +128,7 @@ class Command(BaseCommand):
         else:
             return cmd
 
-    def list(self):
+    def list(self) -> List[str]:
         return [
             v
             for v in chain(self.SUBCOMMAND_DICT.keys(), self.subcommand_dict.keys())
@@ -144,6 +142,13 @@ class Command(BaseCommand):
 
     def hidden(self):
         return False
+
+    @property
+    def root(self):
+        cmd = self
+        while cmd.parent:
+            cmd = cmd.parent
+        return cmd
 
     def name_all(self):
         r = []
@@ -231,6 +236,9 @@ class Object(object):
         if isinstance(handler, Command):
             completer = lambda: handler.completer
             name = name if name else handler.name
+            assert name != None
+            if handler.name == None:
+                handler.name = name
             strict = True if strict == None else strict
             if hidden == None:
                 hidden = handler.hidden
