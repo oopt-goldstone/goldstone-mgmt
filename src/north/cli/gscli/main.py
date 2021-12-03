@@ -32,8 +32,6 @@ from .system import Mgmtif
 from .ufd import UFDCommand
 from .vlan import VLANCommand
 from .portchannel import PortchannelCommand
-from .tacacs import TACACSCommand
-from .aaa import AAACommand
 
 logger = logging.getLogger(__name__)
 
@@ -119,12 +117,6 @@ class Root(Object):
 
         self.add_command(PortchannelCommand(self))
         self.no.add_sub_command("portchannel", PortchannelCommand)
-
-        self.add_command(TACACSCommand(self))
-        self.no.add_sub_command("tacacs-server", TACACSCommand)
-
-        self.add_command(AAACommand(self))
-        self.no.add_sub_command("aaa", AAACommand)
 
         @self.command()
         def ping(line):
