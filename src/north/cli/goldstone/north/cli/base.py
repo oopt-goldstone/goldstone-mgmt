@@ -113,12 +113,12 @@ class Command(object):
         elected = self.complete_subcommand(arg)
         if elected == None:
             return None
-        cmd = self.SUBCOMMAND_DICT.get(elected, Command)(self.context, self, elected)
+        cls = self.SUBCOMMAND_DICT.get(elected)
 
-        if cmd == None:
-            cmd = self.subcommand_dict.get(elected, Command)(
-                self.context, self, elected
-            )
+        if cls == None:
+            cls = self.subcommand_dict.get(elected, Command)
+
+        cmd = cls(self.context, self, elected)
 
         if isinstance(cmd, Option):
             self.options.add(elected)
@@ -355,7 +355,7 @@ class Object(object):
                 for v in c.get_completions(new_document, complete_event):
                     yield v
 
-    def complete_input(self, line):
+    def complete_input(self, line, complete_event=None):
 
         if len(line) == 0:
             raise InvalidInput(
@@ -365,7 +365,7 @@ class Object(object):
 
         for i in range(len(line)):
             doc = Document(" ".join(line[: i + 1]))
-            c = list(self.completion(doc))
+            c = list(self.completion(doc, complete_event))
             if len(c) == 0:
                 if i == 0:
                     raise InvalidInput(
@@ -381,7 +381,9 @@ class Object(object):
                         cmpl = cmpl()
                     if cmpl:
                         doc = Document(" ".join(line[:i] + [" "]))
-                        candidates = list(v.text for v in self.completion(doc))
+                        candidates = list(
+                            v.text for v in self.completion(doc, complete_event)
+                        )
                         # if we don't have any candidates with empty input, it means the value needs
                         # to be passed as an opaque value
                         if len(candidates) == 0:
