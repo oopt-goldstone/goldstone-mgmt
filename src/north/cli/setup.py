@@ -4,7 +4,7 @@ with open("requirements.txt") as f:
     install_requires = f.read().split()
 
 setuptools.setup(
-    name="gscli",
+    name="goldstone_north_cli",
     version="0.1.0",
     install_requires=install_requires,
     description="Goldstone CLI",
@@ -12,9 +12,9 @@ setuptools.setup(
     python_requires=">=3.7",
     entry_points={
         "console_scripts": [
-            "gscli = gscli.main:main",
+            "gscli = goldstone.north.cli.main:main",
         ],
     },
-    packages=setuptools.find_packages(),
+    packages=["goldstone.north.cli"],
     zip_safe=False,
 )
