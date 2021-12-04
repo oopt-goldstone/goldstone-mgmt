@@ -41,11 +41,11 @@ spec:
             serviceAccountName: south-tai
             initContainers:
             - name: wait-prep
-              image: docker.io/bitnami/kubectl:latest
+              image: docker.io/lachlanevenson/k8s-kubectl:latest
               imagePullPolicy: IfNotPresent
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             - name: wait-onlp
-              image: docker.io/bitnami/kubectl:latest
+              image: docker.io/lachlanevenson/k8s-kubectl:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', "kubectl wait --for=condition=ready pods/$(kubectl get pods -l app=south-onlp -o jsonpath='{.items[0].metadata.name}')"]
             containers:

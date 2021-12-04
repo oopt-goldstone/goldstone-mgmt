@@ -58,7 +58,7 @@ spec:
             serviceAccountName: north-netconf
             initContainers:
             - name: wait-prep
-              image: docker.io/bitnami/kubectl:latest
+              image: docker.io/lachlanevenson/k8s-kubectl:latest
               imagePullPolicy: IfNotPresent
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
