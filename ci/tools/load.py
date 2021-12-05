@@ -25,15 +25,18 @@ def main(host, username, password, arch):
             ssh(cli, "systemctl restart usonic")
 
         # restart TAI service
-        ssh(cli, "systemctl restart tai || true") # can fail
-        # stop South system service
-        ssh(cli, "systemctl stop gs-south-system || true")  # can fail
+        ssh(cli, "systemctl restart tai || true")  # can fail
         # stop Goldstone Management service
         ssh(cli, "systemctl stop gs-mgmt.target || true")  # can fail
-        # stop NETOPEER2 service
-        ssh(cli, "netopeer2.sh stop || true")  # can fail
-        # stop SNMP service
-        ssh(cli, "gs-snmp.sh stop || true")  # can fail
+
+        for _ in range(10):
+            time.sleep(10)
+            c = int(ssh(cli, "sysrepoctl -C"))
+            if c == 0:
+                break
+        else:
+            print("sysrepo connection didn't become 0")
+            sys.exit(1)
 
         images = [
             "gs-mgmt",
@@ -72,6 +75,8 @@ def main(host, username, password, arch):
         ssh(
             cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/prep.yaml"
         )
+
+        time.sleep(2)
 
         ssh(cli, "kubectl wait --for=condition=complete job/prep-gs-mgmt --timeout 10m")
 

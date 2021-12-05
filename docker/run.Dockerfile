@@ -30,8 +30,8 @@ ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
 COPY sm/openconfig/third_party/ietf/ /var/lib/goldstone/yang/ietf
 ENV IETF_YANG_REPO /var/lib/goldstone/yang/ietf
 
-RUN --mount=type=bind,source=scripts,target=/src,rw \
-    cd /src && cp /src/reload.sh /usr/local/bin/
+RUN --mount=type=bind,source=scripts,target=/src \
+    cd /src && cp /src/gs-yang.py /usr/local/bin/
 
 RUN pip install setuptools
 
