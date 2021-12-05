@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sysrepo as sr
+from libyang import SNode
 
 import argparse
 
