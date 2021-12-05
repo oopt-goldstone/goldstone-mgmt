@@ -9,9 +9,6 @@ import libyang as ly
 import logging
 from tabulate import tabulate
 from natsort import natsorted
-import re
-import base64
-import struct
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
