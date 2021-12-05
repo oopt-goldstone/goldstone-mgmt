@@ -98,7 +98,7 @@ def main(host, username, password, arch):
             ssh(cli, f"kubectl apply -f {manifest}")
 
         ssh(cli, "rm -rf /tmp/wheels")
-        ssh(cli, "pip uninstall -y gscli gssystem libyang sysrepo")
+        ssh(cli, "pip uninstall -y goldstone-north-cli gssystem libyang sysrepo")
 
         for v in ["libyang", "sysrepo", "cli", "system"]:
             ssh(cli, f"mkdir -p /tmp/wheels/{v}")

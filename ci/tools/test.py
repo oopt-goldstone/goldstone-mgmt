@@ -452,15 +452,13 @@ class TestSouthSONiC(TestBase):
             "interface Ethernet1_1; no shutdown; no switchport mode trunk vlan 1000; show",
         )
 
-        with self.assertRaisesRegex(
+        with self.assertRaises(
             SSHException,
-            "usage: switchport mode \(trunk\|access\) vlan \<vid\>",
         ):
             self.gscli("interface Ethernet1_1; switchport mode trunk vlab 1000")
 
-        with self.assertRaisesRegex(
+        with self.assertRaises(
             SSHException,
-            "usage: switchport mode \(trunk\|access\) vlan \<vid\>",
         ):
             self.gscli(
                 "interface Ethernet1_1; switchport mode trunk access 1000",
@@ -626,7 +624,7 @@ class TestSouthSONiC(TestBase):
 
         with self.assertRaisesRegex(
             SSHException,
-            "usages: fec \<fc\|rs\>",
+            "Invalid value",
         ):
             self.gscli("interface Ethernet1_1; fec ff")
 
