@@ -295,7 +295,7 @@ class PortchannelCommand(Command):
         else:
             if len(line) != 1:
                 raise InvalidInput(f"usage: {self.name_all()} <portchannel_id>")
-            portchannel.add_interfaces(line[0], ifnames)
+            portchannel.add_interfaces(line[0], self.context.ifnames)
 
 
 class InterfaceObject(Object):
