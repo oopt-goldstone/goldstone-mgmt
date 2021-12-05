@@ -305,16 +305,32 @@ class TACACSGroupCommand(Command):
 
 
 class RunningConfigCommand(Command):
-    SUBCOMMAND_DICT = {
-        "transponder": TransponderGroupCommand,
-        "platform": Command,
-        "vlan": Command,
-        "interface": Command,
-        "aaa": Command,
-        "mgmt-if": Command,
-        "ufd": Command,
-        "portchannel": Command,
-    }
+    def __init__(self, context=None, parent=None, name=None):
+        super().__init__(context, parent, name)
+        installed_modules = context.root().installed_modules
+        if "goldstone-interfaces" in installed_modules:
+            self.add_sub_command("interface", Command)
+
+        if "goldstone-uplink-failure-detection" in installed_modules:
+            self.add_sub_command("ufd", Command)
+
+        if "goldstone-vlan" in installed_modules:
+            self.add_sub_command("vlan", Command)
+
+        if "goldstone-portchannel" in installed_modules:
+            self.add_sub_command("portchannel", Command)
+
+        if "goldstone-system" in installed_modules:
+            self.add_sub_command("aaa", Command)
+
+        if "goldstone-transponder" in installed_modules:
+            self.add_sub_command("transponder", Command)
+
+        if "goldstone-platform" in installed_modules:
+            self.add_sub_command("platform", Command)
+
+        if "goldstone-mgmt-interfaces" in installed_modules:
+            self.add_sub_command("mgmt-if", Command)
 
     def exec(self, line):
         if len(line) > 0:
@@ -322,15 +338,23 @@ class RunningConfigCommand(Command):
         else:
             module = "all"
 
+        installed_modules = self.context.root().installed_modules
+
         system = System(self.context.conn)
 
         if module == "all":
-            self("vlan")
-            self("ufd")
-            self("portchannel")
-            self("interface")
-            self("transponder")
-            system.run_conf()
+            if "goldstone-vlan" in installed_modules:
+                self("vlan")
+            if "goldstone-uplink-failure-detection" in installed_modules:
+                self("ufd")
+            if "goldstone-portchannel" in installed_modules:
+                self("portchannel")
+            if "goldstone-interfaces" in installed_modules:
+                self("interface")
+            if "goldstone-transponder" in installed_modules:
+                self("transponder")
+            if "goldstone-system" in installed_modules:
+                system.run_conf()
         elif module == "aaa":
             system.run_conf()
         elif module == "mgmt-if":
@@ -351,22 +375,41 @@ class RunningConfigCommand(Command):
 
 class GlobalShowCommand(Command):
     SUBCOMMAND_DICT = {
-        "interface": InterfaceGroupCommand,
-        "vlan": VlanGroupCommand,
-        "arp": ArpGroupCommand,
-        "ufd": UfdGroupCommand,
-        "portchannel": PortchannelGroupCommand,
-        "ip": IPGroupCommand,
         "datastore": Command,
         "tech-support": Command,
         "logging": Command,
-        "version": Command,
-        "transponder": TransponderGroupCommand,
         "running-config": RunningConfigCommand,
-        "chassis-hardware": PlatformGroupCommand,
-        "aaa": AAAGroupCommand,
-        "tacacs": TACACSGroupCommand,
     }
+
+    def __init__(self, context=None, parent=None, name=None):
+        super().__init__(context, parent, name)
+        installed_modules = context.root().installed_modules
+        if "goldstone-interfaces" in installed_modules:
+            self.add_sub_command("interface", InterfaceGroupCommand)
+
+        if "goldstone-uplink-failure-detection" in installed_modules:
+            self.add_sub_command("ufd", UfdGroupCommand)
+
+        if "goldstone-vlan" in installed_modules:
+            self.add_sub_command("vlan", VlanGroupCommand)
+
+        if "goldstone-portchannel" in installed_modules:
+            self.add_sub_command("portchannel", PortchannelGroupCommand)
+
+        if "goldstone-system" in installed_modules:
+            self.add_sub_command("version", Command)
+            self.add_sub_command("aaa", AAAGroupCommand)
+            self.add_sub_command("tacacs", TACACSGroupCommand)
+
+        if "goldstone-transponder" in installed_modules:
+            self.add_sub_command("transponder", TransponderGroupCommand)
+
+        if "goldstone-platform" in installed_modules:
+            self.add_sub_command("chassis-hardware", PlatformGroupCommand)
+
+        if "goldstone-mgmt-interfaces" in installed_modules:
+            self.add_sub_command("ip", IPGroupCommand)
+            self.add_sub_command("arp", ArpGroupCommand)
 
     def exec(self, line):
         if len(line) == 0:
@@ -512,54 +555,73 @@ class GlobalShowCommand(Command):
 
     def tech_support(self, line):
         datastore_list = ["operational", "running", "candidate", "startup"]
-        xpath_list = [
-            "/goldstone-vlan:vlan/vlans",
-            "/goldstone-interfaces:interfaces/interface",
-            "/goldstone-mgmt-interfaces:interfaces/interface",
-            "/goldstone-uplink-failure-detection:ufd-groups/ufd-group",
-            "/goldstone-portchannel:portchannel",
-            "/goldstone-routing:routing/static-routes/ipv4/route",
-            "/goldstone-transponder:modules",
-            "/goldstone-aaa:aaa",
-            "/goldstone-platform:components",
-        ]
+        installed_modules = self.context.root().installed_modules
 
-        stdout.info("\nshow vlan details:\n")
-        vlan = Vlan(self.context.conn)
-        try:
-            vlan.show_vlans()
-        except InvalidInput as e:
-            stderr.info(e)
+        xpath_list = []
 
-        stdout.info("\nshow interface description:\n")
-        port = Port(self.context.conn)
-        try:
-            port.show_interface()
-        except InvalidInput as e:
-            stderr.info(e)
+        if "goldstone-interfaces" in installed_modules:
+            stdout.info("\nshow interface description:\n")
+            port = Port(self.context.conn)
+            try:
+                port.show_interface()
+            except InvalidInput as e:
+                stderr.info(e)
 
-        stdout.info("\nshow ufd:\n")
-        ufd = UFD(self.context.conn)
-        try:
-            ufd.show()
-        except InvalidInput as e:
-            stderr.info(e)
+            xpath_list.append("/goldstone-interfaces:interfaces/interface")
 
-        stdout.info("\nshow portchannel:\n")
-        portchannel = Portchannel(self.context.conn)
-        try:
-            portchannel.show()
-        except InvalidInput as e:
-            stderr.info(e)
+        if "goldstone-uplink-failure-detection" in installed_modules:
+            stdout.info("\nshow ufd:\n")
+            ufd = UFD(self.context.conn)
+            try:
+                ufd.show()
+            except InvalidInput as e:
+                stderr.info(e)
 
-        transponder = Transponder(self.context.conn)
-        transponder.tech_support()
+            xpath_list.append(
+                "/goldstone-uplink-failure-detection:ufd-groups/ufd-group"
+            )
 
-        system = System(self.context.conn)
-        system.tech_support()
+        if "goldstone-vlan" in installed_modules:
+            stdout.info("\nshow vlan details:\n")
+            vlan = Vlan(self.context.conn)
+            try:
+                vlan.show_vlans()
+            except InvalidInput as e:
+                stderr.info(e)
 
-        component = Component(self.context.conn)
-        component.tech_support()
+            xpath_list.append("/goldstone-vlan:vlan/vlans")
+
+        if "goldstone-portchannel" in installed_modules:
+            stdout.info("\nshow portchannel:\n")
+            portchannel = Portchannel(self.context.conn)
+            try:
+                portchannel.show()
+            except InvalidInput as e:
+                stderr.info(e)
+
+            xpath_list.append("/goldstone-portchannel:portchannel")
+
+        if "goldstone-system" in installed_modules:
+            system = System(self.context.conn)
+            system.tech_support()
+
+            xpath_list.append("/goldstone-aaa:aaa")
+
+        if "goldstone-transponder" in installed_modules:
+            transponder = Transponder(self.context.conn)
+            transponder.tech_support()
+
+            xpath_list.append("/goldstone-transponder:modules")
+
+        if "goldstone-platform" in installed_modules:
+            component = Component(self.context.conn)
+            component.tech_support()
+
+            xpath_list.append("/goldstone-platform:components")
+
+        if "goldstone-mgmt-interfaces" in installed_modules:
+            xpath_list.append("/goldstone-mgmt-interfaces:interfaces/interface")
+            xpath_list.append("/goldstone-routing:routing/static-routes/ipv4/route")
 
         stdout.info("\nshow datastore:\n")
 
@@ -581,20 +643,20 @@ class GlobalShowCommand(Command):
     def usage(self):
         return (
             "usage:\n"
-            f" {self.name} interface (brief|description|counters) \n"
-            f" {self.name} vlan details \n"
-            f" {self.name} ip route\n"
-            f" {self.name} transponder (<transponder_name>|summary)\n"
-            f" {self.name} chassis-hardware (fan|psu|led|transceiver|thermal|system|all)\n"
-            f" {self.name} ufd \n"
-            f" {self.name} portchannel \n"
-            f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"
-            f" {self.name} version \n"
-            f" {self.name} aaa \n"
-            f" {self.name} tacacs \n"
-            f" {self.name} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
-            f" {self.name} running-config [transponder|platform|vlan|interface|aaa|ufd|portchannel]\n"
-            f" {self.name} tech-support"
+            f" {self.name_all()} interface (brief|description|counters) \n"
+            f" {self.name_all()} vlan details \n"
+            f" {self.name_all()} ip route\n"
+            f" {self.name_all()} transponder (<transponder_name>|summary)\n"
+            f" {self.name_all()} chassis-hardware (fan|psu|led|transceiver|thermal|system|all)\n"
+            f" {self.name_all()} ufd \n"
+            f" {self.name_all()} portchannel \n"
+            f" {self.name_all()} logging [sonic|tai|onlp|] [<num_lines>|]\n"
+            f" {self.name_all()} version \n"
+            f" {self.name_all()} aaa \n"
+            f" {self.name_all()} tacacs \n"
+            f" {self.name_all()} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
+            f" {self.name_all()} running-config [transponder|platform|vlan|interface|aaa|ufd|portchannel]\n"
+            f" {self.name_all()} tech-support"
         )
 
 
