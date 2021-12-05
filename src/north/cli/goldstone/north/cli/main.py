@@ -230,7 +230,7 @@ class Root(Object):
             if "goldstone" not in model.name():
                 continue
 
-            module = self.ctx.get_module(model.name())
+            module = ctx.get_module(model.name())
             notif = list(module.children(types=(SNode.NOTIF,)))
             if len(notif) > 0:
                 self.notif_session.subscribe_notification_tree(
