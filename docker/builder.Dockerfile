@@ -141,5 +141,5 @@ COPY --from=cli /usr/share/wheels/cli /usr/share/wheels/cli
 COPY --from=sonic /usr/share/wheels/sonic /usr/share/wheels/sonic
 COPY --from=system /usr/share/wheels/system /usr/share/wheels/system
 
-RUN --mount=type=bind,source=scripts,target=/src,rw \
-    cd /src && cp /src/reload.sh /usr/local/bin/
+RUN --mount=type=bind,source=scripts,target=/src \
+    cd /src && cp /src/gs-yang.py /usr/local/bin/
