@@ -175,8 +175,8 @@ class AutoNegoCommand(Command):
 
     def list(self):
         if self.root.name != "no":
-            return ["enable", "disable"]
-        return []
+            return ["enable", "disable", "advertise"]
+        return ["advertise"]
 
     def exec(self, line):
         port = self.context.port
