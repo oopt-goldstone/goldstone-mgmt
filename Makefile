@@ -122,20 +122,17 @@ lint:
 	grep -rnI 'print(' src || exit 0 && exit 1
 
 unittest:
-	sysrepoctl -i yang/goldstone-interfaces.yang
-	sysrepoctl -i yang/goldstone-platform.yang
-	sysrepoctl -i yang/goldstone-transponder.yang
-	sysrepoctl -i yang/goldstone-gearbox.yang
-	sysrepoctl -i yang/goldstone-component-connection.yang
-	sysrepoctl -i yang/goldstone-uplink-failure-detection.yang
-	sysrepoctl -s sm/openconfig -i sm/openconfig/release/models/interfaces/openconfig-interfaces.yang
-	sysrepoctl -s sm/openconfig -i sm/openconfig/release/models/interfaces/openconfig-if-ethernet.yang
 	cd src/south/sonic && make proto
-	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f
+	scripts/gs-yang.py --install south-sonic south-tai --search-dirs yang
+	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 	# unittest package can't search namespace packages
-	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f
-	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f
-	cd src/south/tai        && PYTHONPATH=../../lib python -m unittest -v -f
-	cd src/south/gearbox    && PYTHONPATH=../../lib python -m unittest -v -f
-	cd src/xlate/openconfig && PYTHONPATH=../../lib python -m unittest -v -f
+	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	scripts/gs-yang.py --install south-sonic --search-dirs yang
+	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	scripts/gs-yang.py --install south-tai --search-dirs yang
+	cd src/south/tai        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	scripts/gs-yang.py --install south-gearbox --search-dirs yang
+	cd src/south/gearbox    && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	scripts/gs-yang.py --install xlate-oc south-sonic --search-dirs yang sm/openconfig
+	cd src/xlate/openconfig && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 	cd src/south/sonic      && make clean
