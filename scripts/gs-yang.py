@@ -12,6 +12,7 @@ MODELS = {
     "south-onlp": ["goldstone-platform", "goldstone-component-connection"],
     "south-sonic": [
         "goldstone-interfaces",
+        "goldstone-sonic",
         "goldstone-vlan",
         "goldstone-uplink-failure-detection",
         "goldstone-ip",

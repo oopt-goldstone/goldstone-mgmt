@@ -267,13 +267,38 @@ class TestSouthGearbox(TestBase):
         ifname = "Ethernet1/1/1"
         self.gscli(f"interface {ifname}; no mtu")
         output = self.gscli(f"interface {ifname}; show")
-        self.assertTrue("9100" in output)
+        self.assertTrue("10000" in output)
         self.gscli(f"interface {ifname}; mtu 9000")
         output = self.gscli(f"interface {ifname}; show")
         self.assertTrue("9000" in output)
-        self.gscli(f"interface {ifname}; mtu 9216")
+        self.gscli(f"interface {ifname}; mtu 20000")
         output = self.gscli(f"interface {ifname}; show")
-        self.assertTrue("9216" in output)
+        self.assertTrue("20000" in output)
+        self.gscli(f"interface {ifname}; mtu 0")
+        output = self.gscli(f"interface {ifname}; show")
+        self.assertTrue("0" in output)
+        self.gscli(f"interface {ifname}; no mtu")
+        output = self.gscli(f"interface {ifname}; show")
+        self.assertTrue("10000" in output)
+
+    def test_fec(self):
+        ifname = "Ethernet1/1/1"
+        self.gscli(f"interface {ifname}; no fec")
+        output = self.gscli(f"interface {ifname}; show")
+        self.assertTrue("rs" in output)
+        with self.assertRaises(SSHException):
+            self.gscli(f"interface {ifname}; fec none")
+
+        with self.assertRaises(SSHException):
+            self.gscli(f"interface {ifname}; fec fc")
+
+        self.gscli(f"interface {ifname}; fec rs")
+        output = self.gscli(f"interface {ifname}; show")
+        self.assertTrue("rs" in output)
+
+        self.gscli(f"interface {ifname}; no fec")
+        output = self.gscli(f"interface {ifname}; show")
+        self.assertTrue("rs" in output)
 
 
 class TestSouthSONiC(TestBase):

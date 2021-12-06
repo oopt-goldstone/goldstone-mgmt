@@ -1,0 +1,44 @@
+module goldstone-sonic {
+
+  yang-version "1";
+
+  namespace "http://goldstone.net/yang/goldstone-sonic";
+  prefix gs-sonic;
+
+  import goldstone-interfaces { prefix gs-if; }
+
+  organization
+    "Goldstone";
+
+  description
+    "This module contains a collection of YANG definitions for
+     managing south-sonic.";
+
+  revision 2021-12-06 {
+    description
+      "Initial version.";
+    reference
+      "0.1.0";
+  }
+
+  deviation "/gs-if:interfaces/gs-if:interface/gs-if:ethernet/gs-if:config/gs-if:fec" {
+      deviate add {
+        default NONE;
+      }
+  }
+
+  deviation "/gs-if:interfaces/gs-if:interface/gs-if:ethernet/gs-if:config/gs-if:mtu" {
+    deviate replace {
+      type uint16 {
+        range "1312..9216" {
+          error-message "Invalid MTU value";
+          error-app-tag mtu-invalid;
+        }
+      }
+    }
+    deviate add {
+      default 9100;
+    }
+  }
+
+}

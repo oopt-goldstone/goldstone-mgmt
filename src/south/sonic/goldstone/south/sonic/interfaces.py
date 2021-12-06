@@ -13,8 +13,6 @@ SINGLE_LANE_INTERFACE_TYPES = ["CR", "LR", "SR", "KR"]
 DOUBLE_LANE_INTERFACE_TYPES = ["CR2", "LR2", "SR2", "KR2"]
 QUAD_LANE_INTERFACE_TYPES = ["CR4", "LR4", "SR4", "KR4"]
 
-DEFAULT_FEC_TYPE = "NONE"
-
 
 class IfChangeHandler(ChangeHandler):
     def __init__(self, server, change):
@@ -399,9 +397,6 @@ class InterfaceServer(ServerBase):
         self.sonic.is_rebooting = False
 
     def get_default(self, key):
-        if key == "fec":
-            return DEFAULT_FEC_TYPE
-
         ctx = self.sess.get_ly_ctx()
         keys = [
             ["interfaces", "interface", "config", key],
