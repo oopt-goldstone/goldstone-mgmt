@@ -8,10 +8,6 @@ import json
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ADMIN_STATUS = "DOWN"
-DEFAULT_FEC_TYPE = "RS"
-DEFAULT_MTU = 9100
-
 
 class IfChangeHandler(ChangeHandler):
     async def _init(self, user):
@@ -201,7 +197,7 @@ class InterfaceServer(ServerBase):
             )
             admin_status = config.get("config", {}).get("admin-status")
             if admin_status == None:
-                admin_status = DEFAULT_ADMIN_STATUS
+                admin_status = self.get_default("admin-status")
             value = "false" if admin_status == "UP" else "true"
 
             obj = await self.ifname2taiobj(ifname)
@@ -209,12 +205,12 @@ class InterfaceServer(ServerBase):
 
             fec = config.get("ethernet", {}).get("config", {}).get("fec")
             if fec == None:
-                fec = DEFAULT_FEC_TYPE
+                fec = self.get_default("fec")
             await obj.set("fec-type", fec.lower())
 
             mtu = config.get("ethernet", {}).get("config", {}).get("mtu")
             if mtu == None:
-                mtu = DEFAULT_MTU
+                mtu = int(self.get_default("mtu"))
             await obj.set("mtu", mtu)
 
     async def tai_cb(self, obj, attr_meta, msg):

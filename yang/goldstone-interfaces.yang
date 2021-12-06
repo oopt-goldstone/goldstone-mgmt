@@ -139,14 +139,8 @@ module goldstone-interfaces {
   grouping ethernet-interface-config {
 
     leaf mtu {
-      type uint16 {
-        range "1312..9216" {
-          error-message "Invalid MTU value";
-          error-app-tag mtu-invalid;
-        }
-      }
+      type uint16;
       units "octets";
-      default 9100;
     }
 
     leaf fec {

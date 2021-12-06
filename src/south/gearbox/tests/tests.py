@@ -19,6 +19,8 @@ logging.basicConfig(level=logging.DEBUG, format=fmt)
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MTU = 10000
+
 
 async def to_subprocess(func):
     loop = asyncio.get_running_loop()
@@ -80,7 +82,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             elif args[0] == "oper-status":
                 return "ready"
             elif args[0] == "mtu":
-                return 9100
+                return DEFAULT_MTU
             elif args[0] == "index":
                 return 0
             else:
@@ -218,10 +220,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("admin-status", "up"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
-                ("mtu", 9100),
+                ("mtu", DEFAULT_MTU),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
-                ("mtu", 9100),
+                ("mtu", DEFAULT_MTU),
             ],
         )
 
@@ -252,10 +254,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("admin-status", "down"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
-                ("mtu", 9100),
+                ("mtu", DEFAULT_MTU),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
-                ("mtu", 9100),
+                ("mtu", DEFAULT_MTU),
             ],
         )
         gbserver.stop()
@@ -285,10 +287,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("admin-status", "up"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
-                ("mtu", 9100),
+                ("mtu", DEFAULT_MTU),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
-                ("mtu", 9100),
+                ("mtu", DEFAULT_MTU),
             ],
         )
 
@@ -320,10 +322,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("admin-status", "up"),
                 ("tx-dis", "false"),
                 ("fec-type", "rs"),
-                ("mtu", 9100),
+                ("mtu", DEFAULT_MTU),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
-                ("mtu", 9100),
+                ("mtu", DEFAULT_MTU),
             ],
         )
 
@@ -382,6 +384,63 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
                 )
                 sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        [task.cancel() for task in tasks]
+
+        await ifserver.stop()
+
+    async def test_mtu(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                ifname = "Ethernet1/0/1"
+                sess.set_item(
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
+                    ifname,
+                )
+                sess.apply_changes()
+
+            with self.conn.start_session("running") as sess:
+                data = sess.get_data(
+                    "/goldstone-interfaces:interfaces", include_implicit_defaults=True
+                )
+                self.assertEqual(len(data["interfaces"]["interface"]), 1)
+                data = list(data["interfaces"]["interface"])[0]
+                self.assertEqual(data["ethernet"]["config"]["mtu"], DEFAULT_MTU)
+
+        await asyncio.to_thread(test)
+
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                ifname = "Ethernet1/0/1"
+                sess.set_item(
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
+                    ifname,
+                )
+                sess.set_item(
+                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/config/mtu",
+                    20000,
+                )
+
+                sess.apply_changes()
+
+            with self.conn.start_session("running") as sess:
+                data = sess.get_data(
+                    "/goldstone-interfaces:interfaces", include_implicit_defaults=True
+                )
+                self.assertEqual(len(data["interfaces"]["interface"]), 1)
+                data = list(data["interfaces"]["interface"])[0]
+                self.assertEqual(data["ethernet"]["config"]["mtu"], 20000)
 
         await asyncio.to_thread(test)
 

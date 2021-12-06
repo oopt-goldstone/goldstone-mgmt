@@ -5,6 +5,8 @@ module goldstone-gearbox {
   namespace "http://goldstone.net/yang/goldstone-gearbox";
   prefix gs-gb;
 
+  import goldstone-interfaces { prefix gs-if; }
+
   organization
     "Goldstone";
 
@@ -53,5 +55,17 @@ module goldstone-gearbox {
   }
 
   uses gearbox-top;
+
+  deviation "/gs-if:interfaces/gs-if:interface/gs-if:ethernet/gs-if:config/gs-if:fec" {
+      deviate add {
+        default RS;
+      }
+  }
+
+  deviation "/gs-if:interfaces/gs-if:interface/gs-if:ethernet/gs-if:config/gs-if:mtu" {
+      deviate add {
+        default 10000;
+      }
+  }
 
 }
