@@ -93,11 +93,38 @@ def install(name, yang_dir):
         install_model(model, yang_dir)
 
 
+def lint(daemons, search_dirs: list[str] = []):
+    if not search_dirs:
+        search_dirs = [DEFAULT_YANG_DIR, "/usr/local/share/yang/modules/ietf"]
+
+    models = []
+    for model_name in set(itertools.chain.from_iterable(MODELS[d] for d in daemons)):
+
+        model = list(
+            itertools.chain.from_iterable(
+                [Path(d).rglob(f"{model_name}.yang") for d in search_dirs]
+            )
+        )
+
+        if len(model) == 0:
+            raise Exception(f"model {model_name} not found")
+        elif len(model) > 1:
+            raise Exception(f"multiple models named {model_name} found")
+
+        models.append(str(model[0]))
+
+    path = "--path=" + ":".join(search_dirs)
+    command = f"pyang {path} {' '.join(models)}"
+    print(f"run: {command}")
+    subprocess.run(command.split(" "), stderr=subprocess.STDOUT)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--install", nargs="+")
     parser.add_argument("--install-platform", action="store_true")
     parser.add_argument("--search-dirs", nargs="+")
+    parser.add_argument("--lint", nargs="+")
 
     args = parser.parse_args()
 
@@ -116,6 +143,17 @@ def main():
 
         for d in daemons:
             install(d, args.search_dirs)
+
+    if args.lint:
+        daemons = args.lint
+
+        choices = MODELS.keys()
+
+        if not all(d in choices for d in daemons):
+            print(f"choose from {', '.join(list(choices))}")
+            sys.exit(1)
+
+        lint(daemons, args.search_dirs)
 
 
 if __name__ == "__main__":
