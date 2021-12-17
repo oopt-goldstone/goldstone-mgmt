@@ -286,16 +286,44 @@ pipeline {
     }
 
     stage('Test SNMP') {
-      when {
-        branch pattern: "^PR.*", comparator: "REGEXP"
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-        sh 'make tester'
-        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.DEVICE}"
+      failFast true
+      parallel {
+        stage('amd64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'amd64'
+          }
+          stages {
+            stage('Test SNMP on amd64') {
+              steps {
+                sh 'make tester'
+                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.DEVICE}"
+              }
+            }
+          }
+        }
+        stage('arm64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'arm64'
+          }
+          stages {
+            stage('Test SNMP on arm64') {
+              steps {
+                sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
+                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.ARM_DEVICE}"
+              }
+            }
+          }
+        }
       }
     }
-
   }
 
   post {

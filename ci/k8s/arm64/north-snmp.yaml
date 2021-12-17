@@ -76,14 +76,14 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: snmpd
-              image: docker.io/gs-test/gs-mgmt-snmpd:latest-amd64
+              image: docker.io/gs-test/gs-mgmt-snmpd:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ['snmpd', '-f', '-C', '-c', '/etc/snmp/snmpd.conf']
               volumeMounts:
               - name: snmpd-config
                 mountPath: /etc/snmp
             - name: agentx
-              image: docker.io/gs-test/gs-mgmt-north-snmp:latest-amd64
+              image: docker.io/gs-test/gs-mgmt-north-snmp:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ['gsnorthd-snmp', '-v']
               volumeMounts:

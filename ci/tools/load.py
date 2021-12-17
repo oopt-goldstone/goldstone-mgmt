@@ -45,12 +45,12 @@ def main(host, username, password, arch):
             "gs-mgmt-south-onlp",
             "gs-mgmt-south-tai",
             "gs-mgmt-north-notif",
+            "gs-mgmt-north-snmp",
             "gs-mgmt-xlate-openconfig",
         ]
 
         if arch == "amd64":
             images.append("gs-mgmt-south-sonic")
-            images.append("gs-mgmt-north-snmp")
         elif arch == "arm64":
             images.append("gs-mgmt-south-gearbox")
 
@@ -85,10 +85,16 @@ def main(host, username, password, arch):
 
         ssh(cli, "sysrepoctl -l | grep goldstone")  # goldstone models must be loaded
 
-        apps = ["north-netconf", "north-notif", "south-onlp", "south-tai", "xlate-oc"]
+        apps = [
+            "north-netconf",
+            "north-notif",
+            "north-snmp",
+            "south-onlp",
+            "south-tai",
+            "xlate-oc",
+        ]
         if arch == "amd64":
             apps.append("south-sonic")
-            apps.append("north-snmp")
         elif arch == "arm64":
             apps.append("south-gearbox")
 
@@ -108,13 +114,13 @@ def main(host, username, password, arch):
 
         if arch == "amd64":
             check_pod(cli, "south-sonic")
-            check_pod(cli, "north-snmp")
         elif arch == "arm64":
             check_pod(cli, "south-gearbox")
 
         check_pod(cli, "south-onlp")
         check_pod(cli, "south-tai")
         check_pod(cli, "north-notif")
+        check_pod(cli, "north-snmp")
         check_pod(cli, "xlate-oc")
 
         def restart_gssouth_system():
