@@ -1,9 +1,12 @@
 import setuptools
 
+with open("requirements.txt", "r") as f:
+    install_requires = f.read().split()
+
 setuptools.setup(
     name="gssnmp",
     version="0.1.0",
-    install_requires=["prompt_toolkit", "tabulate", "python_arptable"],
+    install_requires=install_requires,
     description="Goldstone SNMP AgentX",
     url="https://github.com/microsonic/goldstone-mgmt",
     python_requires=">=3.7",

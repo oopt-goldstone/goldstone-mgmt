@@ -11,13 +11,13 @@ class AgentX(asyncio.Protocol):
     RFC2741 - compliant AgentX protocol. State machine flow:
         start -> connection_made() [-> data_received() *] [-> eof_received() ?] -> connection_lost() -> end
     """
+
     transport = None
 
-    def __init__(self, mib_table, loop):
-        self.loop = loop
+    def __init__(self, mib_table):
         self.session_id = -1
         self.mib_table = mib_table
-        self.closed = asyncio.Event(loop=loop)
+        self.closed = asyncio.Event()
         self.counter = 0
 
     def send_pdu(self, pdu):
@@ -36,14 +36,18 @@ class AgentX(asyncio.Protocol):
                 constants.PduTypes.OPEN,
                 PDUHeader.MASK_NEWORK_BYTE_ORDER,
                 0,  # reserved
-                0, 0, 0, 0),  # payload length[3] is overridden by the constructor(s).
+                0,
+                0,
+                0,
+                0,
+            ),  # payload length[3] is overridden by the constructor(s).
             timeout=constants.DEFAULT_PDU_TIMEOUT,
             # https://tools.ietf.org/html/rfc2741#section-6.2.1:
             #   "An Object Identifier that identifies the subagent.
             #   Subagents that do not support such a notion may
             #   send a null Object Identifier."
             oid=ObjectIdentifier.null_oid(),
-            descr=constants.SNMP_SUBAGENT_NAME
+            descr=constants.SNMP_SUBAGENT_NAME,
         )
         self.send_pdu(open_pdu)
 
@@ -79,7 +83,11 @@ class AgentX(asyncio.Protocol):
                 # No error! Start registering our subtree(s)
                 self.register_subtrees(pdu)
             else:
-                raise exceptions.AgentError("Session ID uninitialized with inconsistent Response PDU [{}]".format(pdu))
+                raise exceptions.AgentError(
+                    "Session ID uninitialized with inconsistent Response PDU [{}]".format(
+                        pdu
+                    )
+                )
         else:
             # TODO: some other administrative PDU
             logger.debug("admin_recv[{}]".format(pdu))
@@ -138,14 +146,16 @@ class AgentX(asyncio.Protocol):
                     response_pdu = pdu.make_response(self.mib_table)
                     self.transport.write(response_pdu.encode())
         except exceptions.PDUUnpackError:
-            logger.exception('decode_error[{}]'.format(data))
+            logger.exception("decode_error[{}]".format(data))
         except exceptions.PDUPackError:
-            logger.exception('encode_error[{}]'.format(data))
+            logger.exception("encode_error[{}]".format(data))
         except Exception:
             logger.exception("Uncaught AgentX proto error! [{}]".format(data))
 
     def pause_writing(self):
-        logger.warning("AgentX buffer above high-water mark. Suspending PDU processing.")
+        logger.warning(
+            "AgentX buffer above high-water mark. Suspending PDU processing."
+        )
 
     def resume_writing(self):
         logger.warning("AgentX buffer below high-water mark. Resuming PDU processing.")
