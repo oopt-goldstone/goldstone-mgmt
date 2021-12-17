@@ -136,6 +136,49 @@ module goldstone-interfaces {
     }
   }
 
+  grouping ethernet-pcs-config {
+
+  }
+
+  grouping ethernet-pcs-state {
+    leaf-list pcs-status {
+      type enumeration {
+        enum ready;
+        enum block-locked;
+        enum alignment-locked;
+        enum rx-remote-fault;
+        enum rx-local-fault;
+      }
+    }
+
+    leaf-list serdes-status {
+      type enumeration {
+        enum tx-ready;
+        enum rx-ready;
+        enum lane-adapt-done;
+        enum dlos;
+        enum pll-locked;
+        enum signal-detect;
+        enum phy-ready;
+        enum tx-fifo-overflow;
+        enum rx-fifo-overflow;
+      }
+    }
+  }
+
+  grouping ethernet-pcs-top {
+    container pcs {
+      container config {
+        uses ethernet-pcs-config;
+      }
+      container state {
+        config false;
+        uses ethernet-pcs-config;
+        uses ethernet-pcs-state;
+      }
+    }
+  }
+
   grouping ethernet-interface-config {
 
     leaf mtu {
@@ -196,6 +239,7 @@ module goldstone-interfaces {
 
       uses ethernet-port-breakout-top;
       uses ethernet-auto-negotiate-top;
+      uses ethernet-pcs-top;
     }
   }
 
