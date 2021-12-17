@@ -365,11 +365,6 @@ class InterfaceServer(ServerBase):
             except taish.TAIException:
                 pass
 
-            try:
-                pcs = await obj.get("pcs-status")
-                state["oper-status"] = pcs_status2oper_status(pcs)
-            except taish.TAIException:
-                pass
             i["state"] = state
 
             state = {}
@@ -393,6 +388,15 @@ class InterfaceServer(ServerBase):
                 pass
 
             i["ethernet"] = {"state": state}
+
+            try:
+                pcs = json.loads(await obj.get("pcs-status", json=True))
+                serdes = json.loads(await obj.get("serdes-status", json=True))
+                i["state"]["oper-status"] = pcs_status2oper_status(pcs)
+                state = {"pcs-status": pcs, "serdes-status": serdes}
+                i["ethernet"]["pcs"] = {"state": state}
+            except taish.TAIException:
+                pass
 
             interfaces.append(i)
 

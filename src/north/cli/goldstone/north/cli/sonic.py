@@ -623,6 +623,12 @@ class Port(object):
                     elif data["vlan-mode"] == "access":
                         data["access-vlan"] = state["access-vlan"]
 
+                if "pcs" in ethernet:
+                    state = ethernet["pcs"].get("state", {})
+                    for field in ["pcs-status", "serdes-status"]:
+                        if field in state:
+                            data[field] = ", ".join(state[field])
+
                 del data["ethernet"]
 
             for key in ["admin-status", "oper-status"]:
