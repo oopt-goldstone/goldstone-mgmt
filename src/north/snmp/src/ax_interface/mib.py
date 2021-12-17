@@ -43,7 +43,9 @@ class MIBUpdater:
                 self.update_data()
             except Exception:
                 # Any unexpected exception or error, log it and keep running
-                logger.exception("MIBUpdater.start() caught an unexpected exception during update_data()")
+                logger.exception(
+                    "MIBUpdater.start() caught an unexpected exception during update_data()"
+                )
 
             # wait based on our update frequency before executing again.
             # randomize to avoid concurrent update storms.
@@ -63,9 +65,9 @@ class MIBUpdater:
 
 
 class MIBMeta(type):
-    KEYSTORE = '__subids__'
-    PREFIXES = '__subtrees__'
-    UPDATERS = '__updaters__'
+    KEYSTORE = "__subids__"
+    PREFIXES = "__subtrees__"
+    UPDATERS = "__updaters__"
 
     def __new__(mcs, name, bases, attributes, prefix=None):
         cls = type.__new__(mcs, name, bases, attributes)
@@ -76,7 +78,9 @@ class MIBMeta(type):
 
         if prefix is not None:
             if not util.is_valid_oid(prefix, dot_prefix=True):
-                raise ValueError("Invalid prefix '{}' for class '{}'".format(prefix, name))
+                raise ValueError(
+                    "Invalid prefix '{}' for class '{}'".format(prefix, name)
+                )
 
             _prefix = util.oid2tuple(prefix)
             _prefix_len = len(_prefix)
@@ -124,8 +128,8 @@ class MIBMeta(type):
 
 
 class MIBEntry:
-    PREFIXLEN = '__prefixlen__'
-    PREFIX = '__prefix__'
+    PREFIXLEN = "__prefixlen__"
+    PREFIX = "__prefix__"
 
     def __init__(self, subtree, value_type, callable_, *args):
         """
@@ -144,7 +148,9 @@ class MIBEntry:
         if type(value_type) is not ValueType:
             raise ValueError("Second argument expected 'ValueType'")
         if not callable(callable_):
-            raise ValueError("Third argument must be a callable object--got literal instead.")
+            raise ValueError(
+                "Third argument must be a callable object--got literal instead."
+            )
         self._callable_ = callable_
         self._callable_args = args
         self.subtree_str = subtree
@@ -182,7 +188,9 @@ class SubtreeMIBEntry(MIBEntry):
                 sub_id = self.iterator.get_next(sub_id)
             except Exception:
                 # Any unexpected exception or error, log it and keep running
-                logger.exception("SubtreeMIBEntry.__iter__() caught an unexpected exception during iterator.get_next()")
+                logger.exception(
+                    "SubtreeMIBEntry.__iter__() caught an unexpected exception during iterator.get_next()"
+                )
                 break
             if sub_id is None:
                 break
@@ -194,7 +202,9 @@ class SubtreeMIBEntry(MIBEntry):
             return self._callable_.__call__(sub_id, *self._callable_args)
         except Exception:
             # Any unexpected exception or error, log it and keep running
-            logger.exception("SubtreeMIBEntry.__call__() caught an unexpected exception during _callable_.__call__()")
+            logger.exception(
+                "SubtreeMIBEntry.__call__() caught an unexpected exception during _callable_.__call__()"
+            )
             return None
 
     def get_next(self, sub_id):
@@ -202,7 +212,9 @@ class SubtreeMIBEntry(MIBEntry):
             return self.iterator.get_next(sub_id)
         except Exception:
             # Any unexpected exception or error, log it and keep running
-            logger.exception("SubtreeMIBEntry.get_next() caught an unexpected exception during iterator.get_next()")
+            logger.exception(
+                "SubtreeMIBEntry.get_next() caught an unexpected exception during iterator.get_next()"
+            )
             return None
 
 
@@ -233,7 +245,7 @@ class OverlayAdpaterMIBEntry(MIBEntry):
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
-        if name.startswith('__') and name.endswith('__'):
+        if name.startswith("__") and name.endswith("__"):
             setattr(self.underlay_mibentry, name, value)
             setattr(self.overlay_mibentry, name, value)
 
@@ -269,8 +281,10 @@ class MIBTable(dict):
     def _done_background_task_callback(fut):
         ex = fut.exception()
         if ex is not None:
-            exstr = "MIBTable background task caught an unexpected exception: {}".format(
-                str(ex)
+            exstr = (
+                "MIBTable background task caught an unexpected exception: {}".format(
+                    str(ex)
+                )
             )
             logger.error(exstr)
 
@@ -282,7 +296,7 @@ class MIBTable(dict):
             fut = asyncio.ensure_future(updater.start())
             fut.add_done_callback(MIBTable._done_background_task_callback)
             tasks.append(fut)
-        return asyncio.gather(*tasks, loop=event._loop)
+        return asyncio.gather(*tasks)
 
     def _find_parent_prefix(self, item):
         oids = sorted(self.prefixes)
@@ -380,18 +394,18 @@ class MIBTable(dict):
 
             val1 = mib_entry(key1)
             if val1 is None:
-                logger.error('MIBTable.get_next found an invalid key: {}+{}'.format(mib_entry.subtree, key1))
+                logger.error(
+                    "MIBTable.get_next found an invalid key: {}+{}".format(
+                        mib_entry.subtree, key1
+                    )
+                )
                 remaining_oids = remaining_oids[1:]
                 continue
 
             oid1 = mib_entry.replace_sub_id(oid_key, key1)
 
             # found a concrete OID value--return it.
-            vr = ValueRepresentation.from_typecast(
-                mib_entry.value_type,
-                oid1,
-                val1
-            )
+            vr = ValueRepresentation.from_typecast(mib_entry.value_type, oid1, val1)
             return vr
 
         # exhausted all remaining OID options--we're at the end of the MIB view.
@@ -403,8 +417,10 @@ class MIBTable(dict):
         )
 
     def __setitem__(self, key, value):
-        if not hasattr(value, '__iter__'):
-            raise ValueError("Invalid key '{}'. All keys must be iterable types.".format(key))
+        if not hasattr(value, "__iter__"):
+            raise ValueError(
+                "Invalid key '{}'. All keys must be iterable types.".format(key)
+            )
         super().__setitem__(key, value)
 
     def __eq__(self, other):

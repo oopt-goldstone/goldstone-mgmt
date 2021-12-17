@@ -12,8 +12,6 @@ class Agent:
         if not type(mib_cls) is MIBMeta:
             raise ValueError("Expected a class with type: {}".format(MIBMeta))
 
-        self.loop = loop
-
         # synchronization events
         self.run_enabled = asyncio.Event()
         self.oid_updaters_enabled = asyncio.Event()
@@ -23,7 +21,9 @@ class Agent:
         self.mib_table = MIBTable(mib_cls, update_frequency)
 
         # containers
-        self.socket_mgr = SocketManager(self.mib_table, self.run_enabled, self.loop, ax_socket_path)
+        self.socket_mgr = SocketManager(
+            self.mib_table, self.run_enabled, loop, ax_socket_path
+        )
 
     async def run_in_event_loop(self):
         # starting up, set the enabled signals for the Agent and background tasks
@@ -34,7 +34,9 @@ class Agent:
         # run while
         while self.run_enabled.is_set():
             # start the MIB updater(s) and remember the future obj.
-            background_task = self.mib_table.start_background_tasks(self.oid_updaters_enabled)
+            background_task = self.mib_table.start_background_tasks(
+                self.oid_updaters_enabled
+            )
             # wait for the socket manager to close
             await self.socket_mgr.connection_loop()
 
@@ -46,7 +48,7 @@ class Agent:
             # signal background tasks to halt
             self.oid_updaters_enabled.clear()
             # wait for handlers to come back
-            await asyncio.wait_for(background_task, BACKGROUND_WAIT_TIMEOUT, loop=self.loop)
+            await asyncio.wait_for(background_task, BACKGROUND_WAIT_TIMEOUT)
 
         # signal that we're done!
         self.stopped.set()

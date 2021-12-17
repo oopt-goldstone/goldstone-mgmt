@@ -9,7 +9,9 @@ from . import constants, util
 
 
 class ObjectIdentifier(
-    namedtuple('_ObjectIdentifier', ('n_subid', 'prefix_', 'include', 'reserved', 'subids'))
+    namedtuple(
+        "_ObjectIdentifier", ("n_subid", "prefix_", "include", "reserved", "subids")
+    )
 ):
     """
     From https://tools.ietf.org/html/rfc2741#section-5.1:
@@ -18,6 +20,7 @@ class ObjectIdentifier(
     variable number of contiguous 4-byte fields representing sub-
     identifiers.
     """
+
     __slots__ = ()
 
     @property
@@ -39,7 +42,7 @@ class ObjectIdentifier(
 
     def __str__(self):
         subid_strs = [str(subid) for subid in self.to_tuple()]
-        return '.' + '.'.join(subid_strs) if subid_strs else ''
+        return "." + ".".join(subid_strs) if subid_strs else ""
 
     @property
     def size(self):
@@ -49,15 +52,22 @@ class ObjectIdentifier(
         return self.prefix + self.subids
 
     def to_bytes(self, endianness):
-        format_string = endianness + 'BBBB' + str(len(self.subids)) + 'L'
-        return struct.pack(format_string, self.n_subid, self.prefix_, self.include, self.reserved, *self.subids)
+        format_string = endianness + "BBBB" + str(len(self.subids)) + "L"
+        return struct.pack(
+            format_string,
+            self.n_subid,
+            self.prefix_,
+            self.include,
+            self.reserved,
+            *self.subids
+        )
 
     def inc(self):
         """
         Returns a new object identifier with last subid increased by one
         """
         newsubids = self.subids[:-1] + (self.subids[-1] + 1,)
-        return self._replace(subids = newsubids)
+        return self._replace(subids=newsubids)
 
     @classmethod
     def null_oid(cls):
@@ -88,16 +98,20 @@ class ObjectIdentifier(
         :param endianness: '!' or '<' (big/little endian)
         :return: n-oids, does not modify the original buffer and the index following the end of the OID
         """
-        oid_attributes = (n_subid, prefix, _, reserved) = struct.unpack(endianness + 'BBBB', byte_string[:4])
+        oid_attributes = (n_subid, prefix, _, reserved) = struct.unpack(
+            endianness + "BBBB", byte_string[:4]
+        )
         start_offset = 4
         end_offset = start_offset + n_subid * 4
-        subids = struct.unpack(endianness + n_subid * 'L', byte_string[start_offset:end_offset])
+        subids = struct.unpack(
+            endianness + n_subid * "L", byte_string[start_offset:end_offset]
+        )
 
         # oid = (n_subid, prefix, _, reserved, (subid1, subid2, ...))
         return cls(*oid_attributes, subids)
 
 
-class SearchRange(namedtuple('_SearchRange', ('start', 'end'))):
+class SearchRange(namedtuple("_SearchRange", ("start", "end"))):
     """
     From https://tools.ietf.org/html/rfc2741#section-5.2:
 
@@ -107,12 +121,13 @@ class SearchRange(namedtuple('_SearchRange', ('start', 'end'))):
     operations, to set an upper bound on the names of managed object
     instances the subagent may send in reply.
     """
+
     __slots__ = ()
 
     def __str__(self):
         end_str = str(self.end)
         ret = str(self.start)
-        ret += ' --> ' + str(self.end) if end_str else ' (unbounded)'
+        ret += " --> " + str(self.end) if end_str else " (unbounded)"
         return ret
 
     @property
@@ -127,15 +142,16 @@ class SearchRange(namedtuple('_SearchRange', ('start', 'end'))):
         # unpack the first OID
         start = ObjectIdentifier.from_bytes(byte_string, endianness)
         # unpack the second OID (resume at the end of the first)
-        end = ObjectIdentifier.from_bytes(byte_string[start.size:], endianness)
+        end = ObjectIdentifier.from_bytes(byte_string[start.size :], endianness)
         # compose our SearchRange tuple
         return cls(start, end)
 
 
-class OctetString(namedtuple('_OctetString', ('length', 'string', 'padding'))):
+class OctetString(namedtuple("_OctetString", ("length", "string", "padding"))):
     """
     https://tools.ietf.org/html/rfc2741#section-5.3
     """
+
     __slots__ = ()
 
     @property
@@ -145,16 +161,16 @@ class OctetString(namedtuple('_OctetString', ('length', 'string', 'padding'))):
     def __str__(self):
         # Note: ascii encoding (0-0x7F) is not enough to decode the internal bytes (self.string)
         # “latin-1” encoding maps byte values directly to the first 256 Unicode code points
-        return self.string.decode('latin-1')
+        return self.string.decode("latin-1")
 
     @classmethod
     def from_string(cls, string):
         length = len(string)
-        _string = bytes(string, 'latin-1') if type(string) is str else string
+        _string = bytes(string, "latin-1") if type(string) is str else string
         return cls(length, _string, util.pad4bytes(len(_string)))
 
     def to_bytes(self, endianness):
-        fmt = endianness + 'L{}s{}s'.format(self.length, util.pad4(self.length))
+        fmt = endianness + "L{}s{}s".format(self.length, util.pad4(self.length))
         return struct.pack(fmt, self.length, self.string, self.padding)
 
     @classmethod
@@ -176,19 +192,21 @@ class OctetString(namedtuple('_OctetString', ('length', 'string', 'padding'))):
         # read the length string
         string_length_bytes = byte_string[:4]
         # look ahead to the length value
-        string_length = struct.unpack(endianness + 'L', string_length_bytes)[0]
+        string_length = struct.unpack(endianness + "L", string_length_bytes)[0]
         # strings are padded to 4 bytes.
         padding_length = util.pad4(string_length)
 
         # E.g. !L101s3s -> (length[long], string, padding[string])
-        fmt = '{}L{}s{}s'.format(endianness, string_length, padding_length)
+        fmt = "{}L{}s{}s".format(endianness, string_length, padding_length)
         # calculate offset
         size = struct.calcsize(fmt)
         # format the context string
         return cls(*struct.unpack(fmt, byte_string[:size]))
 
 
-class ValueRepresentation(namedtuple('_ValueRepresentation', ('type_', 'reserved', 'name', 'data'))):
+class ValueRepresentation(
+    namedtuple("_ValueRepresentation", ("type_", "reserved", "name", "data"))
+):
     """
     https://tools.ietf.org/html/rfc2741#section-5.4
 
@@ -197,6 +215,7 @@ class ValueRepresentation(namedtuple('_ValueRepresentation', ('type_', 'reserved
     VarBind) consists of a 2-byte type field, a name (Object Identifier),
     and the actual value data.
     """
+
     __slots__ = ()
 
     FOUR_BYTE_TYPES = [
@@ -232,7 +251,10 @@ class ValueRepresentation(namedtuple('_ValueRepresentation', ('type_', 'reserved
             size += 4
         elif typed_bind == constants.ValueType.COUNTER_64:
             size += 8
-        elif typed_bind == constants.ValueType.OBJECT_IDENTIFIER or typed_bind in self.OCTET_STRINGS:
+        elif (
+            typed_bind == constants.ValueType.OBJECT_IDENTIFIER
+            or typed_bind in self.OCTET_STRINGS
+        ):
             size += self.data.size
         elif typed_bind in self.EMPTY_TYPES:
             # _size += 0
@@ -241,12 +263,19 @@ class ValueRepresentation(namedtuple('_ValueRepresentation', ('type_', 'reserved
 
     @classmethod
     def from_typecast(cls, type_, oid_iter_or_obj, data):
-        oid = ObjectIdentifier.from_iterable(oid_iter_or_obj) \
-            if type(oid_iter_or_obj) is not ObjectIdentifier else oid_iter_or_obj
+        oid = (
+            ObjectIdentifier.from_iterable(oid_iter_or_obj)
+            if type(oid_iter_or_obj) is not ObjectIdentifier
+            else oid_iter_or_obj
+        )
         if type_ in cls.OCTET_STRINGS:
             _data = OctetString.from_string(data)
         elif type_ == constants.ValueType.OBJECT_IDENTIFIER:
-            _data = ObjectIdentifier.from_iterable(data) if type(data) is not ObjectIdentifier else data
+            _data = (
+                ObjectIdentifier.from_iterable(data)
+                if type(data) is not ObjectIdentifier
+                else data
+            )
         elif type_ in cls.EMPTY_TYPES:
             _data = None
         else:
@@ -287,10 +316,10 @@ class ValueRepresentation(namedtuple('_ValueRepresentation', ('type_', 'reserved
         """
         typed_bind = constants.ValueType(type_)
         if typed_bind in cls.FOUR_BYTE_TYPES:
-            data = struct.unpack(endianness + 'L', byte_string[:4])[0]
+            data = struct.unpack(endianness + "L", byte_string[:4])[0]
             size = 4
         elif typed_bind == constants.ValueType.COUNTER_64:
-            data = struct.unpack(endianness + 'Q', byte_string[:8])[0]
+            data = struct.unpack(endianness + "Q", byte_string[:8])[0]
             size = 8
         elif typed_bind == constants.ValueType.OBJECT_IDENTIFIER:
             data = ObjectIdentifier.from_bytes(byte_string, endianness)
@@ -307,16 +336,19 @@ class ValueRepresentation(namedtuple('_ValueRepresentation', ('type_', 'reserved
         return data, size
 
     def to_bytes(self, endianness):
-        fmt = endianness + 'HH'
+        fmt = endianness + "HH"
         byte_string = struct.pack(fmt, self.type_, self.reserved)
         byte_string += self.name.to_bytes(endianness)
 
         typed_bind = constants.ValueType(self.type_)
         if typed_bind in self.FOUR_BYTE_TYPES:
-            byte_string += struct.pack(endianness + 'L', self.data & 0x00000000ffffffff)
+            byte_string += struct.pack(endianness + "L", self.data & 0x00000000FFFFFFFF)
         elif typed_bind == constants.ValueType.COUNTER_64:
-            byte_string += struct.pack(endianness + 'Q', self.data & 0xffffffffffffffff)
-        elif typed_bind == constants.ValueType.OBJECT_IDENTIFIER or typed_bind in self.OCTET_STRINGS:
+            byte_string += struct.pack(endianness + "Q", self.data & 0xFFFFFFFFFFFFFFFF)
+        elif (
+            typed_bind == constants.ValueType.OBJECT_IDENTIFIER
+            or typed_bind in self.OCTET_STRINGS
+        ):
             byte_string += self.data.to_bytes(endianness)
         elif typed_bind in self.EMPTY_TYPES:
             # ret += b''
@@ -354,7 +386,7 @@ class ValueRepresentation(namedtuple('_ValueRepresentation', ('type_', 'reserved
         :param endianness: big/little endian format specifier.
         :return: an instance of ValueRepresentation.
         """
-        type_, reserved = struct.unpack(endianness + 'HH', byte_string[:4])
+        type_, reserved = struct.unpack(endianness + "HH", byte_string[:4])
         name = ObjectIdentifier.from_bytes(byte_string[4:], endianness)
         offset = 4 + name.size
         data, offset = cls._unpack_data(type_, byte_string[offset:], endianness)
