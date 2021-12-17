@@ -72,7 +72,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             if args[0] in ["alarm-notification", "notify"]:
                 return "(nil)"
             elif args[0] == "pcs-status":
-                return ["ready"]
+                if kwargs.get("json"):
+                    return '["ready", "block-locked"]'
+                else:
+                    return ["ready"]
             elif args[0] == "tx-dis":
                 return "true"
             elif args[0] == "fec-type":
@@ -85,6 +88,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return DEFAULT_MTU
             elif args[0] == "index":
                 return 0
+            elif args[0] == "serdes-status":
+                if kwargs.get("json"):
+                    return '["tx-ready", "rx-ready"]'
+                else:
+                    return ["tx-ready", "rx-ready"]
             else:
                 return mock.MagicMock()
 
