@@ -202,13 +202,17 @@ class Port(object):
             xpath = f"{self.XPATH}[name='{ifname}']/state/counters"
             data = self.sr_op.get_data(xpath, "operational")
             data = ly.xpath_get(data, xpath)
+            if data == None:
+                stdout.info(f"no counter info for Interface {ifname}")
+                continue
+
             if table:
                 rows.append((ifname, data))
             else:
                 for d in data:
                     stdout.info(f"  {d}: {data[d]}")
 
-        if table:
+        if table and len(rows) > 0:
             keys = rows[0][1].keys()
             rows_ = []
             for row in rows:
