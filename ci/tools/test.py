@@ -300,6 +300,11 @@ class TestSouthGearbox(TestBase):
         output = self.gscli(f"interface {ifname}; show")
         self.assertTrue("rs" in output)
 
+    def test_show_counter(self):
+        self.gscli(f"show interface counter Ethernet1/1/1")
+        self.gscli(f"show interface counter")
+        self.gscli(f"show interface counter table")
+
 
 class TestSouthSONiC(TestBase):
     def test_vlan(self):
