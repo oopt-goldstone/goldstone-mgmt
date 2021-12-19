@@ -80,6 +80,20 @@ def main(host, username, password, arch):
 
         ssh(cli, "kubectl wait --for=condition=complete job/prep-gs-mgmt --timeout 10m")
 
+        host_image = f"gs-test/gs-mgmt-host:latest-{arch}"
+        d = f"builds/{arch}/deb"
+        run(f"rm -rf {d} && mkdir -p {d}")
+        run(
+            f'docker run -v `pwd`/{d}:/data -w /data {host_image} sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data"'
+        )
+
+        d = f"builds/{arch}/wheels"
+        run(f"rm -rf {d} && mkdir -p {d}")
+        for pkg in ["libyang", "sysrepo", "system", "cli"]:
+            run(
+                f'docker run -v `pwd`/{d}:/data -w /data {host_image} sh -c "cp -r /usr/share/wheels/{pkg} /data/"'
+            )
+
         scp.put(f"builds/{arch}/deb", recursive=True, remote_path="/tmp")
         ssh(cli, "dpkg -i /tmp/deb/*.deb")
 

@@ -80,6 +80,7 @@ pipeline {
                   sh 'make snmpd'
                   sh 'make base-image'
                   sh 'make images'
+                  sh 'make host-packages'
               }
             }
           }
@@ -107,50 +108,11 @@ pipeline {
                   sh 'make snmpd'
                   sh 'make base-image'
                   sh 'make images'
+                  sh 'make host-packages'
               }
             }
           }
         }
-      }
-    }
-
-    stage('Build sysrepo packages for host') {
-      when {
-        branch pattern: "^PR.*", comparator: "REGEXP"
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-          sh 'rm -rf deb && mkdir -p deb'
-          sh 'docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"'
-          sh 'rm -rf builds/amd64/deb && mkdir -p builds/amd64/deb/'
-          sh 'cp deb/*.deb builds/amd64/deb/'
-
-          sh 'rm -rf deb && mkdir -p deb'
-          sh 'docker run -v `pwd`/deb:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp /usr/share/debs/libyang/libyang1_*.deb /usr/share/debs/sysrepo/sysrepo_*.deb /data/"'
-          sh 'rm -rf builds/arm64/deb && mkdir -p builds/arm64/deb/'
-          sh 'cp deb/*.deb builds/arm64/deb/'
-      }
-    }
-
-    stage('Build cli and south-system packages for host') {
-      when {
-        branch pattern: "^PR.*", comparator: "REGEXP"
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-          sh 'rm -rf builds/amd64/wheels && mkdir -p builds/amd64/wheels'
-          sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/libyang /data/"'
-          sh 'docker run -v `pwd`/builds/amd64/wheels/libyang:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "pip wheel cffi -w /data"'
-          sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/sysrepo /data/"'
-          sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/system /data/"'
-          sh 'docker run -v `pwd`/builds/amd64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-amd64 sh -c "cp -r /usr/share/wheels/cli /data/"'
-
-          sh 'rm -rf builds/arm64/wheels && mkdir -p builds/arm64/wheels'
-          sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/libyang /data/"'
-          sh 'docker run -v `pwd`/builds/arm64/wheels/libyang:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "pip wheel cffi -w /data"'
-          sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/sysrepo /data/"'
-          sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/system /data/"'
-          sh 'docker run -v `pwd`/builds/arm64/wheels:/data -w /data gs-test/gs-mgmt-builder:latest-arm64 sh -c "cp -r /usr/share/wheels/cli /data/"'
       }
     }
 
