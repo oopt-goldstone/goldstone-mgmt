@@ -23,6 +23,7 @@ GS_MGMT_SNMPD_IMAGE   ?= gs-mgmt-snmpd
 GS_MGMT_OC_IMAGE      ?= gs-mgmt-xlate-openconfig
 GS_MGMT_NOTIF_IMAGE   ?= gs-mgmt-north-notif
 GS_MGMT_TEST_IMAGE    ?= gs-mgmt-test
+GS_MGMT_HOST_IMAGE    ?= gs-mgmt-host
 
 define image_name
 $(GS_MGMT_IMAGE_PREFIX)$1:$(GS_MGMT_IMAGE_TAG)
@@ -33,10 +34,11 @@ BASE ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
 
 TAI_META_CUSTOM_FILES ?= $(abspath $(wildcard scripts/tai/*))
 
-all: builder base-image images tester
+all: builder base-image images tester host-packages
 
 docker:
 	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make cli system' $(MAKE) cmd
+
 
 builder:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/builder.Dockerfile -t $(BUILDER) .
@@ -45,6 +47,11 @@ base-image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
 							      -t $(call image_name,$(GS_MGMT_BASE_IMAGE)) .
+
+host-packages:
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/host.Dockerfile \
+							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
+							      -t $(call image_name,$(GS_MGMT_HOST_IMAGE)) .
 
 images: south-images north-images xlate-images
 

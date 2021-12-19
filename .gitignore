@@ -1,3 +1,5 @@
 .python-version
 .pc
 .vscode
+__pycache__
+builds
