@@ -73,7 +73,7 @@ class GlobalShowCommand(Command):
 
     def exec(self, line):
         if len(line) == 0:
-            raise InvalidInput(self.usage())
+            raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
 
         if line[0] == "datastore":
             self.datastore(line)
@@ -82,7 +82,7 @@ class GlobalShowCommand(Command):
             self.display_log(line)
 
         else:
-            raise InvalidInput(self.usage())
+            raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
 
     def datastore(self, line):
         conn = self.context.conn
@@ -153,7 +153,7 @@ class GlobalShowCommand(Command):
                     raise InvalidInput("The argument <num_lines> must be a number")
             else:
                 raise InvalidInput(
-                    f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]"
+                    f"usage: {self.name_all()} logging [sonic|tai|onlp] [<num_lines>]"
                 )
         else:
             line_count = 0
@@ -200,23 +200,7 @@ class GlobalShowCommand(Command):
             stderr.info("Found exception in reading the logs : {}".format(str(e)))
 
     def usage(self):
-        return (
-            "usage:\n"
-            f" {self.name_all()} interface (brief|description|counters) \n"
-            f" {self.name_all()} vlan details \n"
-            f" {self.name_all()} ip route\n"
-            f" {self.name_all()} transponder (<transponder_name>|summary)\n"
-            f" {self.name_all()} chassis-hardware (fan|psu|led|transceiver|thermal|system|all)\n"
-            f" {self.name_all()} ufd \n"
-            f" {self.name_all()} portchannel \n"
-            f" {self.name_all()} logging [sonic|tai|onlp|] [<num_lines>|]\n"
-            f" {self.name_all()} version \n"
-            f" {self.name_all()} aaa \n"
-            f" {self.name_all()} tacacs \n"
-            f" {self.name_all()} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
-            f" {self.name_all()} running-config [transponder|platform|vlan|interface|aaa|ufd|portchannel]\n"
-            f" {self.name_all()} tech-support"
-        )
+        return f"[ {' | '.join(self.list())} ]"
 
 
 def remove_switched_vlan_configuration(sess):
@@ -231,7 +215,7 @@ class ClearDatastoreGroupCommand(Command):
     def exec(self, line):
         if len(line) < 1:
             raise InvalidInput(
-                f"usage: {self.parent.name} {self.name} [ <module name> | all ] [ running | startup ]"
+                f"usage: {self.name_all()} [ <module name> | all ] [ running | startup ]"
             )
 
         ds = line[1] if len(line) == 2 else "running"
