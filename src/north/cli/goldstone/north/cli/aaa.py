@@ -1,6 +1,12 @@
 from .base import Command, InvalidInput
-from .cli import GSObject as Object
-from .system import AAA
+from .cli import (
+    GSObject as Object,
+    RunningConfigCommand,
+    GlobalShowCommand,
+    ModelExists,
+    TechSupportCommand,
+)
+from .system import AAA, System
 
 
 class AAACommand(Command):
@@ -39,3 +45,44 @@ class AAACommand(Command):
             else:
                 raise InvalidInput(usage)
             self.aaa.set_aaa(value)
+
+
+class Show(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return AAA(self.context.root().conn).show_aaa()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+GlobalShowCommand.register_sub_command("aaa", Show, when=ModelExists("goldstone-aaa"))
+
+
+class Run(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return System(self.context.root().conn).run_conf()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+RunningConfigCommand.register_sub_command(
+    "system", Run, when=ModelExists("goldstone-aaa")
+)
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        System(self.context.root().conn).tech_support()
+        self.parent.xpath_list.append("/goldstone-aaa:aaa")
+
+
+TechSupportCommand.register_sub_command(
+    "system", TechSupport, when=ModelExists("goldstone-aaa")
+)

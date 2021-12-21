@@ -1,5 +1,11 @@
 from .base import Command, InvalidInput
-from .cli import GSObject as Object
+from .cli import (
+    GSObject as Object,
+    GlobalShowCommand,
+    RunningConfigCommand,
+    TechSupportCommand,
+    ModelExists,
+)
 from .sonic import UFD
 
 
@@ -39,3 +45,40 @@ class UFDCommand(Command):
             self.ufd.delete(line[0])
         else:
             return UFDObject(self.ufd, self.context, line[0])
+
+
+class Show(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return UFD(self.context.root().conn).show()
+        else:
+            stderr.info(self.usage())
+
+
+GlobalShowCommand.register_sub_command(
+    "ufd", Show, when=ModelExists("goldstone-uplink-failure-detection")
+)
+
+
+class Run(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return UFD(self.context.root().conn).run_conf()
+        else:
+            stderr.info(self.usage())
+
+
+RunningConfigCommand.register_sub_command(
+    "ufd", Run, when=ModelExists("goldstone-uplink-failure-detection")
+)
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        UFD(self.context.root().conn).show()
+        self.parent.xpath_list.append("/goldstone-uplink-failure-detection:ufd-groups")
+
+
+TechSupportCommand.register_sub_command(
+    "ufd", TechSupport, when=ModelExists("goldstone-uplink-failure-detection")
+)

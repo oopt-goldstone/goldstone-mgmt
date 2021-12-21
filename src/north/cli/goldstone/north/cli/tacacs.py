@@ -1,5 +1,10 @@
 from .base import Command, InvalidInput
-from .cli import GSObject as Object
+from .cli import (
+    GSObject as Object,
+    RunningConfigCommand,
+    GlobalShowCommand,
+    ModelExists,
+)
 from .system import TACACS
 
 
@@ -51,3 +56,16 @@ class TACACSCommand(Command):
                 timeout = line[7]
 
             self.tacacs.set_tacacs_server(ipAddress, key, port, timeout)
+
+
+class Show(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return TACACS(self.context.root().conn).run_conf()
+        else:
+            raise InvalidInput(f"usage: {self.name_all()}")
+
+
+GlobalShowCommand.register_sub_command(
+    "tacacs", Show, when=ModelExists("goldstone-system")
+)

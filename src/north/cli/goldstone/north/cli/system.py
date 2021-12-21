@@ -247,13 +247,12 @@ class System(object):
 
         self.mgmt_run_conf()
 
+        output = []
+
         try:
             tacacs_tree = self.sr_op.get_data(
                 "/goldstone-aaa:aaa/server-groups/server-group['TACACS+']/servers/server"
             )
-        except sr.SysrepoNotFoundError as e:
-            return
-        try:
             tacacs_list = list(
                 tacacs_tree["aaa"]["server-groups"]["server-group"]["TACACS+"][
                     "servers"
@@ -282,42 +281,44 @@ class System(object):
                         elif (tacacs_dict["port"] is None) and (
                             tacacs_dict["timeout"] is None
                         ):
-                            stdout.info(
-                                f" tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']}"
+                            output.append(
+                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']}"
                             )
                         elif tacacs_dict["port"] is None:
-                            stdout.info(
-                                f" tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} timeout {tacacs_dict['timeout']}"
+                            output.append(
+                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} timeout {tacacs_dict['timeout']}"
                             )
                         elif tacacs_dict["timeout"] is None:
-                            stdout.info(
-                                f" tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']}"
+                            output.append(
+                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']}"
                             )
                         else:
-                            stdout.info(
-                                f" tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']} timeout {tacacs_dict['timeout']}"
+                            output.append(
+                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']} timeout {tacacs_dict['timeout']}"
                             )
         except Exception as e:
-            return
-        stdout.info("exit")
+            pass
+
         try:
             aaa_data = self.sr_op.get_data("/goldstone-aaa:aaa/authentication")
-        except sr.SysrepoNotFoundError as e:
-            stderr.info(e)
-        try:
             conf_data = aaa_data["aaa"]["authentication"]["config"]
             auth_method_list = conf_data.get("authentication-method")
             auth_method = auth_method_list[0]
             if auth_method is None:
                 pass
             elif auth_method == "local":
-                stdout.info(f" aaa authentication login default local ")
+                output.append(f"  aaa authentication login default local ")
             else:
-                stdout.info(f" aaa authentication login default group tacacs ")
+                output.append(f"  aaa authentication login default group tacacs ")
         except Exception as e:
-            return
-        stdout.info("exit")
-        stdout.info("!")
+            pass
+
+        if output:
+            stdout.info("system")
+            for line in output:
+                stdout.info(line)
+            stdout.info("  quit")
+            stdout.info("!")
 
     def tech_support(self):
         stdout.info("AAA details")
