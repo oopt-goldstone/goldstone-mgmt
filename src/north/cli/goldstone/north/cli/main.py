@@ -130,7 +130,7 @@ class Root(Object):
             def system(line):
                 if len(line) != 0:
                     raise InvalidInput("usage: system[cr]")
-                return System(conn, self)
+                return SystemObject(conn, self)
 
             @self.command(hidden=True)
             def reboot(line):

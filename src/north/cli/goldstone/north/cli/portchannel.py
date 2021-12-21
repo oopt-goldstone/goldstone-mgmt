@@ -1,5 +1,11 @@
 from .base import Command, InvalidInput
-from .cli import GSObject as Object
+from .cli import (
+    GSObject as Object,
+    GlobalShowCommand,
+    RunningConfigCommand,
+    TechSupportCommand,
+    ModelExists,
+)
 from .sonic import Portchannel
 from prompt_toolkit.completion import (
     FuzzyWordCompleter,
@@ -69,3 +75,46 @@ class PortchannelCommand(Command):
             self.pc.delete(line[0])
         else:
             return PortchannelObject(self.pc, self.context, line[0])
+
+
+class Show(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return Portchannel(self.context.root().conn).show()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+GlobalShowCommand.register_sub_command(
+    "portchannel", Show, when=ModelExists("goldstone-portchannel")
+)
+
+
+class Run(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return Portchannel(self.context.root().conn).run_conf()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+RunningConfigCommand.register_sub_command(
+    "portchannel", Run, when=ModelExists("goldstone-portchannel")
+)
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        Portchannel(self.context.root().conn).show()
+        self.parent.xpath_list.append("/goldstone-portchannel:portchannel")
+
+
+TechSupportCommand.register_sub_command(
+    "portchannel", TechSupport, when=ModelExists("goldstone-portchannel")
+)
