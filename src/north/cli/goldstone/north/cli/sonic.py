@@ -307,7 +307,7 @@ class Port(object):
         try:
             tree = self.sr_op.get_data("{}/ufd-group".format(xpath), "running")
             ufd_list = tree["ufd-groups"]["ufd-group"]
-        except (sr.errors.SysrepoNotFoundError, KeyError):
+        except (sr.errors.SysrepoError, KeyError):
             return {}
 
         for data in ufd_list:

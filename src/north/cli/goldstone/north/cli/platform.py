@@ -1,6 +1,7 @@
 import sys
 import os
-from .base import InvalidInput
+from .base import InvalidInput, Command
+from .cli import GlobalShowCommand, TechSupportCommand
 import libyang as ly
 import sysrepo as sr
 from .common import sysrepo_wrap
@@ -156,3 +157,64 @@ class Component(object):
     def tech_support(self):
         stdout.info("\n Show platform details")
         self.show_platform()
+
+
+class PlatformComponentCommand(Command):
+    SUBCOMMAND_DICT = {
+        "table": Command,
+    }
+
+    def exec(self, line):
+        if len(line) > 1:
+            raise InvalidInput(self.usage())
+        format = "" if len(line) == 0 else line[0]
+        return self.parent.platform_component.show_platform(self.name, format=format)
+
+    def usage(self):
+        return (
+            f"usage: {self.parent.parent.name} {self.parent.name} {self.name} [table]"
+        )
+
+
+class PlatformGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "fan": Command,
+        "psu": Command,
+        "led": Command,
+        "transceiver": PlatformComponentCommand,
+        "thermal": Command,
+        "system": Command,
+        "piu": PlatformComponentCommand,
+        "all": Command,
+    }
+
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.platform_component = Component(context.conn)
+
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput(self.usage())
+        return self.platform_component.show_platform(line[0])
+
+    def usage(self):
+        return (
+            "usage:\n"
+            f" {self.parent.name} {self.name} (fan|psu|led|transceiver|thermal|system|piu|all)"
+        )
+
+
+GlobalShowCommand.register_sub_command(
+    "chassis-hardware", PlatformGroupCommand, when=ModelExists("goldstone-platform")
+)
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        Component(self.context.root().conn).tech_support()
+        self.parent.xpath_list.append("/goldstone-platform:components")
+
+
+TechSupportCommand.register_sub_command(
+    "components", TechSupport, when=ModelExists("goldstone-platform")
+)

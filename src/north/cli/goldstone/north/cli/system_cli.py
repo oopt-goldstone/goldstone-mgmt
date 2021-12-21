@@ -1,6 +1,13 @@
-from .cli import GSObject as Object
-from .base import InvalidInput, Completer
-from .system import AAA, TACACS, Mgmtif
+from .cli import (
+    GSObject as Object,
+    RunningConfigCommand,
+    GlobalShowCommand,
+    GlobalClearCommand,
+    ModelExists,
+    TechSupportCommand,
+)
+from .base import InvalidInput, Completer, Command
+from .system import AAA, TACACS, Mgmtif, System
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
 from .common import sysrepo_wrap
@@ -150,7 +157,7 @@ class Netconf(Object):
         return "netconf"
 
 
-class System(Object):
+class SystemObject(Object):
     def __init__(self, conn, parent):
         super().__init__(parent)
 
@@ -168,3 +175,160 @@ class System(Object):
 
     def __str__(self):
         return "system"
+
+
+class ArpGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.conn = context.root().conn
+        self.sess = self.conn.start_session()
+
+    def exec(self, line):
+        self.sess.switch_datastore("operational")
+        xpath = "/goldstone-mgmt-interfaces:interfaces/interface"
+        rows = []
+        try:
+            tree = self.sess.get_data(xpath)
+            if_list = tree["interfaces"]["interface"]
+            for intf in if_list:
+                if "neighbor" in intf["ipv4"]:
+                    arp_list = intf["ipv4"]["neighbor"]
+                    for arp in arp_list:
+                        if "link-layer-address" not in arp:
+                            arp["link-layer-address"] = "(incomplete)"
+                        row = [arp["ip"], arp["link-layer-address"], intf["name"]]
+                        rows.append(row)
+        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
+            raise InvalidInput(str(error))
+
+        headers = ["Address", "HWaddress", "Iface"]
+        stdout.info(tabulate(rows, headers, tablefmt="plain"))
+
+
+class IPRouteShowCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.conn = context.root().conn
+        self.sess = self.conn.start_session()
+
+    def exec(self, line):
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+
+        self.sess.switch_datastore("operational")
+        xpath = "/goldstone-routing:routes"
+        lines = []
+        try:
+            tree = self.sess.get_data(xpath)
+            tree = tree["routes"]["route"]
+            for route in tree:
+                line = ""
+                line = line + route["destination-prefix"] + " "
+                if "next-hop" in route and "outgoing-interface" in route["next-hop"]:
+                    line = line + "via " + str(route["next-hop"]["outgoing-interface"])
+                else:
+                    line = line + "is directly connected"
+                lines.append(line)
+            stdout.info("\n".join(lines))
+        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
+            raise InvalidInput(str(error))
+
+    def usage(self):
+        return "usage:\n" f" {self.parent.parent.name} {self.parent.name} {self.name}"
+
+
+class IPGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "route": IPRouteShowCommand,
+    }
+
+
+class ClearIpGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "route": Command,
+    }
+
+    def exec(self, line):
+        if len(line) < 1 or line[0] not in ["route"]:
+            raise InvalidInput(self.usage())
+
+        if len(line) == 1:
+            mgmtif = Mgmtif(self.context.root().conn)
+            return mgmtif.clear_route()
+        else:
+            raise InvalidInput(self.usage())
+
+    def usage(self):
+        return "usage:\n" f" {self.name_all()} (route)"
+
+
+class ClearArpGroupCommand(Command):
+    def exec(self, line):
+        conn = self.context.root().conn
+        with conn.start_session() as sess:
+            stdout.info(sess.rpc_send("/goldstone-routing:clear-arp", {}))
+
+
+GlobalShowCommand.register_sub_command(
+    "ip", IPGroupCommand, when=ModelExists("goldstone-mgmt-interfaces")
+)
+
+GlobalShowCommand.register_sub_command(
+    "arp", ArpGroupCommand, when=ModelExists("goldstone-mgmt-interfaces")
+)
+
+
+class Version(Command):
+    def exec(self, line):
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+
+        conn = self.context.root().conn
+        with conn.start_session() as sess:
+            xpath = "/goldstone-system:system/state/software-version"
+            sess.switch_datastore("operational")
+            data = sess.get_data(xpath)
+            stdout.info(data["system"]["state"]["software-version"])
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+GlobalShowCommand.register_sub_command(
+    "version", Version, when=ModelExists("goldstone-system")
+)
+
+GlobalClearCommand.register_sub_command(
+    "ip", ClearIpGroupCommand, when=ModelExists("goldstone-mgmt-interfaces")
+)
+
+GlobalClearCommand.register_sub_command(
+    "arp", ClearArpGroupCommand, when=ModelExists("goldstone-mgmt-interfaces")
+)
+
+
+class Run(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return System(self.context.root().conn).mgmt_run_conf()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+RunningConfigCommand.register_sub_command(
+    "mgmt-if", Run, when=ModelExists("goldstone-mgmt-interfaces")
+)
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        self.parent.xpath_list.append("/goldstone-mgmt-interfaces:interfaces")
+        self.parent.xpath_list.append("/goldstone-routing:routing")
+
+
+TechSupportCommand.register_sub_command(
+    "mgmt-if", TechSupport, when=ModelExists("goldstone-mgmt-interfaces")
+)

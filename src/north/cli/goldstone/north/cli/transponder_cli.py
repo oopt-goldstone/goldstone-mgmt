@@ -1,14 +1,21 @@
 from .base import InvalidInput, Completer, Command
-from .cli import GSObject as Object
+from .cli import (
+    GSObject as Object,
+    RunningConfigCommand,
+    GlobalShowCommand,
+    ModelExists,
+    TechSupportCommand,
+)
 from .cli import ShowCommand
 from prompt_toolkit.completion import WordCompleter
 from .common import sysrepo_wrap, print_tabular
-from .transponder import to_human, human_freq
+from .transponder import to_human, human_freq, Transponder
 import sysrepo as sr
 import libyang as ly
 import logging
 from tabulate import tabulate
 from natsort import natsorted
+
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
@@ -299,3 +306,61 @@ class TransponderObject(TransponderBaseObject):
 
     def __str__(self):
         return "transponder({})".format(self.name)
+
+
+class Show(Command):
+    SUBCOMMAND_DICT = {
+        "summary": Command,
+    }
+
+    def __init__(self, context, parent, name):
+        self.transponder = Transponder(context.root().conn)
+        super().__init__(context, parent, name)
+
+    def list(self):
+        module_names = self.transponder.get_modules()
+        return module_names + super().list()
+
+    def exec(self, line):
+        if len(line) == 1:
+            if line[0] == "summary":
+                return self.transponder.show_transponder_summary()
+            else:
+                return self.transponder.show_transponder(line[0])
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return "{ <transponder_name> | summary }"
+
+
+GlobalShowCommand.register_sub_command(
+    "transponder", Show, when=ModelExists("goldstone-transponder")
+)
+
+
+class Run(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return Transponder(self.context.root().conn).run_conf()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+RunningConfigCommand.register_sub_command(
+    "transponder", Run, when=ModelExists("goldstone-transponder")
+)
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        Transponder(self.context.root().conn).tech_support()
+        self.parent.xpath_list.append("/goldstone-transponder:modules")
+
+
+TechSupportCommand.register_sub_command(
+    "transponder", TechSupport, when=ModelExists("goldstone-transponder")
+)

@@ -4,7 +4,14 @@ import re
 import logging
 
 from .base import InvalidInput, Command
-from .cli import GSObject as Object
+from .cli import (
+    GSObject as Object,
+    GlobalShowCommand,
+    RunningConfigCommand,
+    GlobalClearCommand,
+    TechSupportCommand,
+    ModelExists,
+)
 import libyang as ly
 import sysrepo as sr
 
@@ -373,3 +380,110 @@ class InterfaceObject(Object):
 
     def __str__(self):
         return "interface({})".format(self.name)
+
+
+class InterfaceCounterCommand(Command):
+    def list(self):
+        return ["table"] + self.parent.port.interface_names()
+
+    def exec(self, line):
+        ifnames = self.parent.port.interface_names()
+        table = False
+        if len(line) == 1:
+            if line[0] == "table":
+                table = True
+            else:
+                try:
+                    ptn = re.compile(line[0])
+                except re.error:
+                    raise InvalidInput(
+                        f"failed to compile {line[0]} as a regular expression"
+                    )
+                ifnames = [i for i in ifnames if ptn.match(i)]
+        elif len(line) > 1:
+            for ifname in line:
+                if ifname not in ifnames:
+                    raise InvalidInput(f"Invalid interface {ifname}")
+            ifnames = line
+
+        self.parent.port.show_counters(ifnames, table)
+
+
+class InterfaceGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "brief": Command,
+        "description": Command,
+        "counters": InterfaceCounterCommand,
+    }
+
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.port = Port(context.conn)
+
+    def exec(self, line):
+        if len(line) == 1:
+            return self.port.show_interface(line[0])
+        else:
+            raise InvalidInput(self.usage())
+
+    def usage(self):
+        return (
+            "usage:\n" f" {self.parent.name} {self.name} (brief|description|counters)"
+        )
+
+
+class ClearInterfaceGroupCommand(Command):
+    SUBCOMMAND_DICT = {
+        "counters": Command,
+    }
+
+    def exec(self, line):
+        conn = self.context.root().conn
+        with conn.start_session() as sess:
+            if len(line) < 1 or line[0] not in ["counters"]:
+                raise InvalidInput(self.usage())
+            if len(line) == 1:
+                if line[0] == "counters":
+                    sess.rpc_send("/goldstone-interfaces:clear-counters", {})
+                    stdout.info("Interface counters are cleared.\n")
+            else:
+                raise InvalidInput(self.usage())
+
+    def usage(self):
+        return "usage:\n" f" {self.parent.name} {self.name} (counters)"
+
+
+GlobalShowCommand.register_sub_command(
+    "interface", InterfaceGroupCommand, when=ModelExists("goldstone-interfaces")
+)
+
+GlobalClearCommand.register_sub_command(
+    "interface", ClearInterfaceGroupCommand, when=ModelExists("goldstone-interfaces")
+)
+
+
+class Run(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return sonic.Port(self.context.root().conn).run_conf()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+RunningConfigCommand.register_sub_command(
+    "interface", Run, when=ModelExists("goldstone-interfaces")
+)
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        sonic.Port(self.context.root().conn).show_interface()
+        self.parent.xpath_list.append("/goldstone-interfaces:interfaces")
+
+
+TechSupportCommand.register_sub_command(
+    "interfaces", TechSupport, when=ModelExists("goldstone-interfaces")
+)
