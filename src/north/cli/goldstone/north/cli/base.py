@@ -85,9 +85,20 @@ class Command(object):
         self.name = name
         self.options = set()
         self.subcommand_dict = {}  # per-instance sub-commands
+        registered_subcommands = getattr(self, "REGISTERED_SUBCOMMANDS", {})
+        for k, v in registered_subcommands.items():
+            if v[1] == None or (callable(v[1]) and v[1](self)):
+                self.subcommand_dict[k] = v[0]
 
     def add_sub_command(self, name: str, cmd: typing.Type[Command]):
         self.subcommand_dict[name] = cmd
+
+    def list_subcommands(self):
+        return chain(self.SUBCOMMAND_DICT.items(), self.subcommand_dict.items())
+
+    @classmethod
+    def register_sub_command(cls, name: str, cmd: typing.Type[Command], when=None):
+        cls.REGISTERED_SUBCOMMANDS[name] = (cmd, when)
 
     @property
     def completer(self):
