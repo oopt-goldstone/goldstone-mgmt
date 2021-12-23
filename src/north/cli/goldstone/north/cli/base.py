@@ -136,8 +136,9 @@ class Command(object):
         return []
 
     def _list(self, include_hidden=False) -> List[str]:
+        args = self.arguments()
         return chain(
-            self.arguments(),
+            args if args else [],
             (k for k, (cls, options) in self.list_subcommands(include_hidden)),
         )
 
