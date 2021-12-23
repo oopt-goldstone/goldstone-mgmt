@@ -253,22 +253,6 @@ class BreakoutCommand(Command):
             port.set_breakout(self.context.ifnames, input_values[0], input_values[1])
 
 
-class PortchannelCommand(Command):
-    def arguments(self):
-        if self.root.name != "no":
-            self.context.portchannel.get_id()
-        return []
-
-    def exec(self, line):
-        portchannel = self.context.portchannel
-        if self.root.name == "no":
-            portchannel.remove_interfaces(self.context.ifnames)
-        else:
-            if len(line) != 1:
-                raise InvalidInput(f"usage: {self.name_all()} <portchannel_id>")
-            portchannel.add_interfaces(line[0], self.context.ifnames)
-
-
 class InterfaceObject(Object):
     REGISTERED_COMMANDS = {}
 
@@ -311,10 +295,6 @@ class InterfaceObject(Object):
         if "goldstone-uplink-failure-detection" in self.parent.installed_modules:
             self.ufd = sonic.UFD(conn)
             self.add_command("ufd", UFDCommand, add_no=True)
-
-        if "goldstone-portchannel" in self.parent.installed_modules:
-            self.portchannel = sonic.Portchannel(conn)
-            self.add_command("portchannel", PortchannelCommand, add_no=True)
 
         @self.command(parent.get_completer("show"))
         def show(args):
