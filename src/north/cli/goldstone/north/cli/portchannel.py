@@ -10,10 +10,10 @@ from .root import Root
 from .common import sysrepo_wrap, print_tabular
 from tabulate import tabulate
 from natsort import natsorted
-import sysrepo as sr
 from prompt_toolkit.completion import (
     FuzzyWordCompleter,
 )
+import sysrepo as sr
 
 from .interface import InterfaceObject
 
