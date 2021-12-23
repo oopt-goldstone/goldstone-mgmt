@@ -23,15 +23,6 @@ class CLIException(Exception):
     pass
 
 
-class LockedError(CLIException):
-    def __init__(self, msg, e):
-        self.msg = msg
-        self.e = e
-
-    def __str__(self):
-        return self.msg
-
-
 class InvalidInput(CLIException):
     def __init__(self, msg, candidates=[]):
         self.msg = msg
