@@ -385,7 +385,7 @@ class TestSouthSONiC(TestBase):
         self.assertTrue("interface-type" not in output)
 
     def test_speed_intftype(self):
-        with self.assertRaisesRegex(SSHException, "Invalid"):
+        with self.assertRaisesRegex(SSHException, "invalid"):
             self.gscli("interface Ethernet4_1; speed 10000")
         with self.assertRaisesRegex(SSHException, "Unsupported interface type"):
             self.gscli("interface Ethernet4_1; interface-type SR")
@@ -585,7 +585,7 @@ class TestSouthSONiC(TestBase):
 
         with self.assertRaisesRegex(
             SSHException,
-            "Invalid",
+            "invalid",
         ):
             self.gscli("interface Ethernet5_2; speed 1G")
 
@@ -699,13 +699,13 @@ class TestSouthSONiC(TestBase):
     def test_speed(self):
         with self.assertRaisesRegex(
             SSHException,
-            "Invalid",
+            "ambiguous argument",
         ):
             self.gscli("interface Ethernet1_1; speed 100")
 
         with self.assertRaisesRegex(
             SSHException,
-            "Invalid",
+            "invalid",
         ):
             self.gscli(
                 "interface Ethernet1_1; speed 1000000000000000000000000000",
@@ -713,13 +713,13 @@ class TestSouthSONiC(TestBase):
 
         with self.assertRaisesRegex(
             SSHException,
-            "Invalid",
+            "invalid",
         ):
             self.gscli("interface Ethernet1_1; speed 410000")
 
         with self.assertRaisesRegex(
             SSHException,
-            "Invalid",
+            "invalid",
         ):
             self.gscli("interface Ethernet1_1; speed 400000")
 
@@ -913,7 +913,7 @@ def test_tacacs(host, cli):
             'gscli -c "tacacs-server host 192.168.208.101 key testkey123 port number"',
         )
     except SSHException as e:
-        assert "Invalid value" in e.stderr
+        assert "invalid value" in e.stderr
 
     # checking timeout value validation
     try:
@@ -922,7 +922,7 @@ def test_tacacs(host, cli):
             'gscli -c "tacacs-server host 192.168.208.101 key testkey123 timeout seconds"',
         )
     except SSHException as e:
-        assert "Invalid value" in e.stderr
+        assert "invalid value" in e.stderr
 
     # checking port number value and timeout validation
     try:
@@ -931,7 +931,7 @@ def test_tacacs(host, cli):
             'gscli -c "tacacs-server host 192.168.208.101 key testkey123 port number timeout seconds"',
         )
     except SSHException as e:
-        assert "Invalid value" in e.stderr
+        assert "invalid value" in e.stderr
 
     # Configuring second TACACS+ server details
     output = ssh(

@@ -19,7 +19,7 @@ stderr = logging.getLogger("stderr")
 
 
 class RunningConfigCommand(Command):
-    REGISTERED_SUBCOMMANDS = {}
+    REGISTERED_COMMANDS = {}
 
     def exec(self, line):
         if len(line) > 0:
@@ -33,7 +33,7 @@ class RunningConfigCommand(Command):
 
 
 class TechSupportCommand(Command):
-    REGISTERED_SUBCOMMANDS = {}
+    REGISTERED_COMMANDS = {}
 
     def exec(self, line):
         if len(line) != 0:
@@ -46,7 +46,7 @@ class TechSupportCommand(Command):
 
         stdout.info("\nshow datastore:\n")
 
-        with self.context.conn.start_session() as session:
+        with self.context.root().conn.start_session() as session:
             for ds in ["running", "operational", "startup"]:
                 session.switch_datastore(ds)
                 stdout.info("{} DB:\n".format(ds))
@@ -63,13 +63,13 @@ class TechSupportCommand(Command):
 
 
 class GlobalShowCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "datastore": Command,
         "tech-support": TechSupportCommand,
         "logging": Command,
         "running-config": RunningConfigCommand,
     }
-    REGISTERED_SUBCOMMANDS = {}
+    REGISTERED_COMMANDS = {}
 
     def exec(self, line):
         if len(line) == 0:
@@ -85,7 +85,7 @@ class GlobalShowCommand(Command):
             raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
 
     def datastore(self, line):
-        conn = self.context.conn
+        conn = self.context.root().conn
         with conn.start_session() as sess:
             dss = list(DATASTORE_VALUES.keys())
             fmt = "default"
@@ -255,7 +255,7 @@ class ClearDatastoreGroupCommand(Command):
             return None
         return Choice(["running", "startup"], self.context, self, elected)
 
-    def list(self):
+    def arguments(self):
         ctx = self.context.root().conn.get_ly_ctx()
         cmds = [m.name() for m in ctx if "goldstone" in m.name()]
         cmds.append("all")
@@ -269,37 +269,36 @@ class ShowCommand(Command):
         c = context.root().get_completer("show")
         if additional_completer:
             c = merge_completers([c, additional_completer])
-        super().__init__(context, parent, name, c)
+        super().__init__(context, parent, name, additional_completer=c)
 
 
 class GlobalClearCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "datastore": ClearDatastoreGroupCommand,
     }
-    REGISTERED_SUBCOMMANDS = {}
+    REGISTERED_COMMANDS = {}
 
 
 class NoCommand(Command):
     def exec(self, line):
         raise InvalidInput(self.usage())
 
-    # hide no command if no sub-command is registerd
-    def hidden(self):
-        return len(list(self.list_subcommands())) == 0
-
     def usage(self):
         n = self.name_all()
         l = []
-        for k, cls in self.list_subcommands():
-            v = cls(self.context, self, name=k)
-            l.append(f"  {n} {k} {v.usage()}")
+        for k, (cls, options) in self.list_subcommands():
+            if not options.get("hidden"):
+                v = cls(self.context, self, name=k)
+                l.append(f"  {n} {k} {v.usage()}")
 
         return "usage:\n" + "\n".join(l)
 
 
 def ModelExists(model):
-    def f(cmd):
-        return model in cmd.context.root().installed_modules
+    def f(ctx):
+        if isinstance(ctx, Command):
+            ctx = ctx.context
+        return model in ctx.root().installed_modules
 
     return f
 
@@ -307,7 +306,21 @@ def ModelExists(model):
 class GSObject(Object):
     def __init__(self, parent, fuzzy_completion=False):
         super().__init__(parent, fuzzy_completion)
-        self.add_command(GlobalShowCommand(self, name="show"))
-        self.add_command(GlobalClearCommand(self, name="clear"))
-        self.no = NoCommand(self, name="no")
-        self.add_command(self.no)
+        self.add_command("show", GlobalShowCommand)
+        self.add_command("clear", GlobalClearCommand)
+
+        for k, (cls, options) in list(self.list_subcommands()):
+            if options.get("add_no"):
+                self.add_no_command(k, cls, **options)
+
+    def add_command(self, name, cmd, **options):
+        super().add_command(name, cmd, **options)
+        if options.get("add_no"):
+            self.add_no_command(name, cmd, **options)
+
+    def add_no_command(self, name, cmd, **options):
+        no = getattr(self, "no", None)
+        if not no:
+            self.no = NoCommand(self, None, name="no")
+            self.add_command("no", self.no)
+        self.no.add_command(name, cmd, **options)

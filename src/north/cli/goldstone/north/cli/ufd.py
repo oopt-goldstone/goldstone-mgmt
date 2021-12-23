@@ -7,6 +7,7 @@ from .cli import (
     ModelExists,
 )
 from .sonic import UFD
+from .root import Root
 
 
 class UFDObject(Object):
@@ -25,14 +26,53 @@ class UFDObject(Object):
         return "ufd({})".format(self.id)
 
 
+class Show(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return UFD(self.context.root().conn).show()
+        else:
+            stderr.info(self.usage())
+
+
+GlobalShowCommand.register_command(
+    "ufd", Show, when=ModelExists("goldstone-uplink-failure-detection")
+)
+
+
+class Run(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return UFD(self.context.root().conn).run_conf()
+        else:
+            stderr.info(self.usage())
+
+
+RunningConfigCommand.register_command(
+    "ufd", Run, when=ModelExists("goldstone-uplink-failure-detection")
+)
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        UFD(self.context.root().conn).show()
+        self.parent.xpath_list.append("/goldstone-uplink-failure-detection:ufd-groups")
+
+
+TechSupportCommand.register_command(
+    "ufd", TechSupport, when=ModelExists("goldstone-uplink-failure-detection")
+)
+
+
 class UFDCommand(Command):
-    def __init__(self, context: Object = None, parent: Command = None, name=None):
+    def __init__(
+        self, context: Object = None, parent: Command = None, name=None, **options
+    ):
         if name == None:
             name = "ufd"
-        super().__init__(context, parent, name)
+        super().__init__(context, parent, name, **options)
         self.ufd = UFD(context.root().conn)
 
-    def list(self):
+    def arguments(self):
         return self.ufd.get_id()
 
     def usage(self):
@@ -47,38 +87,10 @@ class UFDCommand(Command):
             return UFDObject(self.ufd, self.context, line[0])
 
 
-class Show(Command):
-    def exec(self, line):
-        if len(line) == 0:
-            return UFD(self.context.root().conn).show()
-        else:
-            stderr.info(self.usage())
-
-
-GlobalShowCommand.register_sub_command(
-    "ufd", Show, when=ModelExists("goldstone-uplink-failure-detection")
-)
-
-
-class Run(Command):
-    def exec(self, line):
-        if len(line) == 0:
-            return UFD(self.context.root().conn).run_conf()
-        else:
-            stderr.info(self.usage())
-
-
-RunningConfigCommand.register_sub_command(
-    "ufd", Run, when=ModelExists("goldstone-uplink-failure-detection")
-)
-
-
-class TechSupport(Command):
-    def exec(self, line):
-        UFD(self.context.root().conn).show()
-        self.parent.xpath_list.append("/goldstone-uplink-failure-detection:ufd-groups")
-
-
-TechSupportCommand.register_sub_command(
-    "ufd", TechSupport, when=ModelExists("goldstone-uplink-failure-detection")
+Root.register_command(
+    "ufd",
+    UFDCommand,
+    when=ModelExists("goldstone-uplink-failure-detection"),
+    add_no=True,
+    no_completion_on_exec=True,
 )

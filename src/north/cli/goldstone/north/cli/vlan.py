@@ -7,6 +7,7 @@ from .cli import (
     TechSupportCommand,
 )
 from .sonic import Vlan
+from .root import Root
 
 
 def parse_vlan_range(r: str) -> list[int]:
@@ -54,16 +55,61 @@ class VLANObject(Object):
         return "vlan({})".format(self.vid_str)
 
 
-class VLANCommand(Command):
-    SUBCOMMAND_DICT = {}
+class Show(Command):
+    COMMAND_DICT = {
+        "details": Command,
+    }
 
-    def __init__(self, context: Object = None, parent: Command = None, name=None):
-        if name == None:
-            name = "vlan"
-        super().__init__(context, parent, name)
+    def __init__(self, context, parent, name, options):
+        super().__init__(context, parent, name, options)
         self.vlan = Vlan(context.root().conn)
 
-    def list(self):
+    def exec(self, line):
+        if len(line) < 1:
+            raise InvalidInput(self.usage())
+        return self.vlan.show_vlans(line[0])
+
+    def usage(self):
+        return "[ details ]"
+
+
+GlobalShowCommand.register_command("vlan", Show, when=ModelExists("goldstone-vlan"))
+
+
+class Run(Command):
+    def exec(self, line):
+        if len(line) == 0:
+            return Vlan(self.context.root().conn).run_conf()
+        else:
+            stderr.info(self.usage())
+
+
+RunningConfigCommand.register_command("vlan", Run, when=ModelExists("goldstone-vlan"))
+
+
+class TechSupport(Command):
+    def exec(self, line):
+        Vlan(self.context.root().conn).show_vlans()
+        self.parent.xpath_list.append("/goldstone-vlan:vlans")
+
+
+TechSupportCommand.register_command(
+    "vlan", TechSupport, when=ModelExists("goldstone-vlan")
+)
+
+
+class VLANCommand(Command):
+    COMMAND_DICT = {}
+
+    def __init__(
+        self, context: Object = None, parent: Command = None, name=None, **options
+    ):
+        if name == None:
+            name = "vlan"
+        super().__init__(context, parent, name, **options)
+        self.vlan = Vlan(context.root().conn)
+
+    def arguments(self):
         return ["range"] + self.vlan.get_vids()
 
     def usage(self):
@@ -94,46 +140,10 @@ class VLANCommand(Command):
                 raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
 
 
-class Show(Command):
-    SUBCOMMAND_DICT = {
-        "details": Command,
-    }
-
-    def __init__(self, context, parent, name):
-        super().__init__(context, parent, name)
-        self.vlan = Vlan(context.root().conn)
-
-    def exec(self, line):
-        if len(line) < 1:
-            raise InvalidInput(self.usage())
-        return self.vlan.show_vlans(line[0])
-
-    def usage(self):
-        return "[ details ]"
-
-
-GlobalShowCommand.register_sub_command("vlan", Show, when=ModelExists("goldstone-vlan"))
-
-
-class Run(Command):
-    def exec(self, line):
-        if len(line) == 0:
-            return Vlan(self.context.root().conn).run_conf()
-        else:
-            stderr.info(self.usage())
-
-
-RunningConfigCommand.register_sub_command(
-    "vlan", Run, when=ModelExists("goldstone-vlan")
-)
-
-
-class TechSupport(Command):
-    def exec(self, line):
-        Vlan(self.context.root().conn).show_vlans()
-        self.parent.xpath_list.append("/goldstone-vlan:vlans")
-
-
-TechSupportCommand.register_sub_command(
-    "vlan", TechSupport, when=ModelExists("goldstone-vlan")
+Root.register_command(
+    "vlan",
+    VLANCommand,
+    when=ModelExists("goldstone-vlan"),
+    add_no=True,
+    no_completion_on_exec=True,
 )

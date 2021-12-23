@@ -160,7 +160,7 @@ class TACACS(object):
         create_group(self.sr_op, "TACACS+")
         self.sr_op.delete_data(xpath)
 
-    def show_tacacs(self):
+    def show(self):
         xpath = self.xpath_server_group("TACACS+")
         try:
             tacacs_data = self.sr_op.get_data(xpath)
@@ -214,7 +214,7 @@ class AAA(object):
     def set_no_aaa(self):
         self.sr_op.delete_data(self.xpath)
 
-    def show_aaa(self):
+    def show(self):
         try:
             aaa_data = self.sr_op.get_data(self.xpath)
         except sr.SysrepoNotFoundError as e:
@@ -322,9 +322,9 @@ class System(object):
 
     def tech_support(self):
         stdout.info("AAA details")
-        self.aaa.show_aaa()
+        self.aaa.show()
         stdout.info("Tacacs server details")
-        self.tacacs.show_tacacs()
+        self.tacacs.show()
 
 
 def create_group(sr_op, group):
