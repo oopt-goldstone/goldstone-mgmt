@@ -271,12 +271,10 @@ class TestSouthGearbox(TestBase):
         self.gscli(f"interface {ifname}; mtu 9000")
         output = self.gscli(f"interface {ifname}; show")
         self.assertTrue("9000" in output)
-        self.gscli(f"interface {ifname}; mtu 20000")
-        output = self.gscli(f"interface {ifname}; show")
-        self.assertTrue("20000" in output)
-        self.gscli(f"interface {ifname}; mtu 0")
-        output = self.gscli(f"interface {ifname}; show")
-        self.assertTrue("0" in output)
+
+        with self.assertRaises(SSHException):
+            self.gscli(f"interface {ifname}; mtu 20000")
+
         self.gscli(f"interface {ifname}; no mtu")
         output = self.gscli(f"interface {ifname}; show")
         self.assertTrue("10000" in output)
