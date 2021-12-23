@@ -50,7 +50,7 @@ class AAACommand(Command):
 class Show(Command):
     def exec(self, line):
         if len(line) == 0:
-            return AAA(self.context.root().conn).show_aaa()
+            return AAA(self.context.root().conn).show()
         else:
             stderr.info(self.usage())
 
@@ -58,7 +58,7 @@ class Show(Command):
         return "usage: {self.name_all()}"
 
 
-GlobalShowCommand.register_sub_command("aaa", Show, when=ModelExists("goldstone-aaa"))
+GlobalShowCommand.register_command("aaa", Show, when=ModelExists("goldstone-aaa"))
 
 
 class Run(Command):
@@ -72,9 +72,7 @@ class Run(Command):
         return "usage: {self.name_all()}"
 
 
-RunningConfigCommand.register_sub_command(
-    "system", Run, when=ModelExists("goldstone-aaa")
-)
+RunningConfigCommand.register_command("system", Run, when=ModelExists("goldstone-aaa"))
 
 
 class TechSupport(Command):
@@ -83,6 +81,6 @@ class TechSupport(Command):
         self.parent.xpath_list.append("/goldstone-aaa:aaa")
 
 
-TechSupportCommand.register_sub_command(
+TechSupportCommand.register_command(
     "system", TechSupport, when=ModelExists("goldstone-aaa")
 )

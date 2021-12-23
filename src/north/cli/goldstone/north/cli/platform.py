@@ -1,7 +1,7 @@
 import sys
 import os
 from .base import InvalidInput, Command
-from .cli import GlobalShowCommand, TechSupportCommand
+from .cli import GlobalShowCommand, TechSupportCommand, ModelExists
 import libyang as ly
 import sysrepo as sr
 from .common import sysrepo_wrap
@@ -160,7 +160,7 @@ class Component(object):
 
 
 class PlatformComponentCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "table": Command,
     }
 
@@ -177,7 +177,7 @@ class PlatformComponentCommand(Command):
 
 
 class PlatformGroupCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "fan": Command,
         "psu": Command,
         "led": Command,
@@ -204,7 +204,7 @@ class PlatformGroupCommand(Command):
         )
 
 
-GlobalShowCommand.register_sub_command(
+GlobalShowCommand.register_command(
     "chassis-hardware", PlatformGroupCommand, when=ModelExists("goldstone-platform")
 )
 
@@ -215,6 +215,6 @@ class TechSupport(Command):
         self.parent.xpath_list.append("/goldstone-platform:components")
 
 
-TechSupportCommand.register_sub_command(
+TechSupportCommand.register_command(
     "components", TechSupport, when=ModelExists("goldstone-platform")
 )
