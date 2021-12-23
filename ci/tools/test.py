@@ -652,10 +652,7 @@ class TestSouthSONiC(TestBase):
         output = "".join(l for l in output.split("\n") if "fec" in l)
         self.assertIn("fc", output)
 
-        with self.assertRaisesRegex(
-            SSHException,
-            "Invalid value",
-        ):
+        with self.assertRaises(SSHException):
             self.gscli("interface Ethernet1_1; fec ff")
 
     def test_mtu(self):
