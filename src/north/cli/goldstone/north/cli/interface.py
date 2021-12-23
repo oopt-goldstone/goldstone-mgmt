@@ -200,29 +200,6 @@ class AutoNegoCommand(Command):
             port.set_auto_nego(self.context.ifnames, line[0] == "enable")
 
 
-class UFDLinkCommand(Command):
-    COMMAND_DICT = {"uplink": Command, "downlink": Command}
-
-
-class UFDCommand(Command):
-    def __init__(self, context: Object = None, parent: Command = None, name=None):
-        super().__init__(context, parent, name)
-        if self.root.name != "no":
-            for id in self.context.ufd.get_id():
-                self.add_command(str(id), UFDLinkCommand)
-
-    def exec(self, line):
-        ufd = self.context.ufd
-        if self.root.name == "no":
-            ufd.check_ports(self.context.ifnames)
-        else:
-            if len(line) != 2 or (line[1] != "uplink" and line[1] != "downlink"):
-                raise InvalidInput(
-                    f"usage: {self.name_all()} <ufdid> <uplink|downlink>"
-                )
-            ufd.add_ports(line[0], self.context.ifnames, line[1])
-
-
 class BreakoutCommand(Command):
     def arguments(self):
         if self.root.name != "no":
@@ -292,15 +269,12 @@ class InterfaceObject(Object):
         self.add_command("auto-negotiate", AutoNegoCommand, add_no=True)
         self.add_command("breakout", BreakoutCommand, add_no=True)
 
-        if "goldstone-uplink-failure-detection" in self.parent.installed_modules:
-            self.ufd = sonic.UFD(conn)
-            self.add_command("ufd", UFDCommand, add_no=True)
-
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
-                return parent.show(args)
-            self.port.show(ifnames)
+                parent.exec(f"show {' '.join(args)}")
+            else:
+                self.port.show(ifnames)
 
     def __str__(self):
         return "interface({})".format(self.name)
@@ -333,15 +307,15 @@ class InterfaceCounterCommand(Command):
         self.parent.port.show_counters(ifnames, table)
 
 
-class InterfaceGroupCommand(Command):
+class Show(Command):
     COMMAND_DICT = {
         "brief": Command,
         "description": Command,
         "counters": InterfaceCounterCommand,
     }
 
-    def __init__(self, context, parent, name):
-        super().__init__(context, parent, name)
+    def __init__(self, context, parent, name, **options):
+        super().__init__(context, parent, name, **options)
         self.port = sonic.Port(context.conn)
 
     def exec(self, line):
@@ -354,6 +328,11 @@ class InterfaceGroupCommand(Command):
         return (
             "usage:\n" f" {self.parent.name} {self.name} (brief|description|counters)"
         )
+
+
+GlobalShowCommand.register_command(
+    "interface", Show, when=ModelExists("goldstone-interfaces")
+)
 
 
 class ClearInterfaceGroupCommand(Command):
@@ -376,10 +355,6 @@ class ClearInterfaceGroupCommand(Command):
     def usage(self):
         return "usage:\n" f" {self.parent.name} {self.name} (counters)"
 
-
-GlobalShowCommand.register_command(
-    "interface", InterfaceGroupCommand, when=ModelExists("goldstone-interfaces")
-)
 
 GlobalClearCommand.register_command(
     "interface", ClearInterfaceGroupCommand, when=ModelExists("goldstone-interfaces")
