@@ -12,6 +12,7 @@ from .cli import (
     TechSupportCommand,
     ModelExists,
 )
+from .root import Root
 import libyang as ly
 import sysrepo as sr
 
@@ -42,7 +43,7 @@ class ShutdownCommand(Command):
 
 
 class AdminStatusCommand(Command):
-    def list(self):
+    def arguments(self):
         if self.root.name != "no":
             return ["up", "down"]
         return []
@@ -62,7 +63,7 @@ class AdminStatusCommand(Command):
 
 
 class FECCommand(Command):
-    def list(self):
+    def arguments(self):
         if self.root.name != "no":
             return ["none", "fc", "rs"]
         return []
@@ -82,7 +83,7 @@ class FECCommand(Command):
 
 
 class SpeedCommand(Command):
-    def list(self):
+    def arguments(self):
         if self.root.name != "no":
             return self.context.port.valid_speeds()
         return []
@@ -102,7 +103,7 @@ class SpeedCommand(Command):
 
 
 class InterfaceTypeCommand(Command):
-    def list(self):
+    def arguments(self):
         if self.root.name != "no":
             return [
                 "SR",
@@ -154,7 +155,7 @@ class MTUCommand(Command):
 
 
 class AutoNegoAdvertiseCommand(Command):
-    def list(self):
+    def arguments(self):
         if self.root.name != "no":
             return self.context.port.valid_speeds()
         return []
@@ -174,13 +175,13 @@ class AutoNegoAdvertiseCommand(Command):
 
 
 class AutoNegoCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "enable": Command,
         "disable": Command,
         "advertise": AutoNegoAdvertiseCommand,
     }
 
-    def list(self):
+    def arguments(self):
         if self.root.name != "no":
             return ["enable", "disable", "advertise"]
         return ["advertise"]
@@ -200,31 +201,27 @@ class AutoNegoCommand(Command):
 
 
 class SwitchportModeVLANCommand(Command):
-    def list(self):
+    def arguments(self):
         return self.context.vlan.get_vids()
 
 
 class SwitchportModeAccessCommand(Command):
-    SUBCOMMAND_DICT = {"vlan": SwitchportModeVLANCommand}
+    COMMAND_DICT = {"vlan": SwitchportModeVLANCommand}
 
 
 class SwitchportModeTrunkCommand(Command):
-    SUBCOMMAND_DICT = {"vlan": SwitchportModeVLANCommand}
+    COMMAND_DICT = {"vlan": SwitchportModeVLANCommand}
 
 
 class SwitchportModeCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "access": SwitchportModeAccessCommand,
         "trunk": SwitchportModeTrunkCommand,
     }
 
     def exec(self, line):
         port = self.context.port
-        if (
-            len(line) < 3
-            or (line[0] not in self.SUBCOMMAND_DICT)
-            or (line[1] != "vlan")
-        ):
+        if len(line) < 3 or (line[0] not in self.COMMAND_DICT) or (line[1] != "vlan"):
             raise InvalidInput(f"usage : {self.name_all()} [trunk|access] vlan <vid>")
 
         port.set_vlan_mem(
@@ -233,11 +230,11 @@ class SwitchportModeCommand(Command):
 
 
 class SwitchportCommand(Command):
-    SUBCOMMAND_DICT = {"mode": SwitchportModeCommand}
+    COMMAND_DICT = {"mode": SwitchportModeCommand}
 
 
 class UFDLinkCommand(Command):
-    SUBCOMMAND_DICT = {"uplink": Command, "downlink": Command}
+    COMMAND_DICT = {"uplink": Command, "downlink": Command}
 
 
 class UFDCommand(Command):
@@ -245,7 +242,7 @@ class UFDCommand(Command):
         super().__init__(context, parent, name)
         if self.root.name != "no":
             for id in self.context.ufd.get_id():
-                self.add_sub_command(str(id), UFDLinkCommand)
+                self.add_command(str(id), UFDLinkCommand)
 
     def exec(self, line):
         ufd = self.context.ufd
@@ -260,7 +257,7 @@ class UFDCommand(Command):
 
 
 class BreakoutCommand(Command):
-    def list(self):
+    def arguments(self):
         if self.root.name != "no":
             return ["2X50G", "2X20G", "4X25G", "4X10G"]
 
@@ -290,7 +287,7 @@ class BreakoutCommand(Command):
 
 
 class PortchannelCommand(Command):
-    def list(self):
+    def arguments(self):
         if self.root.name != "no":
             self.context.portchannel.get_id()
         return []
@@ -333,44 +330,26 @@ class InterfaceObject(Object):
 
         self.ifnames = ifnames
 
-        self.add_command(ShutdownCommand(self), name="shutdown")
-        self.no.add_sub_command("shutdown", ShutdownCommand)
-
-        self.add_command(AdminStatusCommand(self), name="admin-status")
-        self.no.add_sub_command("admin-status", AdminStatusCommand)
-
-        self.add_command(FECCommand(self), name="fec")
-        self.no.add_sub_command("fec", FECCommand)
-
-        self.add_command(SpeedCommand(self), name="speed")
-        self.no.add_sub_command("speed", SpeedCommand)
-
-        self.add_command(InterfaceTypeCommand(self), name="interface-type")
-        self.no.add_sub_command("interface-type", InterfaceTypeCommand)
-
-        self.add_command(MTUCommand(self), name="mtu")
-        self.no.add_sub_command("mtu", MTUCommand)
-
-        self.add_command(AutoNegoCommand(self), name="auto-negotiate")
-        self.no.add_sub_command("auto-negotiate", AutoNegoCommand)
-
-        self.add_command(BreakoutCommand(self), name="breakout")
-        self.no.add_sub_command("breakout", BreakoutCommand)
+        self.add_command("shutdown", ShutdownCommand, add_no=True)
+        self.add_command("admin-status", AdminStatusCommand, add_no=True)
+        self.add_command("fec", FECCommand, add_no=True)
+        self.add_command("speed", SpeedCommand, add_no=True)
+        self.add_command("interface-type", InterfaceTypeCommand, add_no=True)
+        self.add_command("mtu", MTUCommand, add_no=True)
+        self.add_command("auto-negotiate", AutoNegoCommand, add_no=True)
+        self.add_command("breakout", BreakoutCommand, add_no=True)
 
         if "goldstone-vlan" in self.parent.installed_modules:
             self.vlan = sonic.Vlan(conn)
-            self.add_command(SwitchportCommand(self), name="switchport")
-            self.no.add_sub_command("switchport", SwitchportCommand)
+            self.add_command("switchport", SwitchportCommand, add_no=True)
 
         if "goldstone-uplink-failure-detection" in self.parent.installed_modules:
             self.ufd = sonic.UFD(conn)
-            self.add_command(UFDCommand(self), name="ufd")
-            self.no.add_sub_command("ufd", UFDCommand)
+            self.add_command("ufd", UFDCommand, add_no=True)
 
         if "goldstone-portchannel" in self.parent.installed_modules:
             self.portchannel = sonic.Portchannel(conn)
-            self.add_command(PortchannelCommand(self), name="portchannel")
-            self.no.add_sub_command("portchannel", PortchannelCommand)
+            self.add_command("portchannel", PortchannelCommand, add_no=True)
 
         @self.command(parent.get_completer("show"))
         def show(args):
@@ -383,7 +362,7 @@ class InterfaceObject(Object):
 
 
 class InterfaceCounterCommand(Command):
-    def list(self):
+    def arguments(self):
         return ["table"] + self.parent.port.interface_names()
 
     def exec(self, line):
@@ -410,7 +389,7 @@ class InterfaceCounterCommand(Command):
 
 
 class InterfaceGroupCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "brief": Command,
         "description": Command,
         "counters": InterfaceCounterCommand,
@@ -418,7 +397,7 @@ class InterfaceGroupCommand(Command):
 
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.port = Port(context.conn)
+        self.port = sonic.Port(context.conn)
 
     def exec(self, line):
         if len(line) == 1:
@@ -433,7 +412,7 @@ class InterfaceGroupCommand(Command):
 
 
 class ClearInterfaceGroupCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "counters": Command,
     }
 
@@ -453,11 +432,11 @@ class ClearInterfaceGroupCommand(Command):
         return "usage:\n" f" {self.parent.name} {self.name} (counters)"
 
 
-GlobalShowCommand.register_sub_command(
+GlobalShowCommand.register_command(
     "interface", InterfaceGroupCommand, when=ModelExists("goldstone-interfaces")
 )
 
-GlobalClearCommand.register_sub_command(
+GlobalClearCommand.register_command(
     "interface", ClearInterfaceGroupCommand, when=ModelExists("goldstone-interfaces")
 )
 
@@ -473,7 +452,7 @@ class Run(Command):
         return "usage: {self.name_all()}"
 
 
-RunningConfigCommand.register_sub_command(
+RunningConfigCommand.register_command(
     "interface", Run, when=ModelExists("goldstone-interfaces")
 )
 
@@ -484,6 +463,28 @@ class TechSupport(Command):
         self.parent.xpath_list.append("/goldstone-interfaces:interfaces")
 
 
-TechSupportCommand.register_sub_command(
+TechSupportCommand.register_command(
     "interfaces", TechSupport, when=ModelExists("goldstone-interfaces")
+)
+
+
+class InterfaceCommand(Command):
+    def __init__(self, context, parent, name, **options):
+        super().__init__(context, parent, name, **options)
+        self.port = sonic.Port(context.conn)
+
+    def arguments(self):
+        return self.port.interface_names()
+
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput("usage: interface <ifname>")
+        return InterfaceObject(self.context.root().conn, self.context, line[0])
+
+
+Root.register_command(
+    "interface",
+    InterfaceCommand,
+    when=ModelExists("goldstone-interfaces"),
+    no_completion_on_exec=True,
 )

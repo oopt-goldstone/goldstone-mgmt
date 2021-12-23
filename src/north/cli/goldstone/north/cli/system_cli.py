@@ -6,6 +6,7 @@ from .cli import (
     ModelExists,
     TechSupportCommand,
 )
+from .root import Root
 from .base import InvalidInput, Completer, Command
 from .system import AAA, TACACS, Mgmtif, System
 from prompt_toolkit.document import Document
@@ -13,6 +14,7 @@ from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
 from .common import sysrepo_wrap
 import re
 import logging
+from tabulate import tabulate
 
 from .tacacs import TACACSCommand
 from .aaa import AAACommand
@@ -87,11 +89,12 @@ class ManagementInterface(Object):
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
-                return parent.show(args)
-            self.mgmt.show(ifname)
+                parent.exec(f"show {' '.join(args)}")
+            else:
+                self.mgmt.show(ifname)
 
     def __str__(self):
-        return "interface({})".format(self.name)
+        return "mgmt-if({})".format(self.name)
 
     def no_usage(self):
         no_keys = list(self.no_dict.keys())
@@ -167,11 +170,21 @@ class SystemObject(Object):
                 raise InvalidInput("usage: netconf[cr]")
             return Netconf(conn, self)
 
-        self.add_command(TACACSCommand(self))
-        self.no.add_sub_command("tacacs-server", TACACSCommand)
+        @self.command()
+        def reboot(line):
+            session = conn.start_session()
+            stdout.info(session.rpc_send("/goldstone-system:reboot", {}))
 
-        self.add_command(AAACommand(self))
-        self.no.add_sub_command("aaa", AAACommand)
+        @self.command()
+        def shutdown(line):
+            session = conn.start_session()
+            stdout.info(session.rpc_send("/goldstone-system:shutdown", {}))
+
+        c = TACACSCommand(self)
+        self.add_command(c.name, c, add_no=True)
+
+        c = AAACommand(self)
+        self.add_command(c.name, c, add_no=True)
 
     def __str__(self):
         return "system"
@@ -238,13 +251,13 @@ class IPRouteShowCommand(Command):
 
 
 class IPGroupCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "route": IPRouteShowCommand,
     }
 
 
 class ClearIpGroupCommand(Command):
-    SUBCOMMAND_DICT = {
+    COMMAND_DICT = {
         "route": Command,
     }
 
@@ -269,11 +282,11 @@ class ClearArpGroupCommand(Command):
             stdout.info(sess.rpc_send("/goldstone-routing:clear-arp", {}))
 
 
-GlobalShowCommand.register_sub_command(
+GlobalShowCommand.register_command(
     "ip", IPGroupCommand, when=ModelExists("goldstone-mgmt-interfaces")
 )
 
-GlobalShowCommand.register_sub_command(
+GlobalShowCommand.register_command(
     "arp", ArpGroupCommand, when=ModelExists("goldstone-mgmt-interfaces")
 )
 
@@ -294,15 +307,15 @@ class Version(Command):
         return "usage: {self.name_all()}"
 
 
-GlobalShowCommand.register_sub_command(
+GlobalShowCommand.register_command(
     "version", Version, when=ModelExists("goldstone-system")
 )
 
-GlobalClearCommand.register_sub_command(
+GlobalClearCommand.register_command(
     "ip", ClearIpGroupCommand, when=ModelExists("goldstone-mgmt-interfaces")
 )
 
-GlobalClearCommand.register_sub_command(
+GlobalClearCommand.register_command(
     "arp", ClearArpGroupCommand, when=ModelExists("goldstone-mgmt-interfaces")
 )
 
@@ -318,7 +331,7 @@ class Run(Command):
         return "usage: {self.name_all()}"
 
 
-RunningConfigCommand.register_sub_command(
+RunningConfigCommand.register_command(
     "mgmt-if", Run, when=ModelExists("goldstone-mgmt-interfaces")
 )
 
@@ -329,6 +342,39 @@ class TechSupport(Command):
         self.parent.xpath_list.append("/goldstone-routing:routing")
 
 
-TechSupportCommand.register_sub_command(
+TechSupportCommand.register_command(
     "mgmt-if", TechSupport, when=ModelExists("goldstone-mgmt-interfaces")
 )
+
+
+class MgmtIfCommand(Command):
+    def __init__(self, context, parent, name, **options):
+        super().__init__(context, parent, name, **options)
+        self.mgmt = Mgmtif(context.conn)
+
+    def arguments(self):
+        return (v["name"] for v in self.mgmt.get_mgmt_interface_list("operational"))
+
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput(f"usage: {self.name_all()} <ifname>")
+        return ManagementInterface(self.context.root().conn, self.context, line[0])
+
+
+Root.register_command(
+    "mgmt-if",
+    MgmtIfCommand,
+    when=ModelExists("goldstone-mgmt-interfaces"),
+    hidden=True,
+    no_completion_on_exec=True,
+)
+
+
+class SystemCommand(Command):
+    def exec(self, line):
+        if len(line) != 0:
+            raise InvalidInput("usage: system")
+        return SystemObject(self.context.root().conn, self.context)
+
+
+Root.register_command("system", SystemCommand, when=ModelExists("goldstone-system"))

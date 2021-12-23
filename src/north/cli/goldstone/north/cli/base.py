@@ -3,17 +3,13 @@ from __future__ import annotations
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import (
     Completion,
-    WordCompleter,
-    FuzzyWordCompleter,
-    NestedCompleter,
-    DummyCompleter,
     FuzzyCompleter,
+    FuzzyWordCompleter,
+    Completer as PromptCompleter,
+    merge_completers,
 )
-from prompt_toolkit.completion import Completer as PromptCompleter
-from prompt_toolkit.completion import merge_completers
-from enum import Enum
-from itertools import chain
 
+from itertools import chain, zip_longest
 import sys
 import subprocess
 import logging
@@ -45,6 +41,14 @@ class InvalidInput(CLIException):
         return self.msg
 
 
+class NoMatch(InvalidInput):
+    pass
+
+
+class AmbiguosInput(InvalidInput):
+    pass
+
+
 class BreakLoop(CLIException):
     pass
 
@@ -53,106 +57,50 @@ class Completer(PromptCompleter):
     def __init__(self, command):
         self.command = command
 
-    def get_completions(self, document, complete_event=None, nest=0):
+    def get_completions(self, document, complete_event=None):
         t = document.text.split()
-        is_space_trailing = len(document.text) and (document.text[-1] == " ")
+        is_space_trailing = bool(len(document.text)) and (document.text[-1] == " ")
         if len(t) == 0 or (len(t) == 1 and not is_space_trailing):
-            candidates = []
             for c in self.command.list():
                 if c.startswith(document.text):
                     yield Completion(c, start_position=-len(document.text))
         else:
-            c = self.command.get(t[0])
+            try:
+                c = self.command.get(t[0])
+            except InvalidInput:
+                return
+
             if c:
                 doc = Document(document.text[len(t[0]) :].lstrip())
-                for v in c.completer.get_completions(
-                    doc, complete_event, nest=nest + 1
-                ):
+                for v in c.completer.get_completions(doc, complete_event):
                     yield v
 
 
 class Command(object):
 
-    SUBCOMMAND_DICT = {}
+    COMMAND_DICT = {}
 
-    def __init__(self, context=None, parent=None, name=None, additional_completer=None):
+    def __init__(
+        self,
+        context,
+        parent,
+        name,
+        **options,
+    ):
         c = Completer(self)
+        additional_completer = options.get("additional_completer")
         if additional_completer:
             c = merge_completers([c, additional_completer])
         self._completer = c
         self.context = context
         self.parent = parent
         self.name = name
-        self.options = set()
+        self.options = options
         self.subcommand_dict = {}  # per-instance sub-commands
-        registered_subcommands = getattr(self, "REGISTERED_SUBCOMMANDS", {})
+        registered_subcommands = getattr(self, "REGISTERED_COMMANDS", {})
         for k, v in registered_subcommands.items():
             if v[1] == None or (callable(v[1]) and v[1](self)):
-                self.subcommand_dict[k] = v[0]
-
-    def add_sub_command(self, name: str, cmd: typing.Type[Command]):
-        self.subcommand_dict[name] = cmd
-
-    def list_subcommands(self):
-        return chain(self.SUBCOMMAND_DICT.items(), self.subcommand_dict.items())
-
-    @classmethod
-    def register_sub_command(cls, name: str, cmd: typing.Type[Command], when=None):
-        cls.REGISTERED_SUBCOMMANDS[name] = (cmd, when)
-
-    @property
-    def completer(self):
-        return self._completer
-
-    def complete_subcommand(self, arg):
-        candidates = [v for v in self.list() if v.startswith(arg)]
-        if len(candidates) == 0:
-            return None
-        elif len(candidates) == 1:
-            elected = candidates[0]
-        else:
-            for c in candidates:
-                # find a perfect match
-                if arg == c:
-                    elected = arg
-                    break
-            else:
-                return None  # no match
-        return elected
-
-    def get(self, arg) -> Type[Command]:
-        elected = self.complete_subcommand(arg)
-        if elected == None:
-            return None
-        cls = self.SUBCOMMAND_DICT.get(elected)
-
-        if cls == None:
-            cls = self.subcommand_dict.get(elected, Command)
-
-        cmd = cls(self.context, self, elected)
-
-        if isinstance(cmd, Option):
-            self.options.add(elected)
-
-        if isinstance(cmd, NoArgOption):
-            return self
-        else:
-            return cmd
-
-    def list(self) -> List[str]:
-        return [
-            v
-            for v in chain(self.SUBCOMMAND_DICT.keys(), self.subcommand_dict.keys())
-            if v not in self.options
-        ]
-
-    def exec(self, line):
-        if self.parent:
-            line.insert(0, self.name)
-            return self.parent.exec(line)
-
-    def hidden(self):
-        return False
+                self.subcommand_dict[k] = (v[0], v[2])
 
     @property
     def root(self):
@@ -165,50 +113,169 @@ class Command(object):
         r = []
         cmd = self
         while cmd != None:
-            r.append(cmd.name)
+            if cmd.name:
+                r.append(cmd.name)
             cmd = cmd.parent
 
         return " ".join(reversed(r))
 
-    def __call__(self, line):
+    def add_command(self, name: str, cmd: typing.Type[Command], **options):
+        self.subcommand_dict[name] = (cmd, options)
+
+    @classmethod
+    def register_command(
+        cls, name: str, cmd: typing.Type[Command], when=None, **options
+    ):
+        cls.REGISTERED_COMMANDS[name] = (cmd, when, options)
+
+    def list_subcommands(self, include_hidden=False):
+        for k, v in chain(self.COMMAND_DICT.items(), self.subcommand_dict.items()):
+            if type(v) == tuple:
+                cls, options = v
+            else:
+                cls, options = v, {}
+
+            if not include_hidden and options.get("hidden"):
+                continue
+
+            yield k, (cls, options)
+
+    # derived class overrides this method in typical case
+    def arguments(self) -> List[str]:
+        return []
+
+    def _list(self, include_hidden=False) -> List[str]:
+        return chain(
+            self.arguments(),
+            (k for k, (cls, options) in self.list_subcommands(include_hidden)),
+        )
+
+    def list(self) -> List[str]:
+        return self._list()
+
+    @property
+    def completer(self):
+        return self._completer
+
+    def complete_subcommand(self, arg, fuzzy=False, find_perfect_match=True):
+        l = list(self._list(True))
+        candidates = [v for v in l if v.startswith(arg)]
+
+        def cmpl(c, arg):
+            return [v.text for v in c.get_completions(Document(arg), None)]
+
+        if len(candidates) == 0 and fuzzy:
+            c = FuzzyWordCompleter(l)
+            candidates = cmpl(c, arg)
+
+        c = self.options.get("additional_completer")
+        if len(candidates) == 0 and c:
+            candidates = cmpl(c, arg)
+            if len(candidates) == 0 and fuzzy:
+                c = FuzzyCompleter(c)
+                candidates = cmpl(c, arg)
+
+        if len(candidates) == 0:
+            raise NoMatch(
+                f"invalid command '{arg}'. available commands: {list(self.list())}",
+                self.list(),
+            )
+        elif len(candidates) == 1:
+            elected = candidates[0]
+        else:
+            l = candidates if find_perfect_match else []
+            for c in l:
+                # find a perfect match
+                if arg == c:
+                    elected = arg
+                    break
+            else:
+                target = "argument" if self.parent else "command"
+                raise AmbiguosInput(
+                    f"ambiguous {target} '{arg}'. candidates: {candidates}", candidates
+                )
+        return elected
+
+    def _get(self, name, default=None):
+        cmd = self.COMMAND_DICT.get(name)
+        options = {}
+        if type(cmd) == tuple:
+            cmd, options = cmd
+
+        if cmd == None:
+            cmd = self.subcommand_dict.get(name, default)
+            if type(cmd) == tuple:
+                cmd, options = cmd
+
+        return cmd, options
+
+    def get(self, arg, fuzzy=False) -> Type[Command]:
+        elected = self.complete_subcommand(arg, fuzzy)
+
+        cmd, options = self._get(elected, Command)
+
+        if isinstance(cmd, type) and issubclass(cmd, Command):
+            cmd = cmd(self.context, self, elected, **options)
+
+        return cmd
+
+    def _parse(self, elems, is_space_trailing, info, fuzzy, nest=0):
+        if not elems:
+            if is_space_trailing:
+                l = [v.text for v in self.completer.get_completions(Document(""), None)]
+                info.append(l)
+            return
+        try:
+            find_perfect_match = len(elems) > 1 or is_space_trailing
+            self.complete_subcommand(elems[0], fuzzy, find_perfect_match)
+        except InvalidInput as e:
+            info.append(e)
+        else:
+            c = self.get(elems[0], fuzzy)
+            info.append(c.name)
+            c._parse(elems[1:], is_space_trailing, info, fuzzy, nest + 1)
+
+    def parse(self, text, fuzzy=False):
+        elems = text.split()
+        is_space_trailing = len(text) == 0 or (text[-1] == " ")
+        info = []
+        self._parse(elems, is_space_trailing, info, fuzzy)
+        return (list(zip_longest(elems, info)), is_space_trailing)
+
+    # derived class overrides this method in typical case
+    def exec(self, line):
+        if self.parent:
+            line.insert(0, self.name)
+            return self.parent.exec(line)
+
+    def __call__(self, line, fuzzy=False):
         if type(line) == str:
             line = [line]
-        if len(line) == 0:
+
+        no_completion = self.options.get("no_completion_on_exec")
+        # if the command doesn't have any sub-commands and additional completer,
+        # usually the desired behavior is to pass all arguments as is without
+        # doing command completion
+        if (
+            no_completion == None
+            and len(list(self.list())) == 0
+            and "additional_completer" not in self.options
+        ):
+            no_completion = True
+
+        if len(line) == 0 or no_completion:
             return self.exec(line)
 
-        elected = self.complete_subcommand(line[0])
-        cmd = self.SUBCOMMAND_DICT.get(elected)
+        name = self.complete_subcommand(line[0], fuzzy)
+        cmd, options = self._get(name)
         if cmd == None:
-            cmd = self.subcommand_dict.get(elected)
+            l = line.copy()
+            l[0] = name
+            return self.exec(l)
 
-        if cmd:
-            return cmd(self.context, self, line[0])(line[1:])
-        else:
-            return self.exec(line)
-
-
-class Choice(Command):
-    def __init__(
-        self, choices, context=None, parent=None, name=None, additional_completer=None
-    ):
-        super().__init__(context, parent, name, additional_completer)
-        self.choices = choices
-
-    def list(self):
-        if callable(self.choices):
-            return self.choices()
-        else:
-            return self.choices
-
-
-class Option(Command):
-    pass
-
-
-class NoArgOption(Option):
-    def __call__(self, line):
-        self.parent.options.add(self)
-        self.parent(line)
+        if isinstance(cmd, type) and issubclass(cmd, Command):
+            cmd = cmd(self.context, self, name, **options)
+        return cmd(line[1:], fuzzy)
 
 
 class Object(object):
@@ -216,7 +283,12 @@ class Object(object):
 
     def __init__(self, parent, fuzzy_completion=None):
         self.parent = parent
-        self._commands = {}
+
+        self._command = Command(self, None, "")
+        registered_subcommands = getattr(self, "REGISTERED_COMMANDS", {})
+        for k, v in registered_subcommands.items():
+            if v[1] == None or (callable(v[1]) and v[1](self)):
+                self._command.add_command(k, v[0], **v[2])
 
         if fuzzy_completion == None:
             if parent == None:
@@ -238,33 +310,25 @@ class Object(object):
             self.close()
             return sys.exit(0)
 
-        if self.parent:
-            for k, v in self.parent._commands.items():
-                if v["inherit"]:
-                    self._commands[k] = v
+    def add_command(self, name, cmd, **options):
+        assert isinstance(cmd, Command) or (
+            isinstance(cmd, type) and issubclass(cmd, Command)
+        )
+        if isinstance(cmd, Command):
+            assert name == cmd.name
+        self._command.add_command(name, cmd, **options)
 
-    def add_command(self, handler, completer=None, name=None, strict=None, hidden=None):
-        if isinstance(handler, Command):
-            completer = lambda: handler.completer
-            name = name if name else handler.name
-            assert name != None
-            if handler.name == None:
-                handler.name = name
-            strict = True if strict == None else strict
-            if hidden == None:
-                hidden = handler.hidden
-        else:
-            strict = False if strict == None else strict
-            hidden = False if hidden == None else hidden
-        self.command(completer, name, strict=strict, hidden=hidden)(handler)
+    @classmethod
+    def register_command(
+        cls, name: str, cmd: typing.Type[Command], when=None, **options
+    ):
+        cls.REGISTERED_COMMANDS[name] = (cmd, when, options)
 
-    def del_command(self, name):
-        del self._commands[name]
+    def list_subcommands(self):
+        return self._command.list_subcommands()
 
     def get_completer(self, name):
-        v = self._commands.get(name, {}).get("completer", DummyCompleter())
-        if callable(v):
-            return v()
+        return self._command.get(name).completer
 
     def close(self):
         pass
@@ -273,40 +337,38 @@ class Object(object):
         self,
         completer=None,
         name=None,
-        async_=False,
-        inherit=False,
-        argparser=None,
-        strict=False,
-        hidden=False,
+        **options,
     ):
         def f(func):
-            self._commands[name if name else func.__name__] = {
-                "func": func,
-                "completer": completer,
-                "async": async_,
-                "inherit": inherit,
-                "argparser": argparser,
-                "strict": strict,
-                "hidden": hidden,
-            }
+            n = name if name else func.__name__
+
+            d = {"exec": lambda self, line: func(line)}
+
+            if completer:
+                options["additional_completer"] = completer
+                options["no_completion_on_exec"] = True
+
+            cls = type(n, (Command,), d)
+            cmd = cls(self, self._command, name=n, **options)
+            self._command.add_command(n, cmd)
 
         return f
 
-    def help(self, text="", short=True):
-        orig = self.fuzzy_completion
-        self.fuzzy_completion = False
-        text = text.lstrip()
-        try:
-            v = text.split()
-            if len(text) > 0 and text[-1] == " ":
-                # needs to show all candidates for the next argument
-                v.append(" ")
-            line = self.complete_input(v)
-        except InvalidInput as e:
-            return ", ".join(e.candidates)
-        finally:
-            self.fuzzy_completion = orig
-        return line[-1].strip()
+    def help(self, text=""):
+        info, is_space_trailing = self._command.parse(text, self.fuzzy_completion)
+        orig, parsed = info[-1]
+        if parsed == None:
+            return ""
+        elif isinstance(parsed, InvalidInput):
+            if is_space_trailing:
+                return ""
+            else:
+                return ", ".join(parsed.candidates)
+        elif isinstance(parsed, str):
+            assert not is_space_trailing
+            return parsed
+        else:
+            return ", ".join(parsed)
 
     def root(self):
         node = self
@@ -314,171 +376,30 @@ class Object(object):
             node = node.parent
         return node
 
-    def commands(self, include_hidden=False):
-        def hide(v):
-            hidden = v.get("hidden", False)
-            if type(hidden) == bool:
-                return hidden
-            elif callable(hidden):
-                return hidden()
-
-        return list(
-            k for k, v in self._commands.items() if include_hidden or not hide(v)
-        )
-
     def completion(self, document, complete_event=None):
-        # complete_event is None when this method is called by complete_input()
-        if complete_event == None and len(document.text) == 0:
-            return
+        c = self._command.completer
+        if self.fuzzy_completion and complete_event:
+            c = FuzzyCompleter(c)
 
-        include_hidden = complete_event == None
+        for v in c.get_completions(document, complete_event):
+            yield v
 
-        t = document.text.split()
-        if len(t) == 0 or (len(t) == 1 and document.text[-1] != " "):
-            # command completion
-            if self.fuzzy_completion and complete_event:
-                c = FuzzyWordCompleter(self.commands(), WORD=True)
-                for v in c.get_completions(document, complete_event):
-                    yield v
-            else:
-                for cmd in self.commands(include_hidden):
-                    if cmd.startswith(document.text):
-                        yield Completion(cmd, start_position=-len(document.text))
-        else:
-            # argument completion
-            # complete command(t[0]) first
-            try:
-                cmd = self.complete_input([t[0]])[0]
-            except InvalidInput:
-                return
-            v = self._commands.get(cmd)
-            if not v:
-                return
-            c = v["completer"]
-            if callable(c):
-                c = c()
-            if c:
-                if self.fuzzy_completion and complete_event:
-                    c = FuzzyCompleter(c)
-
-                # do argument completion with text after the command (t[0])
-                new_document = Document(document.text[len(t[0]) :].lstrip())
-                for v in c.get_completions(new_document, complete_event):
-                    yield v
-
-    def complete_input(self, line, complete_event=None):
-
-        if len(line) == 0:
-            raise InvalidInput(
-                f"invalid command. available commands: {self.commands()}",
-                self.commands(),
-            )
-
-        for i in range(len(line)):
-            doc = Document(" ".join(line[: i + 1]))
-            c = list(self.completion(doc, complete_event))
-            if len(c) == 0:
-                if i == 0:
-                    raise InvalidInput(
-                        f"invalid command. available commands: {self.commands()}",
-                        self.commands(),
-                    )
-                else:
-                    # t[0] must be already completed
-                    v = self._commands.get(line[0])
-                    assert v
-                    cmpl = v["completer"]
-                    if callable(cmpl):
-                        cmpl = cmpl()
-                    if cmpl:
-                        doc = Document(" ".join(line[:i] + [" "]))
-                        candidates = list(
-                            v.text for v in self.completion(doc, complete_event)
-                        )
-                        # if we don't have any candidates with empty input, it means the value needs
-                        # to be passed as an opaque value
-                        if len(candidates) == 0:
-                            continue
-
-                        raise InvalidInput(
-                            f"invalid argument. candidates: {candidates}",
-                            candidates,
-                        )
-                    else:
-                        # no command completer, the command doesn't take any argument
-                        continue
-            elif len(c) > 1:
-                # search for a perfect match
-                t = [v for v in c if v.text == line[i]]
-                if len(t) == 0:
-                    candidates = [v.text for v in c]
-                    target = "command" if i == 0 else "argument"
-                    raise InvalidInput(
-                        f"ambiguous {target}. candidates: {candidates}",
-                        candidates,
-                    )
-                c[0] = t[0]
-            line[i] = c[0].text
-        return line
-
-    def _exec(self, cmd):
-        line = cmd.split()
-        if len(line) > 0 and len(line[0]) > 0 and line[0][0] == "!":
-            line[0] = line[0][1:]
-            try:
-                subprocess.run(" ".join(line), shell=True)
-            except KeyboardInterrupt:
-                stdout.info("")
-            return None, None
-        cmd = self.complete_input(line[:1])
-        cmd = self._commands[cmd[0]]
-
-        if isinstance(cmd["func"], Command):
-            return cmd, line[1:]
-
-        # when strict == true, complete all inputs
-        if cmd["strict"]:
-            args = self.complete_input(line)[1:]
-        else:
-            args = line[1:]
-
-        if cmd["argparser"]:
-            args = cmd["argparser"].parse_args(line[1:])
-
-        return cmd, args
-
-    async def exec_async(self, cmd, no_fail=True):
+    def exec_host(self, cmd):
+        line[0] = line[0][1:]
         try:
-            cmd, args = self._exec(cmd)
-            if cmd == None:
-                return self
-
-            if cmd["async"]:
-                return await cmd["func"](args)
-            else:
-                return cmd["func"](args)
-        except CLIException as e:
-            if not no_fail:
-                raise e
-            stderr.info(str(e))
+            subprocess.run(" ".join(line), shell=True)
+        except KeyboardInterrupt:
+            stdout.info("")
         return self
 
     def exec(self, cmd, no_fail=True):
         try:
-            cmd, args = self._exec(cmd)
-            if cmd == None:
-                return self
-
-            if cmd["async"]:
-                raise InvalidInput("async command not suppoted")
-            return cmd["func"](args)
+            line = cmd.split()
+            if len(line) > 0 and len(line[0]) > 0 and line[0][0] == "!":
+                return self.exec_host(line)
+            return self._command(line, self.fuzzy_completion)
         except CLIException as e:
             if not no_fail:
                 raise e
             stderr.info(str(e))
         return self
-
-    def __getattr__(self, name):
-        if name in self._commands:
-            return self._commands[name]["func"]
-        raise AttributeError(f"no attribute '{name}'")

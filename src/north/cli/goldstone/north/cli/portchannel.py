@@ -6,6 +6,7 @@ from .cli import (
     TechSupportCommand,
     ModelExists,
 )
+from .root import Root
 from .sonic import Portchannel
 from prompt_toolkit.completion import (
     FuzzyWordCompleter,
@@ -55,28 +56,6 @@ class PortchannelObject(Object):
         return "portchannel({})".format(self.id)
 
 
-class PortchannelCommand(Command):
-    def __init__(self, context: Object = None, parent: Command = None, name=None):
-        if name == None:
-            name = "portchannel"
-        super().__init__(context, parent, name)
-        self.pc = Portchannel(context.root().conn)
-
-    def list(self):
-        return self.pc.get_id()
-
-    def usage(self):
-        return "<portchannel-id>"
-
-    def exec(self, line):
-        if len(line) != 1:
-            raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
-        if self.parent and self.parent.name == "no":
-            self.pc.delete(line[0])
-        else:
-            return PortchannelObject(self.pc, self.context, line[0])
-
-
 class Show(Command):
     def exec(self, line):
         if len(line) == 0:
@@ -88,7 +67,7 @@ class Show(Command):
         return "usage: {self.name_all()}"
 
 
-GlobalShowCommand.register_sub_command(
+GlobalShowCommand.register_command(
     "portchannel", Show, when=ModelExists("goldstone-portchannel")
 )
 
@@ -104,7 +83,7 @@ class Run(Command):
         return "usage: {self.name_all()}"
 
 
-RunningConfigCommand.register_sub_command(
+RunningConfigCommand.register_command(
     "portchannel", Run, when=ModelExists("goldstone-portchannel")
 )
 
@@ -115,6 +94,39 @@ class TechSupport(Command):
         self.parent.xpath_list.append("/goldstone-portchannel:portchannel")
 
 
-TechSupportCommand.register_sub_command(
+TechSupportCommand.register_command(
     "portchannel", TechSupport, when=ModelExists("goldstone-portchannel")
+)
+
+
+class PortchannelCommand(Command):
+    def __init__(
+        self, context: Object = None, parent: Command = None, name=None, **options
+    ):
+        if name == None:
+            name = "portchannel"
+        super().__init__(context, parent, name, **options)
+        self.pc = Portchannel(context.root().conn)
+
+    def arguments(self):
+        return self.pc.get_id()
+
+    def usage(self):
+        return "<portchannel-id>"
+
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
+        if self.parent and self.parent.name == "no":
+            self.pc.delete(line[0])
+        else:
+            return PortchannelObject(self.pc, self.context, line[0])
+
+
+Root.register_command(
+    "portchannel",
+    PortchannelCommand,
+    when=ModelExists("goldstone-portchannel"),
+    add_no=True,
+    no_completion_on_exec=True,
 )
