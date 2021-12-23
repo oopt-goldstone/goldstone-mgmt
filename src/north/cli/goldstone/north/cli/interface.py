@@ -200,39 +200,6 @@ class AutoNegoCommand(Command):
             port.set_auto_nego(self.context.ifnames, line[0] == "enable")
 
 
-class SwitchportModeVLANCommand(Command):
-    def arguments(self):
-        return self.context.vlan.get_vids()
-
-
-class SwitchportModeAccessCommand(Command):
-    COMMAND_DICT = {"vlan": SwitchportModeVLANCommand}
-
-
-class SwitchportModeTrunkCommand(Command):
-    COMMAND_DICT = {"vlan": SwitchportModeVLANCommand}
-
-
-class SwitchportModeCommand(Command):
-    COMMAND_DICT = {
-        "access": SwitchportModeAccessCommand,
-        "trunk": SwitchportModeTrunkCommand,
-    }
-
-    def exec(self, line):
-        port = self.context.port
-        if len(line) < 3 or (line[0] not in self.COMMAND_DICT) or (line[1] != "vlan"):
-            raise InvalidInput(f"usage : {self.name_all()} [trunk|access] vlan <vid>")
-
-        port.set_vlan_mem(
-            self.context.ifnames, line[0], line[2], config=self.root.name != "no"
-        )
-
-
-class SwitchportCommand(Command):
-    COMMAND_DICT = {"mode": SwitchportModeCommand}
-
-
 class UFDLinkCommand(Command):
     COMMAND_DICT = {"uplink": Command, "downlink": Command}
 
@@ -303,6 +270,8 @@ class PortchannelCommand(Command):
 
 
 class InterfaceObject(Object):
+    REGISTERED_COMMANDS = {}
+
     def __init__(self, conn, parent, ifname):
         super().__init__(parent)
         self.conn = conn
@@ -338,10 +307,6 @@ class InterfaceObject(Object):
         self.add_command("mtu", MTUCommand, add_no=True)
         self.add_command("auto-negotiate", AutoNegoCommand, add_no=True)
         self.add_command("breakout", BreakoutCommand, add_no=True)
-
-        if "goldstone-vlan" in self.parent.installed_modules:
-            self.vlan = sonic.Vlan(conn)
-            self.add_command("switchport", SwitchportCommand, add_no=True)
 
         if "goldstone-uplink-failure-detection" in self.parent.installed_modules:
             self.ufd = sonic.UFD(conn)
