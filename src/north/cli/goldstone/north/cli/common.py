@@ -7,13 +7,23 @@ import libyang as ly
 import sysrepo as sr
 from sysrepo.session import DATASTORE_VALUES
 from tabulate import tabulate
-from .base import InvalidInput, LockedError
+from .base import InvalidInput, CLIException
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 TIMEOUT_MS = 10000
+
+
+class LockedError(CLIException):
+    def __init__(self, msg, e):
+        self.msg = msg
+        self.e = e
+
+    def __str__(self):
+        return self.msg
+
 
 # Function to print data from show command with tabulate library
 def print_tabular(h, table_title=""):
