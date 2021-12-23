@@ -437,7 +437,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 )
                 sess.set_item(
                     f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/config/mtu",
-                    20000,
+                    9000,
                 )
 
                 sess.apply_changes()
@@ -448,7 +448,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(len(data["interfaces"]["interface"]), 1)
                 data = list(data["interfaces"]["interface"])[0]
-                self.assertEqual(data["ethernet"]["config"]["mtu"], 20000)
+                self.assertEqual(data["ethernet"]["config"]["mtu"], 9000)
 
         await asyncio.to_thread(test)
 

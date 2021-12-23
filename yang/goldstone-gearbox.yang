@@ -63,9 +63,17 @@ module goldstone-gearbox {
   }
 
   deviation "/gs-if:interfaces/gs-if:interface/gs-if:ethernet/gs-if:config/gs-if:mtu" {
-      deviate add {
-        default 10000;
+    deviate replace {
+      type uint16 {
+        range "0..10000" {
+          error-message "Invalid MTU value";
+          error-app-tag mtu-invalid;
+        }
       }
+    }
+    deviate add {
+      default 10000;
+    }
   }
 
 }
