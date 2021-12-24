@@ -7,8 +7,8 @@ ARG https_proxy
 
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
     cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
-    && mkdir -p /usr/share/wheels/cli && cp dist/*.whl /usr/share/wheels/cli
+    && rm -rf /usr/share/wheels/cli && mkdir -p /usr/share/wheels/cli && cp dist/*.whl /usr/share/wheels/cli
 
 RUN --mount=type=bind,source=src/south/system,target=/src,rw \
     cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
-    && mkdir -p /usr/share/wheels/system && cp dist/*.whl /usr/share/wheels/system
+    && rm -rf /usr/share/wheels/system && mkdir -p /usr/share/wheels/system && cp dist/*.whl /usr/share/wheels/system
