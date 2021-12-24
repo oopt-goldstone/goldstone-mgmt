@@ -58,30 +58,30 @@ class TestSouthSystem(TestBase):
 
     def test_mgmt_if_cmds(self):
         with self.assertRaisesRegex(SSHException, "does not satisfy the constraint"):
-            self.gscli("management-interface eth0; ip address 999.999.999.999/24")
+            self.gscli("mgmt-if eth0; ip address 999.999.999.999/24")
         with self.assertRaisesRegex(
             SSHException,
             "Entered address is not in the expected format - A.B.C.D\/\<mask\>",
         ):
-            self.gscli("management-interface eth0; ip address 999.999.999.999.24")
+            self.gscli("mgmt-if eth0; ip address 999.999.999.999.24")
         output = self.gscli(
-            "management-interface eth0; ip address 20.20.20.0/24; show running-config mgmt-if",
+            "mgmt-if eth0; ip address 20.20.20.0/24; show running-config mgmt-if",
         )
         self.assertTrue("ip address 20.20.20.0/24" in output)
 
         with self.assertRaisesRegex(SSHException, "does not satisfy the constraint"):
             self.gscli(
-                "management-interface eth0; no ip address 999.999.999.999/24",
+                "mgmt-if eth0; no ip address 999.999.999.999/24",
             )
 
         with self.assertRaisesRegex(
             SSHException,
             "Entered address is not in the expected format - A.B.C.D\/\<mask\>",
         ):
-            self.gscli("management-interface eth0; ip address 999.999.999.999.24")
+            self.gscli("mgmt-if eth0; ip address 999.999.999.999.24")
 
         output = self.gscli(
-            "management-interface eth0; no ip address 20.20.20.0/24; show running-config mgmt-if",
+            "mgmt-if eth0; no ip address 20.20.20.0/24; show running-config mgmt-if",
         )
         self.assertTrue("ip address 20.20.20.0/24" not in output)
 
@@ -89,16 +89,16 @@ class TestSouthSystem(TestBase):
             SSHException,
             "does not satisfy the constraint",
         ):
-            self.gscli("management-interface eth0; ip route 10.10.10.117")
+            self.gscli("mgmt-if eth0; ip route 10.10.10.117")
 
         with self.assertRaisesRegex(
             SSHException,
             "does not satisfy the constraint",
         ):
-            self.gscli("management-interface eth0; ip route 10.10.10.117/35")
+            self.gscli("mgmt-if eth0; ip route 10.10.10.117/35")
 
         output = self.gscli(
-            "management-interface eth0; ip route 30.30.30.0/24; show running-config mgmt-if",
+            "mgmt-if eth0; ip route 30.30.30.0/24; show running-config mgmt-if",
         )
         self.assertTrue("ip route 30.30.30.0/24" in output)
 
@@ -106,7 +106,7 @@ class TestSouthSystem(TestBase):
         self.assertTrue("30.30.30.0/24" in output)
 
         output = self.gscli(
-            "management-interface eth0; no ip route 30.30.30.0/24; show running-config mgmt-if",
+            "mgmt-if eth0; no ip route 30.30.30.0/24; show running-config mgmt-if",
         )
         self.assertTrue("ip route 30.30.30.0/24" not in output)
 
@@ -114,15 +114,15 @@ class TestSouthSystem(TestBase):
         self.assertTrue("30.30.30.0/24" not in output)
 
         output = self.gscli(
-            "management-interface eth0; ip route 30.20.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; ip route 30.20.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip route 30.20.0.0/16" in output)
         output = self.gscli(
-            "management-interface eth0; ip route 20.10.20.0/24; show running-config mgmt-if",
+            "mgmt-if eth0; ip route 20.10.20.0/24; show running-config mgmt-if",
         )
         self.assertTrue("ip route 20.10.20.0/24" in output)
         output = self.gscli(
-            "management-interface eth0; ip route 30.20.20.0/24; show running-config mgmt-if",
+            "mgmt-if eth0; ip route 30.20.20.0/24; show running-config mgmt-if",
         )
         self.assertTrue("ip route 30.20.20.0/24" in output)
         output = self.gscli("show ip route")
@@ -156,12 +156,12 @@ class TestSouthSystem(TestBase):
 
     def test_system_reconcile(self):
         output = self.gscli(
-            "management-interface eth0; ip route 31.21.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; ip route 31.21.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip route 31.21.0.0/16" in output)
 
         output = self.gscli(
-            "management-interface eth0; ip address 20.21.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; ip address 20.21.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip address 20.21.0.0/16" in output)
 
@@ -177,33 +177,33 @@ class TestSouthSystem(TestBase):
         self.assertTrue("ip address 20.21.0.0/16" in output)
 
         output = self.gscli(
-            "management-interface eth0; no ip route 31.21.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; no ip route 31.21.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip route 31.21.0.0/16" not in output)
 
         output = self.gscli(
-            "management-interface eth0; no ip address 20.21.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; no ip address 20.21.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip address 20.21.0.0/16" not in output)
 
         # case for saving a tree without leaf address
         output = self.gscli(
-            "management-interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; ip address 56.10.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip address 56.10.0.0/16" in output)
 
         output = self.gscli(
-            "management-interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; no ip address 56.10.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip address 56.10.0.0/16" not in output)
 
         output = self.gscli(
-            "management-interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; ip route 100.17.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip route 100.17.0.0/16" in output)
 
         output = self.gscli(
-            "management-interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; no ip route 100.17.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip route 100.17.0.0/16" not in output)
 
@@ -211,22 +211,22 @@ class TestSouthSystem(TestBase):
         time.sleep(10)
 
         output = self.gscli(
-            "management-interface eth0; ip address 56.10.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; ip address 56.10.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip address 56.10.0.0/16" in output)
 
         output = self.gscli(
-            "management-interface eth0; no ip address 56.10.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; no ip address 56.10.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip address 56.10.0.0/16" not in output)
 
         output = self.gscli(
-            "management-interface eth0; ip route 100.17.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; ip route 100.17.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip route 100.17.0.0/16" in output)
 
         output = self.gscli(
-            "management-interface eth0; no ip route 100.17.0.0/16; show running-config mgmt-if",
+            "mgmt-if eth0; no ip route 100.17.0.0/16; show running-config mgmt-if",
         )
         self.assertTrue("ip route 100.17.0.0/16" not in output)
 
