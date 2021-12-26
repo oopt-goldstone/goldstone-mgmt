@@ -303,6 +303,22 @@ class TestSouthGearbox(TestBase):
         self.gscli(f"show interface counter")
         self.gscli(f"show interface counter table")
 
+    def test_gearbox(self):
+        self.gscli("show gearbox")
+        self.gscli("gearbox 1; admin-status up")
+        self.gscli("gearbox 1; admin-status down")
+        self.gscli("gearbox 1; no admin-status")
+        self.gscli("gearbox 1; show")
+
+        for _ in range(120):
+            output = self.gscli("gearbox 1; show")
+            for line in output.split("\n"):
+                if "oper-status" in line and "up" in line:
+                    return
+            time.sleep(1)
+        else:
+            raise Exception("gearbox didn't come up")
+
 
 class TestSouthSONiC(TestBase):
     def test_vlan(self):
