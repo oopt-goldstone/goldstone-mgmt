@@ -1,9 +1,14 @@
-import sysrepo as sr
-from tabulate import tabulate
-from .common import sysrepo_wrap, print_tabular
-from natsort import natsorted
-import json
-import re
+from .cli import (
+    Context,
+    GlobalShowCommand,
+    ModelExists,
+)
+from .root import Root
+from .base import InvalidInput, Command
+from prompt_toolkit.document import Document
+from prompt_toolkit.completion import WordCompleter
+from .common import sysrepo_wrap
+from .aaa import AAACommand, TACACSCommand
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,203 +16,116 @@ stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 
-class TACACS(object):
-    def xpath(self, group, address):
-        return "/goldstone-aaa:aaa/server-groups/server-group[name='{}']/servers/server[address='{}']".format(
-            group, address
-        )
+class NACM(Context):
 
-    def xpath_server_group(self, group):
-        return "/goldstone-aaa:aaa/server-groups/server-group[name='{}']".format(group)
+    XPATH = "/ietf-netconf-acm:nacm"
 
-    def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
-        self.name = "TACACS+"
-
-    def set_tacacs_server(self, ipAddress, key, port, timeout):
-
-        xpath = self.xpath(self.name, ipAddress)
-        self.sr_op.set_data(
-            f"{self.xpath_server_group(self.name)}/config/name",
-            self.name,
-            no_apply=True,
-        )
-        self.sr_op.set_data(f"{xpath}/config/address", ipAddress, no_apply=True)
-        self.sr_op.set_data(f"{xpath}/tacacs/config/secret-key", key, no_apply=True)
-        self.sr_op.set_data(f"{xpath}/tacacs/config/port", port, no_apply=True)
-        self.sr_op.set_data(f"{xpath}/config/timeout", timeout, no_apply=True)
-        self.sr_op.apply()
-
-    def set_no_tacacs(self, address):
-        xpath = self.xpath("TACACS+", address)
-        create_group(self.sr_op, "TACACS+")
-        self.sr_op.delete_data(xpath)
-
-    def show(self):
-        xpath = self.xpath_server_group("TACACS+")
-        try:
-            tacacs_data = self.sr_op.get_data(xpath)
-        except sr.SysrepoNotFoundError as e:
-            return
-        try:
-            tacacs_list = list(
-                tacacs_data["aaa"]["server-groups"]["server-group"]["TACACS+"][
-                    "servers"
-                ]["server"]
-            )
-        except KeyError:
-            return
-        rows = []
-        headers = ["server", "timeout", "port", "secret-key"]
-        for data in tacacs_list:
-            rows.append(
-                [
-                    data["address"],
-                    data["config"]["timeout"]
-                    if "timeout" in data["config"].keys()
-                    else "-",
-                    data["tacacs"]["config"]["port"]
-                    if "port" in data["tacacs"]["config"].keys()
-                    else "-",
-                    data["tacacs"]["config"]["secret-key"]
-                    if "secret-key" in data["tacacs"]["config"].keys()
-                    else "-",
-                ]
-            )
-
-        stdout.info(tabulate(rows, headers, tablefmt="pretty"))
-
-
-class AAA(object):
-
-    xpath = "/goldstone-aaa:aaa/authentication/config/authentication-method"
-
-    def __init__(self, conn):
-        self.session = conn.start_session()
+    def __init__(self, conn, parent):
+        super().__init__(parent)
         self.sr_op = sysrepo_wrap(self.session)
 
-    def set_aaa(self, auth_method):
-        try:
-            self.sr_op.get_data(self.xpath)
-        except sr.SysrepoNotFoundError:
-            self.sr_op.set_data(f"{self.xpath}", auth_method)
-        self.sr_op.delete_data(self.xpath)
-        self.sr_op.set_data(f"{self.xpath}", auth_method)
+        @self.command()
+        def disable(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: disable[cr]")
+            self.sr_op.set_data(f"{self.XPATH}/enable-nacm", False)
 
-    def set_no_aaa(self):
-        self.sr_op.delete_data(self.xpath)
+        @self.command()
+        def enable(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: enable[cr]")
+            self.sr_op.set_data(f"{self.XPATH}/enable-nacm", True)
 
-    def show(self):
-        try:
-            aaa_data = self.sr_op.get_data(self.xpath)
-        except sr.SysrepoNotFoundError as e:
-            return
-        aaa_dict = {}
-        try:
-            v = aaa_data["aaa"]["authentication"]["config"]["authentication-method"]
-            aaa_dict["authentication-method"] = v[0]
-            print_tabular(aaa_dict, "")
-        except Exception as e:
-            return
+    def __str__(self):
+        return "nacm"
 
 
-class System(object):
-    def __init__(self, conn):
-        self.session = conn.start_session()
+class Netconf(Context):
+
+    XPATH = "/goldstone-system:system/netconf"
+
+    def __init__(self, conn, parent):
+        super().__init__(parent)
         self.sr_op = sysrepo_wrap(self.session)
-        self.aaa = AAA(conn)
-        self.tacacs = TACACS(conn)
 
-    def run_conf(self):
-        server_run_conf = ["address", "timeout"]
-        tacacs_run_conf = ["port", "secret-key"]
-        aaa_run_conf = ["authentication"]
-        stdout.info("!")
+        @self.command()
+        def shutdown(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: shutdown[cr]")
+            self.sr_op.set_data(f"{self.XPATH}/config/enabled", False)
 
-        output = []
+        @self.command(WordCompleter(["shutdown"]))
+        def no(line):
+            if len(line) != 1 or line[0] != "shutdown":
+                raise InvalidInput("usage: no shutdown")
+            self.sr_op.set_data(f"{self.XPATH}/config/enabled", True)
 
-        try:
-            tacacs_tree = self.sr_op.get_data(
-                "/goldstone-aaa:aaa/server-groups/server-group['TACACS+']/servers/server"
-            )
-            tacacs_list = list(
-                tacacs_tree["aaa"]["server-groups"]["server-group"]["TACACS+"][
-                    "servers"
-                ]["server"]
-            )
-            server_address = []
-            for item in tacacs_list:
-                addr = item["address"]
-                server_data = item.get("config")
-                tacacs_data = item["tacacs"].get("config")
-                dict_1 = {}
-                dict_2 = {}
-                for attr in server_run_conf:
-                    dict_1 = {
-                        attr: server_data.get(attr, None) for attr in server_run_conf
-                    }
-                for attr in tacacs_run_conf:
-                    tacacs_dict = {
-                        attr: tacacs_data.get(attr, None) for attr in tacacs_run_conf
-                    }
-                tacacs_dict.update(dict_1)
-                for key in tacacs_dict:
-                    if key == "address":
-                        if tacacs_dict[key] is None:
-                            pass
-                        elif (tacacs_dict["port"] is None) and (
-                            tacacs_dict["timeout"] is None
-                        ):
-                            output.append(
-                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']}"
-                            )
-                        elif tacacs_dict["port"] is None:
-                            output.append(
-                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} timeout {tacacs_dict['timeout']}"
-                            )
-                        elif tacacs_dict["timeout"] is None:
-                            output.append(
-                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']}"
-                            )
-                        else:
-                            output.append(
-                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']} timeout {tacacs_dict['timeout']}"
-                            )
-        except Exception as e:
-            pass
+        @self.command()
+        def nacm(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: nacm[cr]")
+            return NACM(conn, self)
 
-        try:
-            aaa_data = self.sr_op.get_data("/goldstone-aaa:aaa/authentication")
-            conf_data = aaa_data["aaa"]["authentication"]["config"]
-            auth_method_list = conf_data.get("authentication-method")
-            auth_method = auth_method_list[0]
-            if auth_method is None:
-                pass
-            elif auth_method == "local":
-                output.append(f"  aaa authentication login default local ")
-            else:
-                output.append(f"  aaa authentication login default group tacacs ")
-        except Exception as e:
-            pass
-
-        if output:
-            stdout.info("system")
-            for line in output:
-                stdout.info(line)
-            stdout.info("  quit")
-            stdout.info("!")
-
-    def tech_support(self):
-        stdout.info("AAA details")
-        self.aaa.show()
-        stdout.info("Tacacs server details")
-        self.tacacs.show()
+    def __str__(self):
+        return "netconf"
 
 
-def create_group(sr_op, group):
-    xpath = "/goldstone-aaa:aaa/server-groups/server-group[name='{}']".format(group)
-    try:
-        sr_op.get_data(xpath, "running")
-    except sr.SysrepoNotFoundError as e:
-        sr_op.set_data(f"{xpath}/config/name", group)
+class SystemContext(Context):
+    def __init__(self, conn, parent):
+        super().__init__(parent)
+
+        @self.command(name="netconf")
+        def netconf(line):
+            if len(line) != 0:
+                raise InvalidInput("usage: netconf[cr]")
+            return Netconf(conn, self)
+
+        @self.command()
+        def reboot(line):
+            session = conn.start_session()
+            stdout.info(session.rpc_send("/goldstone-system:reboot", {}))
+
+        @self.command()
+        def shutdown(line):
+            session = conn.start_session()
+            stdout.info(session.rpc_send("/goldstone-system:shutdown", {}))
+
+        c = TACACSCommand(self)
+        self.add_command(c.name, c, add_no=True)
+
+        c = AAACommand(self)
+        self.add_command(c.name, c, add_no=True)
+
+    def __str__(self):
+        return "system"
+
+
+class Version(Command):
+    def exec(self, line):
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+
+        conn = self.context.root().conn
+        with conn.start_session() as sess:
+            xpath = "/goldstone-system:system/state/software-version"
+            sess.switch_datastore("operational")
+            data = sess.get_data(xpath)
+            stdout.info(data["system"]["state"]["software-version"])
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
+GlobalShowCommand.register_command(
+    "version", Version, when=ModelExists("goldstone-system")
+)
+
+
+class SystemCommand(Command):
+    def exec(self, line):
+        if len(line) != 0:
+            raise InvalidInput("usage: system")
+        return SystemContext(self.context.root().conn, self.context)
+
+
+Root.register_command("system", SystemCommand, when=ModelExists("goldstone-system"))
