@@ -14,7 +14,7 @@ from .base import BreakLoop, CLIException
 from . import interface
 from . import platform
 from . import transponder
-from . import system_cli
+from . import system
 from . import ufd
 from . import portchannel
 from . import vlan
