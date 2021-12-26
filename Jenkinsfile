@@ -19,7 +19,7 @@ pipeline {
                   env.GS_MGMT_IMAGE_PREFIX = 'gs-test/'
                   // if sm/, patches/, builder.Dockerfile, build_onlp.sh is updated
                   // build the builder
-                  env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|yang/\\|patches/\\|builder.Dockerfile\\|build_onlp.sh'") ? 0 : 1
+                  env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile'") ? 0 : 1
               } else {
                   env.SKIP = 1
                   env.BUILD_BUILDER = 0
