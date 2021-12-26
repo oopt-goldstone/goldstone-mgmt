@@ -34,6 +34,15 @@ module goldstone-gearbox {
     }
   }
 
+  grouping gearbox-state {
+    leaf oper-status {
+      type enumeration {
+        enum UP;
+        enum DOWN;
+      }
+    }
+  }
+
   grouping gearbox-top {
     container gearboxes {
       list gearbox {
@@ -49,6 +58,7 @@ module goldstone-gearbox {
         container state {
           config false;
           uses gearbox-config;
+          uses gearbox-state;
         }
       }
     }
