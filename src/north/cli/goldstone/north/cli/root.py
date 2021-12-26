@@ -68,7 +68,9 @@ class SaveCommand(Command):
 class Root(Context):
     REGISTERED_COMMANDS = {}
 
-    def __init__(self, conn):
+    def __init__(self, conn=None):
+        if conn == None:
+            conn = sr.SysrepoConnection()
         self.conn = conn
         self.notif_session = None
         ctx = self.conn.get_ly_ctx()

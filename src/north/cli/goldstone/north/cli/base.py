@@ -368,13 +368,12 @@ class Context(object):
             node = node.parent
         return node
 
-    def completion(self, document, complete_event=None):
+    @property
+    def completer(self):
         c = self._command.completer
-        if self.fuzzy_completion and complete_event:
+        if self.fuzzy_completion:
             c = FuzzyCompleter(c)
-
-        for v in c.get_completions(document, complete_event):
-            yield v
+        return c
 
     def exec_host(self, cmd):
         line[0] = line[0][1:]
