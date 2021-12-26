@@ -1,18 +1,12 @@
-#!/usr/bin/env python
-
-import sysrepo as sr
 import argparse
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit import patch_stdout
-from prompt_toolkit.completion import Completer
 
 import sys
-import os
 import logging
 import asyncio
-import time
 
 from .root import Root
 from .base import BreakLoop, CLIException
@@ -31,56 +25,32 @@ stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 
-class GoldstoneShellCompleter(Completer):
-    def __init__(self, context):
-        self.context = context
-
-    def get_completions(self, document, complete_event):
-        return self.context.completion(document, complete_event)
-
-
 class GoldstoneShell(object):
-    def __init__(self, sess=None, default_prompt="> ", prefix=""):
-        if sess == None:
-            for i in range(10):
-                try:
-                    conn = sr.SysrepoConnection()
-                except sr.errors.SysrepoSysError as e:
-                    logger.warn(
-                        f"failed to establish sysrepo connection: {e} retrying ({i}/10)"
-                    )
-                    time.sleep(0.1)
-                else:
-                    break
-            else:
-                stderr.error("failed to establish sysrepo connection")
-                sys.exit(1)
-
-        sess = conn.start_session()
-        self.context = Root(conn)
-
-        self.completer = GoldstoneShellCompleter(self.context)
+    def __init__(self, default_prompt="> ", prefix=""):
+        self.context = Root()
         self.default_input = ""
         self.default_prompt = default_prompt
         self.prefix = prefix
-
-        # TODO subscribe to global error message bus
 
     def prompt(self):
         c = self.context
         l = [str(c)]
         while c.parent:
-            l.insert(0, str(c.parent))
+            l.append(str(c.parent))
             c = c.parent
         return (
-            self.prefix + ("/".join(l)[1:] if len(l) > 1 else "") + self.default_prompt
+            self.prefix
+            + ("/".join(reversed(l))[1:] if len(l) > 1 else "")
+            + self.default_prompt
         )
+
+    def completer(self):
+        return self.context.completer
 
     async def exec(self, cmd: list, no_fail=True):
         ret = self.context.exec(cmd, no_fail=no_fail)
         if ret:
             self.context = ret
-            self.completer.context = ret
         self.default_input = ""
 
     def bindings(self):
@@ -116,7 +86,7 @@ async def loop_async(shell):
 
     with patch_stdout.patch_stdout():
         while True:
-            c = shell.completer
+            c = shell.completer()
             p = shell.prompt()
             b = shell.bindings()
             session.app.shell = shell
