@@ -84,6 +84,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return "100-gbe"
             elif args[0] == "oper-status":
                 return "ready"
+            elif args[0] == "admin-status":
+                return "up"
             elif args[0] == "mtu":
                 return DEFAULT_MTU
             elif args[0] == "index":
@@ -470,6 +472,28 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             e = task.exception()
             if e:
                 raise e
+
+    async def test_gearbox_oper_cb(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        await gbserver.start()
+
+        self.set_logs = []  # clear set_logs
+
+        def test_oper_cb():
+            with self.conn.start_session("operational") as sess:
+                data = sess.get_data("/goldstone-gearbox:gearboxes/gearbox")
+                self.assertEqual(len(data["gearboxes"]["gearbox"]), 1)
+                data = list(data["gearboxes"]["gearbox"])[0]
+                self.assertEqual(data["state"]["admin-status"], "UP")
+                self.assertEqual(data["state"]["oper-status"], "UP")
+
+        await asyncio.to_thread(test_oper_cb)
 
     async def asyncTearDown(self):
         [p.stop() for p in self.patchers]

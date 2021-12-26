@@ -314,14 +314,19 @@ class InterfaceServer(ServerBase):
 
         return interfaces
 
-    async def ifname2taiobj(self, ifname):
+    async def ifname2taiobj(self, ifname, with_module=False):
         v = [int(v) for v in ifname.replace("Ethernet", "").split("/")]
         m = await self.taish.get_module(str(v[0]))
+        obj = None
         if v[1] == 0:  # hostif
-            return m.get_hostif(v[2] - 1)
+            obj = m.get_hostif(v[2] - 1)
         elif v[1] == 1:  # netif
-            return m.get_netif(v[2] - 1)
-        return None
+            obj = m.get_netif(v[2] - 1)
+
+        if with_module:
+            return (obj, m)
+        else:
+            return obj
 
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
@@ -356,7 +361,13 @@ class InterfaceServer(ServerBase):
                     v["transponder"] = t
                 i["component-connection"] = v
 
-            obj = await self.ifname2taiobj(ifname)
+            obj, module = await self.ifname2taiobj(ifname, with_module=True)
+
+            if (await module.get("oper-status")) != "ready":
+                i["state"] = {"admin-status": "DOWN", "oper-status": "DOWN"}
+                interfaces.append(i)
+                continue
+
             state = {}
             try:
                 state["admin-status"] = (
