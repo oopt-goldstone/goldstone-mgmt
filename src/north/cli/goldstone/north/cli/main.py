@@ -18,6 +18,7 @@ from . import system_cli
 from . import ufd
 from . import portchannel
 from . import vlan
+from . import mgmt_if
 
 logger = logging.getLogger(__name__)
 
