@@ -1,5 +1,6 @@
 import json
-import sysrepo as sr
+import sysrepo
+import libyang
 from sysrepo.session import DATASTORE_VALUES
 from kubernetes.client.rest import ApiException
 from kubernetes import client, config
@@ -246,7 +247,7 @@ class ClearDatastoreGroupCommand(Command):
 
                 sess.apply_changes()
 
-        except sr.SysrepoError as e:
+        except sysrepo.SysrepoError as e:
             raise CLIException(f"failed to clear: {e}")
 
     def get(self, arg):
@@ -308,6 +309,8 @@ class Context(BaseContext):
         super().__init__(parent, fuzzy_completion)
         self.add_command("show", GlobalShowCommand)
         self.add_command("clear", GlobalClearCommand)
+        conn = parent.root().conn if parent != None else self.conn
+        self.session = conn.start_session()
 
         for k, (cls, options) in list(self.list_subcommands()):
             if options.get("add_no"):
@@ -324,3 +327,36 @@ class Context(BaseContext):
             self.no = NoCommand(self, None, name="no")
             self.add_command("no", self.no)
         self.no.add_command(name, cmd, **options)
+
+    def get_sr_data(
+        self,
+        xpath,
+        datastore,
+        default=None,
+        strip=True,
+        include_implicit_defaults=False,
+    ):
+        self.session.switch_datastore(datastore)
+        try:
+            v = self.session.get_data(
+                xpath, include_implicit_defaults=include_implicit_defaults
+            )
+        except sysrepo.SysrepoNotFoundError:
+            logger.debug(
+                f"xpath: {xpath}, ds: {datastore}, not found. returning {default}"
+            )
+            return default
+        if strip:
+            v = libyang.xpath_get(v, xpath, default, filter=datastore == "operational")
+        logger.debug(f"xpath: {xpath}, ds: {datastore}, value: {v}")
+        return v
+
+    def get_running_data(
+        self, xpath, default=None, strip=True, include_implicit_defaults=False
+    ):
+        return self.get_sr_data(
+            xpath, "running", default, strip, include_implicit_defaults
+        )
+
+    def get_operational_data(self, xpath, default=None, strip=True):
+        return self.get_sr_data(xpath, "operational", default, strip)
