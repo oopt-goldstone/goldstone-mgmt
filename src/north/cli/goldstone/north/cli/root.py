@@ -4,7 +4,7 @@ import subprocess
 import logging
 
 from .base import InvalidInput, Command, CLIException
-from .cli import GSObject as Object
+from .cli import Context
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class SaveCommand(Command):
         return cmds
 
 
-class Root(Object):
+class Root(Context):
     REGISTERED_COMMANDS = {}
 
     def __init__(self, conn):

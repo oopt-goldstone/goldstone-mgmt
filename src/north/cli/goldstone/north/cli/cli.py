@@ -7,7 +7,7 @@ import pydoc
 import logging
 from prompt_toolkit.completion import merge_completers
 
-from .base import *
+from .base import Command, Context as BaseContext, InvalidInput
 
 KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 
@@ -303,7 +303,7 @@ def ModelExists(model):
     return f
 
 
-class GSObject(Object):
+class Context(BaseContext):
     def __init__(self, parent, fuzzy_completion=False):
         super().__init__(parent, fuzzy_completion)
         self.add_command("show", GlobalShowCommand)

@@ -1,5 +1,5 @@
 from .cli import (
-    GSObject as Object,
+    Context,
     RunningConfigCommand,
     GlobalShowCommand,
     GlobalClearCommand,
@@ -24,7 +24,7 @@ stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 
-class ManagementInterface(Object):
+class ManagementInterface(Context):
     def __init__(self, conn, parent, ifname):
         super().__init__(parent)
         self.session = conn.start_session()
@@ -104,7 +104,7 @@ class ManagementInterface(Object):
         return "usage:\n ip address A.B.C.D/<mask>\n ip route <dst_prefix>\n"
 
 
-class NACM(Object):
+class NACM(Context):
 
     XPATH = "/ietf-netconf-acm:nacm"
 
@@ -129,7 +129,7 @@ class NACM(Object):
         return "nacm"
 
 
-class Netconf(Object):
+class Netconf(Context):
 
     XPATH = "/goldstone-system:system/netconf"
 
@@ -160,7 +160,7 @@ class Netconf(Object):
         return "netconf"
 
 
-class SystemObject(Object):
+class SystemContext(Context):
     def __init__(self, conn, parent):
         super().__init__(parent)
 
@@ -374,7 +374,7 @@ class SystemCommand(Command):
     def exec(self, line):
         if len(line) != 0:
             raise InvalidInput("usage: system")
-        return SystemObject(self.context.root().conn, self.context)
+        return SystemContext(self.context.root().conn, self.context)
 
 
 Root.register_command("system", SystemCommand, when=ModelExists("goldstone-system"))

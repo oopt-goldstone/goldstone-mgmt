@@ -4,7 +4,7 @@ import re
 
 from .base import InvalidInput, Command
 from .cli import (
-    GSObject as Object,
+    Context,
     GlobalShowCommand,
     RunningConfigCommand,
     GlobalClearCommand,
@@ -737,7 +737,7 @@ class BreakoutCommand(Command):
             )
 
 
-class InterfaceObject(Object):
+class InterfaceContext(Context):
     REGISTERED_COMMANDS = {}
 
     def __init__(self, parent, ifname):
@@ -898,7 +898,7 @@ class InterfaceCommand(Command):
     def exec(self, line):
         if len(line) != 1:
             raise InvalidInput("usage: interface <ifname>")
-        return InterfaceObject(self.context, line[0])
+        return InterfaceContext(self.context, line[0])
 
 
 Root.register_command(
