@@ -1,14 +1,15 @@
-from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
+from goldstone.lib.core import ServerBase, NoOp
 import libyang
 import asyncio
 import sysrepo
 import logging
-import json
+
+from .interfaces import IfChangeHandler
 
 logger = logging.getLogger(__name__)
 
 
-class IfChangeHandler(ChangeHandler):
+class ChangeHandler(IfChangeHandler):
     async def _init(self, user):
         xpath = self.change.xpath
 
@@ -24,17 +25,16 @@ class IfChangeHandler(ChangeHandler):
         if module_name not in l.keys():
             raise sysrepo.SysrepoInvalArgError("Invalid Gearbox name")
 
-        self.module = await self.server.taish.get_module(module_name)
+        self.obj = await self.server.taish.get_module(module_name)
 
 
-class AdminStatusHandler(IfChangeHandler):
-    async def apply(self, user):
-        self.original_value = await self.module.get("admin-status")
-        await self.module.set("admin-status", self.value.lower())
+class AdminStatusHandler(ChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "admin-status"
 
-    async def revert(self, user):
-        logger.warning(f"reverting: admin-status {self.value} => {self.original_value}")
-        await self.module.set("admin-status", self.original_value)
+    def to_tai_value(self, v):
+        return "up" if v == "UP" else "down"
 
 
 class GearboxServer(ServerBase):
@@ -83,3 +83,36 @@ class GearboxServer(ServerBase):
         await self.ifserver.reconcile()
 
         return await super().start()
+
+    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+        logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
+        xpath = list(libyang.xpath_split(req_xpath))
+        logger.debug(f"xpath: {xpath}")
+
+        if len(xpath) < 2 or len(xpath[1][2]) < 1:
+            module_names = (await self.taish.list()).keys()
+        else:
+            if xpath[1][2][0][0] != "name":
+                logger.warn(f"invalid request: {xpath}")
+                return
+            module_names = [xpath[1][2][0][1]]
+
+        gearboxes = []
+        for name in module_names:
+            g = {"name": name, "config": {"name": name}}
+            if len(xpath) == 3 and xpath[2][1] == "name":
+                gearboxes.append(g)
+                continue
+
+            m = await self.taish.get_module(name)
+            admin_status = "UP" if (await m.get("admin-status")) == "up" else "DOWN"
+            oper_status = "UP" if (await m.get("oper-status")) == "ready" else "DOWN"
+
+            g["state"] = {
+                "admin-status": admin_status.upper(),
+                "oper-status": oper_status,
+            }
+
+            gearboxes.append(g)
+
+        return {"goldstone-gearbox:gearboxes": {"gearbox": gearboxes}}
