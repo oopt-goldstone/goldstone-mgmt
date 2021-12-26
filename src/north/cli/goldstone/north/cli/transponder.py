@@ -1,6 +1,6 @@
 from .base import InvalidInput, Completer, Command
 from .cli import (
-    GSObject as Object,
+    Context,
     RunningConfigCommand,
     GlobalShowCommand,
     ModelExists,
@@ -259,7 +259,7 @@ class NoCommand(Command):
         return f"usage: no [{'|'.join(self.arguments())}]"
 
 
-class TransponderBaseObject(Object):
+class TransponderBaseContext(Context):
     def __init__(self, conn, parent):
         super().__init__(parent, fuzzy_completion=True)
 
@@ -377,7 +377,7 @@ class ModuleShowCommand(TransponderShowCommand):
     OBJECT_TYPE = "module"
 
 
-class HostIf(TransponderBaseObject):
+class HostIf(TransponderBaseContext):
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}"
         for v in ["modules", "module", "host-interface", "config"]
@@ -401,7 +401,7 @@ class HostIf(TransponderBaseObject):
         return "hostif({})".format(self.name)
 
 
-class NetIf(TransponderBaseObject):
+class NetIf(TransponderBaseContext):
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}"
         for v in ["modules", "module", "network-interface", "config"]
@@ -425,7 +425,7 @@ class NetIf(TransponderBaseObject):
         return "netif({})".format(self.name)
 
 
-class TransponderObject(TransponderBaseObject):
+class TransponderContext(TransponderBaseContext):
     XPATH = "/goldstone-transponder:modules/module"
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}" for v in ["modules", "module", "config"]
@@ -553,7 +553,7 @@ class TransponderCommand(Command):
     def exec(self, line):
         if len(line) != 1:
             raise InvalidInput("usage: transponder <name>")
-        return TransponderObject(self.context.root().conn, self.context, line[0])
+        return TransponderContext(self.context.root().conn, self.context, line[0])
 
 
 Root.register_command(

@@ -1,6 +1,6 @@
 from .base import Command, InvalidInput
 from .cli import (
-    GSObject as Object,
+    Context,
     GlobalShowCommand,
     RunningConfigCommand,
     TechSupportCommand,
@@ -12,7 +12,7 @@ from tabulate import tabulate
 from natsort import natsorted
 import sysrepo as sr
 
-from .interface import InterfaceObject
+from .interface import InterfaceContext
 
 import logging
 
@@ -206,7 +206,7 @@ def run_conf(session):
         stdout.info("!")
 
 
-class UFDObject(Object):
+class UFDContext(Context):
     def __init__(self, parent, id):
         self.id = id
         super().__init__(parent)
@@ -274,7 +274,7 @@ class UFDCommand(Command):
         if self.parent and self.parent.name == "no":
             delete(get_session(self), line[0])
         else:
-            return UFDObject(self.context, line[0])
+            return UFDContext(self.context, line[0])
 
 
 Root.register_command(
@@ -292,7 +292,7 @@ class UFDLinkCommand(Command):
 
 class InterfaceUFDCommand(Command):
     def __init__(
-        self, context: Object = None, parent: Command = None, name=None, **options
+        self, context: Context = None, parent: Command = None, name=None, **options
     ):
         super().__init__(context, parent, name, **options)
         if self.root.name != "no":
@@ -310,7 +310,7 @@ class InterfaceUFDCommand(Command):
             add_ports(get_session(self), line[0], self.context.ifnames, line[1])
 
 
-InterfaceObject.register_command(
+InterfaceContext.register_command(
     "ufd",
     InterfaceUFDCommand,
     when=ModelExists("goldstone-uplink-failure-detection"),

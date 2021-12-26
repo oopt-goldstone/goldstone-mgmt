@@ -270,7 +270,7 @@ class Command(object):
         return cmd(line[1:], fuzzy)
 
 
-class Object(object):
+class Context(object):
     XPATH = ""
 
     def __init__(self, parent, fuzzy_completion=None):

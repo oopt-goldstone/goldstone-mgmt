@@ -1,6 +1,6 @@
 from .base import Command, InvalidInput
 from .cli import (
-    GSObject as Object,
+    Context,
     RunningConfigCommand,
     GlobalShowCommand,
     ModelExists,
@@ -10,7 +10,7 @@ from .system import AAA, System
 
 
 class AAACommand(Command):
-    def __init__(self, context: Object = None, parent: Command = None, name=None):
+    def __init__(self, context: Context = None, parent: Command = None, name=None):
         if name == None:
             name = "aaa"
         super().__init__(context, parent, name)

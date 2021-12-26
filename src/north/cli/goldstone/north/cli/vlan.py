@@ -1,6 +1,6 @@
 from .base import Command, InvalidInput
 from .cli import (
-    GSObject as Object,
+    Context,
     GlobalShowCommand,
     RunningConfigCommand,
     ModelExists,
@@ -14,7 +14,7 @@ from tabulate import tabulate
 from natsort import natsorted
 from .common import sysrepo_wrap, print_tabular
 
-from .interface import InterfaceObject
+from .interface import InterfaceContext
 
 import logging
 
@@ -171,8 +171,8 @@ def parse_vlan_range(r: str) -> list[int]:
     return vids
 
 
-class VLANObject(Object):
-    def __init__(self, parent: None | Object, vid: str):
+class VLANContext(Context):
+    def __init__(self, parent: None | Context, vid: str):
         self.vid_str = vid
         vids = parse_vlan_range(vid)
         super().__init__(parent)
@@ -263,11 +263,11 @@ class VLANCommand(Command):
                 raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
         else:
             if len(line) == 1:
-                return VLANObject(self.context, line[0])
+                return VLANContext(self.context, line[0])
             elif line[0] == "range":
                 if len(line) != 2:
                     raise InvalidInput("usage: {self.name_all()} range <range-list>")
-                return VLANObject(self.context, line[1])
+                return VLANContext(self.context, line[1])
             else:
                 raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
 
@@ -317,6 +317,6 @@ class SwitchportCommand(Command):
     COMMAND_DICT = {"mode": SwitchportModeCommand}
 
 
-InterfaceObject.register_command(
+InterfaceContext.register_command(
     "switchport", SwitchportCommand, when=ModelExists("goldstone-vlan"), add_no=True
 )
