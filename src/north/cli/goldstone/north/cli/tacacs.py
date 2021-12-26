@@ -1,6 +1,6 @@
 from .base import Command, InvalidInput
 from .cli import (
-    GSObject as Object,
+    Context,
     RunningConfigCommand,
     GlobalShowCommand,
     ModelExists,
@@ -9,7 +9,7 @@ from .system import TACACS
 
 
 class TACACSCommand(Command):
-    def __init__(self, context: Object = None, parent: Command = None, name=None):
+    def __init__(self, context: Context = None, parent: Command = None, name=None):
         if name == None:
             name = "tacacs-server"
         super().__init__(context, parent, name)

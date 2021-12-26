@@ -1,4 +1,4 @@
-from goldstone.north.cli.base import Object, InvalidInput, Completer, Command
+from goldstone.north.cli.base import Context, InvalidInput, Completer, Command
 from prompt_toolkit.completion import WordCompleter, CompleteEvent
 from prompt_toolkit.document import Document
 import unittest
@@ -12,7 +12,7 @@ class A(Command):
         return ["Ethernet1_1", "Ethernet2_1"]
 
 
-class Test(Object):
+class Test(Context):
     def __init__(self, fuzzy):
         super().__init__(None, fuzzy)
 

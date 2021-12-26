@@ -1,6 +1,6 @@
 from .base import Command, InvalidInput
 from .cli import (
-    GSObject as Object,
+    Context,
     GlobalShowCommand,
     RunningConfigCommand,
     TechSupportCommand,
@@ -15,7 +15,7 @@ from prompt_toolkit.completion import (
 )
 import sysrepo as sr
 
-from .interface import InterfaceObject
+from .interface import InterfaceContext
 
 import logging
 
@@ -186,7 +186,7 @@ def show(session, id=None):
         )
 
 
-class PortchannelObject(Object):
+class PortchannelContext(Context):
     def __init__(self, parent, id):
         self.id = id
         super().__init__(parent)
@@ -276,7 +276,7 @@ TechSupportCommand.register_command(
 
 class PortchannelCommand(Command):
     def __init__(
-        self, context: Object = None, parent: Command = None, name=None, **options
+        self, context: Context = None, parent: Command = None, name=None, **options
     ):
         if name == None:
             name = "portchannel"
@@ -294,7 +294,7 @@ class PortchannelCommand(Command):
         if self.parent and self.parent.name == "no":
             delete(get_session(self), line[0])
         else:
-            return PortchannelObject(self.context, line[0])
+            return PortchannelContext(self.context, line[0])
 
 
 Root.register_command(
@@ -321,7 +321,7 @@ class InterfacePortchannelCommand(Command):
             add_interfaces(get_session(self), line[0], self.context.ifnames)
 
 
-InterfaceObject.register_command(
+InterfaceContext.register_command(
     "portchannel",
     InterfacePortchannelCommand,
     when=ModelExists("goldstone-portchannel"),
