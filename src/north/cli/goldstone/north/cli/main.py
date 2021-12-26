@@ -19,6 +19,7 @@ from . import ufd
 from . import portchannel
 from . import vlan
 from . import mgmt_if
+from . import gearbox
 
 logger = logging.getLogger(__name__)
 
