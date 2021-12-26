@@ -11,122 +11,6 @@ stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 
-class Mgmtif(object):
-
-    XPATH_MGMT = "/goldstone-mgmt-interfaces:interfaces/interface"
-
-    def xpath_mgmt(self, ifname):
-        self.name = ifname
-        self.path = self.XPATH_MGMT
-        return "{}[name='{}']".format(self.path, ifname)
-
-    def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
-
-    def get_mgmt_interface_list(self, datastore):
-        try:
-            tree = self.sr_op.get_data(self.XPATH_MGMT, datastore)
-            return natsorted(tree["interfaces"]["interface"], key=lambda x: x["name"])
-        except (KeyError, sr.errors.SysrepoNotFoundError) as error:
-            return []
-
-    def set_ip_addr(self, ifname, ip_addr, mask, config=True):
-        xpath = self.xpath_mgmt(ifname)
-        try:
-            self.sr_op.get_data(xpath, "running")
-        except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data(f"{xpath}/admin-status", "up")
-        xpath += "/goldstone-ip:ipv4"
-        self.sr_op.set_data(f"{xpath}/address[ip='{ip_addr}']/prefix-length", mask)
-        if config == False:
-            self.sr_op.delete_data(f"{xpath}/address[ip='{ip_addr}']")
-
-    def set_route(self, ifname, dst_prefix, config=True):
-        xpath = "/goldstone-routing:routing/static-routes/ipv4/route"
-        try:
-            self.sr_op.get_data(xpath, "running")
-        except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data(
-                f"{xpath}[destination-prefix='{dst_prefix}']/destination-prefix",
-                dst_prefix,
-            )
-        try:
-            self.sr_op.get_data(self.xpath_mgmt(ifname), "running")
-        except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data(f"{self.xpath_mgmt(ifname)}/admin-status", "up")
-        self.sr_op.set_data(
-            f"{xpath}[destination-prefix='{dst_prefix}']/destination-prefix",
-            dst_prefix,
-        )
-        if config == False:
-            self.sr_op.delete_data(
-                f"{xpath}[destination-prefix='{dst_prefix}']/destination-prefix"
-            )
-
-    def clear_route(self):
-        xpath = "/goldstone-routing:routing/static-routes/ipv4/route"
-        try:
-            self.sr_op.get_data(xpath, "running")
-        except sr.SysrepoNotFoundError as e:
-            # No configured routes are present to be cleared
-            # Need not raise any error in this case
-            return
-
-        self.sr_op.delete_data(f"{xpath}")
-
-    def show(self, ifname):
-        stdout.info(self.sr_op.get_data(self.xpath_mgmt(ifname), "operational"))
-
-    def run_conf(self):
-        mgmt_dict = {}
-        try:
-            mgmt_data = self.sr_op.get_data(
-                "/goldstone-mgmt-interfaces:interfaces/interface/goldstone-ip:ipv4/address"
-            )
-        except sr.SysrepoNotFoundError as e:
-            pass
-
-        try:
-            mgmt_intf_dict = self.sr_op.get_data(
-                "/goldstone-mgmt-interfaces:interfaces/interface"
-            )
-            mgmt_intf = list(mgmt_intf_dict["interfaces"]["interface"])[0]
-            stdout.info(f"interface {mgmt_intf['name']}")
-        except (sr.SysrepoNotFoundError, KeyError) as e:
-            return
-
-        try:
-            run_conf_data = list(mgmt_data["interfaces"]["interface"])[0]
-            run_conf_list = run_conf_data["ipv4"]["address"]
-            for item in run_conf_list:
-                ip_addr = item["ip"]
-                ip_addr += "/" + str(item["prefix-length"])
-                mgmt_dict.update({"ip_addr": ip_addr})
-                stdout.info(f"  ip address {mgmt_dict['ip_addr']}")
-        except Exception as e:
-            pass
-        try:
-            route_data = self.sr_op.get_data(
-                "/goldstone-routing:routing/static-routes/ipv4/route"
-            )
-        except sr.SysrepoNotFoundError as e:
-            stdout.info("!")
-            return
-        try:
-            route_conf_list = list(
-                route_data["routing"]["static-routes"]["ipv4"]["route"]
-            )
-            for route in route_conf_list:
-                dst_addr = route["destination-prefix"]
-                mgmt_dict.update({"dst_addr": dst_addr})
-                stdout.info(f"  ip route {mgmt_dict['dst_addr']}")
-        except Exception as e:
-            stdout.info("!")
-            return
-        stdout.info("!")
-
-
 class TACACS(object):
     def xpath(self, group, address):
         return "/goldstone-aaa:aaa/server-groups/server-group[name='{}']/servers/server[address='{}']".format(
@@ -234,18 +118,12 @@ class System(object):
         self.sr_op = sysrepo_wrap(self.session)
         self.aaa = AAA(conn)
         self.tacacs = TACACS(conn)
-        self.mgmt = Mgmtif(conn)
-
-    def mgmt_run_conf(self):
-        self.mgmt.run_conf()
 
     def run_conf(self):
         server_run_conf = ["address", "timeout"]
         tacacs_run_conf = ["port", "secret-key"]
         aaa_run_conf = ["authentication"]
         stdout.info("!")
-
-        self.mgmt_run_conf()
 
         output = []
 
