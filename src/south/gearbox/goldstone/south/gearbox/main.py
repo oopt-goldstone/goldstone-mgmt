@@ -23,7 +23,7 @@ def main():
 
         ifserver = InterfaceServer(conn, taish_server, platform_info)
         gb = GearboxServer(conn, ifserver)
-        servers = [ifserver, gb]
+        servers = [gb, ifserver]  # order matters
 
         try:
             tasks = list(

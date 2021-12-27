@@ -314,6 +314,7 @@ class TestSouthGearbox(TestBase):
             output = self.gscli("gearbox 1; show")
             for line in output.split("\n"):
                 if "oper-status" in line and "up" in line:
+                    time.sleep(2)
                     return
             time.sleep(1)
         else:
