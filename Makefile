@@ -29,9 +29,12 @@ define image_name
 $(GS_MGMT_IMAGE_PREFIX)$1:$(GS_MGMT_IMAGE_TAG)
 endef
 
+define save
+if [ $(GS_SAVE_AFTER_BUILD) -eq 1 ]; then mkdir -p builds && docker save $(call image_name,$(1)) > builds/$(1)-$(ARCH).tar && gzip -f builds/$(1)-$(ARCH).tar; fi
+endef
+
 BUILDER ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
 BASE ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
-
 TAI_META_CUSTOM_FILES ?= $(abspath $(wildcard scripts/tai/*))
 
 all: builder base-image images tester host-packages
@@ -42,16 +45,19 @@ docker:
 
 builder:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/builder.Dockerfile -t $(BUILDER) .
+	$(call save,$(GS_MGMT_BUILDER_IMAGE))
 
 base-image:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
 							      -t $(call image_name,$(GS_MGMT_BASE_IMAGE)) .
+	$(call save,$(GS_MGMT_BASE_IMAGE))
 
 host-packages:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/host.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
 							      -t $(call image_name,$(GS_MGMT_HOST_IMAGE)) .
+	$(call save,$(GS_MGMT_HOST_IMAGE))
 
 images: south-images north-images xlate-images
 
@@ -66,6 +72,7 @@ image:
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
 							      --build-arg GS_MGMT_BASE=$(call image_name,$(GS_MGMT_BASE_IMAGE)) \
 							      -t $(call image_name,$(IMAGE_NAME)) .
+	$(call save,$(IMAGE_NAME))
 
 south-sonic:
 	IMAGE_NAME=$(GS_MGMT_SONIC_IMAGE) DOCKER_FILE=docker/south-sonic.Dockerfile $(MAKE) image
@@ -144,3 +151,6 @@ unittest:
 	scripts/gs-yang.py --install xlate-oc south-sonic --search-dirs yang sm/openconfig
 	cd src/xlate/openconfig && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 	cd src/south/sonic      && make clean
+
+release:
+	./tools/release.py

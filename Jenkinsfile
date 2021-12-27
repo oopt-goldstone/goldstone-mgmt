@@ -286,6 +286,23 @@ pipeline {
         }
       }
     }
+
+    stage('Release') {
+      when {
+        buildingTag()
+      }
+      steps {
+        sh 'make release'
+        archiveArtifacts artifacts: 'builds/*.tar.gz', fingerprint: true
+        withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
+          sh '''#!/bin/bash
+          gh auth login
+          gh auth status
+          gh release create $TAG_NAME ./builds/*tar.gz
+          '''
+        }
+      }
+    }
   }
 
   post {
