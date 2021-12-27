@@ -223,7 +223,7 @@ class InterfaceServer(ServerBase):
             return
 
         m_oid = obj.obj.module_oid
-        modules = await self.taish.list()
+        modules = await self.list_modules()
 
         for location, m in modules.items():
             if m.oid == m_oid:
@@ -261,7 +261,7 @@ class InterfaceServer(ServerBase):
             while True:
                 await asyncio.sleep(5)
                 try:
-                    await asyncio.wait_for(self.taish.list(), timeout=2)
+                    await asyncio.wait_for(self.list_modules(), timeout=2)
                 except Exception as e:
                     logger.error(f"ping failed {e}")
                     return
@@ -301,8 +301,12 @@ class InterfaceServer(ServerBase):
         if self.is_initializing:
             raise sysrepo.SysrepoLockedError("initializing")
 
-    async def get_ifname_list(self):
+    async def list_modules(self):
         modules = await self.taish.list()
+        return {k: v for k, v in modules.items() if k not in self.taish._ignored_module}
+
+    async def get_ifname_list(self):
+        modules = await self.list_modules()
 
         interfaces = []
         for loc, module in modules.items():
