@@ -21,7 +21,7 @@ class ChangeHandler(IfChangeHandler):
         self.xpath = xpath
         module_name = xpath[1][2][0][1]
 
-        l = await self.server.taish.list()
+        l = await self.server.ifserver.list_modules()
         if module_name not in l.keys():
             raise sysrepo.SysrepoInvalArgError("Invalid Gearbox name")
 
@@ -55,7 +55,8 @@ class GearboxServer(ServerBase):
         }
 
     async def reconcile(self):
-        modules = await self.taish.list()
+        self.taish._ignored_module = []  # modules to ignore
+        modules = await self.ifserver.list_modules()
         prefix = "/goldstone-gearbox:gearboxes/gearbox"
 
         async def init(loc):
@@ -71,6 +72,12 @@ class GearboxServer(ServerBase):
                     v = await m.get("oper-status")
                     logger.debug(f"oper-status(loc:{loc}): {v}")
                     if v == "ready":
+                        return
+                    elif v == "unknown":
+                        logger.warning(
+                            f"module(loc:{loc}) malfunctioning. ignore this module"
+                        )
+                        self.taish._ignored_module.append(loc)
                         return
                     await asyncio.sleep(1)
 
@@ -90,7 +97,7 @@ class GearboxServer(ServerBase):
         logger.debug(f"xpath: {xpath}")
 
         if len(xpath) < 2 or len(xpath[1][2]) < 1:
-            module_names = (await self.taish.list()).keys()
+            module_names = (await self.ifserver.list_modules()).keys()
         else:
             if xpath[1][2][0][0] != "name":
                 logger.warn(f"invalid request: {xpath}")
