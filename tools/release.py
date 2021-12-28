@@ -21,7 +21,6 @@ def main():
         env = {
             "GS_MGMT_IMAGE_TAG": f"{version}-{arch}",
             "ARCH": arch,
-            "DOCKER_BUILD_OPTION": f"--platform linux/{arch} --no-cache",
         }
         cmd = ("make", "-C", root, "builder")
         subprocess.run(cmd, env=env)
@@ -29,7 +28,6 @@ def main():
         cmd = ("make", "-C", root, "base-image")
         subprocess.run(cmd, env=env)
 
-        del env["DOCKER_BUILD_OPTION"]
         env["GS_SAVE_AFTER_BUILD"] = "1"
 
         cmd = ("make", "-C", root, "images", "host-packages")

@@ -292,13 +292,19 @@ pipeline {
         buildingTag()
       }
       steps {
-        sh 'make release'
+        sh 'apk add --update docker make python2'
+        sh 'GS_MGMT_IMAGE_PREFIX=gs-test/ make tester'
+        sh 'docker run -v /var/run/docker.sock:/var/run/docker.sock -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 make release'
         archiveArtifacts artifacts: 'builds/*.tar.gz', fingerprint: true
         withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
           sh '''#!/bin/bash
-          gh auth login
-          gh auth status
-          gh release create $TAG_NAME ./builds/*tar.gz
+          set -eux
+          gh release delete -y $TAG_NAME | true # can fail
+          gh release create $TAG_NAME --notes "$TAG_NAME"
+          for file in $(ls ./builds/*.tar.gz);
+          do
+            gh release upload $TAG_NAME $file;
+          done
           '''
         }
       }
