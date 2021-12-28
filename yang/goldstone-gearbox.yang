@@ -21,6 +21,36 @@ module goldstone-gearbox {
       "0.1.0";
   }
 
+  grouping gearbox-connection-config {
+
+  }
+
+  grouping gearbox-connection-state {
+
+  }
+
+  grouping gearbox-connection-top {
+    container connections {
+      list connection {
+        key "client-interface line-interface";
+        leaf client-interface {
+          type gs-if:interface-ref;
+        }
+        leaf line-interface {
+          type gs-if:interface-ref;
+        }
+        container config {
+          uses gearbox-connection-config;
+        }
+        container state {
+          config false;
+          uses gearbox-connection-config;
+          uses gearbox-connection-state;
+        }
+      }
+    }
+  }
+
   grouping gearbox-config {
     leaf name {
       type string;
@@ -60,6 +90,8 @@ module goldstone-gearbox {
           uses gearbox-config;
           uses gearbox-state;
         }
+
+        uses gearbox-connection-top;
       }
     }
   }

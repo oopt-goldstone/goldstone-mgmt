@@ -61,7 +61,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         taish = mock.AsyncMock()
         taish.close = noop
-        module = taish.get_module.return_value
 
         self.set_logs = []
 
@@ -95,6 +94,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     return '["tx-ready", "rx-ready"]'
                 else:
                     return ["tx-ready", "rx-ready"]
+            elif args[0] == "tributary-mapping":
+                return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
             else:
                 return mock.MagicMock()
 
@@ -135,32 +136,38 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             msg.attrs = [attr]
             await args[1](obj, None, msg)
 
+        def f(oid):
+            obj = mock.AsyncMock()
+            obj.monitor = monitor
+            obj.get = get
+            obj.set = set_
+            obj.get_attribute_capability = get_attribute_capability
+            obj.index = 0
+            obj.oid = oid
+            return obj
+
+        def get_netif(*args):
+            return f(0x3000000010000)
+
+        def get_hostif(*args):
+            return f(0x2000000010000)
+
+        module = taish.get_module.return_value
         module.monitor = monitor
         module.get = get
         module.set = set_
         module.oid = 1
-
-        taish.list.return_value = {"1": module}
-
-        obj = mock.AsyncMock()
-        obj.monitor = monitor
-        obj.get = get
-        obj.set = set_
-        obj.get_attribute_capability = get_attribute_capability
-        obj.index = 0
-
-        def f(*args):
-            return obj
-
-        module.get_netif = f
-        module.get_hostif = f
-
-        module.obj.hostifs = [obj]
-        module.obj.netifs = [obj]
+        module.get_netif = get_netif
+        module.get_hostif = get_hostif
+        module.obj.location = "1"
+        module.obj.netifs = [get_netif()]
+        module.obj.hostifs = [get_hostif()]
 
         cap = module.get_attribute_capability.return_value
         cap.min = ""
         cap.max = ""
+
+        taish.list.return_value = {"1": module}
 
         self.patchers = [
             mock.patch("taish.AsyncClient", return_value=taish),
@@ -492,6 +499,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 data = list(data["gearboxes"]["gearbox"])[0]
                 self.assertEqual(data["state"]["admin-status"], "UP")
                 self.assertEqual(data["state"]["oper-status"], "UP")
+                connection = list(data["connections"]["connection"])
+                self.assertEqual(len(connection), 1)
+                self.assertEqual(connection[0]["client-interface"], "Ethernet1/0/1")
+                self.assertEqual(connection[0]["line-interface"], "Ethernet1/1/1")
 
         await asyncio.to_thread(test_oper_cb)
 
