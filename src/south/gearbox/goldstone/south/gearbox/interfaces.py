@@ -214,14 +214,6 @@ class InterfaceServer(ServerBase):
             await obj.set("mtu", mtu)
 
     async def tai_cb(self, obj, attr_meta, msg):
-        if isinstance(obj, taish.NetIf):
-            type_ = 1
-        elif isinstance(obj, taish.HostIf):
-            type_ = 0
-        else:
-            logger.error(f"invalid object: {obj}")
-            return
-
         m_oid = obj.obj.module_oid
         modules = await self.list_modules()
 
@@ -233,10 +225,17 @@ class InterfaceServer(ServerBase):
             logger.error(f"module not found: {m_oid}")
             return
 
-        index = int(await obj.get("index"))
-        ifname = f"Ethernet{loc}/{type_}/{index+1}"
+        ifname = await self.taiobj2ifname(
+            loc, 1 if isinstance(obj, taish.NetIf) else 0, obj
+        )
+        if not ifname:
+            return
 
         await self.notif_q.put({"ifname": ifname, "msg": msg, "obj": obj})
+
+    async def taiobj2ifname(self, loc, type_, obj):
+        index = int(await obj.get("index"))
+        return f"Ethernet{loc}/{type_}/{index+1}"
 
     async def notification_tasks(self):
         async def task(obj, attr):
