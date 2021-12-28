@@ -3,6 +3,7 @@ import libyang
 import asyncio
 import sysrepo
 import logging
+import json
 
 from .interfaces import IfChangeHandler
 
@@ -119,6 +120,42 @@ class GearboxServer(ServerBase):
                 "admin-status": admin_status.upper(),
                 "oper-status": oper_status,
             }
+
+            connections = []
+
+            oidmap = {}
+            for i in range(len(m.obj.netifs)):
+                obj = m.get_netif(i)
+                oidmap[obj.oid] = obj
+
+            for i in range(len(m.obj.hostifs)):
+                obj = m.get_hostif(i)
+                oidmap[obj.oid] = obj
+
+            for v in json.loads(await m.get("tributary-mapping", json=True)):
+                if len(v) != 1:
+                    logger.warning(f"invalid tributary-mapping item: {v}")
+                    continue
+                for netif, hostif in v.items():
+                    if len(hostif) != 1:
+                        logger.warning(f"invalid tributary-mapping item: {v}")
+                        continue
+                    hostif = hostif[0]
+
+                netif = oidmap[int(netif.replace("oid:", ""), 0)]
+                hostif = oidmap[int(hostif.replace("oid:", ""), 0)]
+
+                netif = await self.ifserver.taiobj2ifname(m.obj.location, 1, netif)
+                hostif = await self.ifserver.taiobj2ifname(m.obj.location, 0, hostif)
+
+                connections.append(
+                    {
+                        "client-interface": hostif,
+                        "line-interface": netif,
+                    }
+                )
+
+            g["connections"] = {"connection": connections}
 
             gearboxes.append(g)
 
