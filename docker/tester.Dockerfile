@@ -61,4 +61,6 @@ RUN pip install grpcio-tools
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
             pip install /usr/share/wheels/tai/*.whl
 
+RUN pip install GitPython
+
 # vim:filetype=dockerfile

@@ -29,6 +29,8 @@ define image_name
 $(GS_MGMT_IMAGE_PREFIX)$1:$(GS_MGMT_IMAGE_TAG)
 endef
 
+GS_SAVE_AFTER_BUILD ?= 0
+
 define save
 if [ $(GS_SAVE_AFTER_BUILD) -eq 1 ]; then mkdir -p builds && docker save $(call image_name,$(1)) > builds/$(1)-$(ARCH).tar && gzip -f builds/$(1)-$(ARCH).tar; fi
 endef
