@@ -5,7 +5,7 @@ import signal
 import itertools
 import sysrepo
 import json
-from goldstone.lib.core import start_probe
+from goldstone.lib.core import start_probe, call
 from .interfaces import InterfaceServer
 from .gearbox import GearboxServer
 
@@ -26,6 +26,7 @@ def main():
         servers = [gb, ifserver]  # order matters
 
         try:
+            runner = None
             tasks = list(
                 itertools.chain.from_iterable([await s.start() for s in servers])
             )
@@ -41,9 +42,10 @@ def main():
                 if e:
                     raise e
         finally:
-            await runner.cleanup()
+            if runner:
+                await runner.cleanup()
             for s in servers:
-                s.stop()
+                await call(s.stop)
             conn.disconnect()
 
     parser = argparse.ArgumentParser()
