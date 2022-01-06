@@ -234,37 +234,37 @@ class TestSouthSystem(TestBase):
 class TestSouthGearbox(TestBase):
     def test_interface(self):
         output = self.gscli("show interface brief")
-        self.assertTrue("Ethernet1/1/1" in output)
+        self.assertTrue("Interface1/1/1" in output)
 
-        output = self.gscli("interface Ethernet1/1/1; show")
+        output = self.gscli("interface Interface1/1/1; show")
         self.assertTrue("admin-status" in output)
         self.assertTrue("oper-status" in output)
         self.assertTrue("fec" in output)
         self.assertTrue("speed" in output)
 
-        self.gscli("interface Ethernet1/1/1; admin-status up")
-        output = self.gscli("interface Ethernet1/1/1; show")
+        self.gscli("interface Interface1/1/1; admin-status up")
+        output = self.gscli("interface Interface1/1/1; show")
         for line in output.split("\n"):
             if "admin-status" in line:
                 self.assertTrue("up" in line)
                 break
 
-        self.gscli("interface Ethernet1/1/1; admin-status down")
-        output = self.gscli("interface Ethernet1/1/1; show")
+        self.gscli("interface Interface1/1/1; admin-status down")
+        output = self.gscli("interface Interface1/1/1; show")
         for line in output.split("\n"):
             if "admin-status" in line:
                 self.assertTrue("down" in line)
                 break
 
-        self.gscli("interface Ethernet1/1/1; no admin-status")
-        output = self.gscli("interface Ethernet1/1/1; show")
+        self.gscli("interface Interface1/1/1; no admin-status")
+        output = self.gscli("interface Interface1/1/1; show")
         for line in output.split("\n"):
             if "admin-status" in line:
                 self.assertTrue("down" in line)
                 break
 
     def test_mtu(self):
-        ifname = "Ethernet1/1/1"
+        ifname = "Interface1/1/1"
         self.gscli(f"interface {ifname}; no mtu")
         output = self.gscli(f"interface {ifname}; show")
         self.assertTrue("10000" in output)
@@ -280,7 +280,7 @@ class TestSouthGearbox(TestBase):
         self.assertTrue("10000" in output)
 
     def test_fec(self):
-        ifname = "Ethernet1/1/1"
+        ifname = "Interface1/1/1"
         self.gscli(f"interface {ifname}; no fec")
         output = self.gscli(f"interface {ifname}; show")
         self.assertTrue("rs" in output)
@@ -299,7 +299,7 @@ class TestSouthGearbox(TestBase):
         self.assertTrue("rs" in output)
 
     def test_show_counter(self):
-        self.gscli(f"show interface counter Ethernet1/1/1")
+        self.gscli(f"show interface counter Interface1/1/1")
         self.gscli(f"show interface counter")
         self.gscli(f"show interface counter table")
 
@@ -325,12 +325,12 @@ class TestSouthGearbox(TestBase):
         self.gscli("gearbox 1; show")
         self.gscli("gearbox 1; admin-status down")
         self.gscli("gearbox 1; enable-flexible-connection true")
-        self.gscli("gearbox 1; connection Ethernet1/0/1 Ethernet1/1/4")
-        self.gscli("gearbox 1; connection Ethernet1/0/2 Ethernet1/1/3")
+        self.gscli("gearbox 1; connection Interface1/0/1 Interface1/1/4")
+        self.gscli("gearbox 1; connection Interface1/0/2 Interface1/1/3")
         self.gscli("gearbox 1; show")
         self.gscli("show running-config gearbox")
-        self.gscli("gearbox 1; no connection Ethernet1/0/1 Ethernet1/1/4")
-        self.gscli("gearbox 1; no connection Ethernet1/0/2 Ethernet1/1/3")
+        self.gscli("gearbox 1; no connection Interface1/0/1 Interface1/1/4")
+        self.gscli("gearbox 1; no connection Interface1/0/2 Interface1/1/3")
         self.gscli("gearbox 1; show")
         self.gscli("gearbox 1; enable-flexible-connection false")
         self.gscli("gearbox 1; show")

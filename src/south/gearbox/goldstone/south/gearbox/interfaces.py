@@ -125,7 +125,7 @@ class InterfaceServer(ServerBase):
         info = {}
         for i in platform_info:
             if "interface" in i:
-                ifname = f"Ethernet{i['interface']['suffix']}"
+                ifname = f"Interface{i['interface']['suffix']}"
                 info[ifname] = i
         self.platform_info = info
         self.conn = conn
@@ -230,7 +230,7 @@ class InterfaceServer(ServerBase):
 
     async def taiobj2ifname(self, loc, type_, obj):
         index = int(await obj.get("index"))
-        return f"Ethernet{loc}/{type_}/{index+1}"
+        return f"Interface{loc}/{type_}/{index+1}"
 
     async def notification_tasks(self):
         async def task(obj, attr):
@@ -308,14 +308,14 @@ class InterfaceServer(ServerBase):
                 continue
             m = await self.taish.get_module(loc)
             for hostif in m.obj.hostifs:
-                interfaces.append(f"Ethernet{loc}/0/{hostif.index+1}")
+                interfaces.append(f"Interface{loc}/0/{hostif.index+1}")
             for netif in m.obj.netifs:
-                interfaces.append(f"Ethernet{loc}/1/{netif.index+1}")
+                interfaces.append(f"Interface{loc}/1/{netif.index+1}")
 
         return interfaces
 
     async def ifname2taiobj(self, ifname, with_module=False):
-        v = [int(v) for v in ifname.replace("Ethernet", "").split("/")]
+        v = [int(v) for v in ifname.replace("Interface", "").split("/")]
         m = await self.taish.get_module(str(v[0]))
         obj = None
         if v[1] == 0:  # hostif
