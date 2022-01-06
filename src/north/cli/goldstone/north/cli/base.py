@@ -71,13 +71,7 @@ class Command(object):
 
     COMMAND_DICT = {}
 
-    def __init__(
-        self,
-        context,
-        parent,
-        name,
-        **options,
-    ):
+    def __init__(self, context, parent, name, **options):
         c = Completer(self)
         additional_completer = options.get("additional_completer")
         if additional_completer:
@@ -149,8 +143,9 @@ class Command(object):
     def completer(self):
         return self._completer
 
-    def complete_subcommand(self, arg, fuzzy=False, find_perfect_match=True):
-        l = list(self._list(True))
+    def complete_subcommand(self, arg, fuzzy=False, find_perfect_match=True, l=None):
+        if l == None:
+            l = list(self._list(True))
         candidates = [v for v in l if v.startswith(arg)]
 
         def cmpl(c, arg):
