@@ -255,6 +255,11 @@ class Command(object):
         ):
             no_completion = True
 
+        # per-command fuzzy setting overrides conetext fuzzy setting
+        fuzzy_override = self.options.get("fuzzy")
+        if fuzzy_override != None:
+            fuzzy = fuzzy_override
+
         if len(line) == 0 or no_completion:
             return self.exec(line)
 
