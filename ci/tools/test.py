@@ -314,11 +314,29 @@ class TestSouthGearbox(TestBase):
             output = self.gscli("gearbox 1; show")
             for line in output.split("\n"):
                 if "oper-status" in line and "up" in line:
-                    time.sleep(2)
+                    time.sleep(10)
                     return
             time.sleep(1)
         else:
             raise Exception("gearbox didn't come up")
+
+    def test_flexible_connection(self):
+        self.gscli("no gearbox 1")  # clear configuration
+        self.gscli("gearbox 1; show")
+        self.gscli("gearbox 1; admin-status down")
+        self.gscli("gearbox 1; enable-flexible-connection true")
+        self.gscli("gearbox 1; connection Ethernet1/0/1 Ethernet1/1/4")
+        self.gscli("gearbox 1; connection Ethernet1/0/2 Ethernet1/1/3")
+        self.gscli("gearbox 1; show")
+        self.gscli("show running-config gearbox")
+        self.gscli("gearbox 1; no connection Ethernet1/0/1 Ethernet1/1/4")
+        self.gscli("gearbox 1; no connection Ethernet1/0/2 Ethernet1/1/3")
+        self.gscli("gearbox 1; show")
+        self.gscli("gearbox 1; enable-flexible-connection false")
+        self.gscli("gearbox 1; show")
+        self.gscli("gearbox 1; no enable-flexible-connection")
+        self.gscli("gearbox 1; show")
+        self.gscli("no gearbox 1")  # clear configuration
 
 
 class TestSouthSONiC(TestBase):
