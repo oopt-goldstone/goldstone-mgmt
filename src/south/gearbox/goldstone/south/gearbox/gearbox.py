@@ -188,13 +188,13 @@ class GearboxServer(ServerBase):
             for i in range(len(m.obj.netifs)):
                 obj = m.get_netif(i)
                 self.oidmap[obj.oid] = obj
-                name = f"Ethernet{loc}/1/{i+1}"
+                name = f"Interface{loc}/1/{i+1}"
                 self.ifnamemap[name] = obj.oid
 
             for i in range(len(m.obj.hostifs)):
                 obj = m.get_hostif(i)
                 self.oidmap[obj.oid] = obj
-                name = f"Ethernet{loc}/0/{i+1}"
+                name = f"Interface{loc}/0/{i+1}"
                 self.ifnamemap[name] = obj.oid
 
         async def init(loc):
