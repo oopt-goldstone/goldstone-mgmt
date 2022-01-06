@@ -767,7 +767,12 @@ class InterfaceContext(Context):
         self.add_command("shutdown", ShutdownCommand, add_no=True)
         self.add_command("admin-status", AdminStatusCommand, add_no=True)
         self.add_command("fec", FECCommand, add_no=True)
-        self.add_command("speed", SpeedCommand, add_no=True)
+        self.add_command(
+            "speed",
+            SpeedCommand,
+            add_no=True,
+            fuzzy=False,
+        )
         self.add_command("interface-type", InterfaceTypeCommand, add_no=True)
         self.add_command("mtu", MTUCommand, add_no=True)
         self.add_command("auto-negotiate", AutoNegoCommand, add_no=True)
