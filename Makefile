@@ -138,20 +138,31 @@ lint:
 	scripts/gs-yang.py --lint south-gearbox south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
 	grep -rnI 'print(' src || exit 0 && exit 1
 
-unittest:
+unittest: unittest-cli unittest-gearbox unittest-openconfig unittest-tai unittest-sonic
 	cd src/south/sonic && make proto
 	scripts/gs-yang.py --install south-sonic south-tai --search-dirs yang
 	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
-	# unittest package can't search namespace packages
+	cd src/south/sonic      && make clean
+
+unittest-cli:
 	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
-	scripts/gs-yang.py --install south-sonic --search-dirs yang
-	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
-	scripts/gs-yang.py --install south-tai --search-dirs yang
-	cd src/south/tai        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+
+unittest-gearbox:
 	scripts/gs-yang.py --install south-gearbox --search-dirs yang
 	cd src/south/gearbox    && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+
+unittest-openconfig:
 	scripts/gs-yang.py --install xlate-oc south-sonic --search-dirs yang sm/openconfig
 	cd src/xlate/openconfig && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+
+unittest-tai:
+	scripts/gs-yang.py --install south-tai --search-dirs yang
+	cd src/south/tai        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+
+unittest-sonic:
+	cd src/south/sonic && make proto
+	scripts/gs-yang.py --install south-sonic --search-dirs yang
+	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 	cd src/south/sonic      && make clean
 
 release:
