@@ -305,7 +305,7 @@ def ModelExists(model):
 
 
 class Context(BaseContext):
-    def __init__(self, parent, fuzzy_completion=False):
+    def __init__(self, parent, fuzzy_completion=None):
         super().__init__(parent, fuzzy_completion)
         self.add_command("show", GlobalShowCommand)
         self.add_command("clear", GlobalClearCommand)
