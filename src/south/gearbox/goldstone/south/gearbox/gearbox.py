@@ -1,14 +1,15 @@
-from goldstone.lib.core import ServerBase, ChangeHandler
+from goldstone.lib.core import ServerBase
 import libyang
 import asyncio
 import sysrepo
 import logging
 import json
+from .interfaces import IfChangeHandler
 
 logger = logging.getLogger(__name__)
 
 
-class GearboxChangeHandler(ChangeHandler):
+class GearboxChangeHandler(IfChangeHandler):
     async def _init(self, user):
         xpath = self.change.xpath
 
@@ -29,68 +30,13 @@ class GearboxChangeHandler(ChangeHandler):
         self.obj = await self.server.taish.get_module(self.module_name)
         self.tai_attr_name = None
 
-    async def validate(self, user):
-        if not self.tai_attr_name:
-            return
-        try:
-            cap = await self.obj.get_attribute_capability(self.tai_attr_name)
-        except taish.TAIException as e:
-            raise sysrepo.SysrepoInvalArgError(e.msg)
-
-        logger.info(f"cap: {cap}")
-
-        if self.type == "deleted":
-            leaf = self.xpath[-1][1]
-            d = self.server.get_default(leaf)
-            if d != None:
-                self.value = self.to_tai_value(d)
-            elif cap.default_value == "":  # and is_deleted
-                raise sysrepo.SysrepoInvalArgError(
-                    f"no default value. cannot remove the configuration"
-                )
-            else:
-                self.value = cap.default_value
-        else:
-            v = self.to_tai_value(self.change.value)
-            if cap.min != "" and float(cap.min) > float(v):
-                raise sysrepo.SysrepoInvalArgError(
-                    f"minimum {k} value is {cap.min}. given {v}"
-                )
-
-            if cap.max != "" and float(cap.max) < float(v):
-                raise sysrepo.SysrepoInvalArgError(
-                    f"maximum {k} value is {cap.max}. given {v}"
-                )
-
-            valids = cap.supportedvalues
-            if len(valids) > 0 and v not in valids:
-                raise sysrepo.SysrepoInvalArgError(
-                    f"supported values are {valids}. given {v}"
-                )
-
-            self.value = v
-
-    async def apply(self, user):
-        if not self.tai_attr_name:
-            return
-        self.original_value = await self.obj.get(self.tai_attr_name)
-        await self.obj.set(self.tai_attr_name, self.value)
-
-    async def revert(self, user):
-        if not self.tai_attr_name:
-            return
-        logger.warning(
-            f"reverting: {self.tai_attr_name} {self.value} => {self.original_value}"
-        )
-        await self.obj.set(self.tai_attr_name, self.original_value)
-
 
 class AdminStatusHandler(GearboxChangeHandler):
     async def _init(self, user):
         await super()._init(user)
         self.tai_attr_name = "admin-status"
 
-    def to_tai_value(self, v):
+    def to_tai_value(self, v, attr_name):
         return "up" if v == "UP" else "down"
 
 

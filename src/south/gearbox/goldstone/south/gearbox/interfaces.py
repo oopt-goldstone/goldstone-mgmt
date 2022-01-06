@@ -26,59 +26,69 @@ class IfChangeHandler(ChangeHandler):
             raise sysrepo.SysrepoInvalArgError("Invalid Interface name")
 
         self.ifname = ifname
+        self.tai_attr_name = None
 
     async def validate(self, user):
         if not self.tai_attr_name:
             return
-        try:
-            cap = await self.obj.get_attribute_capability(self.tai_attr_name)
-        except taish.TAIException as e:
-            raise sysrepo.SysrepoInvalArgError(e.msg)
 
-        logger.info(f"cap: {cap}")
+        if type(self.tai_attr_name) != list:
+            self.tai_attr_name = [self.tai_attr_name]
 
-        if self.type == "deleted":
-            leaf = self.xpath[-1][1]
-            d = self.server.get_default(leaf)
-            if d:
-                self.value = self.to_tai_value(d)
-            elif cap.default_value == "":  # and is_deleted
-                raise sysrepo.SysrepoInvalArgError(
-                    f"no default value. cannot remove the configuration"
-                )
+        self.value = []
+
+        for name in self.tai_attr_name:
+            try:
+                cap = await self.obj.get_attribute_capability(name)
+            except taish.TAIException as e:
+                raise sysrepo.SysrepoInvalArgError(e.msg)
+
+            logger.info(f"cap: {cap}")
+
+            if self.type == "deleted":
+                leaf = self.xpath[-1][1]
+                d = self.server.get_default(leaf)
+                if d:
+                    self.value = self.to_tai_value(d, name)
+                elif cap.default_value == "":  # and is_deleted
+                    raise sysrepo.SysrepoInvalArgError(
+                        f"no default value. cannot remove the configuration"
+                    )
+                else:
+                    self.value = cap.default_value
             else:
-                self.value = cap.default_value
-        else:
-            v = self.to_tai_value(self.change.value)
-            if cap.min != "" and float(cap.min) > float(v):
-                raise sysrepo.SysrepoInvalArgError(
-                    f"minimum {k} value is {cap.min}. given {v}"
-                )
+                v = self.to_tai_value(self.change.value, name)
+                if cap.min != "" and float(cap.min) > float(v):
+                    raise sysrepo.SysrepoInvalArgError(
+                        f"minimum {k} value is {cap.min}. given {v}"
+                    )
 
-            if cap.max != "" and float(cap.max) < float(v):
-                raise sysrepo.SysrepoInvalArgError(
-                    f"maximum {k} value is {cap.max}. given {v}"
-                )
+                if cap.max != "" and float(cap.max) < float(v):
+                    raise sysrepo.SysrepoInvalArgError(
+                        f"maximum {k} value is {cap.max}. given {v}"
+                    )
 
-            valids = cap.supportedvalues
-            if len(valids) > 0 and v not in valids:
-                raise sysrepo.SysrepoInvalArgError(
-                    f"supported values are {valids}. given {v}"
-                )
+                valids = cap.supportedvalues
+                if len(valids) > 0 and v not in valids:
+                    raise sysrepo.SysrepoInvalArgError(
+                        f"supported values are {valids}. given {v}"
+                    )
 
-            self.value = v
+                self.value.append(v)
 
     async def apply(self, user):
         if not self.tai_attr_name:
             return
-        self.original_value = await self.obj.get(self.tai_attr_name)
-        await self.obj.set(self.tai_attr_name, self.value)
+        self.original_value = await self.obj.get_multiple(self.tai_attr_name)
+        await self.obj.set_multiple(list(zip(self.tai_attr_name, self.value)))
 
     async def revert(self, user):
+        if not self.tai_attr_name:
+            return
         logger.warning(
             f"reverting: {self.tai_attr_name} {self.value} => {self.original_value}"
         )
-        await self.obj.set(self.tai_attr_name, self.original_value)
+        await self.obj.set_multiple(zip(self.tai_attr_name, self.original_value))
 
 
 class AdminStatusHandler(IfChangeHandler):
@@ -86,7 +96,7 @@ class AdminStatusHandler(IfChangeHandler):
         await super()._init(user)
         self.tai_attr_name = "tx-dis"
 
-    def to_tai_value(self, v):
+    def to_tai_value(self, v, attr_name):
         return "false" if v == "UP" else "true"
 
 
@@ -95,7 +105,7 @@ class FECHandler(IfChangeHandler):
         await super()._init(user)
         self.tai_attr_name = "fec-type"
 
-    def to_tai_value(self, v):
+    def to_tai_value(self, v, attr_name):
         return v.lower()
 
 
@@ -104,8 +114,26 @@ class MTUHandler(IfChangeHandler):
         await super()._init(user)
         self.tai_attr_name = "mtu"
 
-    def to_tai_value(self, v):
+    def to_tai_value(self, v, attr_name):
         return v
+
+
+class InterfaceTypeHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = ["provision-mode", "signal-rate"]
+
+    def to_tai_value(self, v, attr_name):
+        if attr_name == "provision-mode":
+            if v == "IF_ETHERNET":
+                return "normal"
+            elif v == "IF_OTN":
+                return "serdes-only"
+        elif attr_name == "signal-rate":
+            if v == "IF_ETHERNET":
+                return "100-gbe"
+            elif v == "IF_OTN":
+                return "otu4"
 
 
 def pcs_status2oper_status(pcs):
@@ -140,6 +168,7 @@ class InterfaceServer(ServerBase):
                         "admin-status": AdminStatusHandler,
                         "name": NoOp,
                         "description": NoOp,
+                        "interface-type": InterfaceTypeHandler,
                     },
                     "ethernet": {
                         "config": {
