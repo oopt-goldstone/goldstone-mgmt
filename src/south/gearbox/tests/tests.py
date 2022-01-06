@@ -188,28 +188,28 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 sess.switch_datastore("operational")
                 v = sess.get_data("/goldstone-interfaces:interfaces/interface/name")
                 v = libyang.xpath_get(v, "interfaces/interface/name")
-                self.assertEqual(v, ["Ethernet1/0/1", "Ethernet1/1/1"])
+                self.assertEqual(v, ["Interface1/0/1", "Interface1/1/1"])
                 v = sess.get_data("/goldstone-interfaces:interfaces/interface")
                 self.assertEqual(
-                    v["interfaces"]["interface"]["Ethernet1/0/1"]["state"][
+                    v["interfaces"]["interface"]["Interface1/0/1"]["state"][
                         "associated-gearbox"
                     ],
                     "1",
                 )
                 self.assertEqual(
-                    v["interfaces"]["interface"]["Ethernet1/0/1"][
+                    v["interfaces"]["interface"]["Interface1/0/1"][
                         "component-connection"
                     ]["platform"]["component"],
                     "port1",
                 )
                 self.assertEqual(
-                    v["interfaces"]["interface"]["Ethernet1/1/1"][
+                    v["interfaces"]["interface"]["Interface1/1/1"][
                         "component-connection"
                     ]["transponder"]["module"],
                     "piu1",
                 )
                 self.assertEqual(
-                    v["interfaces"]["interface"]["Ethernet1/1/1"][
+                    v["interfaces"]["interface"]["Interface1/1/1"][
                         "component-connection"
                     ]["transponder"]["host-interface"],
                     "0",
@@ -338,11 +338,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             with self.conn.start_session() as sess:
                 sess.switch_datastore("running")
                 sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/name",
-                    "Ethernet1/0/1",
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                    "Interface1/0/1",
                 )
                 sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/admin-status",
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/admin-status",
                     "UP",
                 )
                 sess.apply_changes()
@@ -379,7 +379,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         def test():
             with self.conn.start_session() as sess:
                 sess.switch_datastore("running")
-                ifname = "Ethernet1/0/1"
+                ifname = "Interface1/0/1"
                 sess.set_item(
                     f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
                     ifname,
@@ -391,7 +391,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         def test():
             with self.conn.start_session() as sess:
                 sess.switch_datastore("running")
-                ifname = "Ethernet1/0/1"
+                ifname = "Interface1/0/1"
                 sess.delete_item(
                     f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
                 )
@@ -402,7 +402,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         def test():
             with self.conn.start_session() as sess:
                 sess.switch_datastore("running")
-                ifname = "Ethernet1/0/1"
+                ifname = "Interface1/0/1"
                 sess.set_item(
                     f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
                     ifname,
@@ -418,7 +418,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         def test():
             with self.conn.start_session() as sess:
                 sess.switch_datastore("running")
-                ifname = "Ethernet1/0/1"
+                ifname = "Interface1/0/1"
                 sess.delete_item(
                     f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
                 )
@@ -441,7 +441,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         def test():
             with self.conn.start_session() as sess:
                 sess.switch_datastore("running")
-                ifname = "Ethernet1/0/1"
+                ifname = "Interface1/0/1"
                 sess.set_item(
                     f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
                     ifname,
@@ -461,7 +461,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         def test():
             with self.conn.start_session() as sess:
                 sess.switch_datastore("running")
-                ifname = "Ethernet1/0/1"
+                ifname = "Interface1/0/1"
                 sess.set_item(
                     f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
                     ifname,
@@ -524,8 +524,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(data["state"]["enable-flexible-connection"], False)
                 connection = list(data["connections"]["connection"])
                 self.assertEqual(len(connection), 1)
-                self.assertEqual(connection[0]["client-interface"], "Ethernet1/0/1")
-                self.assertEqual(connection[0]["line-interface"], "Ethernet1/1/1")
+                self.assertEqual(connection[0]["client-interface"], "Interface1/0/1")
+                self.assertEqual(connection[0]["line-interface"], "Interface1/1/1")
 
         await asyncio.to_thread(test_oper_cb)
 
@@ -606,20 +606,20 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     True,
                 )
                 sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/name",
-                    "Ethernet1/0/1",
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                    "Interface1/0/1",
                 )
                 sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Ethernet1/1/1']/config/name",
-                    "Ethernet1/1/1",
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                    "Interface1/1/1",
                 )
                 sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Ethernet1/0/1'][line-interface='Ethernet1/1/1']/config/client-interface",
-                    "Ethernet1/0/1",
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Interface1/0/1'][line-interface='Interface1/1/1']/config/client-interface",
+                    "Interface1/0/1",
                 )
                 sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Ethernet1/0/1'][line-interface='Ethernet1/1/1']/config/line-interface",
-                    "Ethernet1/1/1",
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Interface1/0/1'][line-interface='Interface1/1/1']/config/line-interface",
+                    "Interface1/1/1",
                 )
                 sess.apply_changes()
 
