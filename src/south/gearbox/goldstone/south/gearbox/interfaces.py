@@ -156,28 +156,23 @@ class InterfaceServer(ServerBase):
             }
         }
 
-    def get_default(self, key, model="goldstone-interfaces"):
+    def get_default(self, key):
         ctx = self.sess.get_ly_ctx()
-        if model == "goldstone-interfaces":
-            keys = [
-                ["interfaces", "interface", "config", key],
-                ["interfaces", "interface", "ethernet", "config", key],
-                [
-                    "interfaces",
-                    "interface",
-                    "ethernet",
-                    "auto-negotiate",
-                    "config",
-                    key,
-                ],
-            ]
-        elif model == "goldstone-gearbox":
-            keys = [["gearboxes", "gearbox", "config", key]]
-        else:
-            return None
+        keys = [
+            ["interfaces", "interface", "config", key],
+            ["interfaces", "interface", "ethernet", "config", key],
+            [
+                "interfaces",
+                "interface",
+                "ethernet",
+                "auto-negotiate",
+                "config",
+                key,
+            ],
+        ]
 
         for k in keys:
-            xpath = "".join(f"/{model}:{v}" for v in k)
+            xpath = "".join(f"/goldstone-interfaces:{v}" for v in k)
             try:
                 for node in ctx.find_path(xpath):
                     if node.type().name() == "boolean":
@@ -304,11 +299,13 @@ class InterfaceServer(ServerBase):
         modules = await self.taish.list()
         return {k: v for k, v in modules.items() if k not in self.taish._ignored_module}
 
-    async def get_ifname_list(self):
+    async def get_ifname_list(self, gearbox=None):
         modules = await self.list_modules()
 
         interfaces = []
         for loc, module in modules.items():
+            if gearbox and gearbox != loc:
+                continue
             m = await self.taish.get_module(loc)
             for hostif in m.obj.hostifs:
                 interfaces.append(f"Ethernet{loc}/0/{hostif.index+1}")
@@ -339,14 +336,23 @@ class InterfaceServer(ServerBase):
         if len(xpath) < 2 or len(xpath[1][2]) < 1:
             ifnames = await self.get_ifname_list()
         else:
-            if xpath[1][2][0][0] != "name":
+            if xpath[1][2][0][0] == "name":
+                ifnames = [xpath[1][2][0][1]]
+            elif xpath[1][2][0][0] == "state/goldstone-gearbox:associated-gearbox":
+                ifnames = await self.get_ifname_list(xpath[1][2][0][1])
+            else:
                 logger.warn(f"invalid request: {xpath}")
                 return
-            ifnames = [xpath[1][2][0][1]]
 
         interfaces = []
         for ifname in ifnames:
-            i = {"name": ifname, "config": {"name": ifname}}
+            obj, module = await self.ifname2taiobj(ifname, with_module=True)
+            i = {
+                "name": ifname,
+                "config": {"name": ifname},
+                "state": {"associated-gearbox": module.obj.location},
+            }
+
             if len(xpath) == 3 and xpath[2][1] == "name":
                 interfaces.append(i)
                 continue
@@ -364,22 +370,22 @@ class InterfaceServer(ServerBase):
                     v["transponder"] = t
                 i["component-connection"] = v
 
-            obj, module = await self.ifname2taiobj(ifname, with_module=True)
-
-            if (await module.get("oper-status")) != "ready":
-                i["state"] = {"admin-status": "DOWN", "oper-status": "DOWN"}
+            if len(xpath) == 3 and xpath[2][1] == "component-connection":
                 interfaces.append(i)
                 continue
 
-            state = {}
+            if (await module.get("oper-status")) != "ready":
+                i["state"]["admin-status"] = "DOWN"
+                i["state"]["oper-status"] = "DOWN"
+                interfaces.append(i)
+                continue
+
             try:
-                state["admin-status"] = (
+                i["state"]["admin-status"] = (
                     "DOWN" if await obj.get("tx-dis") == "true" else "UP"
                 )
             except taish.TAIException:
                 pass
-
-            i["state"] = state
 
             state = {}
             try:

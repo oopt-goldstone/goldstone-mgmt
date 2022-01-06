@@ -52,8 +52,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         with self.conn.start_session() as sess:
             sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-interfaces")
             sess.replace_config({}, "goldstone-gearbox")
+            sess.replace_config({}, "goldstone-interfaces")
             sess.apply_changes()
 
         def noop():
@@ -191,6 +191,12 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(v, ["Ethernet1/0/1", "Ethernet1/1/1"])
                 v = sess.get_data("/goldstone-interfaces:interfaces/interface")
                 self.assertEqual(
+                    v["interfaces"]["interface"]["Ethernet1/0/1"]["state"][
+                        "associated-gearbox"
+                    ],
+                    "1",
+                )
+                self.assertEqual(
                     v["interfaces"]["interface"]["Ethernet1/0/1"][
                         "component-connection"
                     ]["platform"]["component"],
@@ -234,6 +240,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
                 ("admin-status", "up"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
@@ -268,6 +278,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
                 ("admin-status", "down"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
@@ -301,6 +315,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
                 ("admin-status", "up"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
@@ -336,6 +354,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
                 ("admin-status", "up"),
                 ("tx-dis", "false"),
                 ("fec-type", "rs"),
@@ -499,12 +521,109 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 data = list(data["gearboxes"]["gearbox"])[0]
                 self.assertEqual(data["state"]["admin-status"], "UP")
                 self.assertEqual(data["state"]["oper-status"], "UP")
+                self.assertEqual(data["state"]["enable-flexible-connection"], False)
                 connection = list(data["connections"]["connection"])
                 self.assertEqual(len(connection), 1)
                 self.assertEqual(connection[0]["client-interface"], "Ethernet1/0/1")
                 self.assertEqual(connection[0]["line-interface"], "Ethernet1/1/1")
 
         await asyncio.to_thread(test_oper_cb)
+
+    async def test_gearbox_invalid_creation(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        await gbserver.start()
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='10']/config/name", "10"
+                )
+                with self.assertRaises(sysrepo.SysrepoCallbackFailedError):
+                    sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+    async def test_gearbox_enable_flexible_connection(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        await gbserver.start()
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
+                )
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
+                    True,
+                )
+                sess.apply_changes()
+                self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
+                self.set_logs = []  # clear set_logs
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
+                    False,
+                )
+                sess.apply_changes()
+                self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
+
+        await asyncio.to_thread(test)
+
+    async def test_gearbox_create_connection(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        await gbserver.start()
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
+                )
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
+                    True,
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/name",
+                    "Ethernet1/0/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Ethernet1/1/1']/config/name",
+                    "Ethernet1/1/1",
+                )
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Ethernet1/0/1'][line-interface='Ethernet1/1/1']/config/client-interface",
+                    "Ethernet1/0/1",
+                )
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Ethernet1/0/1'][line-interface='Ethernet1/1/1']/config/line-interface",
+                    "Ethernet1/1/1",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
 
     async def asyncTearDown(self):
         [p.stop() for p in self.patchers]

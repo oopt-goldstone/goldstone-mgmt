@@ -22,7 +22,12 @@ module goldstone-gearbox {
   }
 
   grouping gearbox-connection-config {
-
+    leaf client-interface {
+      type gs-if:interface-ref;
+    }
+    leaf line-interface {
+      type gs-if:interface-ref;
+    }
   }
 
   grouping gearbox-connection-state {
@@ -34,10 +39,14 @@ module goldstone-gearbox {
       list connection {
         key "client-interface line-interface";
         leaf client-interface {
-          type gs-if:interface-ref;
+          type leafref {
+            path "../config/client-interface";
+          }
         }
         leaf line-interface {
-          type gs-if:interface-ref;
+          type leafref {
+            path "../config/line-interface";
+          }
         }
         container config {
           uses gearbox-connection-config;
@@ -61,6 +70,17 @@ module goldstone-gearbox {
         enum DOWN;
       }
       default UP;
+    }
+
+    leaf enable-flexible-connection {
+      description
+        "enabling this allows user to configure client-line interface connection flexibly.
+        If true, only connections in the running datastore get configured in the hardware.
+        If false, the system uses the default mapping. This can't be disabled if the running datastore
+        contains configuration that conflicts with the default mapping. Enabling this without any configuration
+        in the running datastore removes all connection hence no traffic forwarding happens.";
+      type boolean;
+      default false;
     }
   }
 
@@ -97,6 +117,14 @@ module goldstone-gearbox {
   }
 
   uses gearbox-top;
+
+  augment "/gs-if:interfaces/gs-if:interface/gs-if:state" {
+    leaf associated-gearbox {
+      type leafref {
+        path "/gs-gb:gearboxes/gs-gb:gearbox/gs-gb:name";
+      }
+    }
+  }
 
   deviation "/gs-if:interfaces/gs-if:interface/gs-if:ethernet/gs-if:config/gs-if:fec" {
       deviate add {
