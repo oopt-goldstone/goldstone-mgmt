@@ -126,6 +126,12 @@ module goldstone-gearbox {
     }
   }
 
+  deviation "/gs-if:interfaces/gs-if:interface/gs-if:config/gs-if:interface-type" {
+      deviate add {
+        default IF_ETHERNET;
+      }
+  }
+
   deviation "/gs-if:interfaces/gs-if:interface/gs-if:ethernet/gs-if:config/gs-if:fec" {
       deviate add {
         default RS;

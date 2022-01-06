@@ -67,6 +67,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         async def set_(*args):
             self.set_logs.append(args)
 
+        async def set_multiple(*args):
+            for a in args[0]:
+                self.set_logs.append(a)
+
         async def get(*args, **kwargs):
             if args[0] in ["alarm-notification", "notify"]:
                 return "(nil)"
@@ -98,6 +102,9 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
             else:
                 return mock.MagicMock()
+
+        async def get_multiple(*args, **kwargs):
+            return [await get(name) for name in args[0]]
 
         async def get_attribute_capability(*args, **kwargs):
             m = mock.MagicMock()
@@ -141,6 +148,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             obj.monitor = monitor
             obj.get = get
             obj.set = set_
+            obj.set_multiple = set_multiple
+            obj.get_multiple = get_multiple
             obj.get_attribute_capability = get_attribute_capability
             obj.index = 0
             obj.oid = oid
@@ -624,6 +633,42 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 sess.apply_changes()
 
         await asyncio.to_thread(test)
+
+    async def test_interface_otn(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                    "Interface1/0/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/interface-type",
+                    "IF_OTN",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("provision-mode", "serdes-only"),
+                ("signal-rate", "otu4"),
+                ("tx-dis", "true"),
+                ("mtu", 10000),
+                ("fec-type", "rs"),
+            ],
+        )
 
     async def asyncTearDown(self):
         [p.stop() for p in self.patchers]

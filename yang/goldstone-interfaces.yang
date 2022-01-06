@@ -40,6 +40,7 @@ module goldstone-interfaces {
   typedef interface-type {
     type enumeration {
       enum IF_ETHERNET;
+      enum IF_OTN;
     }
   }
 
@@ -243,6 +244,25 @@ module goldstone-interfaces {
     }
   }
 
+  grouping otn-interface-config {
+  }
+
+  grouping otn-interface-state {
+  }
+
+  grouping otn-top {
+    container otn {
+      container config {
+        uses otn-interface-config;
+      }
+      container state {
+        config false;
+        uses otn-interface-config;
+        uses otn-interface-state;
+      }
+    }
+  }
+
   grouping interface-common-state {
     leaf oper-status {
       type enumeration {
@@ -255,10 +275,6 @@ module goldstone-interfaces {
          This leaf has the same semantics as ifOperStatus.";
       reference
         "RFC 2863: The Interfaces Group MIB - ifOperStatus";
-    }
-
-    leaf interface-type {
-      type interface-type;
     }
 
     leaf lanes {
@@ -532,6 +548,10 @@ module goldstone-interfaces {
         "RFC 2863: The Interfaces Group MIB - ifAdminStatus";
     }
 
+    leaf interface-type {
+      type interface-type;
+    }
+
   }
 
   grouping interfaces-top {
@@ -554,6 +574,7 @@ module goldstone-interfaces {
         }
 
         uses ethernet-top;
+        uses otn-top;
       }
     }
   }
