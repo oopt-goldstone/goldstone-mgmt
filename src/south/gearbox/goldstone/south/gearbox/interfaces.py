@@ -49,13 +49,13 @@ class IfChangeHandler(ChangeHandler):
                 leaf = self.xpath[-1][1]
                 d = self.server.get_default(leaf)
                 if d:
-                    self.value = self.to_tai_value(d, name)
+                    self.value.append(self.to_tai_value(d, name))
                 elif cap.default_value == "":  # and is_deleted
                     raise sysrepo.SysrepoInvalArgError(
                         f"no default value. cannot remove the configuration"
                     )
                 else:
-                    self.value = cap.default_value
+                    self.value.append(cap.default_value)
             else:
                 v = self.to_tai_value(self.change.value, name)
                 if cap.min != "" and float(cap.min) > float(v):
@@ -80,6 +80,9 @@ class IfChangeHandler(ChangeHandler):
         if not self.tai_attr_name:
             return
         self.original_value = await self.obj.get_multiple(self.tai_attr_name)
+        logger.debug(
+            f"applying: {self.tai_attr_name} {self.original_value} => {self.value}"
+        )
         await self.obj.set_multiple(list(zip(self.tai_attr_name, self.value)))
 
     async def revert(self, user):
@@ -88,7 +91,7 @@ class IfChangeHandler(ChangeHandler):
         logger.warning(
             f"reverting: {self.tai_attr_name} {self.value} => {self.original_value}"
         )
-        await self.obj.set_multiple(zip(self.tai_attr_name, self.original_value))
+        await self.obj.set_multiple(list(zip(self.tai_attr_name, self.original_value)))
 
 
 class AdminStatusHandler(IfChangeHandler):
