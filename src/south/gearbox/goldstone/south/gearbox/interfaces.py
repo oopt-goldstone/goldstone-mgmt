@@ -139,6 +139,15 @@ class InterfaceTypeHandler(IfChangeHandler):
                 return "otu4"
 
 
+class MFITypeHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "otn-mfi-type"
+
+    def to_tai_value(self, v, attr_name):
+        return v.lower()
+
+
 def pcs_status2oper_status(pcs):
     status = "DOWN"
     if (
@@ -183,6 +192,11 @@ class InterfaceServer(ServerBase):
                                 "enabled": NoOp,
                             }
                         },
+                    },
+                    "otn": {
+                        "config": {
+                            "mfi-type": MFITypeHandler,
+                        }
                     },
                 }
             }

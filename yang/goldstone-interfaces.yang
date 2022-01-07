@@ -245,6 +245,12 @@ module goldstone-interfaces {
   }
 
   grouping otn-interface-config {
+    leaf mfi-type {
+      type enumeration {
+        enum OTL;
+        enum FOIC;
+      }
+    }
   }
 
   grouping otn-interface-state {
