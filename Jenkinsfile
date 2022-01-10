@@ -3,7 +3,7 @@ pipeline {
 
   parameters {
     string(name: 'DEVICE', defaultValue: '10.10.10.115', description: 'IP address of the test device')
-    string(name: 'ARM_DEVICE', defaultValue: '10.10.10.119', description: 'IP address of the test device')
+    string(name: 'ARM_DEVICE', defaultValue: '10.10.10.118', description: 'IP address of the test device')
     booleanParam(name: 'FORCE_BUILD_BUILDER', defaultValue: false, description: 'build builder image forcibly')
   }
 
