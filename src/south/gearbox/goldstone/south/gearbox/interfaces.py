@@ -207,6 +207,7 @@ class InterfaceServer(ServerBase):
         keys = [
             ["interfaces", "interface", "config", key],
             ["interfaces", "interface", "ethernet", "config", key],
+            ["interfaces", "interface", "otn", "config", key],
             [
                 "interfaces",
                 "interface",
@@ -236,12 +237,32 @@ class InterfaceServer(ServerBase):
             config = self.get_running_data(
                 xpath, default={}, include_implicit_defaults=True
             )
-            admin_status = config.get("config", {}).get("admin-status")
-            if admin_status == None:
-                admin_status = self.get_default("admin-status")
-            value = "false" if admin_status == "UP" else "true"
-
             obj = await self.ifname2taiobj(ifname)
+            iftype = config.get("config", {}).get(
+                "interface-type", self.get_default("interface-type")
+            )
+            if iftype == "IF_OTN":
+                mfi = (
+                    config.get("otn", {})
+                    .get("config", {})
+                    .get("mfi-type", self.get_default("mfi-type"))
+                )
+                await obj.set_multiple(
+                    [
+                        ("provision-mode", "serdes-only"),
+                        ("signal-rate", "otu4"),
+                        ("otn-mfi-type", mfi.lower()),
+                    ]
+                )
+            elif iftype == "IF_ETHERNET":
+                await obj.set_multiple(
+                    [("provision-mode", "normal"), ("signal-rate", "100-gbe")]
+                )
+
+            admin_status = config.get("config", {}).get(
+                "admin-status", self.get_default("admin-status")
+            )
+            value = "false" if admin_status == "UP" else "true"
             await obj.set("tx-dis", value)
 
             fec = config.get("ethernet", {}).get("config", {}).get("fec")
