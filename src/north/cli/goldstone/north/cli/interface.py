@@ -359,10 +359,15 @@ def set_interface_type(session, ifnames, value):
         if value:
             sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
             sr_op.set_data(
+                f"{xpath}/config/interface-type", "IF_ETHERNET", no_apply=True
+            )
+            sr_op.set_data(
                 f"{xpath}/ethernet/config/interface-type", value, no_apply=True
             )
+            sr_op.delete_data(f"{xpath}/otn", no_apply=True)
         else:
             sr_op.delete_data(f"{xpath}/ethernet/config/interface-type", no_apply=True)
+            sr_op.delete_data(f"{xpath}/config/interface-type", no_apply=True)
     sr_op.apply()
 
 
@@ -374,8 +379,9 @@ def set_otn_interface_type(session, ifnames, value):
             sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
             sr_op.set_data(f"{xpath}/config/interface-type", "IF_OTN", no_apply=True)
             sr_op.set_data(f"{xpath}/otn/config/mfi-type", value.upper(), no_apply=True)
+            sr_op.delete_data(f"{xpath}/ethernet/config/interface-type", no_apply=True)
         else:
-            sr_op.delete_data(f"{xpath}/otn/config/mfi-type", no_apply=True)
+            sr_op.delete_data(f"{xpath}/otn", no_apply=True)
             sr_op.delete_data(f"{xpath}/config/interface-type", no_apply=True)
     sr_op.apply()
 
