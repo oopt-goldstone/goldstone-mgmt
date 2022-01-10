@@ -341,22 +341,35 @@ class TestSouthGearbox(TestBase):
     def test_otn_interface(self):
         self.gscli("interface Interface1/0/1; interface-type otn otl")
         time.sleep(2)
-        self.gscli("interface Interface1/0/1; show")
+        output = self.gscli("interface Interface1/0/1; show")
+        self.assertTrue("OTL" in output)
+
         self.gscli("interface Interface1/1/1; interface-type otn otl")
         time.sleep(2)
-        self.gscli("interface Interface1/1/1; show")
+        output = self.gscli("interface Interface1/1/1; show")
+        self.assertTrue("OTL" in output)
+
         self.gscli("interface Interface1/0/1; show")
 
         self.gscli("interface Interface1/0/1; interface-type otn foic")
         time.sleep(2)
-        self.gscli("interface Interface1/0/1; show")
+        output = self.gscli("interface Interface1/0/1; show")
+        self.assertTrue("FOIC" in output)
+
         self.gscli("interface Interface1/1/1; interface-type otn foic")
         time.sleep(2)
-        self.gscli("interface Interface1/1/1; show")
+        output = self.gscli("interface Interface1/1/1; show")
+        self.assertTrue("FOIC" in output)
+
         self.gscli("interface Interface1/0/1; show")
+        output = self.gscli("show running-config interface")
+        self.assertTrue("interface-type otn foic" in output)
 
         self.gscli("interface Interface1/1/1; no interface-type otn")
         self.gscli("interface Interface1/0/1; no interface-type otn")
+        output = self.gscli("show running-config interface")
+        self.assertTrue("interface-type otn" not in output)
+
         time.sleep(2)
         self.gscli("interface Interface1/1/1; show")
         self.gscli("interface Interface1/0/1; show")

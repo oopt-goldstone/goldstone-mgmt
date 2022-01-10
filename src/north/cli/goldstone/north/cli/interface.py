@@ -181,6 +181,12 @@ def run_conf(session):
                     elif value == "UP":
                         stdout.info("  admin-status up")
 
+        otn = data.get("otn")
+        if otn:
+            mfi = otn.get("config", {}).get("mfi-type")
+            if mfi:
+                stdout.info(f"  interface-type otn {mfi.lower()}")
+
         ethernet = data.get("ethernet")
         if ethernet:
             config = ethernet.get("config", {})
