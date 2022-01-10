@@ -78,6 +78,15 @@ class FECHandler(IfChangeHandler):
 class IfTypeHandler(IfChangeHandler):
     def validate(self, user):
         if self.type in ["created", "modified"]:
+            if self.change.value != "IF_ETHERNET":
+                raise sysrepo.SysrepoInvalArgError(
+                    f"Unsupported interface type {self.change.value}"
+                )
+
+
+class EthernetIfTypeHandler(IfChangeHandler):
+    def validate(self, user):
+        if self.type in ["created", "modified"]:
             self.server.validate_interface_type(self.ifname, self.change.value)
 
     async def apply(self, user):
@@ -253,12 +262,13 @@ class InterfaceServer(ServerBase):
                         "admin-status": AdminStatusHandler,
                         "name": NoOp,
                         "description": NoOp,
+                        "interface-type": IfTypeHandler,
                     },
                     "ethernet": {
                         "config": {
                             "mtu": MTUHandler,
                             "fec": FECHandler,
-                            "interface-type": IfTypeHandler,
+                            "interface-type": EthernetIfTypeHandler,
                             "speed": SpeedHandler,
                         },
                         "breakout": {
