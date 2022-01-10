@@ -352,6 +352,20 @@ def set_interface_type(session, ifnames, value):
     sr_op.apply()
 
 
+def set_otn_interface_type(session, ifnames, value):
+    sr_op = sysrepo_wrap(session)
+    for ifname in ifnames:
+        xpath = ifxpath(ifname)
+        if value:
+            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
+            sr_op.set_data(f"{xpath}/config/interface-type", "IF_OTN", no_apply=True)
+            sr_op.set_data(f"{xpath}/otn/config/mfi-type", value.upper(), no_apply=True)
+        else:
+            sr_op.delete_data(f"{xpath}/otn/config/mfi-type", no_apply=True)
+            sr_op.delete_data(f"{xpath}/config/interface-type", no_apply=True)
+    sr_op.apply()
+
+
 def set_mtu(session, ifnames, value):
     sr_op = sysrepo_wrap(session)
     for ifname in ifnames:
@@ -611,7 +625,27 @@ class SpeedCommand(Command):
             set_speed(get_session(self), self.context.ifnames, line[0])
 
 
+class InterfaceTypeOTNCommand(Command):
+    def arguments(self):
+        if self.root.name != "no":
+            return ["otl", "foic"]
+
+    def exec(self, line):
+        if self.root.name == "no":
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            set_otn_interface_type(get_session(self), self.context.ifnames, None)
+        else:
+            if len(line) != 1:
+                raise InvalidInput(
+                    f"usage: {self.name_all()} [{'|'.join(self.list())}]"
+                )
+            set_otn_interface_type(get_session(self), self.context.ifnames, line[0])
+
+
 class InterfaceTypeCommand(Command):
+    COMMAND_DICT = {"otn": InterfaceTypeOTNCommand}
+
     def arguments(self):
         if self.root.name != "no":
             return [

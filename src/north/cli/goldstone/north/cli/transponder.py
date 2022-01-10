@@ -314,7 +314,7 @@ class TransponderShowCommand(ShowCommand):
         if len(line) != 0:
             if line[0] == "details":
                 return self.show(detail=True)
-            return ctx.root().show(line)
+            return ctx.root().exec(f"show {' '.join(line)}")
 
         self.show()
 
