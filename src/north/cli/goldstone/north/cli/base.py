@@ -375,7 +375,7 @@ class Context(object):
             c = FuzzyCompleter(c)
         return c
 
-    def exec_host(self, cmd):
+    def exec_host(self, line):
         line[0] = line[0][1:]
         try:
             subprocess.run(" ".join(line), shell=True)
