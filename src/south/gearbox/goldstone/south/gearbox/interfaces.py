@@ -420,7 +420,7 @@ class InterfaceServer(ServerBase):
                 interfaces.append(i)
                 continue
 
-            if (await module.get("oper-status")) != "ready":
+            if (await module.get("admin-status")) != "up":
                 i["state"]["admin-status"] = "DOWN"
                 i["state"]["oper-status"] = "DOWN"
                 interfaces.append(i)
