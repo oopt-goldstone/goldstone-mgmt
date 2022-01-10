@@ -124,6 +124,9 @@ module goldstone-gearbox {
         path "/gs-gb:gearboxes/gs-gb:gearbox/gs-gb:name";
       }
     }
+    leaf is-connected {
+      type boolean;
+    }
   }
 
   deviation "/gs-if:interfaces/gs-if:interface/gs-if:config/gs-if:interface-type" {

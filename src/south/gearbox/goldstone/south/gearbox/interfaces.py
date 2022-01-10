@@ -433,36 +433,40 @@ class InterfaceServer(ServerBase):
             except taish.TAIException:
                 pass
 
-            state = {}
-            try:
-                state["fec"] = (await obj.get("fec-type")).upper()
-            except taish.TAIException:
-                pass
+            signal_rate = await obj.get("signal-rate")
+            connected = await obj.get("connected-interface")
+            i["state"]["is-connected"] = connected != "oid:0x0"
+            if signal_rate == "otu4":
+                i["state"]["oper-status"] = "UP" if connected != "oid:0x0" else "DOWN"
+            else:
+                state = {}
+                try:
+                    state["fec"] = (await obj.get("fec-type")).upper()
+                except taish.TAIException:
+                    pass
 
-            try:
-                state["mtu"] = int(await obj.get("mtu"))
-            except taish.TAIException:
-                pass
+                try:
+                    state["mtu"] = int(await obj.get("mtu"))
+                except taish.TAIException:
+                    pass
 
-            try:
-                state["speed"] = (
-                    "SPEED_100G"
-                    if await obj.get("signal-rate") == "100-gbe"
-                    else "SPEED_UNKNOWN"
-                )
-            except taish.TAIException:
-                pass
+                try:
+                    state["speed"] = (
+                        "SPEED_100G" if signal_rate == "100-gbe" else "SPEED_UNKNOWN"
+                    )
+                except taish.TAIException:
+                    pass
 
-            i["ethernet"] = {"state": state}
+                i["ethernet"] = {"state": state}
 
-            try:
-                pcs = json.loads(await obj.get("pcs-status", json=True))
-                serdes = json.loads(await obj.get("serdes-status", json=True))
-                i["state"]["oper-status"] = pcs_status2oper_status(pcs)
-                state = {"pcs-status": pcs, "serdes-status": serdes}
-                i["ethernet"]["pcs"] = {"state": state}
-            except taish.TAIException:
-                pass
+                try:
+                    pcs = json.loads(await obj.get("pcs-status", json=True))
+                    serdes = json.loads(await obj.get("serdes-status", json=True))
+                    i["state"]["oper-status"] = pcs_status2oper_status(pcs)
+                    state = {"pcs-status": pcs, "serdes-status": serdes}
+                    i["ethernet"]["pcs"] = {"state": state}
+                except taish.TAIException:
+                    pass
 
             interfaces.append(i)
 
