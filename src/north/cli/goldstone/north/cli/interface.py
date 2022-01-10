@@ -62,13 +62,21 @@ def ifxpath(ifname):
     return f"{XPATH}[name='{ifname}']"
 
 
-def interface_names(session):
+def interface_names(session, ptn=None):
     sr_op = sysrepo_wrap(session)
     try:
         data = sr_op.get_data(f"{XPATH}/name", "operational")
     except sr.SysrepoNotFoundError:
         raise InvalidInput("no interface found")
-    return natsorted(v["name"] for v in data["interfaces"]["interface"])
+    if ptn:
+        try:
+            ptn = re.compile(ptn)
+        except re.error:
+            raise InvalidInput(f"failed to compile {ptn} as a regular expression")
+        f = ptn.match
+    else:
+        f = lambda _: True
+    return natsorted(v["name"] for v in data["interfaces"]["interface"] if f(v["name"]))
 
 
 def get_interface_list(session, datastore):
@@ -778,12 +786,7 @@ class InterfaceContext(Context):
         super().__init__(parent)
         self.session = self.root().conn.start_session()
         self.name = ifname
-        try:
-            ptn = re.compile(ifname)
-        except re.error:
-            raise InvalidInput(f"failed to compile {ifname} as a regular expression")
-
-        ifnames = [i for i in interface_names(self.session) if ptn.match(i)]
+        ifnames = interface_names(self.session, ifname)
 
         if len(ifnames) == 0:
             raise InvalidInput(f"no interface found: {ifname}")
@@ -936,13 +939,21 @@ class InterfaceCommand(Command):
 
     def exec(self, line):
         if len(line) != 1:
-            raise InvalidInput("usage: interface <ifname>")
-        return InterfaceContext(self.context, line[0])
+            raise InvalidInput(f"usage: {self.name_all()} <ifname>")
+        if self.root.name == "no":
+            sess = get_session(self)
+            sr_op = sysrepo_wrap(sess)
+            for name in interface_names(sess, line[0]):
+                sr_op.delete_data(ifxpath(name), no_apply=True)
+            sr_op.apply()
+        else:
+            return InterfaceContext(self.context, line[0])
 
 
 Root.register_command(
     "interface",
     InterfaceCommand,
     when=ModelExists("goldstone-interfaces"),
+    add_no=True,
     no_completion_on_exec=True,
 )
