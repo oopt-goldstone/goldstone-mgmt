@@ -401,6 +401,8 @@ class InterfaceServer(ServerBase):
         xpath = list(libyang.xpath_split(req_xpath))
         logger.debug(f"xpath: {xpath}")
 
+        counter_only = "counters" in req_xpath
+
         if len(xpath) < 2 or len(xpath[1][2]) < 1:
             ifnames = await self.get_ifname_list()
         else:
@@ -445,6 +447,26 @@ class InterfaceServer(ServerBase):
             if (await module.get("admin-status")) != "up":
                 i["state"]["admin-status"] = "DOWN"
                 i["state"]["oper-status"] = "DOWN"
+                interfaces.append(i)
+                continue
+
+            counters = {}
+            for d in ["in", "out"]:
+                c = []
+                for field in ["octets", "fcs-errors", "mac-errors"]:
+                    name = f"ethernet-{d}-{field}"
+                    try:
+                        v = int(await obj.get(name))
+                    except:
+                        v = 0
+                    c.append(v)
+
+                counters[f"{d}-octets"] = c[0]
+                counters[f"{d}-errors"] = c[1] + c[2]
+
+            i["state"]["counters"] = counters
+
+            if counter_only:
                 interfaces.append(i)
                 continue
 
