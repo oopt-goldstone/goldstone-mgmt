@@ -342,24 +342,24 @@ class TestSouthGearbox(TestBase):
         self.gscli("interface Interface1/0/1; interface-type otn otl")
         time.sleep(2)
         output = self.gscli("interface Interface1/0/1; show")
-        self.assertTrue("OTL" in output)
+        self.assertTrue("otl" in output)
 
         self.gscli("interface Interface1/1/1; interface-type otn otl")
         time.sleep(2)
         output = self.gscli("interface Interface1/1/1; show")
-        self.assertTrue("OTL" in output)
+        self.assertTrue("otl" in output)
 
         self.gscli("interface Interface1/0/1; show")
 
         self.gscli("interface Interface1/0/1; interface-type otn foic")
         time.sleep(2)
         output = self.gscli("interface Interface1/0/1; show")
-        self.assertTrue("FOIC" in output)
+        self.assertTrue("foic" in output)
 
         self.gscli("interface Interface1/1/1; interface-type otn foic")
         time.sleep(2)
         output = self.gscli("interface Interface1/1/1; show")
-        self.assertTrue("FOIC" in output)
+        self.assertTrue("foic" in output)
 
         self.gscli("interface Interface1/0/1; show")
         output = self.gscli("show running-config interface")
