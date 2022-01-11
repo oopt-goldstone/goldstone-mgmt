@@ -125,6 +125,9 @@ module goldstone-gearbox {
       }
     }
     leaf is-connected {
+      description
+        "true when the interface is connected with another interface on the other side of the gearbox.
+        when false, traffic can't traverse the gearbox";
       type boolean;
     }
   }
