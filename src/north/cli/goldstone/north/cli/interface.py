@@ -577,6 +577,7 @@ def show(session, ifnames):
         otn = data.get("otn", {})
         state = otn.get("state")
         add_to_rows("mfi-type", state, lambda v: v.lower())
+        state = data.get("state")
         add_to_rows("is-connected", state, lambda v: "true" if v else "false")
 
         stdout.info(tabulate(rows))
