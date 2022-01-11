@@ -21,8 +21,6 @@ from . import vlan
 from . import mgmt_if
 from . import gearbox
 
-logger = logging.getLogger(__name__)
-
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
@@ -112,18 +110,17 @@ def main():
     parser.add_argument("-x", "--stdin", action="store_true")
     args = parser.parse_args()
 
-    formatter = logging.Formatter(
-        "[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
     if args.verbose:
+        formatter = logging.Formatter(
+            "[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        logger = logging.getLogger("goldstone.north.cli")
+        console = logging.StreamHandler()
         console.setLevel(logging.DEBUG)
-        logging.basicConfig(level=logging.DEBUG)
-
-    console.setFormatter(formatter)
+        logger.setLevel(logging.DEBUG)
+        console.setFormatter(formatter)
+        logger.addHandler(console)
 
     sh = logging.StreamHandler(sys.stdout)
     sh.setLevel(logging.DEBUG)
