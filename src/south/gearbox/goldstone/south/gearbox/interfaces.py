@@ -458,7 +458,17 @@ class InterfaceServer(ServerBase):
             connected = await obj.get("connected-interface")
             i["state"]["is-connected"] = connected != "oid:0x0"
             if signal_rate == "otu4":
-                i["state"]["oper-status"] = "UP" if connected != "oid:0x0" else "DOWN"
+                i["state"]["oper-status"] = (
+                    "UP"
+                    if connected != "oid:0x0" and i["state"]["admin-status"] == "UP"
+                    else "DOWN"
+                )
+                state = {}
+                try:
+                    state["mfi-type"] = (await obj.get("otn-mfi-type")).upper()
+                except taish.TAIException:
+                    pass
+                i["otn"] = {"state": state}
             else:
                 state = {}
                 try:
