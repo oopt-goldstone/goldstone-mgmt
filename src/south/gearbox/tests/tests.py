@@ -91,6 +91,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return "up"
             elif args[0] == "mtu":
                 return DEFAULT_MTU
+            elif args[0] == "mru":
+                return DEFAULT_MTU
             elif args[0] == "index":
                 return 0
             elif args[0] == "serdes-status":
@@ -259,11 +261,13 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
             ],
         )
 
@@ -301,11 +305,13 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
             ],
         )
         gbserver.stop()
@@ -342,11 +348,13 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
             ],
         )
 
@@ -385,11 +393,13 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("tx-dis", "false"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
             ],
         )
 
@@ -681,7 +691,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("provision-mode", "serdes-only"),
                 ("signal-rate", "otu4"),
                 ("tx-dis", "true"),
-                ("mtu", 10000),
+                ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
             ],
         )
