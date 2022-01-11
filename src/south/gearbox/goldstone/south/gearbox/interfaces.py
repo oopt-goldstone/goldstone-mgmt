@@ -115,7 +115,7 @@ class FECHandler(IfChangeHandler):
 class MTUHandler(IfChangeHandler):
     async def _init(self, user):
         await super()._init(user)
-        self.tai_attr_name = "mtu"
+        self.tai_attr_name = ["mtu", "mru"]
 
     def to_tai_value(self, v, attr_name):
         return v
@@ -274,6 +274,7 @@ class InterfaceServer(ServerBase):
             if mtu == None:
                 mtu = int(self.get_default("mtu"))
             await obj.set("mtu", mtu)
+            await obj.set("mru", mtu)
 
     async def tai_cb(self, obj, attr_meta, msg):
         m_oid = obj.obj.module_oid
