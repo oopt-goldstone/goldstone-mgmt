@@ -517,69 +517,69 @@ def show(session, ifnames):
                 raise InvalidInput("interface not found")
         data = ly.xpath_get(tree, xpath)
 
-        if "config" in data:
-            data.update(data["config"])
-            del data["config"]
+        logger.debug(f"data: {data}")
 
-        if "state" in data:
-            data.update(data["state"])
-            del data["state"]
+        rows = []
 
-        if "counters" in data:
-            del data["counters"]
+        def add_to_rows(field, v, f=lambda v: v):
+            if v == None:
+                return
+            v = v.get(field)
+            if v == None:
+                return
+            v = f(v)
+            rows.append((field, v))
+            return v
 
-        if "ethernet" in data:
-            ethernet = data["ethernet"]
+        config = data.get("config")
+        state = data.get("state")
+        add_to_rows("name", config)
+        add_to_rows("admin-status", config, lambda v: v.lower())
+        add_to_rows("oper-status", state, lambda v: v.lower())
+        add_to_rows("alias", state)
+        add_to_rows("lanes", state)
+        #        add_to_rows("interface-type", config, lambda v: v.lower().replace("if_", ""))
 
-            if "state" in ethernet:
-                state = ethernet["state"]
-                if "speed" in state:
-                    data["speed"] = speed_yang_to_human(state["speed"])
-                if "fec" in state:
-                    data["fec"] = state["fec"].lower()
-                if "mtu" in state:
-                    data["mtu"] = state["mtu"]
-                if "interface-type" in state:
-                    data["interface-type"] = state["interface-type"]
+        ethernet = data.get("ethernet", {})
+        state = ethernet.get("state")
+        add_to_rows("speed", state, speed_yang_to_human)
+        add_to_rows("fec", state, lambda v: v.lower())
+        add_to_rows("mtu", state)
+        add_to_rows("interface-type", state)
 
-            if "breakout" in ethernet:
-                state = ethernet["breakout"].get("state", {})
-                if "num-channels" in state:
-                    data["breakout"] = breakout_yang_to_human(state)
-                elif "parent" in state:
-                    data["parent"] = state["parent"]
+        breakout = ethernet.get("breakout", {})
+        state = breakout.get("state")
+        add_to_rows("breakout", state, breakout_yang_to_human)
+        add_to_rows("parent", state)
 
-            if "auto-negotiate" in ethernet:
-                autonego = ethernet["auto-negotiate"].get("state")
-                if autonego:
-                    v = "enabled" if autonego["enabled"] else "disabled"
-                    data["auto-negotiate"] = v
-                    v = autonego.get("advertised-speeds")
-                    if v:
-                        v = ",".join(speed_yang_to_human(e) for e in v)
-                        data["advertised-speeds"] = v
+        autonego = ethernet.get("auto-negotiate", {})
+        state = autonego.get("state")
+        add_to_rows("auto-negotiate", state, lambda v: "enabled" if v else "disabled")
+        add_to_rows(
+            "advertised-speeds",
+            state,
+            lambda v: ",".join(speed_yang_to_human(e) for e in v),
+        )
 
-            if "switched-vlan" in ethernet:
-                state = ethernet["switched-vlan"]["state"]
-                data["vlan-mode"] = state["interface-mode"].lower()
-                if data["vlan-mode"] == "trunk":
-                    data["trunk-vlans"] = ", ".join(state["trunk-vlans"])
-                elif data["vlan-mode"] == "access":
-                    data["access-vlan"] = state["access-vlan"]
+        vlan = ethernet.get("switched-vlan", {})
+        state = vlan.get("state")
+        v = add_to_rows("vlan-mode", state, lambda v: v.lower())
+        if v == "trunk":
+            add_to_rows("trunk-vlans", state, lambda v: ", ".join(v))
+        elif v == "access":
+            add_to_rows("access-vlan", state)
 
-            if "pcs" in ethernet:
-                state = ethernet["pcs"].get("state", {})
-                for field in ["pcs-status", "serdes-status"]:
-                    if field in state:
-                        data[field] = ", ".join(state[field])
+        pcs = ethernet.get("pcs", {})
+        state = pcs.get("state")
+        add_to_rows("pcs-status", state, lambda v: ", ".join(v))
+        add_to_rows("serdes-status", state, lambda v: ", ".join(v))
 
-            del data["ethernet"]
+        otn = data.get("otn", {})
+        state = otn.get("state")
+        add_to_rows("mfi-type", state, lambda v: v.lower())
+        add_to_rows("is-connected", state, lambda v: "true" if v else "false")
 
-        for key in ["admin-status", "oper-status"]:
-            if key in data:
-                data[key] = data[key].lower()
-
-        print_tabular(data, "")
+        stdout.info(tabulate(rows))
 
 
 class ShutdownCommand(Command):
