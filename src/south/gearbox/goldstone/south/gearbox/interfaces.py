@@ -232,12 +232,11 @@ class InterfaceServer(ServerBase):
 
     async def reconcile(self):
         prefix = "/goldstone-interfaces:interfaces/interface"
-        for ifname in await self.get_ifname_list():
+        for ifname, obj, module in await self.get_ifname_list():
             xpath = f"{prefix}[name='{ifname}']"
             config = self.get_running_data(
                 xpath, default={}, include_implicit_defaults=True
             )
-            obj = await self.ifname2taiobj(ifname)
             iftype = config.get("config", {}).get(
                 "interface-type", self.get_default("interface-type")
             )
@@ -314,8 +313,8 @@ class InterfaceServer(ServerBase):
                 raise e
 
         return [
-            task(await self.ifname2taiobj(ifname), "alarm-notification")
-            for ifname in await self.get_ifname_list()
+            task(obj, "alarm-notification")
+            for ifname, obj, module in await self.get_ifname_list()
         ]
 
     async def start(self):
@@ -374,11 +373,12 @@ class InterfaceServer(ServerBase):
         for loc, module in modules.items():
             if gearbox and gearbox != loc:
                 continue
-            m = await self.taish.get_module(loc)
-            for hostif in m.obj.hostifs:
-                interfaces.append(f"Interface{loc}/0/{hostif.index+1}")
-            for netif in m.obj.netifs:
-                interfaces.append(f"Interface{loc}/1/{netif.index+1}")
+            for hostif in module.hostifs:
+                interfaces.append(
+                    (f"Interface{loc}/0/{hostif.index+1}", hostif, module)
+                )
+            for netif in module.netifs:
+                interfaces.append((f"Interface{loc}/1/{netif.index+1}", netif, module))
 
         return interfaces
 
@@ -407,7 +407,9 @@ class InterfaceServer(ServerBase):
             ifnames = await self.get_ifname_list()
         else:
             if xpath[1][2][0][0] == "name":
-                ifnames = [xpath[1][2][0][1]]
+                name = xpath[1][2][0][1]
+                obj, module = await self.ifname2taiobj(name, with_module=True)
+                ifnames = [(name, obj, module)]
             elif xpath[1][2][0][0] == "state/goldstone-gearbox:associated-gearbox":
                 ifnames = await self.get_ifname_list(xpath[1][2][0][1])
             else:
@@ -415,8 +417,7 @@ class InterfaceServer(ServerBase):
                 return
 
         interfaces = []
-        for ifname in ifnames:
-            obj, module = await self.ifname2taiobj(ifname, with_module=True)
+        for ifname, obj, module in ifnames:
             i = {
                 "name": ifname,
                 "config": {"name": ifname},
