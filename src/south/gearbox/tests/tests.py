@@ -173,6 +173,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         module.obj.location = "1"
         module.obj.netifs = [get_netif()]
         module.obj.hostifs = [get_hostif()]
+        module.netifs = [get_netif()]
+        module.hostifs = [get_hostif()]
 
         cap = module.get_attribute_capability.return_value
         cap.min = ""
