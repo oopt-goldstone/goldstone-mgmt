@@ -1,0 +1,206 @@
+module goldstone-static-macsec {
+
+  yang-version 1;
+
+  namespace "http://goldstone.net/yang/goldstone-static-macsec";
+  prefix gs-sm;
+
+  import goldstone-interfaces { prefix gs-if; }
+
+  import ietf-yang-types { prefix yang; }
+
+  organization
+    "Goldstone";
+
+  description
+    "This module contains a collection of YANG definitions for
+     managing Goldstone static MACSEC feature.";
+
+  revision 2022-01-21 {
+    description
+      "Initial version.";
+    reference
+      "0.1.0";
+  }
+
+  grouping ethernet-static-macsec-config {
+    leaf key {
+      type binary {
+        length "16"; // 128bit key
+      }
+    }
+  }
+
+  grouping secy-counter-common {
+    leaf unicast-packets-uncontrolled {
+      type yang:counter64;
+    }
+    leaf multicast-packets-uncontrolled {
+      type yang:counter64;
+    }
+    leaf broadcast-packets-uncontrolled {
+      type yang:counter64;
+    }
+    leaf rx-drop-packets-uncontrolled {
+      type yang:counter64;
+    }
+    leaf rx-error-packets-uncontrolled {
+      type yang:counter64;
+    }
+    leaf unicast-packets-controlled {
+      type yang:counter64;
+    }
+    leaf multicast-packets-controlled {
+      type yang:counter64;
+    }
+    leaf broadcast-packets-controlled {
+      type yang:counter64;
+    }
+    leaf rx-drop-packets-controlled {
+      type yang:counter64;
+    }
+    leaf rx-error-packets-controlled {
+      type yang:counter64;
+    }
+    leaf total-bytes-uncontrolled {
+      type yang:counter64;
+    }
+    leaf total-bytes-controlled {
+      type yang:counter64;
+    }
+    leaf packets-transform-error {
+      type yang:counter64;
+    }
+    leaf control-packets {
+      type yang:counter64;
+    }
+    leaf untagged-packets {
+      type yang:counter64;
+    }
+  }
+
+  grouping channel-counter-common {
+    leaf multiple-rule-match {
+      type yang:counter64;
+    }
+    leaf header-parser-drop {
+      type yang:counter64;
+    }
+    leaf rule-mismatch {
+      type yang:counter64;
+    }
+    leaf control-packet-match {
+      type yang:counter64;
+    }
+    leaf data-packet-match {
+      type yang:counter64;
+    }
+    leaf dropped-packets {
+      type yang:counter64;
+    }
+    leaf in-error-packets {
+      type yang:counter64;
+    }
+  }
+
+  grouping ethernet-static-macsec-state {
+    container counters {
+      container ingress {
+        container sa {
+          leaf packets-unchecked {
+            type yang:counter64;
+          }
+          leaf packets-delayed {
+            type yang:counter64;
+          }
+          leaf packets-late {
+            type yang:counter64;
+          }
+          leaf packets-ok {
+            type yang:counter64;
+          }
+          leaf packets-invalid {
+            type yang:counter64;
+          }
+          leaf packets-not-valid {
+            type yang:counter64;
+          }
+          leaf packets-not-using-sa {
+            type yang:counter64;
+          }
+          leaf packets-unused-sa {
+            type yang:counter64;
+          }
+          leaf octets-decrypted {
+            type yang:counter64;
+          }
+          leaf octets-validated {
+            type yang:counter64;
+          }
+        }
+        container secy {
+          uses secy-counter-common;
+
+          leaf no-tag-packets {
+            type yang:counter64;
+          }
+          leaf bad-tag-packets {
+            type yang:counter64;
+          }
+          leaf no-sci-match-packets {
+            type yang:counter64;
+          }
+          leaf unknown-sci-match-packets {
+            type yang:counter64;
+          }
+          leaf tagged-control-packets {
+            type yang:counter64;
+          }
+        }
+        container channel {
+          uses channel-counter-common;
+        }
+      }
+      container egress {
+        container sa {
+          leaf packets-entrypted-protected {
+            type yang:counter64;
+          }
+          leaf packets-too-long {
+            type yang:counter64;
+          }
+          leaf packets-sa-not-in-use {
+            type yang:counter64;
+          }
+          leaf octets-encrypted-protected {
+            type yang:counter64;
+          }
+        }
+        container secy {
+          uses secy-counter-common;
+        }
+        container channel {
+          uses channel-counter-common;
+        }
+      }
+    }
+  }
+
+  grouping ethernet-static-macsec-top {
+    container static-macsec {
+      container config {
+        uses ethernet-static-macsec-config;
+      }
+      container state {
+        config false;
+        uses ethernet-static-macsec-config;
+        uses ethernet-static-macsec-state;
+      }
+    }
+  }
+
+  augment "/gs-if:interfaces/gs-if:interface/gs-if:ethernet" {
+    uses ethernet-static-macsec-top;
+  }
+
+}

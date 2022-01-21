@@ -13,6 +13,8 @@ import itertools
 from goldstone.lib.core import ServerBase
 from concurrent.futures import ProcessPoolExecutor
 from taish import NetIf
+from taish import HostIf
+import base64
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -102,6 +104,20 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     return ["tx-ready", "rx-ready"]
             elif args[0] == "tributary-mapping":
                 return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
+            elif args[0] == "macsec-static-key":
+                return "50462976,117835012,185207048,252579084"
+            elif args[0] == "macsec-ingress-sa-stats":
+                return ",".join(str(i) for i in range(10))
+            elif args[0] == "macsec-egress-sa-stats":
+                return ",".join(str(i) for i in range(4))
+            elif args[0] == "macsec-ingress-secy-stats":
+                return ",".join(str(i) for i in range(20))
+            elif args[0] == "macsec-egress-secy-stats":
+                return ",".join(str(i) for i in range(15))
+            elif args[0] == "macsec-ingress-channel-stats":
+                return ",".join(str(i) for i in range(7))
+            elif args[0] == "macsec-egress-channel-stats":
+                return ",".join(str(i) for i in range(7))
             else:
                 return mock.MagicMock()
 
@@ -145,8 +161,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             msg.attrs = [attr]
             await args[1](obj, None, msg)
 
-        def f(oid):
-            obj = mock.AsyncMock()
+        def f(oid, spec):
+            obj = mock.AsyncMock(spec=spec)
             obj.monitor = monitor
             obj.get = get
             obj.set = set_
@@ -158,10 +174,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             return obj
 
         def get_netif(*args):
-            return f(0x3000000010000)
+            return f(0x3000000010000, NetIf(None, None, None))
 
         def get_hostif(*args):
-            return f(0x2000000010000)
+            return f(0x2000000010000, HostIf(None, None, None))
 
         module = taish.get_module.return_value
         module.monitor = monitor
@@ -270,6 +286,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("macsec-static-key", ""),
             ],
         )
 
@@ -314,6 +331,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("macsec-static-key", ""),
             ],
         )
         gbserver.stop()
@@ -357,6 +375,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("macsec-static-key", ""),
             ],
         )
 
@@ -402,6 +421,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("macsec-static-key", ""),
             ],
         )
 
@@ -698,6 +718,57 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
             ],
         )
+
+    async def test_interface_macsec(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        self.set_logs = []  # clear set_logs
+        key = base64.b64encode(bytearray(list(range(16)))).decode()
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                    "Interface1/1/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/ethernet/goldstone-static-macsec:static-macsec/config/key",
+                    key,
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("tx-dis", "true"),
+                ("provision-mode", "normal"),
+                ("signal-rate", "100-gbe"),
+                ("macsec-static-key", "50462976,117835012,185207048,252579084"),
+                ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
+                ("fec-type", "rs"),
+            ],
+        )
+
+        def test():
+            with self.conn.start_session("operational") as sess:
+                xpath = (
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']"
+                )
+                v = sess.get_data(xpath)
+                v = libyang.xpath_get(v, xpath)
+                self.assertTrue("static-macsec" in v["ethernet"])
+                self.assertEqual(v["ethernet"]["static-macsec"]["state"]["key"], key)
+
+        await asyncio.to_thread(test)
 
     async def asyncTearDown(self):
         [p.stop() for p in self.patchers]
