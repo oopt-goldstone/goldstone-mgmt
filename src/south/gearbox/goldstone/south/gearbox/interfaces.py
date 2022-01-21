@@ -5,6 +5,8 @@ import asyncio
 import sysrepo
 import logging
 import json
+import base64
+import struct
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +150,16 @@ class MFITypeHandler(IfChangeHandler):
         return v.lower()
 
 
+class MACSECStaticKeyHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "macsec-static-key"
+
+    def to_tai_value(self, v, attr_name):
+        v = struct.unpack("IIII", base64.b64decode(v))
+        return ",".join((str(i) for i in v))
+
+
 def pcs_status2oper_status(pcs):
     status = "DOWN"
     if (
@@ -157,6 +169,89 @@ def pcs_status2oper_status(pcs):
     ):
         status = "UP"
     return status
+
+
+def parse_macsec_counters(attrs):
+    counters = {
+        "ingress": {"sa": {}, "secy": {}, "channel": {}},
+        "egress": {"sa": {}, "secy": {}, "channel": {}},
+    }
+    ingress_sa = [int(v) for v in attrs[0].split(",")]
+    counters["ingress"]["sa"]["packets-unchecked"] = ingress_sa[0]
+    counters["ingress"]["sa"]["packets-delayed"] = ingress_sa[1]
+    counters["ingress"]["sa"]["packets-late"] = ingress_sa[2]
+    counters["ingress"]["sa"]["packets-ok"] = ingress_sa[3]
+    counters["ingress"]["sa"]["packets-invalid"] = ingress_sa[4]
+    counters["ingress"]["sa"]["packets-not-valid"] = ingress_sa[5]
+    counters["ingress"]["sa"]["packets-not-using-sa"] = ingress_sa[6]
+    counters["ingress"]["sa"]["packets-unused-sa"] = ingress_sa[7]
+    counters["ingress"]["sa"]["octets-decrypted"] = ingress_sa[8]
+    counters["ingress"]["sa"]["octets-validated"] = ingress_sa[9]
+
+    egress_sa = [int(v) for v in attrs[1].split(",")]
+    counters["egress"]["sa"]["packets-entrypted-protected"] = egress_sa[0]
+    counters["egress"]["sa"]["packets-too-long"] = egress_sa[1]
+    counters["egress"]["sa"]["packets-as-not-in-use"] = egress_sa[2]
+    counters["egress"]["sa"]["octets-encrypted-protected"] = egress_sa[3]
+
+    ingress_secy = [int(v) for v in attrs[2].split(",")]
+    counters["ingress"]["secy"]["unicast-packets-uncontrolled"] = ingress_secy[0]
+    counters["ingress"]["secy"]["multicast-packets-uncontrolled"] = ingress_secy[1]
+    counters["ingress"]["secy"]["broadcast-packets-uncontrolled"] = ingress_secy[2]
+    counters["ingress"]["secy"]["rx-drop-packets-uncontrolled"] = ingress_secy[3]
+    counters["ingress"]["secy"]["rx-error-packets-uncontrolled"] = ingress_secy[4]
+    counters["ingress"]["secy"]["unicast-packets-controlled"] = ingress_secy[5]
+    counters["ingress"]["secy"]["multicast-packets-controlled"] = ingress_secy[6]
+    counters["ingress"]["secy"]["broadcast-packets-controlled"] = ingress_secy[7]
+    counters["ingress"]["secy"]["rx-drop-packets-controlled"] = ingress_secy[8]
+    counters["ingress"]["secy"]["rx-error-packets-controlled"] = ingress_secy[9]
+    counters["ingress"]["secy"]["total-bytes-uncontrolled"] = ingress_secy[10]
+    counters["ingress"]["secy"]["total-bytes-controlled"] = ingress_secy[11]
+    counters["ingress"]["secy"]["packets-transform-error"] = ingress_secy[12]
+    counters["ingress"]["secy"]["control-packets"] = ingress_secy[13]
+    counters["ingress"]["secy"]["untagged-packets"] = ingress_secy[14]
+    counters["ingress"]["secy"]["no-tag-packets"] = ingress_secy[15]
+    counters["ingress"]["secy"]["bad-tag-packets"] = ingress_secy[16]
+    counters["ingress"]["secy"]["no-sci-match-packets"] = ingress_secy[17]
+    counters["ingress"]["secy"]["unknown-sci-match-packets"] = ingress_secy[18]
+    counters["ingress"]["secy"]["tagged-control-packets"] = ingress_secy[19]
+
+    egress_secy = [int(v) for v in attrs[3].split(",")]
+    counters["egress"]["secy"]["unicast-packets-uncontrolled"] = egress_secy[0]
+    counters["egress"]["secy"]["multicast-packets-uncontrolled"] = egress_secy[1]
+    counters["egress"]["secy"]["broadcast-packets-uncontrolled"] = egress_secy[2]
+    counters["egress"]["secy"]["rx-drop-packets-uncontrolled"] = egress_secy[3]
+    counters["egress"]["secy"]["rx-error-packets-uncontrolled"] = egress_secy[4]
+    counters["egress"]["secy"]["unicast-packets-controlled"] = egress_secy[5]
+    counters["egress"]["secy"]["multicast-packets-controlled"] = egress_secy[6]
+    counters["egress"]["secy"]["broadcast-packets-controlled"] = egress_secy[7]
+    counters["egress"]["secy"]["rx-drop-packets-controlled"] = egress_secy[8]
+    counters["egress"]["secy"]["rx-error-packets-controlled"] = egress_secy[9]
+    counters["egress"]["secy"]["total-bytes-uncontrolled"] = egress_secy[10]
+    counters["egress"]["secy"]["total-bytes-controlled"] = egress_secy[11]
+    counters["egress"]["secy"]["packets-transform-error"] = egress_secy[12]
+    counters["egress"]["secy"]["control-packets"] = egress_secy[13]
+    counters["egress"]["secy"]["untagged-packets"] = egress_secy[14]
+
+    ingress_channel = [int(v) for v in attrs[4].split(",")]
+    counters["ingress"]["channel"]["multiple-rule-match"] = ingress_channel[0]
+    counters["ingress"]["channel"]["header-parser-drop"] = ingress_channel[1]
+    counters["ingress"]["channel"]["rule-mismatch"] = ingress_channel[2]
+    counters["ingress"]["channel"]["control-packet-match"] = ingress_channel[3]
+    counters["ingress"]["channel"]["data-packet-match"] = ingress_channel[4]
+    counters["ingress"]["channel"]["dropped-packets"] = ingress_channel[5]
+    counters["ingress"]["channel"]["in-error-packets"] = ingress_channel[6]
+
+    egress_channel = [int(v) for v in attrs[5].split(",")]
+    counters["egress"]["channel"]["multiple-rule-match"] = egress_channel[0]
+    counters["egress"]["channel"]["header-parser-drop"] = egress_channel[1]
+    counters["egress"]["channel"]["rule-mismatch"] = egress_channel[2]
+    counters["egress"]["channel"]["control-packet-match"] = egress_channel[3]
+    counters["egress"]["channel"]["data-packet-match"] = egress_channel[4]
+    counters["egress"]["channel"]["dropped-packets"] = egress_channel[5]
+    counters["egress"]["channel"]["in-error-packets"] = egress_channel[6]
+
+    return counters
 
 
 class InterfaceServer(ServerBase):
@@ -190,6 +285,11 @@ class InterfaceServer(ServerBase):
                         "auto-negotiate": {
                             "config": {
                                 "enabled": NoOp,
+                            }
+                        },
+                        "static-macsec": {
+                            "config": {
+                                "key": MACSECStaticKeyHandler,
                             }
                         },
                     },
@@ -274,6 +374,21 @@ class InterfaceServer(ServerBase):
                 mtu = int(self.get_default("mtu"))
             await obj.set("mtu", mtu)
             await obj.set("mru", mtu)
+
+            if isinstance(obj, taish.NetIf):
+                key = (
+                    config.get("ethernet", {})
+                    .get("static-macsec", {})
+                    .get("config", {})
+                    .get("key")
+                )
+                if key:
+                    key = struct.unpack("IIII", base64.b64decode(key))
+                    key = ",".join((str(i) for i in key))
+                else:
+                    key = ""
+
+                await obj.set("macsec-static-key", key)
 
     async def tai_cb(self, obj, attr_meta, msg):
         m_oid = obj.obj.module_oid
@@ -505,14 +620,38 @@ class InterfaceServer(ServerBase):
                 except taish.TAIException:
                     pass
 
-                try:
-                    state["speed"] = (
-                        "SPEED_100G" if signal_rate == "100-gbe" else "SPEED_UNKNOWN"
-                    )
-                except taish.TAIException:
-                    pass
+                state["speed"] = (
+                    "SPEED_100G" if signal_rate == "100-gbe" else "SPEED_UNKNOWN"
+                )
 
                 i["ethernet"] = {"state": state}
+
+                if isinstance(obj, taish.NetIf):
+                    try:
+                        attrs = await obj.get_multiple(
+                            [
+                                "macsec-static-key",
+                                "macsec-ingress-sa-stats",
+                                "macsec-egress-sa-stats",
+                                "macsec-ingress-secy-stats",
+                                "macsec-egress-secy-stats",
+                                "macsec-ingress-channel-stats",
+                                "macsec-egress-channel-stats",
+                            ]
+                        )
+                        key = attrs[0]
+                        key = [int(v) for v in key.split(",")]
+                        key = struct.pack("IIII", *key)
+                        key = base64.b64encode(key).decode()
+                        counters = parse_macsec_counters(attrs[1:])
+                        i["ethernet"]["static-macsec"] = {
+                            "state": {
+                                "key": key,
+                                "counters": counters,
+                            }
+                        }
+                    except taish.TAIException:
+                        pass
 
                 try:
                     pcs = json.loads(await obj.get("pcs-status", json=True))
