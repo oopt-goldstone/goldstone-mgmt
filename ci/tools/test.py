@@ -316,7 +316,7 @@ class TestSouthGearbox(TestBase):
                 if "oper-status" in line and "up" in line:
                     time.sleep(10)
                     return
-            time.sleep(1)
+            time.sleep(5)
         else:
             raise Exception("gearbox didn't come up")
 

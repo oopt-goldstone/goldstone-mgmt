@@ -24,6 +24,7 @@ MODELS = {
         "goldstone-interfaces",
         "goldstone-gearbox",
         "goldstone-component-connection",
+        "goldstone-static-macsec",
     ],
     "south-system": [
         "goldstone-aaa",
