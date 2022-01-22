@@ -1,5 +1,6 @@
-from .base import InvalidInput, Completer, Command
+from .base import InvalidInput, Completer
 from .cli import (
+    Command,
     Context,
     RunningConfigCommand,
     GlobalShowCommand,
@@ -7,13 +8,11 @@ from .cli import (
     TechSupportCommand,
     ShowCommand,
 )
+from .connector.base import CLIException
 
 from .root import Root
 from prompt_toolkit.completion import WordCompleter
-from .common import sysrepo_wrap, print_tabular
 
-import sysrepo as sr
-import libyang as ly
 import logging
 from tabulate import tabulate
 from natsort import natsorted
@@ -26,6 +25,20 @@ stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 _FREQ_RE = re.compile(r".+[kmgt]?hz$")
+
+# Function to print data from show command with tabulate library
+def print_tabular(h, table_title=""):
+    if table_title != "":
+        stdout.info(f"\n{table_title}")
+
+    table = []
+    skip_attrs = ["index", "location"]
+    for k, v in h.items():
+        if k in skip_attrs:
+            continue
+        table.append([k, v])
+
+    stdout.info(tabulate(table))
 
 
 def human_freq(item):
@@ -66,7 +79,7 @@ def to_human(d, runconf=False):
             d[key] = "true" if d[key] else "false"
         elif not runconf and key.endswith("power"):
             d[key] = f"{d[key]:.2f} dBm"
-        elif type(d[key]) == ly.keyed_list.KeyedList:
+        elif isinstance(d[key], list):
             d[key] = ", ".join(d[key])
 
     return d
@@ -75,12 +88,11 @@ def to_human(d, runconf=False):
 class Transponder(object):
     XPATH = "/goldstone-transponder:modules/module"
 
-    def xpath(self, transponder_name):
-        return "{}[name='{}']".format(self.XPATH, transponder_name)
+    def xpath(self, name):
+        return f"{self.XPATH}[name='{name}']"
 
     def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
+        self.conn = conn
 
     def show_transponder(self, name):
         if name not in self.get_modules():
@@ -89,15 +101,11 @@ class Transponder(object):
             )
             return
         xpath = self.xpath(name)
-        try:
-            v = self.sr_op.get_data(xpath, "operational")
-        except (sr.SysrepoNotFoundError, sr.SysrepoCallbackFailedError) as e:
-            stderr.info(e)
-            return
+        data = self.conn.get_operational(xpath, one=True)
+        if data == None:
+            raise InvalidInput(f"no operational info found for {name}")
 
         try:
-            data = v["modules"]["module"][name]
-
             # module info
             print_tabular(data["state"])
 
@@ -128,9 +136,8 @@ class Transponder(object):
             for attr in attrs:
                 xpath = f"{prefix}/state/{attr}"
                 try:
-                    v = self.sr_op.get_data(xpath, "operational")
-                    v = ly.xpath_get(v, xpath, "N/A")
-                except (sr.SysrepoNotFoundError, sr.SysrepoCallbackFailedError):
+                    v = self.conn.get_operational(xpath, "N/A", one=True)
+                except CLIException:
                     v = "N/A"
                 data.append(v)
             rows.append(data)
@@ -145,9 +152,8 @@ class Transponder(object):
         netif_conf_blacklist = ["name"]
         hostif_conf_blacklist = ["name"]
 
-        try:
-            tree = self.sr_op.get_data(self.XPATH)
-        except sr.errors.SysrepoNotFoundError as e:
+        tree = self.conn.get(self.XPATH)
+        if tree == None:
             stdout.info("!")
             return
 
@@ -191,12 +197,14 @@ class Transponder(object):
         stdout.info("\nshow transponder details:\n")
         modules = self.get_modules()
         for module in modules:
-            self.show_transponder(module)
+            try:
+                self.show_transponder(module)
+            except InvalidInput as e:
+                stdout.info(e)
 
     def get_modules(self):
         path = "/goldstone-transponder:modules/module/name"
-        d = self.sr_op.get_data(path, "operational")
-        return natsorted(v["name"] for v in d["modules"]["module"])
+        return natsorted(self.conn.get_operational(path, []))
 
 
 class SetCommand(Command):
@@ -220,9 +228,9 @@ class SetCommand(Command):
         self.context.set(self.node, value)
 
     def arguments(self):
-        if str(self.node.type()) == "boolean":
+        if self.node.type() == "boolean":
             return ["true", "false"]
-        return [v[0] for v in self.node.type().all_enums() if v[0] != "unknown"]
+        return [v[0] for v in self.node.enums() if v[0] != "unknown"]
 
     def usage(self):
         enum_values = self.arguments()
@@ -234,7 +242,7 @@ class SetCommand(Command):
 
 class NoCommand(Command):
     def __init__(self, context, node):
-        self._arguments = [v.name() for v in node if v.name() != "name"]
+        self._arguments = [v.name() for v in node.children() if v.name() != "name"]
         if "admin-status" in self._arguments:
             self._arguments.append("shutdown")
         super().__init__(context, None, "no")
@@ -263,15 +271,9 @@ class TransponderBaseContext(Context):
     def __init__(self, conn, parent):
         super().__init__(parent, fuzzy_completion=True)
 
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
-        ctx = self.session.get_ly_ctx()
+        node = self.conn.find_node(self.CONFIG_XPATH)
 
-        node = [n for n in ctx.find_path(self.CONFIG_XPATH)]
-        assert len(node) == 1
-        node = node[0]
-
-        for v in node:
+        for v in node.children():
             if v.name() == "name":
                 continue
             self.add_command(v.name(), SetCommand(self, v))
@@ -283,22 +285,15 @@ class TransponderBaseContext(Context):
             name = node
         else:
             name = node.name()
-        try:
-            self.sr_op.get_data(self.module_xpath(), "running")
-        except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data(
-                f"{self.module_xpath()}/config/name", self.module_name()
-            )
 
-        try:
-            self.sr_op.get_data(self.xpath(), "running")
-        except sr.SysrepoNotFoundError as e:
-            self.sr_op.set_data(f"{self.xpath()}/config/name", self.name)
-
-        self.sr_op.set_data(f"{self.xpath()}/config/{name}", value)
+        self.conn.set(f"{self.module_xpath()}/config/name", self.module_name())
+        self.conn.set(f"{self.xpath()}/config/name", self.name)
+        self.conn.set(f"{self.xpath()}/config/{name}", value)
+        self.conn.apply()
 
     def delete(self, name):
-        self.sr_op.delete_data(f"{self.xpath()}/config/{name}")
+        self.conn.delete(f"{self.xpath()}/config/{name}")
+        self.conn.apply()
 
 
 class TransponderShowCommand(ShowCommand):
@@ -320,35 +315,22 @@ class TransponderShowCommand(ShowCommand):
 
     def show(self, detail=False):
         ctx = self.context
+        xpath = ctx.xpath() + "/state"
+        data = self.conn.get_operational(xpath, one=True)
+        if data == None:
+            raise InvalidInput("Not able to fetch data from operational database")
 
-        xpath = ctx.xpath()
+        data = to_human(data)
 
-        try:
-            data = ctx.sr_op.get_data(xpath, "operational")
-        except sr.SysrepoNotFoundError as e:
-            stderr.info("Not able to fetch data from operational database")
-            return
-        try:
-            data = data["modules"]["module"]
-            if self.OBJECT_TYPE == "module":
-                data = data[ctx.name]["state"]
-            else:
-                data = data[ctx.parent.name][self.OBJECT_TYPE][ctx.name]["state"]
+        table = []
+        for k, v in data.items():
+            if k in self.SKIP_ATTRS:
+                continue
+            if not detail and k in self.DETAILED_ATTRS:
+                continue
+            table.append([k, v])
 
-            data = to_human(data)
-
-            table = []
-            for k, v in data.items():
-                if k in self.SKIP_ATTRS:
-                    continue
-                if not detail and k in self.DETAILED_ATTRS:
-                    continue
-
-                table.append([k, v])
-            stdout.info(tabulate(table))
-        except KeyError as e:
-            stderr.info(f"Error while fetching values from operational database: {e}")
-            return
+        stdout.info(tabulate(table))
 
 
 class HostIfShowCommand(TransponderShowCommand):
@@ -477,9 +459,7 @@ class TransponderContext(TransponderBaseContext):
 
     def components(self, type_):
         xpath = f"{self.XPATH}[name='{self.name}']/{type_}/name"
-        d = self.sr_op.get_data(xpath, "operational")
-        d = d.get("modules", {}).get("module", {}).get(self.name, {})
-        return natsorted(v["name"] for v in d.get(type_, []))
+        return natsorted(self.conn.get_operational(xpath, [], one=True))
 
     def __str__(self):
         return "transponder({})".format(self.name)
@@ -491,8 +471,8 @@ class Show(Command):
     }
 
     def __init__(self, context, parent, name):
-        self.transponder = Transponder(context.root().conn)
         super().__init__(context, parent, name)
+        self.transponder = Transponder(self.conn)
 
     def arguments(self):
         return self.transponder.get_modules()
@@ -518,7 +498,7 @@ GlobalShowCommand.register_command(
 class Run(Command):
     def exec(self, line):
         if len(line) == 0:
-            return Transponder(self.context.root().conn).run_conf()
+            return Transponder(self.conn).run_conf()
         else:
             stderr.info(self.usage())
 
@@ -533,7 +513,7 @@ RunningConfigCommand.register_command(
 
 class TechSupport(Command):
     def exec(self, line):
-        Transponder(self.context.root().conn).tech_support()
+        Transponder(self.conn).tech_support()
         self.parent.xpath_list.append("/goldstone-transponder:modules")
 
 
@@ -545,7 +525,7 @@ TechSupportCommand.register_command(
 class TransponderCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.transponder = Transponder(context.root().conn)
+        self.transponder = Transponder(self.conn)
 
     def arguments(self):
         return self.transponder.get_modules()
@@ -553,7 +533,7 @@ class TransponderCommand(Command):
     def exec(self, line):
         if len(line) != 1:
             raise InvalidInput("usage: transponder <name>")
-        return TransponderContext(self.context.root().conn, self.context, line[0])
+        return TransponderContext(self.conn, self.context, line[0])
 
 
 Root.register_command(

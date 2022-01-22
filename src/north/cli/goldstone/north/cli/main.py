@@ -21,13 +21,15 @@ from . import vlan
 from . import mgmt_if
 from . import gearbox
 
+from .connector.sysrepo import Connector as SysrepoConnector
+
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 
 class GoldstoneShell(object):
     def __init__(self, default_prompt="> ", prefix=""):
-        self.context = Root()
+        self.context = Root(SysrepoConnector())
         self.default_input = ""
         self.default_prompt = default_prompt
         self.prefix = prefix

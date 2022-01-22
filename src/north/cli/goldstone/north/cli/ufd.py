@@ -1,5 +1,6 @@
-from .base import Command, InvalidInput
+from .base import InvalidInput
 from .cli import (
+    Command,
     Context,
     GlobalShowCommand,
     RunningConfigCommand,
@@ -7,10 +8,9 @@ from .cli import (
     ModelExists,
 )
 from .root import Root
-from .common import sysrepo_wrap, print_tabular
+
 from tabulate import tabulate
 from natsort import natsorted
-import sysrepo as sr
 
 from .interface import InterfaceContext
 
@@ -24,63 +24,37 @@ stderr = logging.getLogger("stderr")
 XPATH = "/goldstone-uplink-failure-detection:ufd-groups"
 
 
-def get_session(cmd):
-    return cmd.context.root().conn.start_session()
-
-
 def xpath(id):
     return f"{XPATH}/ufd-group[ufd-id='{id}']"
 
 
 def create(session, id):
-    sr_op = sysrepo_wrap(session)
-    sr_op.set_data(f"{xpath(id)}/config/ufd-id", id)
+    session.set(f"{xpath(id)}/config/ufd-id", id)
+    session.apply()
 
 
 def delete(session, id):
-    sr_op = sysrepo_wrap(session)
-    sr_op.delete_data(xpath(id))
+    session.delete(xpath(id))
+    session.apply()
 
 
 def add_ports(session, id, ports, role):
-    sr_op = sysrepo_wrap(session)
     prefix = "/goldstone-interfaces:interfaces"
     for port in ports:
         x = f"{prefix}/interface[name='{port}']"
         # in order to create the interface node if it doesn't exist in running DS
-        sr_op.set_data(f"{x}/config/name", port, no_apply=True)
-        sr_op.set_data(f"{xpath(id)}/config/{role}", port, no_apply=True)
-    sr_op.apply()
-
-
-def remove_ports(session, id, role, ports, no_apply=False):
-    sr_op = sysrepo_wrap(session)
-    xpath = xpath(id)
-    for port in ports:
-        sr_op.delete_data(f"{xpath}/config/{role}[.='{port}']", no_apply=True)
-
-    if not no_apply:
-        sr_op.apply()
+        session.set(f"{x}/config/name", port)
+        session.set(f"{xpath(id)}/config/{role}", port)
+    session.apply()
 
 
 def get_id(session):
-    sr_op = sysrepo_wrap(session)
-    path = "/goldstone-uplink-failure-detection:ufd-groups"
-    try:
-        d = sr_op.get_data(XPATH, "operational")
-        d = d.get("ufd-groups", {}).get("ufd-group", {})
-        return natsorted(v["ufd-id"] for v in d)
-    except (sr.errors.SysrepoNotFoundError, KeyError):
-        return []
+    xpath = f"{XPATH}/ufd-group/ufd-id"
+    return natsorted(session.get_operational(xpath, []))
 
 
 def check_ports(session, ports):
-    sr_op = sysrepo_wrap(session)
-    try:
-        data = sr_op.get_data(f"{XPATH}/ufd-group", "running")
-        ufds = data["ufd-groups"]["ufd-group"]
-    except (sr.errors.SysrepoNotFoundError, KeyError):
-        raise InvalidInput("UFD not configured for this interface")
+    ufds = session.get(f"{XPATH}/ufd-group", [])
 
     for port in ports:
         found = False
@@ -90,24 +64,18 @@ def check_ports(session, ports):
                 links = config.get(role, [])
                 if port in links:
                     found = True
-                    remove_ports(session, ufd["ufd-id"], role, [port], True)
+                    xpath = xpath(id)
+                    session.delete(f"{xpath}/config/{role}[.='{port}']")
 
         if not found:
-            sr_op.discard_changes()
+            session.discard_changes()
             raise InvalidInput("ufd not configured for this interface")
 
-    sr_op.apply()
+    session.apply()
 
 
 def show(session, id=None):
-    sr_op = sysrepo_wrap(session)
-    try:
-        tree = sr_op.get_data(f"{XPATH}/ufd-group", "operational")
-        id_list = tree["ufd-groups"]["ufd-group"]
-    except (sr.SysrepoNotFoundError, KeyError):
-        id_list = []
-    except sr.SysrepoCallbackFailedError as e:
-        raise InvalidInput(e.details[0][1] if e.details else str(e))
+    id_list = session.get_operational(f"{XPATH}/ufd-group", [])
 
     if len(id_list) == 0:
         stdout.info(
@@ -119,25 +87,17 @@ def show(session, id=None):
         data_tabulate = []
         uplink_ports = []
         downlink_ports = []
-        ids = []
-
-        if id != None:
-            ids.append(id)
-        else:
-            for data in id_list:
-                ids.append(data["ufd-id"])
-
-            ids = natsorted(ids)
+        ids = get_id(session)
 
         for id in ids:
             data = id_list[id]
             try:
                 uplink_ports.append(natsorted(list(data["config"]["uplink"])))
-            except (sr.errors.SysrepoNotFoundError, KeyError):
+            except KeyError:
                 uplink_ports.append([])
             try:
                 downlink_ports.append(natsorted(list(data["config"]["downlink"])))
-            except (sr.errors.SysrepoNotFoundError, KeyError):
+            except KeyError:
                 downlink_ports.append([])
 
         for i in range(len(ids)):
@@ -185,21 +145,8 @@ def show(session, id=None):
 
 
 def run_conf(session):
-    sr_op = sysrepo_wrap(session)
-    try:
-        tree = sr_op.get_data(f"{XPATH}/ufd-group", "running")
-        d_list = tree["ufd-groups"]["ufd-group"]
-    except (sr.errors.SysrepoNotFoundError, KeyError):
-        return
-
-    ids = []
-
-    for data in d_list:
-        ids.append(data["ufd-id"])
-
-    ids = natsorted(ids)
-
-    for id in ids:
+    d_list = session.get(f"{XPATH}/ufd-group")
+    for id in get_id(session):
         data = d_list[id]
         stdout.info("ufd {}".format(data["config"]["ufd-id"]))
         stdout.info("  quit")
@@ -210,15 +157,14 @@ class UFDContext(Context):
     def __init__(self, parent, id):
         self.id = id
         super().__init__(parent)
-        session = self.root().conn.start_session()
-        create(session, self.id)
+        create(self.conn, self.id)
 
         @self.command(parent.get_completer("show"), name="show")
         def show_(args):
             if len(args) != 0:
                 parent.exec(f"show {' '.join(args)}")
             else:
-                show(session, self.id)
+                show(self.conn, self.id)
 
     def __str__(self):
         return "ufd({})".format(self.id)
@@ -227,7 +173,7 @@ class UFDContext(Context):
 class Show(Command):
     def exec(self, line):
         if len(line) == 0:
-            return show(get_session(self))
+            return show(self.conn)
         else:
             stderr.info(self.usage())
 
@@ -240,7 +186,7 @@ GlobalShowCommand.register_command(
 class Run(Command):
     def exec(self, line):
         if len(line) == 0:
-            return run_conf(get_session(self))
+            return run_conf(self.conn)
         else:
             stderr.info(self.usage())
 
@@ -252,7 +198,7 @@ RunningConfigCommand.register_command(
 
 class TechSupport(Command):
     def exec(self, line):
-        show(get_session(self))
+        show(self.conn)
         self.parent.xpath_list.append("/goldstone-uplink-failure-detection:ufd-groups")
 
 
@@ -263,7 +209,7 @@ TechSupportCommand.register_command(
 
 class UFDCommand(Command):
     def arguments(self):
-        return get_id(get_session(self))
+        return get_id(self.conn)
 
     def usage(self):
         return "<ufd-id>"
@@ -271,8 +217,8 @@ class UFDCommand(Command):
     def exec(self, line):
         if len(line) != 1:
             raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
-        if self.parent and self.parent.name == "no":
-            delete(get_session(self), line[0])
+        if self.root.name == "no":
+            delete(self.conn, line[0])
         else:
             return UFDContext(self.context, line[0])
 
@@ -296,18 +242,18 @@ class InterfaceUFDCommand(Command):
     ):
         super().__init__(context, parent, name, **options)
         if self.root.name != "no":
-            for id in get_id(get_session(self)):
+            for id in get_id(self.conn):
                 self.add_command(str(id), UFDLinkCommand)
 
     def exec(self, line):
         if self.root.name == "no":
-            check_ports(get_session(self), self.context.ifnames)
+            check_ports(self.conn, self.context.ifnames)
         else:
             if len(line) != 2 or (line[1] != "uplink" and line[1] != "downlink"):
                 raise InvalidInput(
                     f"usage: {self.name_all()} <ufdid> <uplink|downlink>"
                 )
-            add_ports(get_session(self), line[0], self.context.ifnames, line[1])
+            add_ports(self.conn, line[0], self.context.ifnames, line[1])
 
 
 InterfaceContext.register_command(

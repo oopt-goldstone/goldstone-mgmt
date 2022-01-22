@@ -1,10 +1,7 @@
 import sys
 import os
-from .base import InvalidInput, Command
-from .cli import GlobalShowCommand, TechSupportCommand, ModelExists
-import libyang as ly
-import sysrepo as sr
-from .common import sysrepo_wrap
+from .base import InvalidInput
+from .cli import GlobalShowCommand, TechSupportCommand, ModelExists, Command
 from tabulate import tabulate
 import logging
 
@@ -39,8 +36,7 @@ def to_human(d):
 
 class Component(object):
     def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
+        self.conn = conn
         self.component = {}
         self.XPATH = "/goldstone-platform:components"
 
@@ -69,7 +65,7 @@ class Component(object):
                     if v == 0xFFFF:
                         v = "-"
                     table.append([k, v])
-        except (sr.errors.SysrepoNotFoundError, KeyError) as error:
+        except KeyError as error:
             stderr.info(error)
         return table
 
@@ -145,13 +141,9 @@ class Component(object):
                 stdout.info(f"No {option} found on this platform")
 
     def get_components(self, type_):
-        try:
-            c = self.sr_op.get_data(
-                f"{self.XPATH}/component[state/type='{type_.upper()}']", "operational"
-            )
-        except sr.errors.SysrepoNotFoundError:
-            return []
-        c = c.get("components", {}).get("component", [])
+        c = self.conn.get_operational(
+            f"{self.XPATH}/component[state/type='{type_.upper()}']", []
+        )
         return natsorted(c, key=lambda v: v["name"])
 
     def tech_support(self):
@@ -190,7 +182,7 @@ class PlatformGroupCommand(Command):
 
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
-        self.platform_component = Component(context.conn)
+        self.platform_component = Component(self.conn)
 
     def exec(self, line):
         if len(line) != 1:
@@ -211,7 +203,7 @@ GlobalShowCommand.register_command(
 
 class TechSupport(Command):
     def exec(self, line):
-        Component(self.context.root().conn).tech_support()
+        Component(self.conn).tech_support()
         self.parent.xpath_list.append("/goldstone-platform:components")
 
 
