@@ -171,6 +171,29 @@ def pcs_status2oper_status(pcs):
     return status
 
 
+def parse_counters(attrs):
+    counters = {}
+    mac_rx = [int(v) for v in attrs[0].split(",")]
+    mac_tx = [int(v) for v in attrs[1].split(",")]
+    phy_rx = [int(v) for v in attrs[2].split(",")]
+
+    counters["in-octets"] = mac_rx[0]
+    counters["in-unicast-pkts"] = mac_rx[14]
+    counters["in-broadcast-pkts"] = mac_rx[12]
+    counters["in-multicast-pkts"] = mac_rx[13]
+    # counters["in-discards"]
+    counters["in-errors"] = mac_rx[4]
+
+    counters["out-octets"] = mac_tx[0]
+    counters["out-unicast-pkts"] = mac_rx[5]
+    counters["out-broadcast-pkts"] = mac_rx[7]
+    counters["out-multicast-pkts"] = mac_rx[6]
+    # counters["out-discards"]
+    counters["out-errors"] = mac_rx[4]
+
+    return counters
+
+
 def parse_macsec_counters(attrs):
     counters = {
         "ingress": {"sa": {}, "secy": {}, "channel": {}},
@@ -567,20 +590,13 @@ class InterfaceServer(ServerBase):
                 continue
 
             counters = {}
-            for d in ["in", "out"]:
-                c = []
-                for field in ["octets", "fcs-errors", "mac-errors"]:
-                    name = f"ethernet-{d}-{field}"
-                    try:
-                        v = int(await obj.get(name))
-                    except:
-                        v = 0
-                    c.append(v)
-
-                counters[f"{d}-octets"] = c[0]
-                counters[f"{d}-errors"] = c[1] + c[2]
-
-            i["state"]["counters"] = counters
+            try:
+                attrs = await obj.get_multiple(
+                    ["pmon-enet-mac-rx", "pmon-enet-mac-tx", "pmon-enet-phy-rx"]
+                )
+                i["state"]["counters"] = parse_counters(attrs)
+            except taish.TAIException as e:
+                logger.warning(f"failed to get counter info: {e}")
 
             if counter_only:
                 interfaces.append(i)
@@ -650,8 +666,8 @@ class InterfaceServer(ServerBase):
                                 "counters": counters,
                             }
                         }
-                    except taish.TAIException:
-                        pass
+                    except taish.TAIException as e:
+                        logger.warning(f"failed to get MACSEC info: {e}")
 
                 try:
                     pcs = json.loads(await obj.get("pcs-status", json=True))
