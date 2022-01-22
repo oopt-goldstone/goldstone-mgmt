@@ -1,14 +1,15 @@
+from .base import InvalidInput
 from .cli import (
+    Command,
     Context,
     GlobalShowCommand,
     ModelExists,
 )
 from .root import Root
-from .base import InvalidInput, Command
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter
-from .common import sysrepo_wrap
 from .aaa import AAACommand, TACACSCommand
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -22,19 +23,20 @@ class NACM(Context):
 
     def __init__(self, conn, parent):
         super().__init__(parent)
-        self.sr_op = sysrepo_wrap(self.session)
 
         @self.command()
         def disable(line):
             if len(line) != 0:
                 raise InvalidInput("usage: disable[cr]")
-            self.sr_op.set_data(f"{self.XPATH}/enable-nacm", False)
+            self.conn.set(f"{self.XPATH}/enable-nacm", False)
+            self.conn.apply()
 
         @self.command()
         def enable(line):
             if len(line) != 0:
                 raise InvalidInput("usage: enable[cr]")
-            self.sr_op.set_data(f"{self.XPATH}/enable-nacm", True)
+            self.conn.set(f"{self.XPATH}/enable-nacm", True)
+            self.conn.apply()
 
     def __str__(self):
         return "nacm"
@@ -46,19 +48,20 @@ class Netconf(Context):
 
     def __init__(self, conn, parent):
         super().__init__(parent)
-        self.sr_op = sysrepo_wrap(self.session)
 
         @self.command()
         def shutdown(line):
             if len(line) != 0:
                 raise InvalidInput("usage: shutdown[cr]")
-            self.sr_op.set_data(f"{self.XPATH}/config/enabled", False)
+            self.conn.set(f"{self.XPATH}/config/enabled", False)
+            self.conn.apply()
 
         @self.command(WordCompleter(["shutdown"]))
         def no(line):
             if len(line) != 1 or line[0] != "shutdown":
                 raise InvalidInput("usage: no shutdown")
-            self.sr_op.set_data(f"{self.XPATH}/config/enabled", True)
+            self.conn.set(f"{self.XPATH}/config/enabled", True)
+            self.conn.apply()
 
         @self.command()
         def nacm(line):
@@ -71,24 +74,22 @@ class Netconf(Context):
 
 
 class SystemContext(Context):
-    def __init__(self, conn, parent):
+    def __init__(self, parent):
         super().__init__(parent)
 
         @self.command(name="netconf")
         def netconf(line):
             if len(line) != 0:
                 raise InvalidInput("usage: netconf[cr]")
-            return Netconf(conn, self)
+            return Netconf(self.conn, self)
 
         @self.command()
         def reboot(line):
-            session = conn.start_session()
-            stdout.info(session.rpc_send("/goldstone-system:reboot", {}))
+            stdout.info(self.conn.rpc("/goldstone-system:reboot", {}))
 
         @self.command()
         def shutdown(line):
-            session = conn.start_session()
-            stdout.info(session.rpc_send("/goldstone-system:shutdown", {}))
+            stdout.info(self.conn.rpc("/goldstone-system:shutdown", {}))
 
         c = TACACSCommand(self)
         self.add_command(c.name, c, add_no=True)
@@ -105,12 +106,11 @@ class Version(Command):
         if len(line) != 0:
             raise InvalidInput(self.usage())
 
-        conn = self.context.root().conn
-        with conn.start_session() as sess:
-            xpath = "/goldstone-system:system/state/software-version"
-            sess.switch_datastore("operational")
-            data = sess.get_data(xpath)
-            stdout.info(data["system"]["state"]["software-version"])
+        xpath = "/goldstone-system:system/state/software-version"
+        version = self.conn.get_operational(xpath)
+        if version == None:
+            raise InvalidInput("failed to get software-version")
+        stdout.info(version)
 
     def usage(self):
         return "usage: {self.name_all()}"
@@ -125,7 +125,7 @@ class SystemCommand(Command):
     def exec(self, line):
         if len(line) != 0:
             raise InvalidInput("usage: system")
-        return SystemContext(self.context.root().conn, self.context)
+        return SystemContext(self.context)
 
 
 Root.register_command("system", SystemCommand, when=ModelExists("goldstone-system"))

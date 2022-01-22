@@ -497,7 +497,7 @@ class TestSouthSONiC(TestBase):
         self.assertTrue("portchannel PortChannel10" in output)
         self.gscli("portchannel PortChannel20")
 
-        with self.assertRaisesRegex(SSHException, "points to a non-existing leaf"):
+        with self.assertRaises(SSHException):
             self.gscli("interface Ethernet1_1; portchannel PortChannel30")
 
         self.gscli("portchannel PortChannel9")
