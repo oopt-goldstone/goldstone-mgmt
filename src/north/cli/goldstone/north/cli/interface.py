@@ -1,9 +1,6 @@
-import sys
-import os
-import re
-
-from .base import InvalidInput, Command
+from .base import InvalidInput
 from .cli import (
+    Command,
     Context,
     GlobalShowCommand,
     RunningConfigCommand,
@@ -12,20 +9,9 @@ from .cli import (
     ModelExists,
 )
 from .root import Root
-from .common import sysrepo_wrap, print_tabular
-import libyang as ly
-import sysrepo as sr
 from tabulate import tabulate
-
-from prompt_toolkit.document import Document
-from prompt_toolkit.completion import (
-    WordCompleter,
-    Completion,
-    NestedCompleter,
-    FuzzyWordCompleter,
-)
-
 from natsort import natsorted
+import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,20 +40,15 @@ def breakout_yang_to_human(breakout):
 XPATH = "/goldstone-interfaces:interfaces/interface"
 
 
-def get_session(cmd):
-    return cmd.context.root().conn.start_session()
-
-
 def ifxpath(ifname):
     return f"{XPATH}[name='{ifname}']"
 
 
 def interface_names(session, ptn=None):
-    sr_op = sysrepo_wrap(session)
-    try:
-        data = sr_op.get_data(f"{XPATH}/name", "operational")
-    except sr.SysrepoNotFoundError:
+    data = session.get_operational(f"{XPATH}/name")
+    if data == None:
         raise InvalidInput("no interface found")
+
     if ptn:
         try:
             ptn = re.compile(ptn)
@@ -76,20 +57,12 @@ def interface_names(session, ptn=None):
         f = ptn.match
     else:
         f = lambda _: True
-    return natsorted(v["name"] for v in data["interfaces"]["interface"] if f(v["name"]))
+    return natsorted(v for v in data if f(v))
 
 
 def get_interface_list(session, datastore):
-    sr_op = sysrepo_wrap(session)
-    try:
-        imp = datastore == "operational"
-        tree = sr_op.get_data(XPATH, datastore, include_implicit_values=imp)
-    except sr.SysrepoError as e:
-        if datastore == "operational":
-            raise InvalidInput(e.details[0][1] if e.details else str(e))
-        else:
-            return []
-    interfaces = tree["interfaces"]["interface"]
+    imp = datastore == "operational"
+    interfaces = session.get(XPATH, [], ds=datastore, include_implicit_defaults=imp)
     return natsorted(interfaces, key=lambda x: x["name"])
 
 
@@ -126,16 +99,13 @@ def show_interface(session, details="description"):
 
 def show_counters(session, ifnames, table):
     rows = []
-    sr_op = sysrepo_wrap(session)
-    interfaces = get_interface_list(session, "operational")
     for ifname in ifnames:
         if len(ifnames) > 1:
             if not table:
                 stdout.info(f"Interface {ifname}:")
 
         xpath = f"{XPATH}[name='{ifname}']/state/counters"
-        data = sr_op.get_data(xpath, "operational")
-        data = ly.xpath_get(data, xpath)
+        data = session.get_operational(xpath, one=True)
         if data == None:
             stdout.info(f"no counter info for Interface {ifname}")
             continue
@@ -244,13 +214,10 @@ def run_conf(session):
 
 
 def get_ufd(session):
-    sr_op = sysrepo_wrap(session)
     xpath = "/goldstone-uplink-failure-detection:ufd-groups"
     ufd = {}
-    try:
-        tree = sr_op.get_data("{}/ufd-group".format(xpath), "running")
-        ufd_list = tree["ufd-groups"]["ufd-group"]
-    except (sr.errors.SysrepoError, KeyError):
+    ufd_list = session.get(f"{xpath}/ufd-group")
+    if ufd_list == None:
         return {}
 
     for data in ufd_list:
@@ -270,13 +237,10 @@ def get_ufd(session):
 
 
 def get_portchannel(session):
-    sr_op = sysrepo_wrap(session)
     xpath = "/goldstone-portchannel:portchannel"
     pc = {}
-    try:
-        tree = sr_op.get_data("{}/portchannel-group".format(xpath), "running")
-        pc_list = tree["portchannel"]["portchannel-group"]
-    except (sr.errors.SysrepoNotFoundError, KeyError):
+    pc_list = session.get(f"{xpath}/portchannel-group")
+    if pc_list == None:
         return {}
 
     for data in pc_list:
@@ -289,155 +253,117 @@ def get_portchannel(session):
     return pc
 
 
-def set_admin_status(session, ifnames, value):
-    sr_op = sysrepo_wrap(session)
+def _set(session, ifnames, attr, value):
     for ifname in ifnames:
         xpath = ifxpath(ifname)
         if value:
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            sr_op.set_data(f"{xpath}/config/admin-status", value, no_apply=True)
+            session.set(f"{xpath}/config/name", ifname)
+            session.set(f"{xpath}/{attr}", value)
         else:
-            sr_op.delete_data(f"{xpath}/config/admin-status", no_apply=True)
+            session.delete(f"{xpath}/{attr}")
+    session.apply()
 
-    sr_op.apply()
+
+def set_admin_status(session, ifnames, value):
+    return _set(session, ifnames, "config/admin-status", value)
 
 
 def set_fec(session, ifnames, value):
-    sr_op = sysrepo_wrap(session)
-    for ifname in ifnames:
-        xpath = ifxpath(ifname)
-        if value:
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            sr_op.set_data(f"{xpath}/ethernet/config/fec", value, no_apply=True)
-        else:
-            sr_op.delete_data(f"{xpath}/ethernet/config/fec", no_apply=True)
-    sr_op.apply()
-
-
-def set_auto_nego(session, ifnames, mode):
-    sr_op = sysrepo_wrap(session)
-    for ifname in ifnames:
-        xpath = ifxpath(ifname)
-        if mode:
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            sr_op.set_data(
-                f"{xpath}/ethernet/auto-negotiate/config/enabled",
-                mode,
-                no_apply=True,
-            )
-        else:
-            sr_op.delete_data(
-                f"{xpath}/ethernet/auto-negotiate/config/enabled", no_apply=True
-            )
-    sr_op.apply()
-
-
-def set_auto_nego_adv_speed(session, ifnames, speeds):
-    sr_op = sysrepo_wrap(session)
-    for ifname in ifnames:
-        xpath = ifxpath(ifname)
-        sr_op.delete_data(
-            f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
-            no_apply=True,
-        )
-        if speeds:
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            for speed in speeds.split(","):
-                sr_op.set_data(
-                    f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
-                    speed_human_to_yang(speed),
-                    no_apply=True,
-                )
-
-    sr_op.apply()
-
-
-def set_interface_type(session, ifnames, value):
-    sr_op = sysrepo_wrap(session)
-    for ifname in ifnames:
-        xpath = ifxpath(ifname)
-        if value:
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            sr_op.set_data(
-                f"{xpath}/config/interface-type", "IF_ETHERNET", no_apply=True
-            )
-            sr_op.set_data(
-                f"{xpath}/ethernet/config/interface-type", value, no_apply=True
-            )
-            sr_op.delete_data(f"{xpath}/otn", no_apply=True)
-        else:
-            sr_op.delete_data(f"{xpath}/ethernet/config/interface-type", no_apply=True)
-            sr_op.delete_data(f"{xpath}/config/interface-type", no_apply=True)
-    sr_op.apply()
-
-
-def set_otn_interface_type(session, ifnames, value):
-    sr_op = sysrepo_wrap(session)
-    for ifname in ifnames:
-        xpath = ifxpath(ifname)
-        if value:
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            sr_op.set_data(f"{xpath}/config/interface-type", "IF_OTN", no_apply=True)
-            sr_op.set_data(f"{xpath}/otn/config/mfi-type", value.upper(), no_apply=True)
-            sr_op.delete_data(f"{xpath}/ethernet/config/interface-type", no_apply=True)
-        else:
-            sr_op.delete_data(f"{xpath}/otn", no_apply=True)
-            sr_op.delete_data(f"{xpath}/config/interface-type", no_apply=True)
-    sr_op.apply()
+    return _set(session, ifnames, "ethernet/config/fec", value)
 
 
 def set_mtu(session, ifnames, value):
-    sr_op = sysrepo_wrap(session)
+    return _set(session, ifnames, "ethernet/config/mtu", value)
+
+
+def set_speed(session, ifnames, speed):
+    return _set(
+        session,
+        ifnames,
+        "ethernet/config/speed",
+        speed_human_to_yang(speed) if speed else None,
+    )
+
+
+def set_auto_nego(session, ifnames, value):
+    return _set(session, ifnames, "ethernet/auto-negotiate/config/enabled", value)
+
+
+def set_auto_nego_adv_speed(session, ifnames, speeds):
+    for ifname in ifnames:
+        xpath = ifxpath(ifname)
+        session.delete(
+            f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
+        )
+        if speeds:
+            session.set(f"{xpath}/config/name", ifname)
+            for speed in speeds.split(","):
+                session.set(
+                    f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
+                    speed_human_to_yang(speed),
+                )
+    session.apply()
+
+
+def set_interface_type(session, ifnames, value):
     for ifname in ifnames:
         xpath = ifxpath(ifname)
         if value:
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            sr_op.set_data(f"{xpath}/ethernet/config/mtu", value, no_apply=True)
+            session.set(f"{xpath}/config/name", ifname)
+            session.set(f"{xpath}/config/interface-type", "IF_ETHERNET")
+            session.set(f"{xpath}/ethernet/config/interface-type", value)
+            session.delete(f"{xpath}/otn")
         else:
-            sr_op.delete_data(f"{xpath}/ethernet/config/mtu", no_apply=True)
-    sr_op.apply()
+            session.delete(f"{xpath}/ethernet/config/interface-type")
+            session.delete(f"{xpath}/config/interface-type")
+    session.apply()
+
+
+def set_otn_interface_type(session, ifnames, value):
+    for ifname in ifnames:
+        xpath = ifxpath(ifname)
+        if value:
+            session.set(f"{xpath}/config/name", ifname)
+            session.set(f"{xpath}/config/interface-type", "IF_OTN")
+            session.set(f"{xpath}/otn/config/mfi-type", value.upper())
+            session.delete(f"{xpath}/ethernet/config/interface-type")
+        else:
+            session.delete(f"{xpath}/otn")
+            session.delete(f"{xpath}/config/interface-type")
+    session.apply()
 
 
 def mtu_range(session):
-    ctx = session.get_ly_ctx()
     xpath = "/goldstone-interfaces:interfaces"
     xpath += "/goldstone-interfaces:interface"
     xpath += "/goldstone-interfaces:ethernet"
     xpath += "/goldstone-interfaces:config"
     xpath += "/goldstone-interfaces:mtu"
-    for node in ctx.find_path(xpath):
-        return node.type().range()
+    return session.find_node(xpath).range()
 
 
 def valid_speeds(session):
-    ctx = session.get_ly_ctx()
     xpath = "/goldstone-interfaces:interfaces"
     xpath += "/goldstone-interfaces:interface"
     xpath += "/goldstone-interfaces:ethernet"
     xpath += "/goldstone-interfaces:config"
     xpath += "/goldstone-interfaces:speed"
-    leaf = list(ctx.find_path(xpath))[0]
+    node = session.find_node(xpath)
     # SPEED_10G => 10G
-    v = [e[0].replace("SPEED_", "") for e in leaf.type().enums()]
-    v = v[1:]  # remove SPEED_UNKNOWN
-    return v
+    v = [e[0].replace("SPEED_", "") for e in node.enums()]
+    return v[1:]  # remove SPEED_UNKNOWN
 
 
-def set_speed(session, ifnames, speed):
-    sr_op = sysrepo_wrap(session)
-    for ifname in ifnames:
-        xpath = ifxpath(ifname)
-        if speed:
-            speed = speed_human_to_yang(speed)
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            sr_op.set_data(f"{xpath}/ethernet/config/speed", speed, no_apply=True)
-        else:
-            sr_op.delete_data(f"{xpath}/ethernet/config/speed", no_apply=True)
-    sr_op.apply()
+def valid_eth_if_type(session):
+    xpath = "/goldstone-interfaces:interfaces"
+    xpath += "/goldstone-interfaces:interface"
+    xpath += "/goldstone-interfaces:ethernet"
+    xpath += "/goldstone-interfaces:config"
+    xpath += "/goldstone-interfaces:interface-type"
+    return (e[0] for e in session.find_node(xpath).enums())
 
 
 def set_breakout(session, ifnames, numch, speed):
-    sr_op = sysrepo_wrap(session)
     if (numch == None) != (speed == None):
         raise InvalidInput(f"unsupported combination: {numch}, {speed}")
 
@@ -453,19 +379,16 @@ def set_breakout(session, ifnames, numch, speed):
             )
 
         if is_delete:
-            try:
-                xpath = ifxpath(ifname)
-                xpath = f"{xpath}/ethernet/breakout/config"
-                data = sr_op.get_data(xpath, "running")
-                ly.xpath_get(data, xpath)
-            except (sr.errors.SysrepoNotFoundError, KeyError):
+            xpath = ifxpath(ifname)
+            xpath = f"{xpath}/ethernet/breakout/config"
+            data = session.get(xpath)
+            if data == None:
                 # If no configuration exists, no need to return error
                 continue
 
             stdout.info("Sub Interfaces will be deleted")
 
-            data = sr_op.get_data(XPATH, ds="operational")
-            data = ly.xpath_get(data, XPATH)
+            data = session.get_operational(XPATH, [])
 
             interfaces = [ifname]
             for intf in data:
@@ -480,42 +403,37 @@ def set_breakout(session, ifnames, numch, speed):
 
             stdout.info("Existing configurations on parent interfaces will be flushed")
             for i in interfaces:
-                sr_op.delete_data(ifxpath(i), no_apply=True)
+                session.delete(ifxpath(i))
 
         else:
             stdout.info("Existing configurations on parent interfaces will be flushed")
             xpath = ifxpath(ifname)
-            sr_op.delete_data(xpath, no_apply=True)
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-            sr_op.set_data(
+            session.delete(xpath)
+            session.set(f"{xpath}/config/name", ifname)
+            session.set(
                 f"{xpath}/ethernet/breakout/config/num-channels",
                 numch,
-                no_apply=True,
             )
-            sr_op.set_data(
+            session.set(
                 f"{xpath}/ethernet/breakout/config/channel-speed",
                 speed_human_to_yang(speed),
-                no_apply=True,
             )
 
-    sr_op.apply()
+    session.apply()
 
 
 def show(session, ifnames):
-    sr_op = sysrepo_wrap(session)
     for ifname in ifnames:
         if len(ifnames) > 1:
             stdout.info(f"Interface {ifname}:")
         xpath = ifxpath(ifname)
-        try:
-            tree = sr_op.get_data(xpath, "operational")
-        except sr.SysrepoNotFoundError:
+        data = session.get_operational(xpath, one=True)
+        if data == None:
             if len(ifnames) > 1:
                 stdout.info("interface not found")
                 continue
             else:
                 raise InvalidInput("interface not found")
-        data = ly.xpath_get(tree, xpath)
 
         logger.debug(f"data: {data}")
 
@@ -534,7 +452,7 @@ def show(session, ifnames):
         config = data.get("config")
         state = data.get("state")
         add_to_rows("name", config)
-        add_to_rows("admin-status", config, lambda v: v.lower())
+        add_to_rows("admin-status", state, lambda v: v.lower())
         add_to_rows("oper-status", state, lambda v: v.lower())
         add_to_rows("alias", state)
         add_to_rows("lanes", state)
@@ -589,7 +507,7 @@ class ShutdownCommand(Command):
             raise InvalidInput(f"usage: {self.name_all()}")
 
         admin_status = "UP" if self.parent.name == "no" else "DOWN"
-        set_admin_status(get_session(self), self.context.ifnames, admin_status)
+        set_admin_status(self.conn, self.context.ifnames, admin_status)
 
 
 class AdminStatusCommand(Command):
@@ -601,13 +519,13 @@ class AdminStatusCommand(Command):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_admin_status(get_session(self), self.context.ifnames, None)
+            set_admin_status(self.conn, self.context.ifnames, None)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_admin_status(get_session(self), self.context.ifnames, line[0].upper())
+            set_admin_status(self.conn, self.context.ifnames, line[0].upper())
 
 
 class FECCommand(Command):
@@ -619,31 +537,31 @@ class FECCommand(Command):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_fec(get_session(self), self.context.ifnames, None)
+            set_fec(self.conn, self.context.ifnames, None)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_fec(get_session(self), self.context.ifnames, line[0].upper())
+            set_fec(self.conn, self.context.ifnames, line[0].upper())
 
 
 class SpeedCommand(Command):
     def arguments(self):
         if self.root.name != "no":
-            return valid_speeds(get_session(self))
+            return valid_speeds(self.conn)
 
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_speed(get_session(self), self.context.ifnames, None)
+            set_speed(self.conn, self.context.ifnames, None)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_speed(get_session(self), self.context.ifnames, line[0])
+            set_speed(self.conn, self.context.ifnames, line[0])
 
 
 class InterfaceTypeOTNCommand(Command):
@@ -655,13 +573,13 @@ class InterfaceTypeOTNCommand(Command):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_otn_interface_type(get_session(self), self.context.ifnames, None)
+            set_otn_interface_type(self.conn, self.context.ifnames, None)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_otn_interface_type(get_session(self), self.context.ifnames, line[0])
+            set_otn_interface_type(self.conn, self.context.ifnames, line[0])
 
 
 class InterfaceTypeCommand(Command):
@@ -669,32 +587,19 @@ class InterfaceTypeCommand(Command):
 
     def arguments(self):
         if self.root.name != "no":
-            return [
-                "SR",
-                "SR2",
-                "SR4",
-                "CR",
-                "CR2",
-                "CR4",
-                "LR",
-                "LR2",
-                "LR4",
-                "KR",
-                "KR2",
-                "KR4",
-            ]
+            return valid_eth_if_type(self.conn)
 
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_interface_type(get_session(self), self.context.ifnames, None)
+            set_interface_type(self.conn, self.context.ifnames, None)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_interface_type(get_session(self), self.context.ifnames, line[0])
+            set_interface_type(self.conn, self.context.ifnames, line[0])
 
 
 class MTUCommand(Command):
@@ -702,15 +607,15 @@ class MTUCommand(Command):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_mtu(get_session(self), self.context.ifnames, None)
+            set_mtu(self.conn, self.context.ifnames, None)
         else:
             if len(line) != 1:
-                range_ = mtu_range(get_session(self))
+                range_ = mtu_range(self.conn)
                 range_ = f" <range {range_}>" if range_ else ""
                 raise InvalidInput(f"usage: mtu{range_}")
             if line[0].isdigit():
                 mtu = int(line[0])
-                set_mtu(get_session(self), self.context.ifnames, mtu)
+                set_mtu(self.conn, self.context.ifnames, mtu)
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
 
@@ -718,19 +623,19 @@ class MTUCommand(Command):
 class AutoNegoAdvertiseCommand(Command):
     def arguments(self):
         if self.root.name != "no":
-            return valid_speeds(get_session(self))
+            return valid_speeds(self.conn)
 
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_auto_nego_adv_speed(get_session(self), self.context.ifnames, None)
+            set_auto_nego_adv_speed(self.conn, self.context.ifnames, None)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_auto_nego_adv_speed(get_session(self), self.context.ifnames, line[0])
+            set_auto_nego_adv_speed(self.conn, self.context.ifnames, line[0])
 
 
 class AutoNegoCommand(Command):
@@ -749,13 +654,13 @@ class AutoNegoCommand(Command):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_auto_nego(get_session(self), self.context.ifnames, None)
+            set_auto_nego(self.conn, self.context.ifnames, None)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_auto_nego(get_session(self), self.context.ifnames, line[0] == "enable")
+            set_auto_nego(self.conn, self.context.ifnames, line[0] == "enable")
 
 
 class BreakoutCommand(Command):
@@ -767,7 +672,7 @@ class BreakoutCommand(Command):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_breakout(get_session(self), self.context.ifnames, None, None)
+            set_breakout(self.conn, self.context.ifnames, None, None)
         else:
             valid_speed = ["50G", "20G", "10G", "25G"]
             usage = f'usage: {self.name_all()} [{"|".join(self.list())}]'
@@ -785,7 +690,7 @@ class BreakoutCommand(Command):
             except:
                 raise InvalidInput(usage)
             set_breakout(
-                get_session(self),
+                self.conn,
                 self.context.ifnames,
                 input_values[0],
                 input_values[1],
@@ -797,9 +702,8 @@ class InterfaceContext(Context):
 
     def __init__(self, parent, ifname):
         super().__init__(parent)
-        self.session = self.root().conn.start_session()
         self.name = ifname
-        ifnames = interface_names(self.session, ifname)
+        ifnames = interface_names(self.conn, ifname)
 
         if len(ifnames) == 0:
             raise InvalidInput(f"no interface found: {ifname}")
@@ -833,7 +737,7 @@ class InterfaceContext(Context):
             if len(args) != 0:
                 parent.exec(f"show {' '.join(args)}")
             else:
-                show(self.session, ifnames)
+                show(self.conn, ifnames)
 
     def __str__(self):
         return "interface({})".format(self.name)
@@ -841,29 +745,24 @@ class InterfaceContext(Context):
 
 class InterfaceCounterCommand(Command):
     def arguments(self):
-        return ["table"] + interface_names(get_session(self))
+        return ["table"] + interface_names(self.conn)
 
     def exec(self, line):
-        ifnames = interface_names(get_session(self))
         table = False
-        if len(line) == 1:
-            if line[0] == "table":
-                table = True
-            else:
-                try:
-                    ptn = re.compile(line[0])
-                except re.error:
-                    raise InvalidInput(
-                        f"failed to compile {line[0]} as a regular expression"
-                    )
-                ifnames = [i for i in ifnames if ptn.match(i)]
+        ptn = None
+        if len(line) == 1 and line[0] != "table":
+            ptn = line[0]
+        ifnames = interface_names(self.conn, ptn)
+
+        if len(line) == 1 and line[0] == "table":
+            table = True
         elif len(line) > 1:
             for ifname in line:
                 if ifname not in ifnames:
                     raise InvalidInput(f"Invalid interface {ifname}")
             ifnames = line
 
-        show_counters(get_session(self), ifnames, table)
+        show_counters(self.conn, ifnames, table)
 
 
 class Show(Command):
@@ -873,12 +772,9 @@ class Show(Command):
         "counters": InterfaceCounterCommand,
     }
 
-    def __init__(self, context, parent, name, **options):
-        super().__init__(context, parent, name, **options)
-
     def exec(self, line):
         if len(line) == 1:
-            return show_interface(get_session(self), line[0])
+            return show_interface(self.conn, line[0])
         else:
             raise InvalidInput(self.usage())
 
@@ -899,16 +795,11 @@ class ClearInterfaceGroupCommand(Command):
     }
 
     def exec(self, line):
-        conn = self.context.root().conn
-        with conn.start_session() as sess:
-            if len(line) < 1 or line[0] not in ["counters"]:
-                raise InvalidInput(self.usage())
-            if len(line) == 1:
-                if line[0] == "counters":
-                    sess.rpc_send("/goldstone-interfaces:clear-counters", {})
-                    stdout.info("Interface counters are cleared.\n")
-            else:
-                raise InvalidInput(self.usage())
+        if len(line) == 1 and line[0] == "counters":
+            self.conn.rpc("/goldstone-interfaces:clear-counters", {})
+            stdout.info("Interface counters are cleared.\n")
+        else:
+            raise InvalidInput(self.usage())
 
     def usage(self):
         return "usage:\n" f" {self.parent.name} {self.name} (counters)"
@@ -922,7 +813,7 @@ GlobalClearCommand.register_command(
 class Run(Command):
     def exec(self, line):
         if len(line) == 0:
-            return run_conf(get_session(self))
+            return run_conf(self.conn)
         else:
             stderr.info(self.usage())
 
@@ -937,7 +828,7 @@ RunningConfigCommand.register_command(
 
 class TechSupport(Command):
     def exec(self, line):
-        show_interface(get_session(self))
+        show_interface(self.conn)
         self.parent.xpath_list.append("/goldstone-interfaces:interfaces")
 
 
@@ -948,17 +839,15 @@ TechSupportCommand.register_command(
 
 class InterfaceCommand(Command):
     def arguments(self):
-        return interface_names(get_session(self))
+        return interface_names(self.conn)
 
     def exec(self, line):
         if len(line) != 1:
             raise InvalidInput(f"usage: {self.name_all()} <ifname>")
         if self.root.name == "no":
-            sess = get_session(self)
-            sr_op = sysrepo_wrap(sess)
-            for name in interface_names(sess, line[0]):
-                sr_op.delete_data(ifxpath(name), no_apply=True)
-            sr_op.apply()
+            for name in interface_names(self.conn, line[0]):
+                self.conn.delete(ifxpath(name))
+            self.conn.apply()
         else:
             return InterfaceContext(self.context, line[0])
 

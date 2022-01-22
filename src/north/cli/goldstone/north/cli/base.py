@@ -14,13 +14,10 @@ import sys
 import subprocess
 import logging
 import typing
+from .connector.base import CLIException
 
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
-
-
-class CLIException(Exception):
-    pass
 
 
 class InvalidInput(CLIException):

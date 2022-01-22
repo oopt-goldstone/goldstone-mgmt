@@ -1,10 +1,8 @@
-import sysrepo as sr
-from libyang import SNode
 import subprocess
 import logging
 
-from .base import InvalidInput, Command, CLIException
-from .cli import Context
+from .base import InvalidInput, CLIException
+from .cli import Command, Context
 
 logger = logging.getLogger(__name__)
 
@@ -42,25 +40,19 @@ class SaveCommand(Command):
         if len(line) != 1:
             raise InvalidInput(f"usage: {self.name} [ <module name> | all ]")
 
-        with self.context.conn.start_session() as sess:
-            sess.switch_datastore("startup")
+        if line[0] == "all":
+            modules = [m for m in self.conn.models if "goldstone" in m]
+        else:
+            modules = [line[0]]
 
-            if line[0] == "all":
-                ctx = self.context.conn.get_ly_ctx()
-                modules = [m.name() for m in ctx if "goldstone" in m.name()]
-            else:
-                modules = [line[0]]
-
-            for m in modules:
-                try:
-                    stdout.info(f"saving module {m}")
-                    sess.copy_config("running", m)
-                except sr.SysrepoError as e:
-                    raise CLIException(f"failed to save {m}: {e}")
+        for m in modules:
+            try:
+                conn.save(m)
+            except DSException as e:
+                raise CLIException(f"failed to save {m}: {e}")
 
     def arguments(self):
-        ctx = self.context.conn.get_ly_ctx()
-        cmds = [m.name() for m in ctx if "goldstone" in m.name()]
+        cmds = [m for m in self.conn.models if "goldstone" in m]
         cmds.append("all")
         return cmds
 
@@ -68,13 +60,9 @@ class SaveCommand(Command):
 class Root(Context):
     REGISTERED_COMMANDS = {}
 
-    def __init__(self, conn=None):
-        if conn == None:
-            conn = sr.SysrepoConnection()
+    def __init__(self, conn):
         self.conn = conn
         self.notif_session = None
-        ctx = self.conn.get_ly_ctx()
-        self.installed_modules = [m.name() for m in ctx]
 
         super().__init__(None, fuzzy_completion=True)
 
@@ -119,18 +107,11 @@ class Root(Context):
         if self.notif_session:
             logger.warning("notification already enabled")
             return
-        self.notif_session = self.conn.start_session("running")
-        ctx = self.conn.get_ly_ctx()
-        for model in ctx:
-            if "goldstone" not in model.name():
+        self.notif_session = self.conn.new_session()
+        for model in self.conn.models:
+            if "goldstone" not in model:
                 continue
-
-            module = ctx.get_module(model.name())
-            notif = list(module.children(types=(SNode.NOTIF,)))
-            if len(notif) > 0:
-                self.notif_session.subscribe_notification_tree(
-                    model.name(), f"/{model.name()}:*", 0, 0, self.notification_cb
-                )
+            self.notif_session.subscribe_notifications(model, self.notification_cb)
 
     def disable_notification(self):
         if not self.notif_session:

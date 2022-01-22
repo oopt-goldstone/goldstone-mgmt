@@ -1,10 +1,8 @@
-from .base import InvalidInput, Command
-from .cli import GlobalShowCommand, ModelExists, Context, RunningConfigCommand
+from .base import InvalidInput
+from .cli import GlobalShowCommand, ModelExists, Context, RunningConfigCommand, Command
 from .root import Root
-import sysrepo as sr
 import logging
-from .common import sysrepo_wrap
-from prompt_toolkit.completion import Completion, Completer, FuzzyWordCompleter
+from prompt_toolkit.completion import Completion, Completer
 
 from tabulate import tabulate
 from natsort import natsorted
@@ -16,46 +14,8 @@ stderr = logging.getLogger("stderr")
 XPATH = "/goldstone-gearbox:gearboxes/gearbox"
 
 
-def get_names(session):
-    sr_op = sysrepo_wrap(session)
-    try:
-        d = sr_op.get_data(XPATH, "operational")
-        d = d.get("gearboxes", {}).get("gearbox", {})
-        return natsorted(v["name"] for v in d)
-    except sr.SysrepoNotFoundError:
-        return []
-
-
 def gbxpath(name):
     return f"{XPATH}[name='{name}']"
-
-
-def set_admin_status(session, name, value):
-    sr_op = sysrepo_wrap(session)
-
-    xpath = gbxpath(name)
-    if value:
-        sr_op.set_data(f"{xpath}/config/name", name, no_apply=True)
-        sr_op.set_data(f"{xpath}/config/admin-status", value, no_apply=True)
-    else:
-        sr_op.delete_data(f"{xpath}/config/admin-status", no_apply=True)
-
-    sr_op.apply()
-
-
-def set_enable_flexible_connection(session, name, value):
-    sr_op = sysrepo_wrap(session)
-
-    xpath = gbxpath(name)
-    if value:
-        sr_op.set_data(f"{xpath}/config/name", name, no_apply=True)
-        sr_op.set_data(
-            f"{xpath}/config/enable-flexible-connection", value, no_apply=True
-        )
-    else:
-        sr_op.delete_data(f"{xpath}/config/enable-flexible-connection", no_apply=True)
-
-    sr_op.apply()
 
 
 class AdminStatusCommand(Command):
@@ -64,16 +24,20 @@ class AdminStatusCommand(Command):
             return ["up", "down"]
 
     def exec(self, line):
+        name = self.context.name
+        xpath = gbxpath(name)
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_admin_status(self.context.session, self.context.name, None)
+            self.conn.delete(f"{xpath}/config/admin-status")
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_admin_status(self.context.session, self.context.name, line[0].upper())
+            self.conn.set(f"{xpath}/config/name", name)
+            self.conn.set(f"{xpath}/config/admin-status", line[0].upper())
+        self.conn.apply()
 
 
 class ConnectionCompleter(Completer):
@@ -181,38 +145,32 @@ class ConnectionCommand(Command):
             l=self.line_interfaces(client),
         )
 
-        sr_op = sysrepo_wrap(self.context.session)
-
         name = self.context.name
         xpath = gbxpath(name)
         if self.root.name != "no":
-            sr_op.set_data(f"{xpath}/config/name", name, no_apply=True)
-            sr_op.set_data(
+            self.conn.set(f"{xpath}/config/name", name)
+            self.conn.set(
                 f"/goldstone-interfaces:interfaces/interface[name='{client}']/config/name",
                 client,
-                no_apply=True,
             )
-            sr_op.set_data(
+            self.conn.set(
                 f"/goldstone-interfaces:interfaces/interface[name='{line}']/config/name",
                 line,
-                no_apply=True,
             )
             xpath = f"{xpath}/connections/connection[client-interface='{client}'][line-interface='{line}']"
-            sr_op.set_data(
+            self.conn.set(
                 f"{xpath}/config/client-interface",
                 client,
-                no_apply=True,
             )
-            sr_op.set_data(
+            self.conn.set(
                 f"{xpath}/config/line-interface",
                 line,
-                no_apply=True,
             )
         else:
             xpath = f"{xpath}/connections/connection[client-interface='{client}'][line-interface='{line}']"
-            sr_op.delete_data(xpath, no_apply=True)
+            self.conn.delete(xpath)
 
-        sr_op.apply()
+        self.conn.apply()
 
     def _interfaces(self, kind):
         name = self.context.name
@@ -221,7 +179,7 @@ class ConnectionCommand(Command):
             f"/interface[state/goldstone-gearbox:associated-gearbox='{name}']"
             "/goldstone-component-connection:component-connection"
         )
-        v = self.context.get_operational_data(xpath, {}, strip=False)
+        v = self.conn.get_operational(xpath, {}, strip=False)
         interfaces = v.get("interfaces", {}).get("interface", [])
         return (
             i["name"] for i in interfaces if kind in i.get("component-connection", {})
@@ -240,20 +198,20 @@ class EnableFlexibleConnectionCommand(Command):
             return ["true", "false"]
 
     def exec(self, line):
+        name = self.context.name
+        xpath = gbxpath(name)
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_enable_flexible_connection(
-                self.context.session, self.context.name, None
-            )
+            self.conn.delete(f"{xpath}/config/enable-flexible-connection")
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_enable_flexible_connection(
-                self.context.session, self.context.name, line[0] == "true"
-            )
+            self.conn.set(f"{xpath}/config/name", name)
+            self.conn.set(f"{xpath}/config/enable-flexible-connection", line[0])
+        self.conn.apply()
 
 
 class GearboxContext(Context):
@@ -272,10 +230,11 @@ class GearboxContext(Context):
             if len(args) != 0:
                 parent.exec(f"show {' '.join(args)}")
             else:
-                data = self.get_operational_data(
+                data = self.conn.get_operational(
                     f"/goldstone-gearbox:gearboxes/gearbox[name='{self.name}']",
-                    [{}],
-                )[0]
+                    {},
+                    one=True,
+                )
 
                 rows = []
                 state = data.get("state", {})
@@ -307,7 +266,7 @@ class GearboxContext(Context):
 
 class GearboxCommand(Command):
     def arguments(self):
-        return get_names(self.context.session)
+        return natsorted(v for v in self.conn.get_operational(XPATH + "/name", []))
 
     def exec(self, line):
         if len(line) != 1:
@@ -315,8 +274,8 @@ class GearboxCommand(Command):
 
         if self.root.name == "no":
             xpath = gbxpath(line[0])
-            sr_op = sysrepo_wrap(self.context.session)
-            sr_op.delete_data(xpath)
+            self.conn.delete(xpath)
+            self.conn.apply()
         else:
             return GearboxContext(self.context, line[0])
 
@@ -330,9 +289,7 @@ class Show(Command):
     def exec(self, line):
         if len(line) != 0:
             raise InvalidInput(f"usage: {self.name_all()}")
-        data = self.context.get_operational_data(
-            "/goldstone-gearbox:gearboxes/gearbox", []
-        )
+        data = self.conn.get_operational("/goldstone-gearbox:gearboxes/gearbox", [])
         rows = []
         for d in data:
             state = d.get("state", {})
@@ -357,7 +314,7 @@ class Run(Command):
     def exec(self, line):
         if len(line) != 0:
             raise InvalidInput(f"usage: {self.name_all()}")
-        data = self.context.get_running_data("/goldstone-gearbox:gearboxes/gearbox", [])
+        data = self.conn.get("/goldstone-gearbox:gearboxes/gearbox", [])
         for d in data:
             stdout.info(f"gearbox {d['name']}")
             config = d.get("config")

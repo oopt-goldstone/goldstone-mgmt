@@ -1,5 +1,6 @@
-from .base import Command, InvalidInput
+from .base import InvalidInput
 from .cli import (
+    Command,
     Context,
     GlobalShowCommand,
     RunningConfigCommand,
@@ -7,14 +8,12 @@ from .cli import (
     ModelExists,
 )
 from .root import Root
-from .common import sysrepo_wrap, print_tabular
+
 from tabulate import tabulate
 from natsort import natsorted
 from prompt_toolkit.completion import (
     FuzzyWordCompleter,
 )
-import sysrepo as sr
-
 from .interface import InterfaceContext
 
 import logging
@@ -26,57 +25,49 @@ stderr = logging.getLogger("stderr")
 XPATH = "/goldstone-portchannel:portchannel"
 
 
-def get_session(cmd):
-    return cmd.context.root().conn.start_session()
-
-
 def pcxpath(id):
     return f"{XPATH}/portchannel-group[portchannel-id='{id}']"
 
 
 def create(session, id):
-    sr_op = sysrepo_wrap(session)
-    sr_op.set_data(f"{pcxpath(id)}/config/portchannel-id", id)
+    session.set(f"{pcxpath(id)}/config/portchannel-id", id)
+    session.apply()
 
 
 def delete(session, id):
-    sr_op = sysrepo_wrap(session)
-    sr_op.delete_data(pcxpath(id))
+    session.delete(pcxpath(id))
+    session.apply()
 
 
-def get_list(session, ds, include_implicit_values=True):
-    sr_op = sysrepo_wrap(session)
-    try:
-        tree = sr_op.get_data(XPATH, ds, include_implicit_values)
-        return natsorted(
-            tree["portchannel"]["portchannel-group"],
-            key=lambda x: x["portchannel-id"],
-        )
-    except (KeyError, sr.errors.SysrepoNotFoundError) as error:
-        return []
+def get_list(session, ds, include_implicit_defaults=True):
+    l = session.get(
+        XPATH + "/portchannel-group",
+        [],
+        ds=ds,
+        include_implicit_defaults=include_implicit_defaults,
+    )
+    return natsorted(
+        l,
+        key=lambda x: x["portchannel-id"],
+    )
 
 
 def add_interfaces(session, id, ifnames):
-    sr_op = sysrepo_wrap(session)
     prefix = "/goldstone-interfaces:interfaces"
     for ifname in ifnames:
         xpath = f"{prefix}/interface[name='{ifname}']"
         # in order to create the interface node if it doesn't exist in running DS
-        try:
-            sr_op.get_data(xpath, "running")
-        except sr.SysrepoNotFoundError as e:
-            sr_op.set_data(f"{xpath}/config/name", ifname, no_apply=True)
-
-        sr_op.set_data(f"{pcxpath(id)}/config/interface", ifname, no_apply=True)
-    sr_op.apply()
+        session.set(f"{xpath}/config/name", ifname)
+        session.set(f"{pcxpath(id)}/config/interface", ifname)
+    session.apply()
 
 
 def set_admin_status(session, id, value):
-    sr_op = sysrepo_wrap(session)
     if value:
-        sr_op.set_data(f"{pcxpath(id)}/config/admin-status", value)
+        session.set(f"{pcxpath(id)}/config/admin-status", value)
     else:
-        sr_op.delete_data(f"{pcxpath(id)}/config/admin-status")
+        session.delete(f"{pcxpath(id)}/config/admin-status")
+    session.apply()
 
 
 def get_id(session):
@@ -84,7 +75,6 @@ def get_id(session):
 
 
 def remove_interfaces(session, ifnames):
-    sr_op = sysrepo_wrap(session)
     groups = get_list(session, "running")
     if len(groups) == 0:
         raise InvalidInput("portchannel not configured for this interface")
@@ -94,17 +84,15 @@ def remove_interfaces(session, ifnames):
             try:
                 if ifname in data["config"]["interface"]:
                     xpath = pcxpath(data["portchannel-id"])
-                    sr_op.delete_data(
-                        f"{xpath}/config/interface[.='{ifname}']", no_apply=True
-                    )
+                    session.delete(f"{xpath}/config/interface[.='{ifname}']")
                     break
             except KeyError:
                 pass
         else:
-            sr_op.discard_changes()
+            session.discard_changes()
             raise InvalidInput(f"portchannel not configured for {ifname}")
 
-    sr_op.apply()
+    session.apply()
 
 
 def run_conf(session):
@@ -119,101 +107,58 @@ def run_conf(session):
 
 
 def show(session, id=None):
-    sr_op = sysrepo_wrap(session)
-    try:
-        tree = sr_op.get_data(XPATH, "operational")
-        id_list = tree["portchannel"]["portchannel-group"]
-    except (sr.SysrepoNotFoundError, KeyError):
-        id_list = []
-    except sr.SysrepoCallbackFailedError as e:
-        raise InvalidInput(e.details[0][1] if e.details else str(e))
 
-    if len(id_list) == 0:
-        stdout.info(
-            tabulate(
-                [],
-                ["Portchannel-ID", "oper-status", "admin-status", "Interface"],
-                tablefmt="pretty",
-            )
-        )
+    if id != None:
+        items = session.get_operational(pcxpath(id))
     else:
-        data_tabulate = []
-        interface = []
-        ids = []
-        adm_st = []
-        op_st = []
+        items = get_list(session, "operational")
 
-        if id != None:
-            ids.append(id)
-        else:
-            for data in id_list:
-                ids.append(data["portchannel-id"])
-
-            ids = natsorted(ids)
-
-        for id in ids:
-            data = id_list[id]
-            adm_st.append(data["state"]["admin-status"].lower())
-            try:
-                interface.append(natsorted(list(data["state"]["interface"])))
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                interface.append([])
-            try:
-                op_st.append(data["state"]["oper-status"].lower())
-            except (sr.errors.SysrepoNotFoundError, KeyError):
-                op_st.append("-")
-
-        for i in range(len(ids)):
-
-            if len(interface[i]) > 0:
-                data_tabulate.append([ids[i], op_st[i], adm_st[i], interface[i][0]])
-            else:
-                data_tabulate.append([ids[i], op_st[i], adm_st[i], "-"])
-
-            for j in range(1, len(interface[i])):
-                data_tabulate.append(["", "", "", interface[i][j]])
-
-            if i != len(ids) - 1:
-                data_tabulate.append(["", "", "", ""])
-
-        stdout.info(
-            tabulate(
-                data_tabulate,
-                ["Portchannel-ID", "oper-status", "admin-status", "Interface"],
-                tablefmt="pretty",
-                colalign=("left",),
-            )
+    rows = []
+    for item in items:
+        rows.append(
+            [
+                item["portchannel-id"],
+                item["state"]["oper-status"].lower(),
+                item["state"]["admin-status"].lower(),
+                ", ".join(natsorted(list(item["state"].get("interface", [])))),
+            ]
         )
+
+    stdout.info(
+        tabulate(
+            rows,
+            ["Portchannel ID", "oper-status", "admin-status", "Interfaces"],
+        )
+    )
 
 
 class PortchannelContext(Context):
     def __init__(self, parent, id):
         self.id = id
         super().__init__(parent)
-        session = self.root().conn.start_session()
-        create(session, self.id)
+        create(self.conn, self.id)
 
         @self.command(parent.get_completer("show"), name="show")
         def show_(args):
             if len(args) != 0:
                 parent.exec(f"show {' '.join(args)}")
             else:
-                show(session, self.id)
+                show(self.conn, self.id)
 
         @self.command()
         def shutdown(args):
             if len(args) != 0:
                 raise InvalidInput("usage: shutdown")
-            set_admin_status(session, id, "DOWN")
+            set_admin_status(self.conn, id, "DOWN")
 
         @self.command(FuzzyWordCompleter(["shutdown", "admin-status"]))
         def no(args):
             if len(args) != 1:
                 raise InvalidInput(f"usage: no [shutdown|admin-status]")
             if args[0] == "shutdown":
-                set_admin_status(session, id, "UP")
+                set_admin_status(self.conn, id, "UP")
             elif args[0] == "admin-status":
-                set_admin_status(session, id, None)
+                set_admin_status(self.conn, id, None)
             else:
                 raise InvalidInput(f"usage: no [shutdown|admin-status]")
 
@@ -225,7 +170,7 @@ class PortchannelContext(Context):
                 raise InvalidInput(
                     f"usage: admin_status [{'|'.join(admin_status_list)}]"
                 )
-            set_admin_status(session, id, args[0].upper())
+            set_admin_status(self.conn, id, args[0].upper())
 
     def __str__(self):
         return "portchannel({})".format(self.id)
@@ -234,7 +179,7 @@ class PortchannelContext(Context):
 class Show(Command):
     def exec(self, line):
         if len(line) == 0:
-            return show(get_session(self))
+            return show(self.conn)
         else:
             stderr.info(self.usage())
 
@@ -250,7 +195,7 @@ GlobalShowCommand.register_command(
 class Run(Command):
     def exec(self, line):
         if len(line) == 0:
-            return run_conf(get_session(self))
+            return run_conf(self.conn)
         else:
             stderr.info(self.usage())
 
@@ -265,7 +210,7 @@ RunningConfigCommand.register_command(
 
 class TechSupport(Command):
     def exec(self, line):
-        show(get_session(self))
+        show(self.conn)
         self.parent.xpath_list.append("/goldstone-portchannel:portchannel")
 
 
@@ -283,7 +228,7 @@ class PortchannelCommand(Command):
         super().__init__(context, parent, name, **options)
 
     def arguments(self):
-        return get_id(get_session(self))
+        return get_id(self.conn)
 
     def usage(self):
         return "<portchannel-id>"
@@ -291,8 +236,8 @@ class PortchannelCommand(Command):
     def exec(self, line):
         if len(line) != 1:
             raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
-        if self.parent and self.parent.name == "no":
-            delete(get_session(self), line[0])
+        if self.root.name == "no":
+            delete(self.conn, line[0])
         else:
             return PortchannelContext(self.context, line[0])
 
@@ -309,16 +254,16 @@ Root.register_command(
 class InterfacePortchannelCommand(Command):
     def arguments(self):
         if self.root.name != "no":
-            get_id(get_session(self))
+            return get_id(self.conn)
         return []
 
     def exec(self, line):
         if self.root.name == "no":
-            remove_interfaces(get_session(self), self.context.ifnames)
+            remove_interfaces(self.conn, self.context.ifnames)
         else:
             if len(line) != 1:
                 raise InvalidInput(f"usage: {self.name_all()} <portchannel_id>")
-            add_interfaces(get_session(self), line[0], self.context.ifnames)
+            add_interfaces(self.conn, line[0], self.context.ifnames)
 
 
 InterfaceContext.register_command(

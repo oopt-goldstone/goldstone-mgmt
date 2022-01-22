@@ -1,5 +1,6 @@
-from .base import Command, InvalidInput
+from .base import InvalidInput
 from .cli import (
+    Command,
     Context,
     GlobalShowCommand,
     RunningConfigCommand,
@@ -8,11 +9,8 @@ from .cli import (
 )
 from .root import Root
 
-import sysrepo as sr
-import libyang as ly
 from tabulate import tabulate
 from natsort import natsorted
-from .common import sysrepo_wrap, print_tabular
 
 from .interface import InterfaceContext
 
@@ -25,44 +23,27 @@ stderr = logging.getLogger("stderr")
 XPATH = "/goldstone-vlan:vlans/vlan"
 
 
-def get_session(cmd):
-    return cmd.context.root().conn.start_session()
-
-
 def vlan_xpath(vid):
     return f"{XPATH}[vlan-id='{vid}']"
 
 
 def get_vids(session):
-    sr_op = sysrepo_wrap(session)
-    xpath = "/goldstone-vlan:vlans/vlan/vlan-id"
-    try:
-        data = sr_op.get_data(xpath)
-    except sr.SysrepoNotFoundError:
-        return []
-    data = ly.xpath_get(data, xpath)
-    return [str(v) for v in data]
+    xpath = f"{XPATH}/vlan-id"
+    return [str(v) for v in session.get(xpath, [])]
 
 
 def get_interface_mode(session, ifname):
-    sr_op = sysrepo_wrap(session)
     xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/goldstone-vlan:switched-vlan/config/interface-mode"
-    mode = sr_op.get_data(xpath)
-    return ly.xpath_get(mode, xpath).lower()
+    return session.get(xpath, "").lower()
 
 
 def show_vlans(session, details="details"):
-    sr_op = sysrepo_wrap(session)
 
-    try:
-        data = sr_op.get_data(XPATH, "operational")
-    except sr.SysrepoNotFoundError:
+    data = session.get_operational(XPATH)
+    if data == None:
         stderr.info("no vlan configured")
         return
-    except sr.SysrepoCallbackFailedError as e:
-        raise InvalidInput(e.details[0][1] if e.details else str(e))
 
-    data = ly.xpath_get(data, XPATH)
     rows = []
     for v in data:
         vid = v.get("vlan-id", "-")
@@ -82,37 +63,33 @@ def show_vlans(session, details="details"):
 
 
 def set_name(session, vid, name):
-    sr_op = sysrepo_wrap(session)
-    sr_op.set_data(f"{vlan_xpath(vid)}/config/name", name)
+    session.set(f"{vlan_xpath(vid)}/config/name", name)
+    session.apply()
 
 
 def create(session, vids: int | list[int]):
-    sr_op = sysrepo_wrap(session)
     if type(vids) == int:
         vids = [vids]
 
     for vid in vids:
-        sr_op.set_data(f"{vlan_xpath(vid)}/config/vlan-id", vid, no_apply=True)
-    sr_op.apply()
+        session.set(f"{vlan_xpath(vid)}/config/vlan-id", vid)
+    session.apply()
 
 
 def delete(session, vids: int | list[int]):
-    sr_op = sysrepo_wrap(session)
     if type(vids) == int:
         vids = [vids]
 
     for vid in vids:
         if str(vid) not in get_vids(session):
             raise InvalidInput(f"vlan {vid} not found")
-        sr_op.delete_data(vlan_xpath(vid), no_apply=True)
-    sr_op.apply()
+        session.delete(vlan_xpath(vid))
+    session.apply()
 
 
 def show(session, vid):
     xpath = vlan_xpath(vid)
-    sr_op = sysrepo_wrap(session)
-    v = sr_op.get_data(xpath, "operational")
-    v = ly.xpath_get(v, xpath)
+    v = session.get_operational(xpath, one=True)
     rows = [("vid", v.get("vlan-id", "-"))]
     rows.append(("name", v["state"].get("name", "-")))
     members = natsorted(v.get("members", {}).get("member", []))
@@ -126,30 +103,6 @@ def run_conf(session):
         stdout.info(f"vlan {vid}")
         stdout.info(f"  quit")
     stdout.info("!")
-
-
-def set_vlan_mem(session, ifnames, mode, vid, config=True, no_apply=False):
-    sr_op = sysrepo_wrap(session)
-    for ifname in ifnames:
-        prefix = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-        xpath = prefix + "/config"
-        sr_op.set_data(f"{xpath}/name", ifname, no_apply=True)
-        xpath = prefix + "/goldstone-vlan:switched-vlan/config"
-
-        if config:
-            sr_op.set_data(f"{xpath}/interface-mode", mode.upper(), no_apply=True)
-            if mode == "access":
-                sr_op.set_data(f"{xpath}/access-vlan", vid, no_apply=True)
-            else:
-                sr_op.set_data(f"{xpath}/trunk-vlans", vid, no_apply=True)
-        else:
-            if mode == "access":
-                sr_op.delete_data(f"{xpath}/access-vlan", no_apply=True)
-            else:
-                sr_op.delete_data(f"{xpath}/trunk-vlans[.='{vid}']", no_apply=True)
-
-    if not no_apply:
-        sr_op.apply()
 
 
 def parse_vlan_range(r: str) -> list[int]:
@@ -176,8 +129,7 @@ class VLANContext(Context):
         self.vid_str = vid
         vids = parse_vlan_range(vid)
         super().__init__(parent)
-        self.session = parent.root().conn.start_session()
-        create(self.session, vids)
+        create(self.conn, vids)
 
         @self.command(parent.get_completer("show"))
         def show(args):
@@ -185,7 +137,7 @@ class VLANContext(Context):
                 parent.exec(f"show {' '.join(args)}")
             else:
                 for vid in vids:
-                    show(self.session, vid)
+                    show(self.conn, vid)
 
         @self.command()
         def name(args):
@@ -193,7 +145,7 @@ class VLANContext(Context):
                 raise InvalidInput("usage: name <name>")
             if len(vids) > 1:
                 raise InvalidInput("can't set name. multiple vlans are selected")
-            set_name(self.session, vids[0], args[0])
+            set_name(self.conn, vids[0], args[0])
 
     def __str__(self):
         return "vlan({})".format(self.vid_str)
@@ -207,7 +159,7 @@ class Show(Command):
     def exec(self, line):
         if len(line) < 1:
             raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
-        return show_vlans(get_session(self), line[0])
+        return show_vlans(self.conn, line[0])
 
     def usage(self):
         return "[ details ]"
@@ -219,7 +171,7 @@ GlobalShowCommand.register_command("vlan", Show, when=ModelExists("goldstone-vla
 class Run(Command):
     def exec(self, line):
         if len(line) == 0:
-            return run_conf(get_session(self))
+            return run_conf(self.conn)
         else:
             stderr.info(self.usage())
 
@@ -229,7 +181,7 @@ RunningConfigCommand.register_command("vlan", Run, when=ModelExists("goldstone-v
 
 class TechSupport(Command):
     def exec(self, line):
-        show_vlans(get_session(self))
+        show_vlans(self.conn)
         self.parent.xpath_list.append("/goldstone-vlan:vlans")
 
 
@@ -242,7 +194,7 @@ class VLANCommand(Command):
     COMMAND_DICT = {}
 
     def arguments(self):
-        return ["range"] + get_vids(get_session(self))
+        return ["range"] + get_vids(self.conn)
 
     def usage(self):
         return "{ <vlan-id> | range <range-list> }"
@@ -253,12 +205,12 @@ class VLANCommand(Command):
 
         if self.parent and self.parent.name == "no":
             if len(line) == 1 and line[0].isdigit():
-                delete(get_session(self), int(line[0]))
+                delete(self.conn, int(line[0]))
             elif line[0] == "range":
                 if len(line) != 2:
                     raise InvalidInput("usage: {self.name_all()} range <range-list>")
                 vids = parse_vlan_range(line[1])
-                delete(get_session(self), vids)
+                delete(self.conn, vids)
             else:
                 raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
         else:
@@ -283,7 +235,7 @@ Root.register_command(
 
 class SwitchportModeVLANCommand(Command):
     def arguments(self):
-        return get_vids(self.context.session)
+        return get_vids(self.conn)
 
 
 class SwitchportModeAccessCommand(Command):
@@ -304,13 +256,28 @@ class SwitchportModeCommand(Command):
         if len(line) < 3 or (line[0] not in self.COMMAND_DICT) or (line[1] != "vlan"):
             raise InvalidInput(f"usage : {self.name_all()} [trunk|access] vlan <vid>")
 
-        set_vlan_mem(
-            get_session(self),
-            self.context.ifnames,
-            line[0],
-            line[2],
-            config=self.root.name != "no",
-        )
+        mode = line[0]
+        vid = line[2]
+
+        for ifname in self.context.ifnames:
+            prefix = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+            xpath = prefix + "/config"
+            self.conn.set(f"{xpath}/name", ifname)
+            xpath = prefix + "/goldstone-vlan:switched-vlan/config"
+
+            if self.root.name != "no":
+                self.conn.set(f"{xpath}/interface-mode", mode.upper())
+                if mode == "access":
+                    self.conn.set(f"{xpath}/access-vlan", vid)
+                else:
+                    self.conn.set(f"{xpath}/trunk-vlans", vid)
+            else:
+                if mode == "access":
+                    self.conn.delete(f"{xpath}/access-vlan")
+                else:
+                    self.conn.delete(f"{xpath}/trunk-vlans[.='{vid}']")
+
+        self.conn.apply()
 
 
 class SwitchportCommand(Command):

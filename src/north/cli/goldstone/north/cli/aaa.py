@@ -1,5 +1,6 @@
-from .base import Command, InvalidInput
+from .base import InvalidInput
 from .cli import (
+    Command,
     Context,
     RunningConfigCommand,
     GlobalShowCommand,
@@ -7,12 +8,7 @@ from .cli import (
     TechSupportCommand,
 )
 
-import sysrepo as sr
 from tabulate import tabulate
-from .common import sysrepo_wrap, print_tabular
-from natsort import natsorted
-import json
-import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,8 +26,7 @@ class TACACS(object):
         return "/goldstone-aaa:aaa/server-groups/server-group[name='{}']".format(group)
 
     def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
+        self.conn = conn
         self.name = "TACACS+"
 
     def set_tacacs_server(self, ipAddress, key, port, timeout):
@@ -42,23 +37,24 @@ class TACACS(object):
             self.name,
             no_apply=True,
         )
-        self.sr_op.set_data(f"{xpath}/config/address", ipAddress, no_apply=True)
-        self.sr_op.set_data(f"{xpath}/tacacs/config/secret-key", key, no_apply=True)
-        self.sr_op.set_data(f"{xpath}/tacacs/config/port", port, no_apply=True)
-        self.sr_op.set_data(f"{xpath}/config/timeout", timeout, no_apply=True)
-        self.sr_op.apply()
+        self.conn.set(f"{xpath}/config/address", ipAddress)
+        self.conn.set(f"{xpath}/tacacs/config/secret-key", key)
+        self.conn.set(f"{xpath}/tacacs/config/port", port)
+        self.conn.set(f"{xpath}/config/timeout", timeout)
+        self.conn.apply()
 
     def set_no_tacacs(self, address):
         xpath = self.xpath("TACACS+", address)
         create_group(self.sr_op, "TACACS+")
-        self.sr_op.delete_data(xpath)
+        self.conn.delete(xpath)
+        self.conn.apply()
 
     def show(self):
         xpath = self.xpath_server_group("TACACS+")
-        try:
-            tacacs_data = self.sr_op.get_data(xpath)
-        except sr.SysrepoNotFoundError as e:
+        tacacs_data = self.conn.get(xpath)
+        if tacacs_data == None:
             return
+
         try:
             tacacs_list = list(
                 tacacs_data["aaa"]["server-groups"]["server-group"]["TACACS+"][
@@ -93,38 +89,25 @@ class AAA(object):
     xpath = "/goldstone-aaa:aaa/authentication/config/authentication-method"
 
     def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
+        self.conn = conn
 
     def set_aaa(self, auth_method):
-        try:
-            self.sr_op.get_data(self.xpath)
-        except sr.SysrepoNotFoundError:
-            self.sr_op.set_data(f"{self.xpath}", auth_method)
-        self.sr_op.delete_data(self.xpath)
-        self.sr_op.set_data(f"{self.xpath}", auth_method)
+        self.conn.set(self.xpath, auth_method)
+        self.conn.apply()
 
     def set_no_aaa(self):
-        self.sr_op.delete_data(self.xpath)
+        self.conn.delete(self.xpath)
+        self.conn.apply()
 
     def show(self):
-        try:
-            aaa_data = self.sr_op.get_data(self.xpath)
-        except sr.SysrepoNotFoundError as e:
-            return
-        aaa_dict = {}
-        try:
-            v = aaa_data["aaa"]["authentication"]["config"]["authentication-method"]
-            aaa_dict["authentication-method"] = v[0]
-            print_tabular(aaa_dict, "")
-        except Exception as e:
-            return
+        aaa_data = self.conn.get(self.xpath)
+        if aaa_data:
+            stdout.info(tabuldate([aaa_data], ["authentication method"]))
 
 
 class System(object):
     def __init__(self, conn):
-        self.session = conn.start_session()
-        self.sr_op = sysrepo_wrap(self.session)
+        self.conn = conn
         self.aaa = AAA(conn)
         self.tacacs = TACACS(conn)
 
@@ -137,13 +120,9 @@ class System(object):
         output = []
 
         try:
-            tacacs_tree = self.sr_op.get_data(
-                "/goldstone-aaa:aaa/server-groups/server-group['TACACS+']/servers/server"
-            )
-            tacacs_list = list(
-                tacacs_tree["aaa"]["server-groups"]["server-group"]["TACACS+"][
-                    "servers"
-                ]["server"]
+            tacacs_list = self.conn.get(
+                "/goldstone-aaa:aaa/server-groups/server-group['TACACS+']/servers/server",
+                [],
             )
             server_address = []
             for item in tacacs_list:
@@ -187,9 +166,8 @@ class System(object):
             pass
 
         try:
-            aaa_data = self.sr_op.get_data("/goldstone-aaa:aaa/authentication")
-            conf_data = aaa_data["aaa"]["authentication"]["config"]
-            auth_method_list = conf_data.get("authentication-method")
+            aaa_data = self.conn.get("/goldstone-aaa:aaa/authentication/config")
+            auth_method_list = aaa_data.get("authentication-method")
             auth_method = auth_method_list[0]
             if auth_method is None:
                 pass
@@ -214,12 +192,10 @@ class System(object):
         self.tacacs.show()
 
 
-def create_group(sr_op, group):
-    xpath = "/goldstone-aaa:aaa/server-groups/server-group[name='{}']".format(group)
-    try:
-        sr_op.get_data(xpath, "running")
-    except sr.SysrepoNotFoundError as e:
-        sr_op.set_data(f"{xpath}/config/name", group)
+def create_group(session, group):
+    xpath = f"/goldstone-aaa:aaa/server-groups/server-group[name='{group}']"
+    session.set(f"{xpath}/config/name", group)
+    session.apply()
 
 
 class AAACommand(Command):
@@ -230,7 +206,7 @@ class AAACommand(Command):
         self.aaa = AAA(context.root().conn)
 
     def usage(self):
-        if self.parent and self.parent.name == "no":
+        if self.root.name == "no":
             return "authentication login"
 
         return "authentication login default [group tacacs | local]"
@@ -238,7 +214,7 @@ class AAACommand(Command):
     def exec(self, line):
         usage = f"usage: {self.name_all()} {self.usage()}"
 
-        if self.parent and self.parent.name == "no":
+        if self.root.name == "no":
             if len(line) != 2:
                 raise InvalidInput(usage)
             self.aaa.set_no_aaa()
@@ -263,7 +239,7 @@ class AAACommand(Command):
 class Show(Command):
     def exec(self, line):
         if len(line) == 0:
-            return AAA(self.context.root().conn).show()
+            return AAA(self.conn).show()
         else:
             stderr.info(self.usage())
 
@@ -277,7 +253,7 @@ GlobalShowCommand.register_command("aaa", Show, when=ModelExists("goldstone-aaa"
 class Run(Command):
     def exec(self, line):
         if len(line) == 0:
-            return System(self.context.root().conn).run_conf()
+            return System(self.conn).run_conf()
         else:
             stderr.info(self.usage())
 
@@ -290,7 +266,7 @@ RunningConfigCommand.register_command("system", Run, when=ModelExists("goldstone
 
 class TechSupport(Command):
     def exec(self, line):
-        System(self.context.root().conn).tech_support()
+        System(self.conn).tech_support()
         self.parent.xpath_list.append("/goldstone-aaa:aaa")
 
 
@@ -304,7 +280,7 @@ class TACACSCommand(Command):
         if name == None:
             name = "tacacs-server"
         super().__init__(context, parent, name)
-        self.tacacs = TACACS(context.root().conn)
+        self.tacacs = TACACS(self.conn)
 
     def usage(self):
         if self.parent and self.parent.name == "no":
@@ -314,7 +290,7 @@ class TACACSCommand(Command):
 
     def exec(self, line):
         usage = f"usage: {self.name_all()} {self.usage()}"
-        if self.parent and self.parent.name == "no":
+        if self.root.name == "no":
             if len(line) != 2:
                 raise InvalidInput(usage)
             self.tacacs.set_no_tacacs(line[1])
@@ -352,7 +328,7 @@ class TACACSCommand(Command):
 class Show(Command):
     def exec(self, line):
         if len(line) == 0:
-            return TACACS(self.context.root().conn).show()
+            return TACACS(self.conn).show()
         else:
             raise InvalidInput(f"usage: {self.name_all()}")
 
