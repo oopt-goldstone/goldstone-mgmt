@@ -191,7 +191,7 @@ def parse_macsec_counters(attrs):
     egress_sa = [int(v) for v in attrs[1].split(",")]
     counters["egress"]["sa"]["packets-entrypted-protected"] = egress_sa[0]
     counters["egress"]["sa"]["packets-too-long"] = egress_sa[1]
-    counters["egress"]["sa"]["packets-as-not-in-use"] = egress_sa[2]
+    counters["egress"]["sa"]["packets-sa-not-in-use"] = egress_sa[2]
     counters["egress"]["sa"]["octets-encrypted-protected"] = egress_sa[3]
 
     ingress_secy = [int(v) for v in attrs[2].split(",")]
