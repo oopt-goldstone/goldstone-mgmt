@@ -102,6 +102,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     return '["tx-ready", "rx-ready"]'
                 else:
                     return ["tx-ready", "rx-ready"]
+            elif args[0] == "anlt-defect":
+                return '["resolved", "completed"]'
             elif args[0] == "tributary-mapping":
                 return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
             elif args[0] == "macsec-static-key":
@@ -146,10 +148,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             return m
 
         async def monitor(*args, **kwargs):
-            logger.debug("monitoring..")
+            logger.debug(f"monitoring.. {args}, {kwargs}")
             await asyncio.sleep(1)
 
-            obj = mock.MagicMock(spec=NetIf)
+            obj = mock.MagicMock(spec=NetIf(None, None, None))
             obj.obj = mock.MagicMock()
             obj.obj.module_oid = 1
             obj.get = get
@@ -166,6 +168,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             attr.value = '["ready", "rx-remote-fault"]'
             msg.attrs = [attr]
             await args[1](obj, None, msg)
+
+            await asyncio.sleep(1)
 
         def f(oid, spec):
             obj = mock.AsyncMock(spec=spec)
@@ -286,6 +290,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("auto-negotiation", "false"),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
@@ -331,6 +336,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("auto-negotiation", "false"),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
@@ -375,6 +381,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("auto-negotiation", "false"),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
@@ -421,6 +428,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("auto-negotiation", "false"),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
@@ -722,6 +730,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
+                ("auto-negotiation", "false"),
             ],
         )
 
@@ -761,6 +770,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
+                ("auto-negotiation", "false"),
             ],
         )
 
@@ -773,6 +783,57 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 v = libyang.xpath_get(v, xpath)
                 self.assertTrue("static-macsec" in v["ethernet"])
                 self.assertEqual(v["ethernet"]["static-macsec"]["state"]["key"], key)
+
+        await asyncio.to_thread(test)
+
+    async def test_interface_auto_nego(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                    "Interface1/0/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/ethernet/auto-negotiate/config/enabled",
+                    "true",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("tx-dis", "true"),
+                ("provision-mode", "normal"),
+                ("signal-rate", "100-gbe"),
+                ("auto-negotiation", "true"),
+                ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
+            ],
+        )
+
+        def test():
+            with self.conn.start_session("operational") as sess:
+                xpath = (
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']"
+                )
+                v = sess.get_data(xpath)
+                v = libyang.xpath_get(v, xpath)
+                self.assertEqual(
+                    v["ethernet"]["auto-negotiate"]["state"]["status"],
+                    ["resolved", "completed"],
+                )
 
         await asyncio.to_thread(test)
 
