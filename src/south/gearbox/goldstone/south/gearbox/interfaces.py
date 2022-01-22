@@ -160,6 +160,15 @@ class MACSECStaticKeyHandler(IfChangeHandler):
         return ",".join((str(i) for i in v))
 
 
+class AutoNegoHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "auto-negotiation"
+
+    def to_tai_value(self, v, attr_name):
+        return "true" if v else "false"
+
+
 def pcs_status2oper_status(pcs):
     status = "DOWN"
     if (
@@ -307,7 +316,7 @@ class InterfaceServer(ServerBase):
                         },
                         "auto-negotiate": {
                             "config": {
-                                "enabled": NoOp,
+                                "enabled": AutoNegoHandler,
                             }
                         },
                         "static-macsec": {
@@ -412,6 +421,15 @@ class InterfaceServer(ServerBase):
                     key = ""
 
                 await obj.set("macsec-static-key", key)
+
+            elif isinstance(obj, taish.HostIf):
+                anlt = (
+                    config.get("ethernet", {})
+                    .get("auto-negotiate", {})
+                    .get("config", {})
+                    .get("enabled", self.get_default("enabled"))
+                )
+                await obj.set("auto-negotiation", "true" if anlt else "false")
 
     async def tai_cb(self, obj, attr_meta, msg):
         m_oid = obj.obj.module_oid
@@ -668,6 +686,16 @@ class InterfaceServer(ServerBase):
                         }
                     except taish.TAIException as e:
                         logger.warning(f"failed to get MACSEC info: {e}")
+                elif isinstance(obj, taish.HostIf):
+                    enabled = await obj.get("auto-negotiation")
+                    anlt = {"enabled": enabled == "true"}
+                    try:
+                        status = json.loads(await obj.get("anlt-defect", json=True))
+                        anlt["status"] = status
+                    except taish.TAIException as e:
+                        pass
+
+                    i["ethernet"]["auto-negotiate"] = {"state": anlt}
 
                 try:
                     pcs = json.loads(await obj.get("pcs-status", json=True))
