@@ -118,6 +118,12 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return ",".join(str(i) for i in range(7))
             elif args[0] == "macsec-egress-channel-stats":
                 return ",".join(str(i) for i in range(7))
+            elif args[0] == "pmon-enet-mac-rx":
+                return ",".join(str(i) for i in range(40))
+            elif args[0] == "pmon-enet-mac-tx":
+                return ",".join(str(i) for i in range(33))
+            elif args[0] == "pmon-enet-phy-rx":
+                return ",".join(str(i) for i in range(109))
             else:
                 return mock.MagicMock()
 
