@@ -122,6 +122,15 @@ module goldstone-interfaces {
     leaf-list capable-speeds {
       type ethernet-speed;
     }
+    leaf-list status {
+      type enumeration {
+        enum resolved;
+        enum incompatible-link;
+        enum link-fail-inhibit-timeout;
+        enum completed;
+        enum fatal-error;
+      }
+    }
   }
 
   grouping ethernet-auto-negotiate-top {
