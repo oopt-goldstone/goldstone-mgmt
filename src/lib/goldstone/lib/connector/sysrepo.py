@@ -2,8 +2,8 @@ from .base import (
     Connector as BaseConnector,
     Session as BaseSession,
     Node as BaseNode,
-    DSLocked,
-    CLIException,
+    Error,
+    DatastoreLocked,
 )
 
 import sysrepo
@@ -22,11 +22,11 @@ def wrap_sysrepo_error(func):
         except sysrepo.SysrepoError as error:
             sess = args[0].session
             sess.discard_changes()
-            raise CLIException(error.details[0][1])
+            raise Error(error.details[0][1])
         except sysrepo.SysrepoLockedError as error:
             sess = args[0].session
             sess.discard_changes()
-            raise DSLocked(f"{xpath} is locked", error)
+            raise DatastoreLocked(f"{xpath} is locked", error)
 
     return f
 
@@ -78,7 +78,7 @@ class Session(BaseSession):
             )
             return default
         except sysrepo.SysrepoError as e:
-            raise CLIException(e)
+            raise Error(e)
 
         if strip:
             data = libyang.xpath_get(
@@ -91,7 +91,7 @@ class Session(BaseSession):
                 if len(data) == 1:
                     data = data[0]
                 elif len(data) > 1:
-                    raise CLIException(f"{xpath} matches more than one item")
+                    raise Error(f"{xpath} matches more than one item")
         logger.debug(f"xpath: {xpath}, ds: {self.ds}, value: {data}")
         return data
 
@@ -156,7 +156,7 @@ class Connector(BaseConnector):
         try:
             self.startup_session.copy_config("running", m)
         except sysrepo.SysrepoError as e:
-            raise CLIException(str(e))
+            raise Error(str(e))
 
     def rpc(self, xpath, args):
         return self.running_session.rpc(xpath, args)
@@ -192,7 +192,7 @@ class Connector(BaseConnector):
         elif ds == "startup":
             sess = self.startup_session
         else:
-            raise CLIException(f"unsupported ds: {ds}")
+            raise Error(f"unsupported ds: {ds}")
         return sess.get(xpath, default, include_implicit_defaults, strip, one)
 
     def get_operational(

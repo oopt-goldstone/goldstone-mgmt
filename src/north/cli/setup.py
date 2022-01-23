@@ -15,6 +15,6 @@ setuptools.setup(
             "gscli = goldstone.north.cli.main:main",
         ],
     },
-    packages=["goldstone.north.cli", "goldstone.north.cli.connector"],
+    packages=["goldstone.north.cli"],
     zip_safe=False,
 )

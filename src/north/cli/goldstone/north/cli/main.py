@@ -9,7 +9,10 @@ import logging
 import asyncio
 
 from .root import Root
-from .base import BreakLoop, CLIException
+from .base import BreakLoop
+
+from goldstone.lib.connector.sysrepo import Connector as SysrepoConnector
+from goldstone.lib.connector import Error
 
 from . import interface
 from . import platform
@@ -20,8 +23,6 @@ from . import portchannel
 from . import vlan
 from . import mgmt_if
 from . import gearbox
-
-from .connector.sysrepo import Connector as SysrepoConnector
 
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
@@ -148,7 +149,7 @@ def main():
             for line in stream:
                 try:
                     await shell.exec(line, no_fail=False)
-                except CLIException as e:
+                except Error as e:
                     stderr.info("failed to execute: {}".format(line))
                     stderr.info(e)
                     sys.exit(1)

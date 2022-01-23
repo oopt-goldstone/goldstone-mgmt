@@ -89,7 +89,7 @@ def main(host, username, password, arch):
 
         d = f"builds/{arch}/wheels"
         run(f"rm -rf {d} && mkdir -p {d}")
-        for pkg in ["libyang", "sysrepo", "system", "cli"]:
+        for pkg in ["libyang", "sysrepo", "lib", "system", "cli"]:
             run(
                 f'docker run -v `pwd`/{d}:/data -w /data {host_image} sh -c "cp -r /usr/share/wheels/{pkg} /data/"'
             )
@@ -118,9 +118,12 @@ def main(host, username, password, arch):
             ssh(cli, f"kubectl apply -f {manifest}")
 
         ssh(cli, "rm -rf /tmp/wheels")
-        ssh(cli, "pip uninstall -y goldstone-north-cli gssystem libyang sysrepo")
+        ssh(
+            cli,
+            "pip uninstall -y goldstone-lib goldstone-north-cli gssystem libyang sysrepo",
+        )
 
-        for v in ["libyang", "sysrepo", "cli", "system"]:
+        for v in ["libyang", "sysrepo", "lib", "cli", "system"]:
             ssh(cli, f"mkdir -p /tmp/wheels/{v}")
             path = f"builds/{arch}/wheels/{v}"
             scp.put(path, recursive=True, remote_path="/tmp/wheels")

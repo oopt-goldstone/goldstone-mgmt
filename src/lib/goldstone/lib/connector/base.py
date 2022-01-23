@@ -1,8 +1,8 @@
-class CLIException(Exception):
+class Error(Exception):
     pass
 
 
-class DSLocked(CLIException):
+class DatastoreLocked(Error):
     def __init__(self, msg, what):
         self.msg = msg
         super().__init__(what)
