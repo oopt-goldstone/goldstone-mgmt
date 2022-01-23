@@ -45,9 +45,7 @@ def ifxpath(ifname):
 
 
 def interface_names(session, ptn=None):
-    data = session.get_operational(f"{XPATH}/name")
-    if data == None:
-        raise InvalidInput("no interface found")
+    data = session.get_operational(f"{XPATH}/name", [])
 
     if ptn:
         try:
@@ -753,6 +751,9 @@ class InterfaceCounterCommand(Command):
         if len(line) == 1 and line[0] != "table":
             ptn = line[0]
         ifnames = interface_names(self.conn, ptn)
+
+        if len(ifnames) == 0:
+            raise InvalidInput("no interface found")
 
         if len(line) == 1 and line[0] == "table":
             table = True
