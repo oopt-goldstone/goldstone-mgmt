@@ -13,6 +13,9 @@ from tabulate import tabulate
 from natsort import natsorted
 import re
 import logging
+import base64
+import struct
+
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
@@ -28,6 +31,26 @@ def speed_yang_to_human(speed):
     # Considering only speeds supported in CLI
     speed = speed.split(":")[-1]
     return speed.replace("SPEED_", "")
+
+
+def static_macsec_key_to_yang(key):
+    v = line[0].split(",")
+    if len(v) != 4:
+        return None
+
+    try:
+        v = [int(i, 0) for i in v]
+    except ValueError:
+        return None
+
+    key = struct.pack("IIII", *v)
+    return base64.b64encode(key).decode()
+
+
+def static_macsec_key_to_human(key):
+    key = struct.unpack("IIII", base64.b64decode(key))
+    key = ",".join(f"0x{i:08x}" for i in key)
+    return key
 
 
 def breakout_yang_to_human(breakout):
@@ -183,6 +206,12 @@ def run_conf(session):
                 config = ethernet["breakout"].get("config", {})
                 breakout = breakout_yang_to_human(config)
                 stdout.info(f"  breakout {breakout}")
+            if "static-macsec" in ethernet:
+                config = ethernet["static-macsec"].get("config", {})
+                key = config.get("key")
+                if key:
+                    key = static_macsec_key_to_human(key)
+                    stdout.info(f"  static-macsec-key {key}")
 
         vlan = data.get("switched-vlan")
         if vlan:
@@ -496,6 +525,12 @@ def show(session, ifnames):
         state = data.get("state")
         add_to_rows("is-connected", state, lambda v: "true" if v else "false")
 
+        macsec = ethernet.get("static-macsec", {})
+        state = macsec.get("state", {})
+        key = state.get("key")
+        if key:
+            rows.append(("static-macsec-key", static_macsec_key_to_human(key)))
+
         stdout.info(tabulate(rows))
 
 
@@ -695,6 +730,31 @@ class BreakoutCommand(Command):
             )
 
 
+class StaticMACSECCommand(Command):
+    def exec(self, line):
+        if self.root.name == "no":
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            for name in self.context.ifnames:
+                self.conn.delete(
+                    f"{ifxpath(name)}/ethernet/goldstone-static-macsec:static-macsec"
+                )
+            self.conn.apply()
+        else:
+            if len(line) != 1:
+                raise InvalidInput(self.usage())
+
+            key = static_macsec_key_to_yang(line[0])
+            if not key:
+                raise InvalidInput(self.usage())
+
+            attr = "ethernet/goldstone-static-macsec:static-macsec/config/key"
+            _set(self.conn, self.context.ifnames, attr, key)
+
+    def usage(self):
+        return f"usage: {self.name_all()} <static-macsec-key> (<uint32>,<uint32>,<uint32>,<uint32>)"
+
+
 class InterfaceContext(Context):
     REGISTERED_COMMANDS = {}
 
@@ -730,6 +790,9 @@ class InterfaceContext(Context):
         self.add_command("auto-negotiate", AutoNegoCommand, add_no=True)
         self.add_command("breakout", BreakoutCommand, add_no=True)
 
+        if ModelExists("goldstone-static-macsec")(self):
+            self.add_command("static-macsec-key", StaticMACSECCommand, add_no=True)
+
         @self.command(parent.get_completer("show"), name="show")
         def show_(args):
             if len(args) != 0:
@@ -741,7 +804,46 @@ class InterfaceContext(Context):
         return "interface({})".format(self.name)
 
 
+class InterfaceMACSECCounterCommand(Command):
+    def arguments(self):
+        return [
+            n
+            for n in interface_names(self.conn)
+            if self.conn.get(
+                f"{ifxpath(n)}/ethernet/goldstone-static-macsec:static-macsec/config/key"
+            )
+        ]
+
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput(f"usage: {self.name_all()} <interface name>")
+        xpath = f"{ifxpath(line[0])}/ethernet/goldstone-static-macsec:static-macsec/state/counters"
+        data = self.conn.get_operational(xpath, one=True)
+        if not data:
+            raise InvalidInput(f"no static-macsec stats for {line[0]}")
+
+        stdout.info("Ingress SA:")
+        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["sa"].items()]))
+        stdout.info("Ingress SecY:")
+        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["secy"].items()]))
+        stdout.info("Ingress Channel:")
+        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["channel"].items()]))
+
+        stdout.info("Egress SA:")
+        stdout.info(tabulate([(k, v) for k, v in data["egress"]["sa"].items()]))
+        stdout.info("Egress SecY:")
+        stdout.info(tabulate([(k, v) for k, v in data["egress"]["secy"].items()]))
+        stdout.info("Egress Channel:")
+        stdout.info(tabulate([(k, v) for k, v in data["egress"]["channel"].items()]))
+
+
 class InterfaceCounterCommand(Command):
+    def __init__(self, context, parent, name, **options):
+        super().__init__(context, parent, name, **options)
+
+        if ModelExists("goldstone-static-macsec")(self):
+            self.add_command("static-macsec", InterfaceMACSECCounterCommand)
+
     def arguments(self):
         return ["table"] + interface_names(self.conn)
 
