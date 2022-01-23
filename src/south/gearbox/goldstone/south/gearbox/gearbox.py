@@ -125,7 +125,6 @@ class GearboxServer(ServerBase):
             await m.set("tributary-mapping", mapping)
 
     async def reconcile(self):
-        self.taish._ignored_module = []  # modules to ignore
         modules = await self.ifserver.list_modules()
         prefix = "/goldstone-gearbox:gearboxes/gearbox"
 
@@ -193,9 +192,10 @@ class GearboxServer(ServerBase):
 
     async def start(self):
 
-        await self.reconcile()
+        self.taish._ignored_module = []  # modules to ignore
 
         await self.ifserver.reconcile()
+        await self.reconcile()
 
         return await super().start()
 
