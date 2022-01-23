@@ -14,13 +14,13 @@ import sys
 import subprocess
 import logging
 import typing
-from .connector.base import CLIException
+from goldstone.lib.connector import Error
 
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 
-class InvalidInput(CLIException):
+class InvalidInput(Error):
     def __init__(self, msg, candidates=[]):
         self.msg = msg
         self.candidates = candidates
@@ -37,7 +37,7 @@ class AmbiguosInput(InvalidInput):
     pass
 
 
-class BreakLoop(CLIException):
+class BreakLoop(Error):
     pass
 
 
@@ -386,7 +386,7 @@ class Context(object):
             if len(line) > 0 and len(line[0]) > 0 and line[0][0] == "!":
                 return self.exec_host(line)
             return self._command(line, self.fuzzy_completion)
-        except CLIException as e:
+        except Error as e:
             if not no_fail:
                 raise e
             stderr.info(str(e))

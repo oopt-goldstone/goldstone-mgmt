@@ -5,6 +5,10 @@ FROM $GS_MGMT_BUILDER_IMAGE as builder
 ARG http_proxy
 ARG https_proxy
 
+RUN --mount=type=bind,source=src/lib,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && rm -rf /usr/share/wheels/lib && mkdir -p /usr/share/wheels/lib && cp dist/*.whl /usr/share/wheels/lib
+
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
     cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
     && rm -rf /usr/share/wheels/cli && mkdir -p /usr/share/wheels/cli && cp dist/*.whl /usr/share/wheels/cli
