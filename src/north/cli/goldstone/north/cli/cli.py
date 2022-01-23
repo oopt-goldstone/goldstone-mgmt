@@ -52,7 +52,7 @@ class TechSupportCommand(Command):
             for xpath in self.xpath_list:
                 try:
                     stdout.info(f"{xpath} : \n")
-                    stdout.info(conn.get(xpath, ds=ds))
+                    stdout.info(self.conn.get(xpath, ds=ds))
                     stdout.info("\n")
                 except Exception as e:
                     stderr.info(e)
