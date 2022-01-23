@@ -87,7 +87,7 @@ class Session(BaseSession):
                 default,
                 filter=self.ds == "operational",
             )
-            if one:
+            if data and one:
                 if len(data) == 1:
                     data = data[0]
                 elif len(data) > 1:
