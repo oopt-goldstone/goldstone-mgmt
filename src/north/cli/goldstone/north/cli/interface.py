@@ -466,14 +466,14 @@ def show(session, ifnames):
 
         rows = []
 
-        def add_to_rows(field, v, f=lambda v: v):
+        def add_to_rows(field, v, f=lambda v: v, alt_field=None):
             if v == None:
                 return
             v = v.get(field)
             if v == None:
                 return
             v = f(v)
-            rows.append((field, v))
+            rows.append((alt_field if alt_field else field, v))
             return v
 
         config = data.get("config")
@@ -499,11 +499,16 @@ def show(session, ifnames):
 
         autonego = ethernet.get("auto-negotiate", {})
         state = autonego.get("state")
-        add_to_rows("auto-negotiate", state, lambda v: "enabled" if v else "disabled")
+        add_to_rows(
+            "enabled", state, lambda v: "enabled" if v else "disabled", "auto-negotiate"
+        )
         add_to_rows(
             "advertised-speeds",
             state,
-            lambda v: ",".join(speed_yang_to_human(e) for e in v),
+            lambda v: ", ".join(speed_yang_to_human(e) for e in v),
+        )
+        add_to_rows(
+            "status", state, lambda v: ", ".join(e for e in v), "auto-negotiate status"
         )
 
         vlan = ethernet.get("switched-vlan", {})
