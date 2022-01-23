@@ -1,4 +1,7 @@
 from .base import InvalidInput, Completer
+
+from goldstone.lib.connector import Error
+
 from .cli import (
     Command,
     Context,
@@ -8,7 +11,6 @@ from .cli import (
     TechSupportCommand,
     ShowCommand,
 )
-from .connector.base import CLIException
 
 from .root import Root
 from prompt_toolkit.completion import WordCompleter
@@ -137,7 +139,7 @@ class Transponder(object):
                 xpath = f"{prefix}/state/{attr}"
                 try:
                     v = self.conn.get_operational(xpath, "N/A", one=True)
-                except CLIException:
+                except Error:
                     v = "N/A"
                 data.append(v)
             rows.append(data)

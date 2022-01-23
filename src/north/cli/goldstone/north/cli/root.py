@@ -1,7 +1,7 @@
 import subprocess
 import logging
 
-from .base import InvalidInput, CLIException
+from .base import InvalidInput
 from .cli import Command, Context
 
 logger = logging.getLogger(__name__)
@@ -46,10 +46,7 @@ class SaveCommand(Command):
             modules = [line[0]]
 
         for m in modules:
-            try:
-                conn.save(m)
-            except DSException as e:
-                raise CLIException(f"failed to save {m}: {e}")
+            conn.save(m)
 
     def arguments(self):
         cmds = [m for m in self.conn.models if "goldstone" in m]
