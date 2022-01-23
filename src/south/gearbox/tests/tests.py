@@ -104,6 +104,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     return ["tx-ready", "rx-ready"]
             elif args[0] == "anlt-defect":
                 return '["resolved", "completed"]'
+            elif args[0] == "auto-negotiation":
+                return "true"
             elif args[0] == "tributary-mapping":
                 return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
             elif args[0] == "macsec-static-key":
@@ -279,11 +281,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-                ("admin-status", "up"),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
@@ -298,6 +295,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("macsec-static-key", ""),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
+                ("admin-status", "up"),
             ],
         )
 
@@ -325,11 +327,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-                ("admin-status", "down"),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
@@ -344,6 +341,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("macsec-static-key", ""),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
+                ("admin-status", "down"),
             ],
         )
         gbserver.stop()
@@ -370,11 +372,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-                ("admin-status", "up"),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "true"),
@@ -389,6 +386,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("macsec-static-key", ""),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
+                ("admin-status", "up"),
             ],
         )
 
@@ -417,11 +419,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-                ("admin-status", "up"),
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
                 ("tx-dis", "false"),
@@ -436,6 +433,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("macsec-static-key", ""),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
+                ("admin-status", "up"),
             ],
         )
 

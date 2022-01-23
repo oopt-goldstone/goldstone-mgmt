@@ -50,7 +50,7 @@ class IfChangeHandler(ChangeHandler):
             if self.type == "deleted":
                 leaf = self.xpath[-1][1]
                 d = self.server.get_default(leaf)
-                if d:
+                if d != None:
                     self.value.append(self.to_tai_value(d, name))
                 elif cap.default_value == "":  # and is_deleted
                     raise sysrepo.SysrepoInvalArgError(
@@ -156,6 +156,8 @@ class MACSECStaticKeyHandler(IfChangeHandler):
         self.tai_attr_name = "macsec-static-key"
 
     def to_tai_value(self, v, attr_name):
+        if v == "":
+            return ""
         v = struct.unpack("IIII", base64.b64decode(v))
         return ",".join((str(i) for i in v))
 
@@ -335,6 +337,9 @@ class InterfaceServer(ServerBase):
         }
 
     def get_default(self, key):
+        # static-macsec/config/key
+        if key == "key":
+            return ""
         ctx = self.sess.get_ly_ctx()
         keys = [
             ["interfaces", "interface", "config", key],
@@ -360,7 +365,7 @@ class InterfaceServer(ServerBase):
             except libyang.util.LibyangError:
                 pass
 
-        raise None
+        return None
 
     async def reconcile(self):
         prefix = "/goldstone-interfaces:interfaces/interface"
@@ -557,7 +562,7 @@ class InterfaceServer(ServerBase):
         xpath = list(libyang.xpath_split(req_xpath))
         logger.debug(f"xpath: {xpath}")
 
-        counter_only = "counters" in req_xpath
+        counter_only = "counters" in req_xpath and "static-macsec" not in req_xpath
 
         if len(xpath) < 2 or len(xpath[1][2]) < 1:
             ifnames = await self.get_ifname_list()
@@ -661,39 +666,39 @@ class InterfaceServer(ServerBase):
                 i["ethernet"] = {"state": state}
 
                 if isinstance(obj, taish.NetIf):
-                    try:
-                        attrs = await obj.get_multiple(
-                            [
-                                "macsec-static-key",
-                                "macsec-ingress-sa-stats",
-                                "macsec-egress-sa-stats",
-                                "macsec-ingress-secy-stats",
-                                "macsec-egress-secy-stats",
-                                "macsec-ingress-channel-stats",
-                                "macsec-egress-channel-stats",
-                            ]
-                        )
-                        key = attrs[0]
-                        key = [int(v) for v in key.split(",")]
-                        key = struct.pack("IIII", *key)
-                        key = base64.b64encode(key).decode()
-                        counters = parse_macsec_counters(attrs[1:])
-                        i["ethernet"]["static-macsec"] = {
-                            "state": {
-                                "key": key,
-                                "counters": counters,
-                            }
-                        }
-                    except taish.TAIException as e:
-                        logger.warning(f"failed to get MACSEC info: {e}")
+                    # check if static MACSEC is configured
+                    key = self.get_running_data(
+                        f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/goldstone-static-macsec:static-macsec/config/key"
+                    )
+                    if key:
+                        state = {"key": key}
+                        try:
+                            attrs = await obj.get_multiple(
+                                [
+                                    "macsec-ingress-sa-stats",
+                                    "macsec-egress-sa-stats",
+                                    "macsec-ingress-secy-stats",
+                                    "macsec-egress-secy-stats",
+                                    "macsec-ingress-channel-stats",
+                                    "macsec-egress-channel-stats",
+                                ]
+                            )
+                            counters = parse_macsec_counters(attrs)
+                            state["counters"] = counters
+                        except taish.TAIException as e:
+                            logger.warning(f"failed to get MACSEC counters: {e}")
+
+                        i["ethernet"]["static-macsec"] = {"state": state}
+
                 elif isinstance(obj, taish.HostIf):
                     enabled = await obj.get("auto-negotiation")
                     anlt = {"enabled": enabled == "true"}
-                    try:
-                        status = json.loads(await obj.get("anlt-defect", json=True))
-                        anlt["status"] = status
-                    except taish.TAIException as e:
-                        pass
+                    if enabled == "true":
+                        try:
+                            status = json.loads(await obj.get("anlt-defect", json=True))
+                            anlt["status"] = status
+                        except taish.TAIException as e:
+                            logger.warning(f"failed to get Autonego defect info: {e}")
 
                     i["ethernet"]["auto-negotiate"] = {"state": anlt}
 
@@ -703,7 +708,9 @@ class InterfaceServer(ServerBase):
                     i["state"]["oper-status"] = pcs_status2oper_status(pcs)
                     state = {"pcs-status": pcs, "serdes-status": serdes}
                     i["ethernet"]["pcs"] = {"state": state}
-                except taish.TAIException:
+                except taish.TAIException as e:
+                    logger.warning(f"failed to get PCS/SERDES status: {e}")
+                    i["state"]["oper-status"] = "DOWN"
                     pass
 
             interfaces.append(i)
