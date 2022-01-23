@@ -1,5 +1,6 @@
-import sysrepo as sr
-import libyang
+from goldstone.lib.connector.sysrepo import Connector as SysrepoConnector
+from goldstone.lib.connector import Error
+
 from enum import unique, Enum
 from bisect import bisect_right
 from natsort import natsorted
@@ -16,7 +17,7 @@ from ax_interface.mib import (
 
 from ax_interface.encodings import ObjectIdentifier
 
-sysrepo_conn = sr.SysrepoConnection()
+sysrepo_conn = SysrepoConnector()
 
 
 @unique
@@ -54,14 +55,10 @@ class SystemUpdater(MIBUpdater):
         sysDescription = "Goldstone Version"
 
         xpath = "/goldstone-system:system/state/software-version"
-        with sysrepo_conn.start_session() as sess:
-            try:
-                sess.switch_datastore("operational")
-                data = sess.get_data(xpath)
-                version = data["system"]["state"]["software-version"]
-                # mibs.logger.warning(f"Goldstone version: {version}")
-            except Exception as e:
-                mibs.logger.warning(f"sysDesc Exception: {e}")
+        try:
+            version = sysrepo_conn.get(xpath)
+        except Error as e:
+            mibs.logger.warning(f"sysDesc Exception: {e}")
 
         return f"{sysDescription} {version}"
 
@@ -144,14 +141,14 @@ class InterfacesUpdater(MIBUpdater):
     def reinit_data(self):
         xpath = "/goldstone-interfaces:interfaces/interface"
         self.interfaces = []
-        with sysrepo_conn.start_session() as sess:
-            try:
-                sess.switch_datastore("operational")
-                data = sess.get_data(xpath)
-                ifs = list(libyang.xpath_get(data, xpath, [], filter=True))
-                self.interfaces = natsorted(ifs, key=lambda v: v["name"])
-            except Exception as e:
-                mibs.logger.warning(f"reinit_data Exception: {e}")
+        try:
+            names = sysrepo_conn.get_operational(xpath + "/name")
+            ifs = []
+            for name in names:
+                ifs.append(sysrepo_conn.get_operational(xpath + f"[name='{name}']"))
+            self.interfaces = natsorted(ifs, key=lambda v: v["name"])
+        except Error as e:
+            mibs.logger.warning(f"reinit_data Exception: {e}")
 
     def update_data(self):
         self.reinit_data()
