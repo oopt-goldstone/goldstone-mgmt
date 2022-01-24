@@ -860,7 +860,7 @@ class InterfaceShowCommand(Command):
 
     def exec(self, line):
         if len(line) != 0:
-            parent.exec(f"show {' '.join(args)}")
+            return self.context.root().exec(f"show {' '.join(line)}")
         else:
             show(self.conn, self.context.ifnames)
 
