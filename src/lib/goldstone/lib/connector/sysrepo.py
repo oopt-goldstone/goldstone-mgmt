@@ -203,9 +203,9 @@ class Connector(BaseConnector):
         strip=True,
         one=False,
     ):
-        return self.operational_session.get(
-            xpath, default, include_implicit_defaults, strip, one
+        return self.get(
+            xpath, default, include_implicit_defaults, strip, one, ds="operational"
         )
 
     def get_startup(self, xpath):
-        return self.startup_session.get(xpath)
+        return self.get(xpath, ds="startup")

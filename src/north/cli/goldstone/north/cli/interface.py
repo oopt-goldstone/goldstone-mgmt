@@ -708,15 +708,12 @@ class AutoNegoAdvertiseCommand(Command):
 
 class AutoNegoCommand(Command):
     COMMAND_DICT = {
-        "enable": Command,
-        "disable": Command,
         "advertise": AutoNegoAdvertiseCommand,
     }
 
     def arguments(self):
         if self.root.name != "no":
-            return ["enable", "disable", "advertise"]
-        return ["advertise"]
+            return ["enable", "disable"]
 
     def exec(self, line):
         if self.root.name == "no":
