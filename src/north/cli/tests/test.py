@@ -18,6 +18,25 @@ from goldstone.north.cli import interface
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
 
+INTF_OPER_DATA = [
+    {
+        "name": "Interface0",
+        "state": {"oper-status": "UP", "admin-status": "UP"},
+    },
+    {
+        "name": "Interface1",
+        "state": {"oper-status": "DOWN", "admin-status": "UP"},
+    },
+    {
+        "name": "Interface2",
+        "state": {"oper-status": "DOWN"},
+    },
+    {
+        "name": "Interface3",
+        "state": {"admin-status": "UP"},
+    },
+]
+
 
 class MockConnector(Connector):
     def get(
@@ -55,27 +74,8 @@ class Test(unittest.IsolatedAsyncioTestCase):
 
         conn = MockConnector()
         root = Root(conn)
-        data = [
-            {
-                "name": "Interface0",
-                "state": {"oper-status": "UP", "admin-status": "UP"},
-            },
-            {
-                "name": "Interface1",
-                "state": {"oper-status": "DOWN", "admin-status": "UP"},
-            },
-            {
-                "name": "Interface2",
-                "state": {"oper-status": "DOWN"},
-            },
-            {
-                "name": "Interface3",
-                "state": {"admin-status": "UP"},
-            },
-        ]
-
         conn.oper_data = {
-            "/goldstone-interfaces:interfaces/interface": data,
+            "/goldstone-interfaces:interfaces/interface": INTF_OPER_DATA,
         }
         logger = logging.getLogger("stdout")
 
@@ -84,12 +84,13 @@ class Test(unittest.IsolatedAsyncioTestCase):
             lines = l.records[0].msg.split("\n")
             for i, line in enumerate(lines[3:-1]):
                 elems = [e.strip() for e in line.split("|") if e]
-                self.assertEqual(elems[0], data[i]["name"])
+                self.assertEqual(elems[0], INTF_OPER_DATA[i]["name"])
                 self.assertEqual(
-                    elems[1], data[i]["state"].get("oper-status", "-").lower()
+                    elems[1], INTF_OPER_DATA[i]["state"].get("oper-status", "-").lower()
                 )
                 self.assertEqual(
-                    elems[2], data[i]["state"].get("admin-status", "-").lower()
+                    elems[2],
+                    INTF_OPER_DATA[i]["state"].get("admin-status", "-").lower(),
                 )
 
     async def test_auto_nego_help(self):
@@ -107,3 +108,21 @@ class Test(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 l.records[0].msg, "usage: auto-negotiate [enable|disable|advertise]"
             )
+
+    async def test_show_in_interface_ctx(self):
+        conn = MockConnector()
+        root = Root(conn)
+        data = ["Interface0"]
+        conn.oper_data = {
+            "/goldstone-interfaces:interfaces/interface": INTF_OPER_DATA,
+            "/goldstone-interfaces:interfaces/interface/name": data,
+        }
+        logger = logging.getLogger("stdout")
+
+        with self.assertLogs(logger=logger) as l:
+            root.exec("show interface brief")
+            ifctx = root.exec("interface Interface0")
+            ifctx.exec("show interface brief")
+
+            # global show and show in the interface ctx must have the same output
+            self.assertEqual(l.records[0].msg, l.records[1].msg)
