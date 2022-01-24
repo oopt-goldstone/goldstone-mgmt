@@ -145,6 +145,7 @@ unittest: unittest-cli unittest-gearbox unittest-openconfig unittest-tai unittes
 	cd src/south/sonic      && make clean
 
 unittest-cli:
+	sysrepoctl --search-dirs yang --install yang/goldstone-interfaces.yang
 	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 
 unittest-gearbox:
