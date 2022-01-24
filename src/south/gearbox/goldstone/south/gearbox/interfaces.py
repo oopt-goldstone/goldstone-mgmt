@@ -196,11 +196,11 @@ def parse_counters(attrs):
     counters["in-errors"] = mac_rx[4]
 
     counters["out-octets"] = mac_tx[0]
-    counters["out-unicast-pkts"] = mac_rx[5]
-    counters["out-broadcast-pkts"] = mac_rx[7]
-    counters["out-multicast-pkts"] = mac_rx[6]
-    # counters["out-discards"]
-    counters["out-errors"] = mac_rx[4]
+    counters["out-unicast-pkts"] = mac_tx[5]
+    counters["out-broadcast-pkts"] = mac_tx[7]
+    counters["out-multicast-pkts"] = mac_tx[6]
+    counters["out-discards"] = mac_tx[29]  # tx_pkts_drained
+    counters["out-errors"] = mac_tx[4]
 
     return counters
 
