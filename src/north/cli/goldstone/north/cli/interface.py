@@ -34,7 +34,7 @@ def speed_yang_to_human(speed):
 
 
 def static_macsec_key_to_yang(key):
-    v = line[0].split(",")
+    v = key.split(",")
     if len(v) != 4:
         return None
 
@@ -149,6 +149,36 @@ def show_counters(session, ifnames, table):
         headers = [""] + ["\n".join(k.split("-")) for k in keys]
 
         stdout.info(tabulate(rows_, headers))
+
+
+def show_macsec_counters(session, ifnames):
+    for ifname in ifnames:
+        if len(ifnames) > 1:
+            stdout.info(f"Interface {ifname}:")
+
+        xpath = f"{ifxpath(ifname)}/ethernet/goldstone-static-macsec:static-macsec/state/counters"
+        data = session.get_operational(xpath, one=True)
+        if not data:
+            msg = f"no static-macsec stats for {ifname}"
+            if len(ifnames) == 1:
+                raise InvalidInput(msg)
+            else:
+                stderr.info(msg)
+                continue
+
+        stdout.info("Ingress SA:")
+        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["sa"].items()]))
+        stdout.info("Ingress SecY:")
+        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["secy"].items()]))
+        stdout.info("Ingress Channel:")
+        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["channel"].items()]))
+
+        stdout.info("Egress SA:")
+        stdout.info(tabulate([(k, v) for k, v in data["egress"]["sa"].items()]))
+        stdout.info("Egress SecY:")
+        stdout.info(tabulate([(k, v) for k, v in data["egress"]["secy"].items()]))
+        stdout.info("Egress Channel:")
+        stdout.info(tabulate([(k, v) for k, v in data["egress"]["channel"].items()]))
 
 
 def run_conf(session):
@@ -760,6 +790,84 @@ class StaticMACSECCommand(Command):
         return f"usage: {self.name_all()} <static-macsec-key> (<uint32>,<uint32>,<uint32>,<uint32>)"
 
 
+class InterfaceMACSECCounterCommand(Command):
+    def arguments(self):
+        if self.parent.parent.name == "interface":
+            return [
+                n
+                for n in interface_names(self.conn)
+                if self.conn.get(
+                    f"{ifxpath(n)}/ethernet/goldstone-static-macsec:static-macsec/config/key"
+                )
+            ]
+
+    def exec(self, line):
+        if self.parent.parent.name == "interface":
+            if len(line) != 1:
+                raise InvalidInput(f"usage: {self.name_all()} <interface name>")
+            ifnames = [line[0]]
+        else:
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            ifnames = self.context.ifnames
+
+        show_macsec_counters(self.conn, ifnames)
+
+
+class InterfaceCounterCommand(Command):
+    def __init__(self, context, parent, name, **options):
+        super().__init__(context, parent, name, **options)
+
+        if ModelExists("goldstone-static-macsec")(self):
+            self.add_command("static-macsec", InterfaceMACSECCounterCommand)
+
+    def arguments(self):
+        if self.parent.name == "interface":
+            return ["table"] + interface_names(self.conn)
+        else:
+            return ["table"]
+
+    def exec(self, line):
+        table = False
+        ptn = None
+
+        if self.parent.name == "interface":
+            if len(line) == 1 and line[0] != "table":
+                ptn = line[0]
+            ifnames = interface_names(self.conn, ptn)
+
+            if len(ifnames) == 0:
+                raise InvalidInput("no interface found")
+
+            if len(line) == 1 and line[0] == "table":
+                table = True
+            elif len(line) > 1:
+                for ifname in line:
+                    if ifname not in ifnames:
+                        raise InvalidInput(f"Invalid interface {ifname}")
+                ifnames = line
+        else:
+            if (len(line) == 1 and line[0] != "table") or len(line) > 1:
+                raise InvalidInput("usage: {self.name_all()} [table]")
+
+            if len(line) == 1:
+                table = line[0] == "table"
+
+            ifnames = self.context.ifnames
+
+        show_counters(self.conn, ifnames, table)
+
+
+class InterfaceShowCommand(Command):
+    COMMAND_DICT = {"counters": InterfaceCounterCommand}
+
+    def exec(self, line):
+        if len(line) != 0:
+            parent.exec(f"show {' '.join(args)}")
+        else:
+            show(self.conn, self.context.ifnames)
+
+
 class InterfaceContext(Context):
     REGISTERED_COMMANDS = {}
 
@@ -798,79 +906,14 @@ class InterfaceContext(Context):
         if ModelExists("goldstone-static-macsec")(self):
             self.add_command("static-macsec-key", StaticMACSECCommand, add_no=True)
 
-        @self.command(parent.get_completer("show"), name="show")
-        def show_(args):
-            if len(args) != 0:
-                parent.exec(f"show {' '.join(args)}")
-            else:
-                show(self.conn, ifnames)
+        self.add_command(
+            "show",
+            InterfaceShowCommand,
+            additional_completer=parent.get_completer("show"),
+        )
 
     def __str__(self):
         return "interface({})".format(self.name)
-
-
-class InterfaceMACSECCounterCommand(Command):
-    def arguments(self):
-        return [
-            n
-            for n in interface_names(self.conn)
-            if self.conn.get(
-                f"{ifxpath(n)}/ethernet/goldstone-static-macsec:static-macsec/config/key"
-            )
-        ]
-
-    def exec(self, line):
-        if len(line) != 1:
-            raise InvalidInput(f"usage: {self.name_all()} <interface name>")
-        xpath = f"{ifxpath(line[0])}/ethernet/goldstone-static-macsec:static-macsec/state/counters"
-        data = self.conn.get_operational(xpath, one=True)
-        if not data:
-            raise InvalidInput(f"no static-macsec stats for {line[0]}")
-
-        stdout.info("Ingress SA:")
-        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["sa"].items()]))
-        stdout.info("Ingress SecY:")
-        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["secy"].items()]))
-        stdout.info("Ingress Channel:")
-        stdout.info(tabulate([(k, v) for k, v in data["ingress"]["channel"].items()]))
-
-        stdout.info("Egress SA:")
-        stdout.info(tabulate([(k, v) for k, v in data["egress"]["sa"].items()]))
-        stdout.info("Egress SecY:")
-        stdout.info(tabulate([(k, v) for k, v in data["egress"]["secy"].items()]))
-        stdout.info("Egress Channel:")
-        stdout.info(tabulate([(k, v) for k, v in data["egress"]["channel"].items()]))
-
-
-class InterfaceCounterCommand(Command):
-    def __init__(self, context, parent, name, **options):
-        super().__init__(context, parent, name, **options)
-
-        if ModelExists("goldstone-static-macsec")(self):
-            self.add_command("static-macsec", InterfaceMACSECCounterCommand)
-
-    def arguments(self):
-        return ["table"] + interface_names(self.conn)
-
-    def exec(self, line):
-        table = False
-        ptn = None
-        if len(line) == 1 and line[0] != "table":
-            ptn = line[0]
-        ifnames = interface_names(self.conn, ptn)
-
-        if len(ifnames) == 0:
-            raise InvalidInput("no interface found")
-
-        if len(line) == 1 and line[0] == "table":
-            table = True
-        elif len(line) > 1:
-            for ifname in line:
-                if ifname not in ifnames:
-                    raise InvalidInput(f"Invalid interface {ifname}")
-            ifnames = line
-
-        show_counters(self.conn, ifnames, table)
 
 
 class Show(Command):
