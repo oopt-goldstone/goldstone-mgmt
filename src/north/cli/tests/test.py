@@ -13,6 +13,8 @@ import sys
 
 logger = logging.getLogger(__name__)
 
+from goldstone.north.cli import interface
+
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
 
@@ -50,7 +52,6 @@ class Test(unittest.IsolatedAsyncioTestCase):
             sess.apply_changes()
 
     async def test_show_interface_brief(self):
-        from goldstone.north.cli import interface
 
         conn = MockConnector()
         root = Root(conn)
@@ -90,3 +91,19 @@ class Test(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     elems[2], data[i]["state"].get("admin-status", "-").lower()
                 )
+
+    async def test_auto_nego_help(self):
+        conn = MockConnector()
+        root = Root(conn)
+        data = ["Interface0"]
+        conn.oper_data = {
+            "/goldstone-interfaces:interfaces/interface/name": data,
+        }
+        logger = logging.getLogger("stderr")
+
+        with self.assertLogs(logger=logger) as l:
+            ifctx = root.exec("interface Interface0")
+            ifctx.exec("auto-nego")
+            self.assertEqual(
+                l.records[0].msg, "usage: auto-negotiate [enable|disable|advertise]"
+            )
