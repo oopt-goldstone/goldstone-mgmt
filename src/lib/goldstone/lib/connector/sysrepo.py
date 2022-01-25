@@ -17,16 +17,18 @@ DEFAULT_TIMEOUT_MS = 10_000
 
 def wrap_sysrepo_error(func):
     def f(*args, **kwargs):
+        sess = args[0].session
         try:
             return func(*args, **kwargs)
         except sysrepo.SysrepoError as error:
-            sess = args[0].session
             sess.discard_changes()
             raise Error(error.details[0][1])
         except sysrepo.SysrepoLockedError as error:
-            sess = args[0].session
             sess.discard_changes()
             raise DatastoreLocked(f"{xpath} is locked", error)
+        except libyang.LibyangError as error:
+            sess.discard_changes()
+            raise Error(str(error))
 
     return f
 
@@ -168,7 +170,7 @@ class Connector(BaseConnector):
         return self.running_session.delete(xpath)
 
     def delete_all(self, model):
-        return self.running_session.replace_config({}, model)
+        return self.running_session.delete_all(model)
 
     def apply(self):
         return self.running_session.apply()
