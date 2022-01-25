@@ -237,13 +237,34 @@ pipeline {
     }
 
     stage('Test NETCONF') {
-      when {
-        branch pattern: "^PR.*", comparator: "REGEXP"
-        environment name: 'SKIP', value: '0'
-      }
-      steps {
-        sh 'make tester'
-        sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.DEVICE}"
+      failFast true
+      parallel {
+        stage('amd64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'amd64'
+          }
+          steps {
+            sh 'make tester'
+            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.DEVICE} --arch ${ARCH}"
+          }
+        }
+        stage('arm64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'arm64'
+          }
+          steps {
+            sh 'ARCH=amd64 make tester'
+            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.ARM_DEVICE} --arch ${ARCH}"
+          }
+        }
       }
     }
 
