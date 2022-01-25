@@ -1,12 +1,6 @@
 import unittest
-from unittest import mock
-import sysrepo
-import itertools
 import logging
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
 import os
-import json
 import sys
 
 logger = logging.getLogger(__name__)
@@ -14,8 +8,10 @@ logger = logging.getLogger(__name__)
 libpath = os.path.join(os.path.dirname(__file__), "../../../lib")
 sys.path.insert(0, libpath)
 
-from goldstone.north.cli.root import Root
 from goldstone.lib.connector.sysrepo import Connector
+
+from goldstone.north.cli.base import InvalidInput
+from goldstone.north.cli.root import Root
 from goldstone.north.cli import interface
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
@@ -70,12 +66,9 @@ class MockConnector(Connector):
 class Test(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.conn = sysrepo.SysrepoConnection()
-
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-interfaces")
-            sess.apply_changes()
+        self.conn = MockConnector()
+        self.conn.delete_all("goldstone-interfaces")
+        self.conn.apply()
 
     async def test_show_interface_brief(self):
 
@@ -87,7 +80,7 @@ class Test(unittest.IsolatedAsyncioTestCase):
         logger = logging.getLogger("stdout")
 
         with self.assertLogs(logger=logger) as l:
-            root.exec("show interface brief")
+            root.exec("show interface brief", no_fail=False)
             lines = l.records[0].msg.split("\n")
             for i, line in enumerate(lines[3:-1]):
                 elems = [e.strip() for e in line.split("|") if e]
@@ -109,12 +102,14 @@ class Test(unittest.IsolatedAsyncioTestCase):
         }
         logger = logging.getLogger("stderr")
 
-        with self.assertLogs(logger=logger) as l:
-            ifctx = root.exec("interface Interface0")
-            ifctx.exec("auto-nego")
-            self.assertEqual(
-                l.records[0].msg, "usage: auto-negotiate [enable|disable|advertise]"
-            )
+        ifctx = root.exec("interface Interface0", no_fail=False)
+
+        with self.assertRaises(InvalidInput) as cm:
+            ifctx.exec("auto-nego", no_fail=False)
+
+        self.assertEqual(
+            str(cm.exception), "usage: auto-negotiate [enable|disable|advertise]"
+        )
 
     async def test_show_in_interface_ctx(self):
         conn = MockConnector()
@@ -127,9 +122,9 @@ class Test(unittest.IsolatedAsyncioTestCase):
         logger = logging.getLogger("stdout")
 
         with self.assertLogs(logger=logger) as l:
-            root.exec("show interface brief")
-            ifctx = root.exec("interface Interface0")
-            ifctx.exec("show interface brief")
+            root.exec("show interface brief", no_fail=False)
+            ifctx = root.exec("interface Interface0", no_fail=False)
+            ifctx.exec("show interface brief", no_fail=False)
 
             # global show and show in the interface ctx must have the same output
             self.assertEqual(l.records[0].msg, l.records[1].msg)
@@ -146,12 +141,12 @@ class Test(unittest.IsolatedAsyncioTestCase):
 
         xpath = ifxpath(ifname) + "/config/admin-status"
 
-        ifctx = root.exec("interface Interface0")
-        ifctx.exec("admin-status up")
+        ifctx = root.exec("interface Interface0", no_fail=False)
+        ifctx.exec("admin-status up", no_fail=False)
 
         admin_status = conn.get(xpath)
         self.assertEqual(admin_status, "UP")
 
-        root.exec("clear datastore all")
+        root.exec("clear datastore all", no_fail=False)
         admin_status = conn.get(xpath)
         self.assertEqual(admin_status, None)
