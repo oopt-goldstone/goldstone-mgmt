@@ -187,19 +187,20 @@ class ClearDatastoreGroupCommand(Command):
         sess = self.conn.new_session(ds)
 
         if line[0] == "all":
-            modules = [m for m in self.conn.models if "goldstone" in m]
+            models = [m for m in self.conn.models if "goldstone" in m]
             # the interface model has dependencies to other models (e.g. vlan, ufd )
             # we need to the clear interface model lastly
             # the vlan model has dependency to switched-vlan configuration
             # we need to clear the switched-vlan configuration first
             # TODO invent cleaner way when we have more dependency among models
-            remove_switched_vlan_configuration(sess)
-            modules.remove("goldstone-interfaces")
-            modules.append("goldstone-interfaces")
+            if "goldstone-vlan" in models:
+                remove_switched_vlan_configuration(sess)
+            models.remove("goldstone-interfaces")
+            models.append("goldstone-interfaces")
         else:
-            modules = [line[0]]
+            models = [line[0]]
 
-        for m in modules:
+        for m in models:
             stdout.info(f"clearing module {m}")
             sess.delete_all(m)
 

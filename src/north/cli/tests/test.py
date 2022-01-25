@@ -1,8 +1,6 @@
 import unittest
 from unittest import mock
 import sysrepo
-from goldstone.north.cli.root import Root
-from goldstone.lib.connector.sysrepo import Connector
 import itertools
 import logging
 import asyncio
@@ -13,6 +11,11 @@ import sys
 
 logger = logging.getLogger(__name__)
 
+libpath = os.path.join(os.path.dirname(__file__), "../../../lib")
+sys.path.insert(0, libpath)
+
+from goldstone.north.cli.root import Root
+from goldstone.lib.connector.sysrepo import Connector
 from goldstone.north.cli import interface
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
@@ -36,6 +39,10 @@ INTF_OPER_DATA = [
         "state": {"admin-status": "UP"},
     },
 ]
+
+
+def ifxpath(ifname):
+    return f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
 
 
 class MockConnector(Connector):
@@ -126,3 +133,25 @@ class Test(unittest.IsolatedAsyncioTestCase):
 
             # global show and show in the interface ctx must have the same output
             self.assertEqual(l.records[0].msg, l.records[1].msg)
+
+    async def test_clear_datastore_all(self):
+        conn = MockConnector()
+        root = Root(conn)
+        ifname = "Interface0"
+        data = [ifname]
+        conn.oper_data = {
+            "/goldstone-interfaces:interfaces/interface": INTF_OPER_DATA,
+            "/goldstone-interfaces:interfaces/interface/name": data,
+        }
+
+        xpath = ifxpath(ifname) + "/config/admin-status"
+
+        ifctx = root.exec("interface Interface0")
+        ifctx.exec("admin-status up")
+
+        admin_status = conn.get(xpath)
+        self.assertEqual(admin_status, "UP")
+
+        root.exec("clear datastore all")
+        admin_status = conn.get(xpath)
+        self.assertEqual(admin_status, None)
