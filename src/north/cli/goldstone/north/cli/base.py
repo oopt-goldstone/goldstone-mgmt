@@ -331,9 +331,13 @@ class Context(object):
         self,
         completer=None,
         name=None,
+        when=None,
         **options,
     ):
         def f(func):
+            if when != None and not when(self):
+                return
+
             n = name if name else func.__name__
 
             d = {"exec": lambda self, line: func(line)}
