@@ -49,7 +49,12 @@ class Completer(PromptCompleter):
         t = document.text.split()
         is_space_trailing = bool(len(document.text)) and (document.text[-1] == " ")
         if len(t) == 0 or (len(t) == 1 and not is_space_trailing):
-            for c in self.command.list():
+            try:
+                l = self.command.list()
+            except Error:
+                return
+
+            for c in l:
                 if c.startswith(document.text):
                     yield Completion(c, start_position=-len(document.text))
         else:
