@@ -2,7 +2,7 @@ import subprocess
 import logging
 
 from .base import InvalidInput
-from .cli import Command, Context
+from .cli import Command, Context, ConnectorType
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class SaveCommand(Command):
             modules = [line[0]]
 
         for m in modules:
-            conn.save(m)
+            self.conn.save(m)
 
     def arguments(self):
         cmds = [m for m in self.conn.models if "goldstone" in m]
@@ -66,7 +66,7 @@ class Root(Context):
         self.add_command("set", SetCommand)
         self.add_command("save", SaveCommand)
 
-        @self.command()
+        @self.command(when=ConnectorType("sysrepo"))
         def ping(line):
             try:
                 png = " ".join(["ping"] + line)
@@ -76,7 +76,7 @@ class Root(Context):
             except:
                 stderr.info("Unexpected error:", sys.exc_info()[0])
 
-        @self.command()
+        @self.command(when=ConnectorType("sysrepo"))
         def traceroute(line):
             try:
                 trct = " ".join(["traceroute"] + line)
@@ -84,7 +84,7 @@ class Root(Context):
             except:
                 stderr.info("Unexpected error:", sys.exc_info()[0])
 
-        @self.command()
+        @self.command(when=ConnectorType("sysrepo"))
         def hostname(line):
             try:
                 hst_name = " ".join(["hostname"] + line)
@@ -92,7 +92,7 @@ class Root(Context):
             except:
                 stderr.info("Unexpected error:", sys.exc_info()[0])
 
-        @self.command()
+        @self.command(when=ConnectorType("sysrepo"))
         def date(line):
             self.date(line)
 
