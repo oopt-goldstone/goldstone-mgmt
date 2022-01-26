@@ -251,12 +251,11 @@ class NoCommand(Command):
 
 
 def ModelExists(model):
-    def f(ctx):
-        if isinstance(ctx, Command):
-            ctx = ctx.context
-        return model in ctx.conn.models
+    return lambda ctx: model in ctx.conn.models
 
-    return f
+
+def ConnectorType(t):
+    return lambda ctx: ctx.conn.type == t
 
 
 class Context(BaseContext):

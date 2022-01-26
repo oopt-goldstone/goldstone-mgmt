@@ -140,6 +140,10 @@ class Connector(BaseConnector):
         self.operational_session = self.new_session("operational")
         self.startup_session = self.new_session("startup")
 
+    @property
+    def type(self):
+        return "sysrepo"
+
     def new_session(self, ds="running"):
         return Session(self.conn, ds)
 
