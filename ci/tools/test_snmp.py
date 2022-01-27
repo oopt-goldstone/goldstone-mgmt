@@ -6,19 +6,16 @@ import paramiko
 from .common import *
 
 
-def main(host, username, password):
+def main(host, username, password, arch):
 
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         cli.connect(host, username=username, password=password)
 
         run(f"snmpwalk -v 2c -c admin {host} system")
-
-        try:
-            run(f"snmpwalk -v 2c -c admin {host} ifTable")
-        except Exception as e:
-            print("TODO: snmpwalk ifTable can fail now after breakout configuration")
-            ssh(cli, "kubectl logs ds/gs-mgmt-snmp agentx")
+        version = run(f"snmpwalk -v 2c -c admin {host} SNMPv2-MIB::sysDescr.0")
+        assert "unknown" not in version
+        run(f"snmpwalk -v 2c -c admin {host} ifTable")
 
 
 if __name__ == "__main__":
@@ -26,6 +23,7 @@ if __name__ == "__main__":
     parser.add_argument("host")
     parser.add_argument("--username", default="root")
     parser.add_argument("--password", default="x1")
+    parser.add_argument("--arch", default="amd64", choices=["amd64", "arm64"])
 
     args = parser.parse_args()
-    main(args.host, args.username, args.password)
+    main(args.host, args.username, args.password, args.arch)

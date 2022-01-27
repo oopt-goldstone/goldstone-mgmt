@@ -283,7 +283,7 @@ pipeline {
             stage('Test SNMP on amd64') {
               steps {
                 sh 'make tester'
-                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.DEVICE}"
+                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.DEVICE} --arch ${ARCH}"
               }
             }
           }
@@ -300,7 +300,7 @@ pipeline {
             stage('Test SNMP on arm64') {
               steps {
                 sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
-                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.ARM_DEVICE}"
+                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.ARM_DEVICE} --arch ${ARCH}"
               }
             }
           }
