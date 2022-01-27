@@ -66,7 +66,7 @@ spec:
               image: docker.io/gs-test/gs-mgmt-netopeer2:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['netopeer2-server']
-              args: ['-d', '-v', '2']
+              args: ['-d', '-v', '2', '-t', '60']
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
