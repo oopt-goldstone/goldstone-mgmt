@@ -4,7 +4,7 @@ import sys
 import time
 
 
-class SSHException(Exception):
+class ProcException(Exception):
     def __init__(self, msg, ret, stdout, stderr):
         super().__init__(msg)
         self.ret = ret
@@ -13,6 +13,10 @@ class SSHException(Exception):
 
     def __str__(self):
         return "".join(self.stderr)
+
+
+class SSHException(ProcException):
+    pass
 
 
 def ssh(cli, cmd):
@@ -37,14 +41,28 @@ def ssh(cli, cmd):
 
 def run(cmd):
     print(f'run: "{cmd}"')
-    subprocess.run(
+    proc = subprocess.run(
         cmd,
         shell=True,
-        stdout=sys.stdout,
-        stderr=sys.stderr,
         check=True,
         env=os.environ,
+        capture_output=True,
     )
+    output = []
+    err = []
+    for line in proc.stdout.decode().split("\n"):
+        output.append(line)
+        print(f"stdout: {line}")
+    for line in proc.stderr.decode().split("\n"):
+        err.append(line)
+        print(f"stderr: {line}")
+    ret = proc.returncode
+    if ret != 0:
+        raise SSHException(
+            f"{cmd} failed: ret: {ret}", ret, "".join(output), "".join(err)
+        )
+
+    return "".join(output)
 
 
 def check_pod(cli, name, max_iteration=48, sleep=10):
