@@ -12,6 +12,7 @@ from .root import Root
 from .base import BreakLoop
 
 from goldstone.lib.connector.sysrepo import Connector as SysrepoConnector
+from goldstone.lib.connector.netconf import Connector as NETCONFConnector
 from goldstone.lib.connector import Error
 
 from . import interface
@@ -29,8 +30,8 @@ stderr = logging.getLogger("stderr")
 
 
 class GoldstoneShell(object):
-    def __init__(self, default_prompt="> ", prefix=""):
-        self.context = Root(SysrepoConnector())
+    def __init__(self, conn, default_prompt="> ", prefix=""):
+        self.context = Root(conn)
         self.default_input = ""
         self.default_prompt = default_prompt
         self.prefix = prefix
@@ -111,6 +112,11 @@ def main():
     parser.add_argument("-c", "--command-string")
     parser.add_argument("-k", "--keep-open", action="store_true")
     parser.add_argument("-x", "--stdin", action="store_true")
+    parser.add_argument(
+        "--connector", choices=["sysrepo", "netconf"], default="sysrepo"
+    )
+    parser.add_argument("--connector-opts", default="")
+
     args = parser.parse_args()
 
     if args.verbose:
@@ -118,11 +124,12 @@ def main():
             "[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
-        logger = logging.getLogger("goldstone.north.cli")
         console = logging.StreamHandler()
         console.setLevel(logging.DEBUG)
-        logger.setLevel(logging.DEBUG)
         console.setFormatter(formatter)
+
+        logger = logging.getLogger("goldstone")
+        logger.setLevel(logging.DEBUG)
         logger.addHandler(console)
 
     sh = logging.StreamHandler(sys.stdout)
@@ -140,7 +147,26 @@ def main():
     stderr.setLevel(logging.DEBUG)
     stderr.addHandler(sh2)
 
-    shell = GoldstoneShell()
+    opts = {}
+    if args.connector_opts:
+        for o in args.connector_opts.split(","):
+            v = o.split("=")
+            if len(v) != 2:
+                stderr.info(f"invalid connector-opts format: '{o}'")
+                sys.exit(1)
+            opts[v[0]] = v[1]
+
+    if args.connector == "sysrepo":
+        conn = SysrepoConnector()
+        prefix = ""
+    elif args.connector == "netconf":
+        if "host" not in opts:
+            stderr.info(f"host options is mandatory for NETCONF connector")
+            sys.exit(1)
+        conn = NETCONFConnector(**opts)
+        prefix = f"netconf({opts['host']})|"
+
+    shell = GoldstoneShell(conn, prefix=prefix)
 
     async def _main():
 
