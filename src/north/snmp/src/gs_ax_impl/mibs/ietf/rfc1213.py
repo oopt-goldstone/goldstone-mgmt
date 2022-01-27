@@ -51,12 +51,11 @@ class SystemUpdater(MIBUpdater):
         return self.range[right]
 
     def system_desc(self):
-        version = "Init"
         sysDescription = "Goldstone Version"
 
         xpath = "/goldstone-system:system/state/software-version"
         try:
-            version = sysrepo_conn.get(xpath)
+            version = sysrepo_conn.get_operational(xpath, "unknown")
         except Error as e:
             mibs.logger.warning(f"sysDesc Exception: {e}")
 
@@ -145,7 +144,9 @@ class InterfacesUpdater(MIBUpdater):
             names = sysrepo_conn.get_operational(xpath + "/name")
             ifs = []
             for name in names:
-                ifs.append(sysrepo_conn.get_operational(xpath + f"[name='{name}']"))
+                ifs.append(
+                    sysrepo_conn.get_operational(xpath + f"[name='{name}']", one=True)
+                )
             self.interfaces = natsorted(ifs, key=lambda v: v["name"])
         except Error as e:
             mibs.logger.warning(f"reinit_data Exception: {e}")
