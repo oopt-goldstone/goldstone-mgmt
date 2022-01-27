@@ -144,6 +144,11 @@ unittest: unittest-cli unittest-gearbox unittest-openconfig unittest-tai unittes
 	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 	cd src/south/sonic      && make clean
 
+unittest-lib:
+	sysrepoctl --search-dirs yang --install yang/goldstone-interfaces.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-transponder.yang
+	cd src/lib && python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+
 unittest-cli:
 	sysrepoctl --search-dirs yang --install yang/goldstone-interfaces.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-transponder.yang
