@@ -80,7 +80,7 @@ def to_human(d, runconf=False):
         elif type(d[key]) == bool:
             d[key] = "true" if d[key] else "false"
         elif not runconf and key.endswith("power"):
-            d[key] = f"{d[key]:.2f} dBm"
+            d[key] = f"{float(d[key]):.2f} dBm"
         elif isinstance(d[key], list):
             d[key] = ", ".join(d[key])
 
@@ -111,13 +111,11 @@ class Transponder(object):
             # module info
             print_tabular(data["state"])
 
-            for netif in range(data["state"]["num-network-interfaces"]):
-                d = data["network-interface"][str(netif)]["state"]
-                print_tabular(to_human(d), f"Network Interface {netif}")
+            for netif in natsorted(data["network-interface"], key=lambda v: v["name"]):
+                print_tabular(to_human(netif["state"]), f"Network Interface {netif}")
 
-            for hostif in range(data["state"]["num-host-interfaces"]):
-                d = data["host-interface"][str(hostif)]["state"]
-                print_tabular(to_human(d), f"Host Interface {hostif}")
+            for hostif in natsorted(data["host-interface"], key=lambda v: v["name"]):
+                print_tabular(to_human(hostif["state"]), f"Host Interface {netif}")
 
         except KeyError as e:
             stderr.info(f"Error while fetching values from operational database: {e}")
