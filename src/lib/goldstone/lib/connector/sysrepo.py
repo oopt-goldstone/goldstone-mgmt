@@ -35,7 +35,7 @@ def wrap_sysrepo_error(func):
 class Session(BaseSession):
     def __init__(self, conn, ds):
         self.conn = conn
-        self.session = conn.start_session(ds)
+        self.session = conn.conn.start_session(ds)
         self.ds = ds
 
     def get(
@@ -97,7 +97,7 @@ class Session(BaseSession):
         return self.session.discard_changes()
 
     def subscribe_notifications(self, callback):
-        ctx = self.conn.get_ly_ctx()
+        ctx = self.conn.ctx
         f = lambda notif_name, value, timestamp, priv: callback(
             value.print_dict().update({"eventTime": timestamp})
         )
@@ -130,7 +130,7 @@ class Connector(BaseConnector):
         return "sysrepo"
 
     def new_session(self, ds="running"):
-        return Session(self.conn, ds)
+        return Session(self, ds)
 
     @property
     def models(self):

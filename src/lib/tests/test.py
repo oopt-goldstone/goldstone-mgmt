@@ -1,5 +1,7 @@
 import unittest
+import logging
 from goldstone.lib.connector.netconf import Connector as NCConnector
+from goldstone.lib.connector.sysrepo import Connector as SRConnector
 
 console = logging.StreamHandler()
 logger = logging.getLogger("goldstone")
@@ -26,6 +28,12 @@ class TestCLI(unittest.TestCase):
             "/goldstone-interfaces:interfaces/interface[name='Ethernet1_1']", one=True
         )
         self.assertTrue(v != None)
+
+    def test_sysrepo_connector_notification(self):
+        conn = SRConnector()
+        session = conn.new_session()
+        session.subscribe_notifications(lambda v: v)
+        session.stop()
 
 
 if __name__ == "__main__":
