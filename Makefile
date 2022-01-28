@@ -138,7 +138,7 @@ lint:
 	scripts/gs-yang.py --lint south-gearbox south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
 	grep -rnI 'print(' src || exit 0 && exit 1
 
-unittest: unittest-cli unittest-gearbox unittest-openconfig unittest-tai unittest-sonic
+unittest: unittest-lib unittest-cli unittest-gearbox unittest-openconfig unittest-tai unittest-sonic
 	cd src/south/sonic && make proto
 	scripts/gs-yang.py --install south-sonic south-tai --search-dirs yang
 	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
