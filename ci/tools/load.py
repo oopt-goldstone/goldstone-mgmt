@@ -9,7 +9,7 @@ import time
 from .common import *
 
 
-def main(host, username, password, arch):
+def main(host, username, password, arch, image_prefix, image_tag):
 
     with paramiko.SSHClient() as cli:
         cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -23,11 +23,29 @@ def main(host, username, password, arch):
 
         if arch == "amd64":
             ssh(cli, "systemctl restart usonic")
+        elif arch == "arm64":
+            ssh(cli, "systemctl restart tai-gearbox")
 
         # restart TAI service
         ssh(cli, "systemctl restart tai || true")  # can fail
         # stop Goldstone Management service
         ssh(cli, "systemctl stop gs-mgmt.target || true")  # can fail
+
+        apps = [
+            "north-netconf",
+            "north-notif",
+            "north-snmp",
+            "south-onlp",
+            "south-tai",
+            "xlate-oc",
+        ]
+        if arch == "amd64":
+            apps.append("south-sonic")
+        elif arch == "arm64":
+            apps.append("south-gearbox")
+
+        for app in apps:
+            ssh(cli, f"gs-mgmt.py stop {app} || true")  # can fail
 
         for _ in range(10):
             time.sleep(10)
@@ -54,7 +72,7 @@ def main(host, username, password, arch):
         elif arch == "arm64":
             images.append("gs-mgmt-south-gearbox")
 
-        images = " ".join(f"gs-test/{name}:latest-{arch}" for name in images)
+        images = " ".join(f"{image_prefix}{name}:{image_tag}" for name in images)
 
         run(f"docker save -o /tmp/gs-mgmt-{arch}.tar {images}")
 
@@ -76,11 +94,17 @@ def main(host, username, password, arch):
             cli, "kubectl apply -f /var/lib/rancher/k3s/server/manifests/mgmt/prep.yaml"
         )
 
-        time.sleep(2)
+        while _ in range(10):
+            output = ssh(cli, "kubectl get pods")
+            if "prep-gs-mgmt" in output:
+                break
+            time.sleep(1)
+        else:
+            raise Exception("prep-gs-mgmt didn't get deployed")
 
         ssh(cli, "kubectl wait --for=condition=complete job/prep-gs-mgmt --timeout 10m")
 
-        host_image = f"gs-test/gs-mgmt-host:latest-{arch}"
+        host_image = f"{image_prefix}gs-mgmt-host:{image_tag}"
         d = f"builds/{arch}/deb"
         run(f"rm -rf {d} && mkdir -p {d}")
         run(
@@ -98,19 +122,6 @@ def main(host, username, password, arch):
         ssh(cli, "dpkg -i /tmp/deb/*.deb")
 
         ssh(cli, "sysrepoctl -l | grep goldstone")  # goldstone models must be loaded
-
-        apps = [
-            "north-netconf",
-            "north-notif",
-            "north-snmp",
-            "south-onlp",
-            "south-tai",
-            "xlate-oc",
-        ]
-        if arch == "amd64":
-            apps.append("south-sonic")
-        elif arch == "arm64":
-            apps.append("south-gearbox")
 
         for app in apps:
             manifest = f"/var/lib/rancher/k3s/server/manifests/mgmt/{app}.yaml"
@@ -164,6 +175,20 @@ if __name__ == "__main__":
     parser.add_argument("--username", default="root")
     parser.add_argument("--password", default="x1")
     parser.add_argument("--arch", default="amd64", choices=["amd64", "arm64"])
+    parser.add_argument(
+        "--image-prefix", default="ghcr.io/oopt-goldstone/goldstone-mgmt"
+    )
+    parser.add_argument("--image-tag", default="")
 
     args = parser.parse_args()
-    main(args.host, args.username, args.password, args.arch)
+
+    if args.image_tag == "":
+        args.image_tag = f"latest-{args.arch}"
+    main(
+        args.host,
+        args.username,
+        args.password,
+        args.arch,
+        args.image_prefix,
+        args.image_tag,
+    )

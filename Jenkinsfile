@@ -41,7 +41,7 @@ pipeline {
       steps {
         sh 'apk add --update docker make python2'
         sh 'make tester'
-        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 make lint"
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 make lint"
       }
     }
 
@@ -52,7 +52,7 @@ pipeline {
       steps {
         sh 'apk add --update docker make python2'
         sh 'make tester'
-        sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 make unittest"
+        sh "docker run -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 make unittest"
       }
     }
 
@@ -132,7 +132,7 @@ pipeline {
               steps {
                 sh 'make tester'
                 timeout(time: 30, unit: 'MINUTES') {
-                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.load ${params.DEVICE} --arch $ARCH"
+                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.load ${params.DEVICE} --arch $ARCH --image-prefix $GS_MGMT_IMAGE_PREFIX"
                 }
               }
             }
@@ -152,7 +152,7 @@ pipeline {
               steps {
                 sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
                 timeout(time: 30, unit: 'MINUTES') {
-                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.load ${params.ARM_DEVICE} --arch $ARCH"
+                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.load ${params.ARM_DEVICE} --arch $ARCH --image-prefix $GS_MGMT_IMAGE_PREFIX"
                 }
               }
             }
@@ -177,7 +177,7 @@ pipeline {
               steps {
                 sh 'make tester'
                 timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthSONiC"
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthSONiC"
                 }
               }
             }
@@ -196,13 +196,13 @@ pipeline {
               steps {
                 sh 'make tester'
                 timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthTAI"
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthTAI"
                 }
                 timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
                 }
                 timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthSystem"
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthSystem"
                 }
               }
             }
@@ -221,13 +221,13 @@ pipeline {
               steps {
                 sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
                 timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthTAI"
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthTAI"
                 }
                 timeout(time: 30, unit: 'MINUTES') {
-                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
+                    sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
                 }
                 timeout(time: 30, unit: 'MINUTES') {
-                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthGearbox"
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.ARM_DEVICE} -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthGearbox"
                 }
               }
             }
@@ -249,8 +249,8 @@ pipeline {
           }
           steps {
             sh 'make tester'
-            sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.DEVICE} --arch ${ARCH}"
-            sh "docker run -e GS_TEST_HOST=${params.DEVICE} -e GS_TEST_GSCLI_CONNECTOR=netconf -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
+            sh "docker run -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.DEVICE} --arch ${ARCH}"
+            sh "docker run -e GS_TEST_HOST=${params.DEVICE} -e GS_TEST_GSCLI_CONNECTOR=netconf -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
           }
         }
         stage('arm64') {
@@ -263,8 +263,8 @@ pipeline {
           }
           steps {
             sh 'ARCH=amd64 make tester'
-            sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.ARM_DEVICE} --arch ${ARCH}"
-            sh "docker run -e GS_TEST_HOST=${params.ARM_DEVICE} -e GS_TEST_GSCLI_CONNECTOR=netconf -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
+            sh "docker run -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.ARM_DEVICE} --arch ${ARCH}"
+            sh "docker run -e GS_TEST_HOST=${params.ARM_DEVICE} -e GS_TEST_GSCLI_CONNECTOR=netconf -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
           }
         }
       }
@@ -285,7 +285,7 @@ pipeline {
             stage('Test SNMP on amd64') {
               steps {
                 sh 'make tester'
-                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.DEVICE} --arch ${ARCH}"
+                sh "docker run -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.DEVICE} --arch ${ARCH}"
               }
             }
           }
@@ -302,7 +302,7 @@ pipeline {
             stage('Test SNMP on arm64') {
               steps {
                 sh 'ARCH=amd64 make tester' // tester image doesn't need to be arm64
-                sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.ARM_DEVICE} --arch ${ARCH}"
+                sh "docker run -t -v `pwd`:`pwd` -w `pwd` ${GS_MGMT_IMAGE_PREFIX}gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_snmp ${params.ARM_DEVICE} --arch ${ARCH}"
               }
             }
           }
