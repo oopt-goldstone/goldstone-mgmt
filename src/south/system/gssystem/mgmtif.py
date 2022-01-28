@@ -225,10 +225,10 @@ class ManagementInterfaceServer:
                     routes.append(route_dic)
             return routes
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
-        logger.debug(f"xpath:{xpath}, req_xpath:{req_xpath}")
+    async def oper_cb(self, xpath, priv):
+        logger.debug(f"xpath:{xpath}")
 
-        if req_xpath.startswith("/goldstone-mgmt-interfaces"):
+        if xpath.startswith("/goldstone-mgmt-interfaces"):
             interfaces = []
             for ifname in MGMT_INTF_NAMES:
                 interface = {"name": ifname}
@@ -238,7 +238,7 @@ class ManagementInterfaceServer:
 
             logger.debug(f"interfaces: {interfaces}")
             return {"interfaces": {"interface": interfaces}}
-        elif req_xpath.startswith("/goldstone-routing"):
+        elif xpath.startswith("/goldstone-routing"):
             return {"routes": {"route": self.get_routes(MGMT_INTF_NAMES[0])}}
 
     def clear_arp(self, xpath, input_params, event, priv):

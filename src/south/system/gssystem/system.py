@@ -18,7 +18,7 @@ class SystemServer:
     def stop(self):
         self.sess.stop()
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+    async def oper_cb(self, xpath, priv):
         try:
             with open(VERSION_FILE, "r") as f:
                 d = json.loads(f.read())
