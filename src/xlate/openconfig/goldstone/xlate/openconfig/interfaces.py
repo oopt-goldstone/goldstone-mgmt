@@ -124,7 +124,7 @@ class InterfaceServer(ServerBase):
         user["sess"].apply_changes()
         user["sess"].stop()
 
-    def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+    def oper_cb(self, xpath, priv):
         xpath = "/goldstone-interfaces:interfaces/interface"
         data = self.get_operational_data(xpath, [])
         interfaces = []

@@ -98,8 +98,8 @@ class Session(BaseSession):
 
     def subscribe_notifications(self, callback):
         ctx = self.conn.ctx
-        f = lambda notif_name, value, timestamp, priv: callback(
-            value.print_dict().update({"eventTime": timestamp})
+        f = lambda xpath, notif_type, value, timestamp, priv: callback(
+            {xpath: value, "eventTime": timestamp}
         )
 
         for model in self.conn.models:
@@ -108,7 +108,7 @@ class Session(BaseSession):
             if len(notif) == 0:
                 continue
 
-            self.session.subscribe_notification_tree(model, f"/{model}:*", 0, 0, f)
+            self.session.subscribe_notification(model, f"/{model}:*", f)
 
     def stop(self):
         self.session.stop()

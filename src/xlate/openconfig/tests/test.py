@@ -29,7 +29,7 @@ class MockGSInterfaceServer(ServerBase):
             }
         }
 
-    def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+    def oper_cb(self, xpath, priv):
         interfaces = [
             {
                 "name": "Ethernet1_1",

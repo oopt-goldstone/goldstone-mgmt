@@ -23,7 +23,7 @@ class MockPlatformServer(ServerBase):
     def __init__(self, conn):
         super().__init__(conn, "goldstone-platform")
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+    async def oper_cb(self, xpath, priv):
         components = []
         for i in range(4):
             name = f"piu{i+1}"

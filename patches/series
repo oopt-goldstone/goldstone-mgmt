@@ -1,6 +1,5 @@
 # sysrepo patches
 sysrepo-python/support_getting_detailed_error_info.patch
-sysrepo-python/add_get_module_access_and_set_module_access.patch
 sysrepo/sysrepoctl-install.patch
 sysrepo/skip_test.patch
 
@@ -12,14 +11,11 @@ libyang-python/add_get()_method_to_keyed_list.patch
 libyang-python/add_sgrouping.patch
 
 # sysrepo-python patches
-sysrepo-python/notification.patch
-sysrepo-python/async.patch
 sysrepo-python/add_oper_merge_subscribe_flag.patch
-sysrepo-python/add_more_info_to_oper_callback.patch
 sysrepo-python/add_copy_config.patch
+sysrepo-python/add_get_module_access_and_set_module_access.patch
 sysrepo-python/add_lock_unlock.patch
-sysrepo-python/add_sr_get_lock.patch
-
+#
 # netopeer2 patches
 np2/netopeer2-cli.patch
 

@@ -568,14 +568,14 @@ class InterfaceServer(ServerBase):
         if oper_status != None:
             return oper_status.upper()
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
-        logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
+    async def oper_cb(self, xpath, priv):
+        logger.debug(f"xpath: {xpath}")
         if self.sonic.is_rebooting:
             raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
 
-        counter_only = "counters" in req_xpath
+        counter_only = "counters" in xpath
 
-        req_xpath = list(libyang.xpath_split(req_xpath))
+        req_xpath = list(libyang.xpath_split(xpath))
         ifnames = self.sonic.get_ifnames()
 
         if (

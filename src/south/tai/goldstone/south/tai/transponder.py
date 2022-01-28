@@ -374,12 +374,10 @@ class TransponderServer(ServerBase):
 
             logger.info(f"cleanup done for {location}")
 
-    async def notification_cb(self, notif_name, value, timestamp, priv):
-        data = value.print_dict()
-        logger.info(data)
-        assert "piu-notify-event" in data
+    async def notification_cb(self, xpath, notif_type, data, timestamp, priv):
+        logger.info(f"{xpath=}, {notif_type=}, {data=}, {timestamp=}, {priv=}")
+        assert "piu-notify-event" in xpath
 
-        data = data["piu-notify-event"]
         name = data["name"]
         location = await self.name2location(name)
         status = [v for v in data.get("status", [])]
@@ -472,11 +470,9 @@ class TransponderServer(ServerBase):
             logger.debug(f"running configuration for {location}: {config}")
             await self.initialize_piu(config, location)
 
-        self.sess.subscribe_notification_tree(
+        self.sess.subscribe_notification(
             "goldstone-platform",
             f"/goldstone-platform:piu-notify-event",
-            0,
-            0,
             self.notification_cb,
             asyncio_register=True,
         )
@@ -664,8 +660,8 @@ class TransponderServer(ServerBase):
 
         raise InvalidXPath()
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
-        logger.info(f"oper get callback requested xpath: {req_xpath}")
+    async def oper_cb(self, xpath, priv):
+        logger.info(f"oper get callback requested xpath: {xpath}")
 
         async def get(obj, schema):
             attr, meta = await obj.get(schema.name(), with_metadata=True, json=True)
@@ -681,9 +677,9 @@ class TransponderServer(ServerBase):
             return attrs
 
         try:
-            module, intf, item = await self.parse_oper_req(req_xpath)
+            module, intf, item = await self.parse_oper_req(xpath)
         except InvalidXPath:
-            logger.error(f"invalid xpath: {req_xpath}")
+            logger.error(f"invalid xpath: {xpath}")
             return {}
         except EmptryReturn:
             return {}
