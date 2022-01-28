@@ -273,11 +273,14 @@ class Connector(BaseConnector):
         return root
 
     def get_ns_from_xpath(self, xpath):
-        return {
-            elem[0]: self._models.get(elem[0])["ns"]
-            for elem in libyang.xpath_split(xpath)
-            if elem[0]  # elem[0] == prefix
-        }
+        try:
+            return {
+                elem[0]: self._models.get(elem[0])["ns"]
+                for elem in libyang.xpath_split(xpath)
+                if elem[0]  # elem[0] == prefix
+            }
+        except TypeError:  # elem[0] not exist in self._modules
+            return None
 
     @property
     def models(self):
@@ -315,6 +318,8 @@ class Connector(BaseConnector):
         ds="running",
     ):
         nss = self.get_ns_from_xpath(xpath)
+        if nss == None:
+            return default
         logger.debug(f"{xpath=}, {ds=}, {nss=}")
 
         if ds == "operational":
