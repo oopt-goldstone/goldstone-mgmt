@@ -10,6 +10,7 @@ import logging
 import urllib.parse
 from functools import cache
 import threading
+from pathlib import Path
 
 from ncclient import manager
 from ncclient.xml_ import *
@@ -26,36 +27,68 @@ import json
 logger = logging.getLogger(__name__)
 
 
-def jsonxsl_xformer(models):
+def str2bool(d, key):
+    v = d.get(key)
+    if v == "false":
+        d[key] = False
+    elif v == "true":
+        d[key] = True
 
-    repos = repository.FileRepository()
 
-    ctx = context.Context(repos)
+def get_schema(conn, model, cache_dir=None):
+    cache_file = Path(f"{cache_dir}/schema/{model}.yang") if cache_dir else None
+    if cache_file and cache_file.exists():
+        with cache_file.open() as f:
+            return f.read()
 
-    jsonxsl = JsonXslPlugin()
-    jsonxsl.setup_fmt(ctx)
+    schema = conn.get_schema(identifier=model)
+    schema = schema._data
+    if cache_file:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        with cache_file.open("w") as f:
+            f.write(schema)
+    return schema
 
-    modules = []
 
-    for filename, text in models:
-        m = syntax.re_filename.search(filename)
-        name, rev, in_format = m.groups()
-        module = ctx.add_module(
-            filename,
-            text,
-            in_format,
-            name,
-            rev,
-            expect_failure_error=False,
-            primary_module=True,
-        )
-        modules.append(module)
+def jsonxsl_xformer(models, cache_dir=None):
+    cache_file = Path(f"{cache_dir}/xsl/goldstone-json.xsl") if cache_dir else None
+    if cache_file and cache_file.exists():
+        with cache_file.open() as f:
+            xslt = f.read()
+    else:
+        repos = repository.FileRepository()
 
-    ctx.validate()
+        ctx = context.Context(repos)
 
-    buf = io.StringIO()
-    jsonxsl.emit(ctx, modules, buf)
-    xslt = buf.getvalue()
+        jsonxsl = JsonXslPlugin()
+        jsonxsl.setup_fmt(ctx)
+
+        modules = []
+
+        for filename, text in models:
+            m = syntax.re_filename.search(filename)
+            name, rev, in_format = m.groups()
+            module = ctx.add_module(
+                filename,
+                text,
+                in_format,
+                name,
+                rev,
+                expect_failure_error=False,
+                primary_module=True,
+            )
+            modules.append(module)
+
+        ctx.validate()
+
+        buf = io.StringIO()
+        jsonxsl.emit(ctx, modules, buf)
+        xslt = buf.getvalue()
+
+        if cache_file:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with cache_file.open("w") as f:
+                f.write(xslt)
 
     # no idea why we need this, but without this, it failes to resolv URL
     # there might be a better and cleaner way
@@ -123,17 +156,14 @@ class Session(BaseSession):
 
 class Connector(BaseConnector):
     def __init__(self, **kwargs):
-        key = "hostkey_verify"
-        v = kwargs.get(key)
-        if v == "false":
-            kwargs[key] = False
-        elif v == "true":
-            kwargs[key] = True
+        cache_dir = kwargs.pop("cache_dir", None)
+        str2bool(kwargs, "hostkey_verify")
         self._connect_args = kwargs
         self.sess = self.new_session()
         self.conn = self.sess.netconf_conn
         self._models = {}
         xform_models = []
+
         for cap in self.conn.server_capabilities:
             t = urllib.parse.urlparse(cap)
             q = [v.split("=") for v in t.query.split("&") if v]
@@ -150,10 +180,10 @@ class Connector(BaseConnector):
                 raise Error(f"unsupported scheme: {t.scheme}")
             self._models[m] = {"query": q, "ns": ns}
 
-            # limit to Goldstone primitive models for speed
-            schema = self.conn.get_schema(identifier=m)
-            xform_models.append((m + ".yang", schema._data))
-            self._models[m]["schema"] = schema._data
+            schema = get_schema(self.conn, m, cache_dir)
+
+            xform_models.append((m + ".yang", schema))
+            self._models[m]["schema"] = schema
 
         ctx = libyang.Context()
         failed = []
@@ -172,7 +202,7 @@ class Connector(BaseConnector):
 
         self.ctx = ctx
 
-        f = jsonxsl_xformer(xform_models)
+        f = jsonxsl_xformer(xform_models, cache_dir)
         self.xform = lambda v: json.loads(str(f(v)))
 
     def new_session(self, ds="running"):
