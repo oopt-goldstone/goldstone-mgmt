@@ -9,6 +9,7 @@ import libyang
 import logging
 import urllib.parse
 from functools import cache
+import threading
 
 from ncclient import manager
 from ncclient.xml_ import *
@@ -72,6 +73,9 @@ class Session(BaseSession):
     def __init__(self, conn, ds):
         self.conn = conn
         self.ds = ds
+        self.netconf_conn = manager.connect(**self.conn._connect_args)
+        assert self.netconf_conn != None
+        self._thread = None
 
     def delete_all(self, model):
         if self.ds != "running":
@@ -83,6 +87,39 @@ class Session(BaseSession):
             super().delete_all(model)
         return self.conn.apply()
 
+    def stop(self):
+        self.netconf_conn.close_session()
+        if self._thread != None:
+            self._stop = True
+            self._thread.join()
+            self._thread = None
+
+    def _loop(self, callback):
+        while True:
+            v = self.netconf_conn.take_notification(block=False, timeout=0.5)
+            if v == None:
+                if self._stop:
+                    return
+                else:
+                    continue
+
+            try:
+                data = self.conn.xform(etree.fromstring(v.notification_xml))
+            except etree.XSLTApplyError:
+                logger.debug(f"failed to xform notification: {v.notification_xml}")
+                continue
+            callback(data)
+
+    def subscribe_notifications(self, callback):
+        if self._thread != None:
+            raise Error("notification already subscribed")
+
+        self.netconf_conn.create_subscription()
+        self._thread = threading.Thread(target=self._loop, args=(callback,))
+
+        self._stop = False
+        self._thread.start()
+
 
 class Connector(BaseConnector):
     def __init__(self, **kwargs):
@@ -92,8 +129,9 @@ class Connector(BaseConnector):
             kwargs[key] = False
         elif v == "true":
             kwargs[key] = True
-        self.conn = manager.connect(**kwargs)
-        assert self.conn != None
+        self._connect_args = kwargs
+        self.sess = self.new_session()
+        self.conn = self.sess.netconf_conn
         self._models = {}
         xform_models = []
         for cap in self.conn.server_capabilities:
@@ -113,10 +151,9 @@ class Connector(BaseConnector):
             self._models[m] = {"query": q, "ns": ns}
 
             # limit to Goldstone primitive models for speed
-            if "goldstone" in m:
-                schema = self.conn.get_schema(identifier=m)
-                xform_models.append((m + ".yang", schema._data))
-                self._models[m]["schema"] = schema._data
+            schema = self.conn.get_schema(identifier=m)
+            xform_models.append((m + ".yang", schema._data))
+            self._models[m]["schema"] = schema._data
 
         ctx = libyang.Context()
         failed = []
