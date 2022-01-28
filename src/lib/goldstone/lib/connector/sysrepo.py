@@ -1,7 +1,6 @@
 from .base import (
     Connector as BaseConnector,
     Session as BaseSession,
-    Node as BaseNode,
     Error,
     DatastoreLocked,
 )
@@ -31,26 +30,6 @@ def wrap_sysrepo_error(func):
             raise Error(str(error))
 
     return f
-
-
-class Node(BaseNode):
-    def __init__(self, node):
-        self.node = node
-
-    def name(self):
-        return self.node.name()
-
-    def children(self):
-        return [Node(v) for v in self.node]
-
-    def type(self):
-        return str(self.node.type())
-
-    def enums(self):
-        return self.node.type().all_enums()
-
-    def range(self):
-        return self.node.type().range()
 
 
 class Session(BaseSession):
@@ -144,6 +123,7 @@ class Connector(BaseConnector):
         self.running_session = self.new_session()
         self.operational_session = self.new_session("operational")
         self.startup_session = self.new_session("startup")
+        self.ctx = self.conn.get_ly_ctx()
 
     @property
     def type(self):
@@ -156,12 +136,6 @@ class Connector(BaseConnector):
     def models(self):
         ctx = self.conn.get_ly_ctx()
         return [m.name() for m in ctx]
-
-    def find_node(self, xpath):
-        ctx = self.conn.get_ly_ctx()
-        node = [n for n in ctx.find_path(xpath)]
-        assert len(node) == 1
-        return Node(node[0])
 
     def save(self, model):
         try:

@@ -16,7 +16,23 @@ class DatastoreLocked(Error):
 
 
 class Node(object):
-    pass
+    def __init__(self, node):
+        self.node = node
+
+    def name(self):
+        return self.node.name()
+
+    def children(self):
+        return [Node(v) for v in self.node]
+
+    def type(self):
+        return str(self.node.type())
+
+    def enums(self):
+        return self.node.type().all_enums()
+
+    def range(self):
+        return self.node.type().range()
 
 
 class Session(object):
@@ -38,8 +54,13 @@ class Connector(object):
         raise NotSupported(f"{fname}() not supported by {self.type} connector")
 
     def find_node(self, xpath):
-        fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        ctx = getattr(self, "ctx", None)
+        if ctx == None:
+            fname = sys._getframe().f_code.co_name
+            raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        node = [n for n in ctx.find_path(xpath)]
+        assert len(node) == 1
+        return Node(node[0])
 
     def save(self, model):
         fname = sys._getframe().f_code.co_name
