@@ -117,14 +117,19 @@ class Session(BaseSession):
     def discard_changes(self):
         return self.session.discard_changes()
 
-    def subscribe_notifications(self, model, callback):
+    def subscribe_notifications(self, callback):
         ctx = self.conn.get_ly_ctx()
-        module = ctx.get_module(model)
-        notif = list(module.children(types=(libyang.SNode.NOTIF,)))
-        if len(notif) > 0:
-            self.session.subscribe_notification_tree(
-                model, f"/{model}:*", 0, 0, callback
-            )
+        f = lambda notif_name, value, timestamp, priv: callback(
+            value.print_dict().update({"eventTime": timestamp})
+        )
+
+        for model in self.conn.models:
+            module = ctx.get_module(model)
+            notif = list(module.children(types=(libyang.SNode.NOTIF,)))
+            if len(notif) == 0:
+                continue
+
+            self.session.subscribe_notification_tree(model, f"/{model}:*", 0, 0, f)
 
     def stop(self):
         self.session.stop()
