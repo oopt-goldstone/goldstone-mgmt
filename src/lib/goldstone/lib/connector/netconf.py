@@ -1,7 +1,6 @@
 from .base import (
     Connector as BaseConnector,
     Session as BaseSession,
-    Node,
     Error,
 )
 
