@@ -114,6 +114,29 @@ class Session(BaseSession):
             super().delete_all(model)
         return self.conn.delete_all(model)
 
+    def get(
+        self,
+        xpath,
+        default=None,
+        include_implicit_defaults=False,
+        strip=True,
+        one=False,
+        ds="running",
+    ):
+        return self.conn.get(xpath, default, include_implicit_defaults, strip, one, ds)
+
+    def get_operational(
+        self,
+        xpath,
+        default=None,
+        include_implicit_defaults=False,
+        strip=True,
+        one=False,
+    ):
+        return self.get(
+            xpath, default, include_implicit_defaults, strip, one, ds="operational"
+        )
+
     def apply(self):
         if self.ds != "running":
             super().delete_all(model)
