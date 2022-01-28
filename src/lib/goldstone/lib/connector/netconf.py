@@ -185,6 +185,12 @@ class Connector(BaseConnector):
             xform_models.append((m + ".yang", schema))
             self._models[m]["schema"] = schema
 
+        # load models which don't show up in the server capabilities
+        for m in ["ietf-interfaces"]:
+            schema = get_schema(self.conn, m, cache_dir)
+            xform_models.append((m + ".yang", schema))
+            self._models[m] = {"schema": schema}
+
         ctx = libyang.Context()
         failed = []
         for k, m in self._models.items():
