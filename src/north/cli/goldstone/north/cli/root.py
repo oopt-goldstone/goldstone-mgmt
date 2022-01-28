@@ -102,23 +102,23 @@ class Root(Context):
 
     def enable_notification(self):
         if self.notif_session:
-            logger.warning("notification already enabled")
+            logger.debug("notification already enabled")
             return
         self.notif_session = self.conn.new_session()
-        for model in self.conn.models:
-            if "goldstone" not in model:
-                continue
-            self.notif_session.subscribe_notifications(model, self.notification_cb)
+        self.notif_session.subscribe_notifications(self.notification_cb)
 
     def disable_notification(self):
         if not self.notif_session:
-            logger.warning("notification already disabled")
+            logger.debug("notification already disabled")
             return
         self.notif_session.stop()
         self.notif_session = None
 
-    def notification_cb(self, a, b, c, d):
-        stdout.info(b.print_dict())
+    def notification_cb(self, notification):
+        stdout.info(notification)
+
+    def close(self):
+        self.disable_notification()
 
     def __str__(self):
         return ""
