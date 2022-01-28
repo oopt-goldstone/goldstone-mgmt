@@ -44,7 +44,6 @@ def run(cmd):
     proc = subprocess.run(
         cmd,
         shell=True,
-        check=True,
         env=os.environ,
         capture_output=True,
     )
@@ -58,7 +57,7 @@ def run(cmd):
         print(f"stderr: {line}")
     ret = proc.returncode
     if ret != 0:
-        raise SSHException(
+        raise ProcException(
             f"{cmd} failed: ret: {ret}", ret, "".join(output), "".join(err)
         )
 

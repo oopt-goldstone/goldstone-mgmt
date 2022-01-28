@@ -14,6 +14,10 @@ assert HOST
 USERNAME = os.getenv("GS_TEST_USERNAME", "root")
 PASSWORD = os.getenv("GS_TEST_PASSWORD", "x1")
 
+GSCLI_CONNECTOR = os.getenv("GS_TEST_GSCLI_CONNECTOR", "sysrepo")
+
+assert GSCLI_CONNECTOR in ["sysrepo", "netconf"]
+
 
 class TestBase(unittest.TestCase):
     def setUp(self):
@@ -28,7 +32,12 @@ class TestBase(unittest.TestCase):
         return ssh(self.cli, command)
 
     def gscli(self, command):
-        return self.ssh(f'gscli -c "{command}"')
+        if GSCLI_CONNECTOR == "sysrepo":
+            return self.ssh(f'gscli -c "{command}"')
+        elif GSCLI_CONNECTOR == "netconf":
+            return run(
+                f'gscli --connector netconf --connector-opts host={HOST},username={USERNAME},password={PASSWORD},hostkey_verify=false,cache_dir=.gscli/{HOST} -c "{command}"'
+            )
 
 
 class TestSouthONLP(TestBase):

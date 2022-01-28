@@ -249,7 +249,8 @@ pipeline {
           }
           steps {
             sh 'make tester'
-            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.DEVICE} --arch ${ARCH}"
+            sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.DEVICE} --arch ${ARCH}"
+            sh "docker run -e GS_TEST_HOST=${params.DEVICE} -e GS_TEST_GSCLI_CONNECTOR=netconf -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
           }
         }
         stage('arm64') {
@@ -262,7 +263,8 @@ pipeline {
           }
           steps {
             sh 'ARCH=amd64 make tester'
-            sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_MGMT_IMAGE_PREFIX=$GS_MGMT_IMAGE_PREFIX -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.ARM_DEVICE} --arch ${ARCH}"
+            sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test_np2 ${params.ARM_DEVICE} --arch ${ARCH}"
+            sh "docker run -e GS_TEST_HOST=${params.ARM_DEVICE} -e GS_TEST_GSCLI_CONNECTOR=netconf -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthONLP"
           }
         }
       }
