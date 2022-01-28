@@ -10,6 +10,7 @@ import base64
 import os
 from aiohttp import web
 from libyang import SNode
+from goldstone.lib.connector.sysrepo import Connector
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +18,8 @@ logger = logging.getLogger(__name__)
 class Server(object):
     def __init__(self):
         self.loop = asyncio.get_event_loop()
-        self.conn = sysrepo.SysrepoConnection()
-        self.sess = self.conn.start_session()
-        self.ctx = self.conn.get_ly_ctx()
+        self.conn = Connector()
+        self.sess = self.conn.new_session()
 
         routes = web.RouteTableDef()
 
@@ -36,30 +36,19 @@ class Server(object):
         logger.info(f"stop server")
         await self.runner.cleanup()
         self.sess.stop()
-        self.conn.disconnect()
 
     async def monitor_notif(self):
         while True:
-
             await asyncio.sleep(1)
 
-    def notification_cb(self, a, b, c, d):
-        logger.info(b.print_dict())
+    def notification_cb(self, notification):
+        logger.info(f"{notification=}")
 
     async def start(self):
 
         logger.info("**********Inside Start**********")
 
-        self.sess.switch_datastore("running")
-        # Subscribe to the notification tree of the modules below
-        for model in self.ctx:
-            if "goldstone" in model.name():
-                module = self.ctx.get_module(model.name())
-                notif = list(module.children(types=(SNode.NOTIF,)))
-                if len(notif) > 0:
-                    self.sess.subscribe_notification_tree(
-                        model.name(), f"/{model.name()}:*", 0, 0, self.notification_cb
-                    )
+        self.sess.subscribe_notifications(self.notification_cb)
 
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", 8080)

@@ -226,8 +226,8 @@ class ServerBase(object):
     def post(self, user):
         pass
 
-    def oper_cb(self, sess, xpath, req_xpath, parent, priv):
-        logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
+    def oper_cb(self, xpath, priv):
+        logger.debug(f"{xpath=}")
         return
 
     def send_notification(self, name, notification):

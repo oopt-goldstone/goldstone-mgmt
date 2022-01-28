@@ -199,9 +199,9 @@ class GearboxServer(ServerBase):
 
         return await super().start()
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
-        logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
-        xpath = list(libyang.xpath_split(req_xpath))
+    async def oper_cb(self, xpath, priv):
+        logger.debug(f"xpath: {xpath}")
+        xpath = list(libyang.xpath_split(xpath))
         logger.debug(f"xpath: {xpath}")
 
         if len(xpath) < 2 or len(xpath[1][2]) < 1:

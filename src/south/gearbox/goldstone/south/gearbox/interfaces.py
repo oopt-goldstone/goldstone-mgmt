@@ -557,12 +557,12 @@ class InterfaceServer(ServerBase):
         else:
             return obj
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
-        logger.debug(f"xpath: {xpath}, req_xpath: {req_xpath}")
-        xpath = list(libyang.xpath_split(req_xpath))
+    async def oper_cb(self, xpath, priv):
+        logger.debug(f"xpath: {xpath}")
+        xpath = list(libyang.xpath_split(xpath))
         logger.debug(f"xpath: {xpath}")
 
-        counter_only = "counters" in req_xpath and "static-macsec" not in req_xpath
+        counter_only = "counters" in xpath and "static-macsec" not in xpath
 
         if len(xpath) < 2 or len(xpath[1][2]) < 1:
             ifnames = await self.get_ifname_list()

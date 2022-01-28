@@ -608,10 +608,10 @@ class PlatformServer(ServerBase):
             self.components["goldstone-platform:components"]["component"].append(r)
             await asyncio.sleep(0)
 
-    async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
+    async def oper_cb(self, xpath, priv):
         self.components = {"goldstone-platform:components": {"component": []}}
-        logger.debug(f"oper_cb: {xpath}, {req_xpath}")
-        item = self.parse_oper_req(req_xpath)
+        logger.debug(f"oper_cb: {xpath}")
+        item = self.parse_oper_req(xpath)
         logger.debug(f"parse_oper_req: item: {item}")
         if item == None:
             await self.get_thermal_info()

@@ -31,16 +31,14 @@ async def to_subprocess(func):
 
 
 def test_monitor():
-    def cb(a, b, c, d):
-        logger.info(b.print_dict())
+    def cb(xpath, notif_type, value, timestamp, priv):
+        logger.info(f"{xpath=}, {notif_type=}, {value=}, {timestamp=}, {priv=}")
 
     conn = sysrepo.SysrepoConnection()
     with conn.start_session() as sess:
-        sess.subscribe_notification_tree(
+        sess.subscribe_notification(
             "goldstone-interfaces",
             "/goldstone-interfaces:*",
-            0,
-            0,
             cb,
         )
 
