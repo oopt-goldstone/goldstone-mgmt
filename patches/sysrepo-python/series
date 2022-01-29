@@ -3,3 +3,4 @@ add_copy_config.patch
 add_get_module_access_and_set_module_access.patch
 add_lock_unlock.patch
 support_getting_detailed_error_info.patch
+use_operational_flag_to_allow_key-less_list_in_notification.patch
