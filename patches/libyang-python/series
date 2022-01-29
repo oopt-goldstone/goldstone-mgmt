@@ -7,3 +7,4 @@ add_sgrouping.patch
 xpath:_support_getting_leaves_and_non-key_conditions.patch
 xpath:_support_passing_keyedlist_with_filter_option.patch
 remove_debug_log.patch
+fix_for_notification.patch
