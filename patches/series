@@ -1,4 +1,5 @@
 # sysrepo patches
+sysrepo-python/use_operational_flag_to_allow_key-less_list_in_notification.patch
 sysrepo/sysrepoctl-install.patch
 sysrepo/skip_test.patch
 
