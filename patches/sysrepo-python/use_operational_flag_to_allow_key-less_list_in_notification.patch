@@ -1,0 +1,12 @@
+Index: goldstone-mgmt/sm/sysrepo-python/sysrepo/subscription.py
+===================================================================
+--- goldstone-mgmt.orig/sm/sysrepo-python/sysrepo/subscription.py
++++ goldstone-mgmt/sm/sysrepo-python/sysrepo/subscription.py
+@@ -568,6 +568,7 @@ def event_notif_tree_callback(session, n
+                 notif_dnode.print_dict(
+                     include_implicit_defaults=subscription.include_implicit_defaults,
+                     absolute=False,
++                    operational=True,  # allow key-less list to be parsed
+                 ).values()
+             )
+         )
