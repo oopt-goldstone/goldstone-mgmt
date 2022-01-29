@@ -1,20 +1,25 @@
 # sysrepo patches
-sysrepo-python/support_getting_detailed_error_info.patch
 sysrepo/sysrepoctl-install.patch
 sysrepo/skip_test.patch
 
 # libyang-python patches
 libyang-python/get_searchdirs.patch
 libyang-python/notification.patch
+libyang-python/notif2.patch
 libyang-python/dup.patch
 libyang-python/add_get()_method_to_keyed_list.patch
 libyang-python/add_sgrouping.patch
+libyang-python/xpath:_support_getting_leaves_and_non-key_conditions.patch
+libyang-python/xpath:_support_passing_keyedlist_with_filter_option.patch
+libyang-python/remove_debug_log.patch
+libyang-python/fix_for_notification.patch
 
 # sysrepo-python patches
 sysrepo-python/add_oper_merge_subscribe_flag.patch
 sysrepo-python/add_copy_config.patch
 sysrepo-python/add_get_module_access_and_set_module_access.patch
 sysrepo-python/add_lock_unlock.patch
+sysrepo-python/support_getting_detailed_error_info.patch
 #
 # netopeer2 patches
 np2/netopeer2-cli.patch
@@ -43,6 +48,3 @@ sysrepo/add_log.patch
 libyang/revert_a_fix_not_working_for_debian10.patch
 sysrepo/sysrepoctl_install.patch
 sysrepo/revert_packages_bugfix_exact_main_package_version_dependency.patch
-libyang-python/xpath:_support_getting_leaves_and_non-key_conditions.patch
-libyang-python/xpath:_support_passing_keyedlist_with_filter_option.patch
-libyang-python/remove_debug_log.patch
