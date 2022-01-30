@@ -95,14 +95,18 @@ def main(host, username, password, arch, image_prefix, image_tag):
         )
 
         while _ in range(10):
-            output = ssh(cli, "kubectl get pods")
-            if "prep-gs-mgmt" in output:
+            try:
+                ssh(
+                    cli,
+                    "kubectl wait --for=condition=complete job/prep-gs-mgmt --timeout 10m",
+                )
+            except SSHException:
+                pass
+            else:
                 break
             time.sleep(1)
         else:
             raise Exception("prep-gs-mgmt didn't get deployed")
-
-        ssh(cli, "kubectl wait --for=condition=complete job/prep-gs-mgmt --timeout 10m")
 
         host_image = f"{image_prefix}gs-mgmt-host:{image_tag}"
         d = f"builds/{arch}/deb"
