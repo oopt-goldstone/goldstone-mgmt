@@ -420,6 +420,16 @@ def valid_eth_if_type(session):
     return (e[0] for e in session.find_node(xpath).enums())
 
 
+def valid_tx_timing_mode(session):
+    xpath = "/goldstone-interfaces:interfaces"
+    xpath += "/goldstone-interfaces:interface"
+    xpath += "/goldstone-interfaces:ethernet"
+    xpath += "/goldstone-synce:synce"
+    xpath += "/goldstone-synce:config"
+    xpath += "/goldstone-synce:tx-timing-mode"
+    return (e[0] for e in session.find_node(xpath).enums())
+
+
 def set_breakout(session, ifnames, numch, speed):
     if (numch == None) != (speed == None):
         raise InvalidInput(f"unsupported combination: {numch}, {speed}")
@@ -565,6 +575,11 @@ def show(session, ifnames):
         key = state.get("key")
         if key:
             rows.append(("static-macsec-key", static_macsec_key_to_human(key)))
+
+        synce = ethernet.get("synce", {})
+        state = synce.get("state", {})
+        add_to_rows("tx-timing-mode", state)
+        add_to_rows("current-tx-timing-mode", state)
 
         stdout.info(tabulate(rows))
 
@@ -855,6 +870,31 @@ class InterfaceCounterCommand(Command):
         show_counters(self.conn, ifnames, table)
 
 
+class TXTimingModeCommand(Command):
+    def arguments(self):
+        if self.root.name != "no":
+            return valid_tx_timing_mode(self.conn)
+
+    def exec(self, line):
+        if self.root.name == "no":
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            for name in self.context.ifnames:
+                self.conn.delete(
+                    f"{ifxpath(name)}/ethernet/goldstone-synce:synce/config/tx-timing-mode"
+                )
+            self.conn.apply()
+        else:
+            if len(line) != 1:
+                raise InvalidInput(self.usage())
+
+            attr = "ethernet/goldstone-synce:synce/config/tx-timing-mode"
+            _set(self.conn, self.context.ifnames, attr, line[0])
+
+    def usage(self):
+        return f"usage: {self.name_all()} [{'|'.join(self.list())}]"
+
+
 class InterfaceShowCommand(Command):
     COMMAND_DICT = {"counters": InterfaceCounterCommand}
 
@@ -902,6 +942,9 @@ class InterfaceContext(Context):
 
         if ModelExists("goldstone-static-macsec")(self):
             self.add_command("static-macsec-key", StaticMACSECCommand, add_no=True)
+
+        if ModelExists("goldstone-synce")(self):
+            self.add_command("tx-timing-mode", TXTimingModeCommand, add_no=True)
 
         self.add_command(
             "show",
