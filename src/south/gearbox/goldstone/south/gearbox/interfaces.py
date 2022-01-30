@@ -171,6 +171,15 @@ class AutoNegoHandler(IfChangeHandler):
         return "true" if v else "false"
 
 
+class TXTimingModeHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "tx-timing-mode"
+
+    def to_tai_value(self, v, attr_name):
+        return v
+
+
 def pcs_status2oper_status(pcs):
     status = "DOWN"
     if (
@@ -324,6 +333,11 @@ class InterfaceServer(ServerBase):
                         "static-macsec": {
                             "config": {
                                 "key": MACSECStaticKeyHandler,
+                            }
+                        },
+                        "synce": {
+                            "config": {
+                                "tx-timing-mode": TXTimingModeHandler,
                             }
                         },
                     },
@@ -701,6 +715,19 @@ class InterfaceServer(ServerBase):
                             logger.warning(f"failed to get Autonego defect info: {e}")
 
                     i["ethernet"]["auto-negotiate"] = {"state": anlt}
+
+                try:
+                    attrs = await obj.get_multiple(
+                        ["tx-timing-mode", "current-tx-timing-mode"]
+                    )
+                    i["ethernet"]["synce"] = {
+                        "state": {
+                            "tx-timing-mode": attrs[0],
+                            "current-tx-timing-mode": attrs[1],
+                        }
+                    }
+                except taish.TAIException as e:
+                    logger.warning(f"failed to get tx-timing-mode info")
 
                 try:
                     pcs = json.loads(await obj.get("pcs-status", json=True))

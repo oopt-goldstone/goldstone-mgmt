@@ -1,0 +1,61 @@
+module goldstone-synce {
+
+  yang-version "1";
+
+  namespace "http://goldstone.net/yang/goldstone-synce";
+  prefix gs-se;
+
+  import goldstone-interfaces { prefix gs-if; }
+
+  organization
+    "Goldstone";
+
+  description
+    "This module contains a collection of YANG definitions for
+     managing SyncE feature.";
+
+  revision 2022-01-30 {
+    description
+      "Initial version.";
+    reference
+      "0.1.0";
+  }
+
+  grouping ethernet-synce-config {
+    leaf tx-timing-mode {
+      type enumeration {
+        enum auto;
+        enum synce-ref-clk;
+      }
+      default auto;
+    }
+  }
+
+  grouping ethernet-synce-state {
+    leaf current-tx-timing-mode {
+      type enumeration {
+        enum external;
+        enum through;
+        enum synce-ref-clk;
+      }
+    }
+  }
+
+  grouping ethernet-synce-top {
+    container synce {
+      container config {
+        uses ethernet-synce-config;
+      }
+      container state {
+        config false;
+        uses ethernet-synce-config;
+        uses ethernet-synce-state;
+      }
+    }
+  }
+
+  augment "/gs-if:interfaces/gs-if:interface/gs-if:ethernet" {
+    uses ethernet-synce-top;
+  }
+
+}

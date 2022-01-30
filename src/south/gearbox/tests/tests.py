@@ -126,6 +126,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return ",".join(str(i) for i in range(33))
             elif args[0] == "pmon-enet-phy-rx":
                 return ",".join(str(i) for i in range(109))
+            elif args[0] == "tx-timing-mode":
+                return "synce-ref-clk"
+            elif args[0] == "current-tx-timing-mode":
+                return "synce-ref-clk"
             else:
                 return mock.MagicMock()
 
@@ -731,6 +735,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
                 ("auto-negotiation", "false"),
+                ("tx-timing-mode", "auto"),
             ],
         )
 
@@ -771,6 +776,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
                 ("auto-negotiation", "false"),
+                ("tx-timing-mode", "auto"),
             ],
         )
 
@@ -820,6 +826,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("auto-negotiation", "true"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
+                ("tx-timing-mode", "auto"),
             ],
         )
 
@@ -833,6 +840,62 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     v["ethernet"]["auto-negotiate"]["state"]["status"],
                     ["resolved", "completed"],
+                )
+
+        await asyncio.to_thread(test)
+
+    async def test_interface_tx_timing_mode(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                    "Interface1/0/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/ethernet/goldstone-synce:synce/config/tx-timing-mode",
+                    "synce-ref-clk",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("tx-dis", "true"),
+                ("provision-mode", "normal"),
+                ("signal-rate", "100-gbe"),
+                ("tx-timing-mode", "synce-ref-clk"),
+                ("mtu", DEFAULT_MTU),
+                ("mru", DEFAULT_MTU),
+                ("fec-type", "rs"),
+                ("auto-negotiation", "false"),
+            ],
+        )
+
+        def test():
+            with self.conn.start_session("operational") as sess:
+                xpath = (
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']"
+                )
+                v = sess.get_data(xpath)
+                v = libyang.xpath_get(v, xpath)
+                self.assertEqual(
+                    v["ethernet"]["synce"]["state"],
+                    {
+                        "tx-timing-mode": "synce-ref-clk",
+                        "current-tx-timing-mode": "synce-ref-clk",
+                    },
                 )
 
         await asyncio.to_thread(test)
