@@ -329,6 +329,18 @@ class TestSouthGearbox(TestBase):
         else:
             raise Exception("gearbox didn't come up")
 
+    def test_tx_timing_mode(self):
+        output = self.gscli("interface Interface1/0/1; show")
+        self.assertTrue("auto" in output)  # default tx-timing-mode is auto
+        self.gscli(f"interface Interface1/0/1; tx-timing-mode synce-ref-clk")
+        time.sleep(2)
+        output = self.gscli("interface Interface1/0/1; show")
+        self.assertTrue("synce-ref-clk" in output)
+        self.gscli(f"interface Interface1/0/1; no tx-timing-mode")
+        time.sleep(2)
+        output = self.gscli("interface Interface1/0/1; show")
+        self.assertTrue("auto" in output)  # default tx-timing-mode is auto
+
     def test_flexible_connection(self):
         self.gscli("no gearbox 1")  # clear configuration
         self.gscli("gearbox 1; show")
