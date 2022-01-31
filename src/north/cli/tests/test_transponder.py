@@ -2,6 +2,7 @@ import unittest
 import logging
 import os
 import sys
+import itertools
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,14 @@ from goldstone.north.cli import transponder
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
+
+EXPECTED_RUN_CONF = """transponder piu1
+  admin-status up
+  netif 0
+    tx-dis true
+    quit
+  quit
+!"""
 
 
 class MockConnector(Connector):
@@ -62,3 +71,28 @@ class Test(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(Error):
             ctx.exec("show details", no_fail=False)
+
+    async def test_show_run(self):
+        root = Root(self.conn)
+        self.conn.oper_data = {
+            "/goldstone-transponder:modules/module/name": ["piu1"],
+            "/goldstone-transponder:modules/module[name='piu1']/network-interface/name": [
+                "0"
+            ],
+        }
+
+        ctx = root.exec("transponder piu1", no_fail=False)
+        ctx.exec("admin-status up", no_fail=False)
+
+        netif = ctx.exec("netif 0", no_fail=False)
+        netif.exec("tx-dis true", no_fail=False)
+
+        logger = logging.getLogger("stdout")
+
+        with self.assertLogs(logger=logger) as l:
+            root.exec("show running-config transponder", no_fail=False)
+            run_conf = "\n".join(
+                itertools.chain.from_iterable(r.msg.split("\n") for r in l.records)
+            )
+
+        self.assertEqual(run_conf, EXPECTED_RUN_CONF)
