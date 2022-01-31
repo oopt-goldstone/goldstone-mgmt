@@ -4,6 +4,7 @@ import logging
 from aiohttp import web
 import inspect
 import json
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +170,14 @@ class ServerBase(object):
     # - 'abort' event handling
     #   - 1. call revert() of the stored handlers
     #   - 2. discard the stored handlers
+    #
+    # ## Client side timeout handling
+    # When timeout of client expired during 'change' event handling, sysrepo doesn't issue any event.
+    # We create a task that waits for "done" or "abort" event after finishing "change" event handling.
+    # If no event arrives within certain amount of time, assume it as client timeout happens then clal revert()
+    # of the stored handlers.
+    # If "done" or "abort" event arrives within the time window, cancel this task.
+
     async def change_cb(self, event, req_id, changes, priv):
         logger.debug(f"id: {req_id}, event: {event}, changes: {changes}")
         if event not in ["change", "done", "abort"]:
@@ -176,7 +185,13 @@ class ServerBase(object):
             return
 
         if event in ["done", "abort"]:
-            id, handlers, user = self._current_handlers
+            id, handlers, user, revert_task = self._current_handlers
+            revert_task.cancel()
+            try:
+                await revert_task
+            except asyncio.CancelledError:
+                pass
+
             assert id == req_id
             if event == "abort":
                 for done in reversed(handlers):
@@ -184,7 +199,8 @@ class ServerBase(object):
             self._current_handlers = None
             return
 
-        assert self._current_handlers == None
+        if self._current_handlers != None:
+            raise sysrepo.SysrepoInternalError("waiting for 'done' or 'abort' events..")
 
         handlers = []
 
@@ -218,7 +234,16 @@ class ServerBase(object):
                 raise e
 
         await call(self.post, user)
-        self._current_handlers = (req_id, handlers, user)
+
+        async def do_revert():
+            await asyncio.sleep(2)
+            logging.warning("client timeout happens? reverting changes we made")
+            for done in reversed(handlers):
+                await call(done.revert, user)
+            self._current_handlers = None
+
+        revert_task = asyncio.create_task(do_revert())
+        self._current_handlers = (req_id, handlers, user, revert_task)
 
     def pre(self, user):
         pass
