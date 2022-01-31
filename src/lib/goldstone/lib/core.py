@@ -84,6 +84,7 @@ class ServerBase(object):
         self.top = f"/{self.module}:{v[0]}"
         self.handlers = {}
         self._current_handlers = None  # (req_id, handlers, user)
+        self._stop_event = asyncio.Event()
 
     def get_sr_data(
         self,
@@ -145,7 +146,7 @@ class ServerBase(object):
             asyncio_register=asyncio_register,
         )
 
-        return []
+        return [self._stop_event.wait()]
 
     def stop(self):
         self.sess.stop()
@@ -185,6 +186,11 @@ class ServerBase(object):
             return
 
         if event in ["done", "abort"]:
+            if self._current_handlers == None:
+                logger.error(f"current_handlers is null")
+                self._stop_event.set()
+                raise sysrepo.SysrepoInternalError("fatal error happened")
+
             id, handlers, user, revert_task = self._current_handlers
             revert_task.cancel()
             try:
@@ -192,7 +198,11 @@ class ServerBase(object):
             except asyncio.CancelledError:
                 pass
 
-            assert id == req_id
+            if id != req_id:
+                logger.error(f"{id=} != {req_id=}")
+                self._stop_event.set()
+                raise sysrepo.SysrepoInternalError("fatal error happened")
+
             if event == "abort":
                 for done in reversed(handlers):
                     await call(done.revert, user)
