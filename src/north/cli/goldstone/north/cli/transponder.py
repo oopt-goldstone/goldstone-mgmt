@@ -523,8 +523,8 @@ TechSupportCommand.register_command(
 
 
 class TransponderCommand(Command):
-    def __init__(self, context, parent, name):
-        super().__init__(context, parent, name)
+    def __init__(self, context, parent, name, **options):
+        super().__init__(context, parent, name, **options)
         self.transponder = Transponder(self.conn)
 
     def arguments(self):

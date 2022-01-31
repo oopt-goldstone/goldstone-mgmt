@@ -1,6 +1,7 @@
 from .base import InvalidInput
 from .cli import (
     Command,
+    ConfigCommand,
     Context,
     GlobalShowCommand,
     RunningConfigCommand,
@@ -236,7 +237,20 @@ class UFDLinkCommand(Command):
     COMMAND_DICT = {"uplink": Command, "downlink": Command}
 
 
-class InterfaceUFDCommand(Command):
+def get_ufd(conn, ifname):
+    xpath = "/goldstone-uplink-failure-detection:ufd-groups"
+    ufd = []
+
+    for data in conn.get(f"{xpath}/ufd-group", []):
+        for kind in ["uplink", "downlink"]:
+            for intf in data.get("config", {}).get(kind, []):
+                if intf == ifname:
+                    ufd.append((data["ufd-id"], kind))
+
+    return ufd
+
+
+class InterfaceUFDCommand(ConfigCommand):
     def __init__(
         self, context: Context = None, parent: Command = None, name=None, **options
     ):
@@ -254,6 +268,11 @@ class InterfaceUFDCommand(Command):
                     f"usage: {self.name_all()} <ufdid> <uplink|downlink>"
                 )
             add_ports(self.conn, line[0], self.context.ifnames, line[1])
+
+    @staticmethod
+    def to_command(conn, data):
+        ifname = data.get("name")
+        return [f"ufd {v[0]} {v[1]}" for v in get_ufd(conn, ifname)]
 
 
 InterfaceContext.register_command(

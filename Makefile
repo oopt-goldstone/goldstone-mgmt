@@ -151,6 +151,11 @@ unittest-lib:
 
 unittest-cli:
 	sysrepoctl --search-dirs yang --install yang/goldstone-interfaces.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-synce.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-static-macsec.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-vlan.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-uplink-failure-detection.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-portchannel.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-transponder.yang
 	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 
