@@ -1,6 +1,7 @@
 from .base import InvalidInput
 from .cli import (
     Command,
+    ConfigCommand,
     Context,
     GlobalShowCommand,
     RunningConfigCommand,
@@ -8,6 +9,7 @@ from .cli import (
     TechSupportCommand,
 )
 from .root import Root
+from .util import dig_dict
 
 from tabulate import tabulate
 from natsort import natsorted
@@ -280,8 +282,27 @@ class SwitchportModeCommand(Command):
         self.conn.apply()
 
 
-class SwitchportCommand(Command):
+class SwitchportCommand(ConfigCommand):
     COMMAND_DICT = {"mode": SwitchportModeCommand}
+
+    def exec(self, line):
+        raise InvalidInput(f"usage : {self.name_all()} mode [trunk|access] vlan <vid>")
+
+    @staticmethod
+    def to_command(conn, data):
+        config = dig_dict(data, ["switched-vlan", "config"])
+        if not config:
+            return
+
+        mode = config.get("interface-mode", "").lower()
+        if mode == "access":
+            vids = [config["access-vlan"]]
+        elif mode == "trunk":
+            vids = config.get("trunk-vlans", [])
+        else:
+            return
+
+        return [f"switchport mode {mode} vlan {vid}" for vid in vids]
 
 
 InterfaceContext.register_command(

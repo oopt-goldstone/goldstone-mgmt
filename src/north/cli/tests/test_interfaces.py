@@ -2,6 +2,7 @@ import unittest
 import logging
 import os
 import sys
+import itertools
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,9 @@ from goldstone.lib.connector.sysrepo import Connector
 from goldstone.north.cli.base import InvalidInput
 from goldstone.north.cli.root import Root
 from goldstone.north.cli import interface
+from goldstone.north.cli import vlan
+from goldstone.north.cli import ufd
+from goldstone.north.cli import portchannel
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -35,6 +39,28 @@ INTF_OPER_DATA = [
         "state": {"admin-status": "UP"},
     },
 ]
+
+EXPECTED_RUN_CONF = """interface Interface0
+  admin-status up
+  fec none
+  speed 100G
+  interface-type otn foic
+  static-macsec-key 0x00000001,0x00000002,0x00000003,0x00000004
+  tx-timing-mode synce-ref-clk
+  switchport mode access vlan 300
+  ufd 1 uplink
+  quit
+!
+interface Interface1
+  auto-negotiate enable
+  auto-negotiate advatise 100G
+  switchport mode trunk vlan 100
+  switchport mode trunk vlan 200
+  ufd 1 downlink
+  portchannel PortChannel10
+  quit
+!
+!"""
 
 
 def ifxpath(ifname):
@@ -128,6 +154,52 @@ class Test(unittest.IsolatedAsyncioTestCase):
 
             # global show and show in the interface ctx must have the same output
             self.assertEqual(l.records[0].msg, l.records[1].msg)
+
+    async def test_show_run(self):
+        conn = MockConnector()
+        root = Root(conn)
+        data = ["Interface0", "Interface1"]
+        conn.oper_data = {
+            "/goldstone-interfaces:interfaces/interface": INTF_OPER_DATA,
+            "/goldstone-interfaces:interfaces/interface/name": data,
+        }
+        logger = logging.getLogger("stdout")
+
+        root.exec("vlan 100")
+        root.exec("vlan 200")
+        root.exec("vlan 300")
+
+        root.exec("ufd 1")
+        root.exec("portchannel PortChannel10")
+
+        with self.assertLogs(logger=logger) as l:
+            ifctx = root.exec("interface Interface0", no_fail=False)
+            ifctx.exec("admin-status up", no_fail=False)
+            ifctx.exec("fec none", no_fail=False)
+            ifctx.exec("speed 100G", no_fail=False)
+            ifctx.exec("interface-type otn foic", no_fail=False)
+            #        ifctx.exec("breakout 4X25G", no_fail=False)
+            ifctx.exec("static-macsec-key 1,2,3,4", no_fail=False)
+            ifctx.exec("tx-timing-mode synce-ref-clk", no_fail=False)
+
+            ifctx.exec("switchport mode access vlan 300", no_fail=False)
+            ifctx.exec("ufd 1 uplink", no_fail=False)
+
+            ifctx = root.exec("interface Interface1", no_fail=False)
+            ifctx.exec("auto-negotiate enable", no_fail=False)
+            ifctx.exec("auto-negotiate advertise 100G", no_fail=False)
+
+            ifctx.exec("switchport mode trunk vlan 100", no_fail=False)
+            ifctx.exec("switchport mode trunk vlan 200", no_fail=False)
+            ifctx.exec("ufd 1 downlink", no_fail=False)
+            ifctx.exec("portchannel PortChannel10", no_fail=False)
+
+            root.exec("show running-config interface")
+
+            run_conf = "\n".join(
+                itertools.chain.from_iterable(r.msg.split("\n") for r in l.records)
+            )
+            self.assertEqual(run_conf, EXPECTED_RUN_CONF)
 
     async def test_clear_datastore_all(self):
         conn = MockConnector()

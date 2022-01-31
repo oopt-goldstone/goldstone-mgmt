@@ -282,6 +282,7 @@ class Context(object):
         registered_subcommands = getattr(self, "REGISTERED_COMMANDS", {})
         for k, v in registered_subcommands.items():
             if v[1] == None or (callable(v[1]) and v[1](self)):
+                v[2]["registered"] = True
                 self._command.add_command(k, v[0], **v[2])
 
         if fuzzy_completion == None:
