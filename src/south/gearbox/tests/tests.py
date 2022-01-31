@@ -775,7 +775,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
-                ("auto-negotiation", "false"),
                 ("tx-timing-mode", "auto"),
             ],
         )
@@ -841,6 +840,23 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     v["ethernet"]["auto-negotiate"]["state"]["status"],
                     ["resolved", "completed"],
                 )
+
+        await asyncio.to_thread(test)
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                    "Interface1/1/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/ethernet/auto-negotiate/config/enabled",
+                    "true",
+                )
+
+                # enabling auto nego is not supported for line side interface
+                with self.assertRaises(sysrepo.SysrepoCallbackFailedError):
+                    sess.apply_changes()
 
         await asyncio.to_thread(test)
 

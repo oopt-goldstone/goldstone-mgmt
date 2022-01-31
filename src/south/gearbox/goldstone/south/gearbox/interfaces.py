@@ -176,6 +176,28 @@ class AutoNegoHandler(IfChangeHandler):
         await super()._init(user)
         self.tai_attr_name = "auto-negotiation"
 
+    async def validate(self, user):
+        # netif doesn't support augo nego. only allow false config
+        if isinstance(self.obj, taish.NetIf):
+            if self.type == "deleted":
+                return
+            if self.change.value:
+                raise sysrepo.SysrepoInvalArgError(
+                    "line side interface doesn't support auto negotiation"
+                )
+            return
+        return await super().validate(user)
+
+    async def apply(self, user):
+        if isinstance(self.obj, taish.NetIf):
+            return
+        return await super().apply(user)
+
+    async def revert(self, user):
+        if isinstance(self.obj, taish.NetIf):
+            return
+        return await super().revert(user)
+
     def to_tai_value(self, v, attr_name):
         return "true" if v else "false"
 
