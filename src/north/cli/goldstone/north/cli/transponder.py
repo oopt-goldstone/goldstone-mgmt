@@ -152,17 +152,7 @@ class Transponder(object):
         netif_conf_blacklist = ["name"]
         hostif_conf_blacklist = ["name"]
 
-        tree = self.conn.get(self.XPATH)
-        if tree == None:
-            stdout.info("!")
-            return
-
-        modules = list(tree.get("modules", {}).get("module", []))
-        if len(modules) == 0:
-            stdout.info("!")
-            return
-
-        for module in modules:
+        for module in self.conn.get(self.XPATH, []):
             stdout.info("transponder {}".format(module.get("name")))
 
             m = to_human(module.get("config", {}))
