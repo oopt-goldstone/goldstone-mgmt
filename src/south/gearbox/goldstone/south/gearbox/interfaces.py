@@ -39,13 +39,22 @@ class IfChangeHandler(ChangeHandler):
 
         self.value = []
 
-        for name in self.tai_attr_name:
-            try:
-                cap = await self.obj.get_attribute_capability(name)
-            except taish.TAIException as e:
-                raise sysrepo.SysrepoInvalArgError(e.msg)
+        if "cap-cache" not in user:
+            user["cap-cache"] = {}
 
-            logger.info(f"cap: {cap}")
+        for name in self.tai_attr_name:
+            t = "netif" if isinstance(self.obj, taish.NetIf) else "hostif"
+            cap = user["cap-cache"].get(f"{t}:{name}")
+            if cap == None:
+                try:
+                    cap = await self.obj.get_attribute_capability(name)
+                except taish.TAIException as e:
+                    logger.error(f"failed to get capability: {name}")
+                    raise sysrepo.SysrepoInvalArgError(e.msg)
+                logger.info(f"cap {name}: {cap}")
+                user["cap-cache"][f"{t}:{name}"] = cap
+            else:
+                logger.info(f"cached cap {name}: {cap}")
 
             if self.type == "deleted":
                 leaf = self.xpath[-1][1]
