@@ -11,7 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT_MS = 10_000
+DEFAULT_TIMEOUT_MS = 60_000
 
 
 def wrap_sysrepo_error(func):
@@ -50,7 +50,7 @@ class Session(BaseSession):
             data = self.session.get_data(
                 xpath,
                 0,
-                DEFAULT_TIMEOUT_MS,
+                timeout_ms=DEFAULT_TIMEOUT_MS,
                 include_implicit_defaults=include_implicit_defaults,
             )
         except (sysrepo.SysrepoNotFoundError, sysrepo.SysrepoInvalArgError):
@@ -86,11 +86,11 @@ class Session(BaseSession):
 
     @wrap_sysrepo_error
     def delete_all(self, model):
-        return self.session.replace_config({}, model)
+        return self.session.replace_config({}, model, timeout_ms=DEFAULT_TIMEOUT_MS)
 
     @wrap_sysrepo_error
     def apply(self):
-        return self.session.apply_changes()
+        return self.session.apply_changes(timeout_ms=DEFAULT_TIMEOUT_MS)
 
     @wrap_sysrepo_error
     def discard_changes(self):
