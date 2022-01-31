@@ -1,6 +1,7 @@
 from .base import InvalidInput
 from .cli import (
     Command,
+    ConfigCommand,
     Context,
     GlobalShowCommand,
     RunningConfigCommand,
@@ -251,7 +252,17 @@ Root.register_command(
 )
 
 
-class InterfacePortchannelCommand(Command):
+def get_portchannel(conn, ifname):
+    xpath = "/goldstone-portchannel:portchannel"
+    pc = []
+    for data in conn.get(f"{xpath}/portchannel-group", []):
+        for intf in data.get("config", {}).get("interface", []):
+            if intf == ifname:
+                pc.append(data["portchannel-id"])
+    return pc
+
+
+class InterfacePortchannelCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return get_id(self.conn)
@@ -264,6 +275,11 @@ class InterfacePortchannelCommand(Command):
             if len(line) != 1:
                 raise InvalidInput(f"usage: {self.name_all()} <portchannel_id>")
             add_interfaces(self.conn, line[0], self.context.ifnames)
+
+    @staticmethod
+    def to_command(conn, data):
+        ifname = data.get("name")
+        return [f"portchannel {v}" for v in get_portchannel(conn, ifname)]
 
 
 InterfaceContext.register_command(

@@ -1,6 +1,7 @@
 from .base import InvalidInput
 from .cli import (
     Command,
+    ConfigCommand,
     Context,
     GlobalShowCommand,
     RunningConfigCommand,
@@ -9,6 +10,8 @@ from .cli import (
     ModelExists,
 )
 from .root import Root
+from .util import dig_dict
+
 from tabulate import tabulate
 from natsort import natsorted
 import re
@@ -179,135 +182,6 @@ def show_macsec_counters(session, ifnames):
         stdout.info(tabulate([(k, v) for k, v in data["egress"]["secy"].items()]))
         stdout.info("Egress Channel:")
         stdout.info(tabulate([(k, v) for k, v in data["egress"]["channel"].items()]))
-
-
-def run_conf(session):
-    interface_list = get_interface_list(session, "running")
-    if not interface_list:
-        return
-
-    ufd = get_ufd(session)
-    pc = get_portchannel(session)
-
-    for data in interface_list:
-        ifname = data.get("name")
-        stdout.info("interface {}".format(ifname))
-
-        config = data.get("config")
-        if config:
-            for key, value in config.items():
-                if key == "admin-status":
-                    if value == "DOWN":
-                        stdout.info("  admin-status down")
-                    elif value == "UP":
-                        stdout.info("  admin-status up")
-
-        otn = data.get("otn")
-        if otn:
-            mfi = otn.get("config", {}).get("mfi-type")
-            if mfi:
-                stdout.info(f"  interface-type otn {mfi.lower()}")
-
-        ethernet = data.get("ethernet")
-        if ethernet:
-            config = ethernet.get("config", {})
-            for key in ["fec", "interface-type", "speed", "mtu"]:
-                if key in config and config.get(key):
-                    value = config.get(key)
-                    if key == "fec":
-                        value = value.lower()
-                    elif key == "speed":
-                        value = speed_yang_to_human(value)
-                    stdout.info(f"  {key} {value}")
-
-            if "auto-negotiate" in ethernet:
-                config = ethernet["auto-negotiate"].get("config", {})
-                v = config.get("enabled")
-                if v != None:
-                    value = "enable" if v else "disable"
-                    stdout.info(f"  auto-negotiate {value}")
-
-                v = config.get("advertised-speeds")
-                if v:
-                    v = ",".join(speed_yang_to_human(s) for s in v)
-                    stdout.info(f"  auto-negotiate advatise {v}")
-
-            if "breakout" in ethernet:
-                config = ethernet["breakout"].get("config", {})
-                breakout = breakout_yang_to_human(config)
-                stdout.info(f"  breakout {breakout}")
-            if "static-macsec" in ethernet:
-                config = ethernet["static-macsec"].get("config", {})
-                key = config.get("key")
-                if key:
-                    key = static_macsec_key_to_human(key)
-                    stdout.info(f"  static-macsec-key {key}")
-
-        vlan = data.get("switched-vlan")
-        if vlan:
-            config = vlan.get("config", {})
-            mode = config.get("interface-mode", "").lower()
-            if mode == "access":
-                vids = [config["access-vlan"]]
-            elif mode == "trunk":
-                vids = config.get("trunk-vlans", [])
-            else:
-                continue  # print error?
-
-            for vid in vids:
-                stdout.info(f"  switchport mode {mode} vlan {vid}")
-
-        if ifname in ufd:
-            stdout.info(
-                "  ufd {} {}".format(ufd[ifname]["ufd-id"], ufd[ifname]["role"])
-            )
-
-        if ifname in pc:
-            stdout.info("  portchannel {}".format(pc[ifname]["pc-id"]))
-
-        stdout.info("  quit")
-        stdout.info("!")
-    stdout.info("!")
-
-
-def get_ufd(session):
-    xpath = "/goldstone-uplink-failure-detection:ufd-groups"
-    ufd = {}
-    ufd_list = session.get(f"{xpath}/ufd-group")
-    if ufd_list == None:
-        return {}
-
-    for data in ufd_list:
-        try:
-            for intf in data["config"]["uplink"]:
-                ufd[intf] = {"ufd-id": data["ufd-id"], "role": "uplink"}
-        except:
-            pass
-
-        try:
-            for intf in data["config"]["downlink"]:
-                ufd[intf] = {"ufd-id": data["ufd-id"], "role": "downlink"}
-        except:
-            pass
-
-    return ufd
-
-
-def get_portchannel(session):
-    xpath = "/goldstone-portchannel:portchannel"
-    pc = {}
-    pc_list = session.get(f"{xpath}/portchannel-group")
-    if pc_list == None:
-        return {}
-
-    for data in pc_list:
-        try:
-            for intf in data["config"]["interface"]:
-                pc[intf] = {"pc-id": data["portchannel-id"]}
-        except:
-            pass
-
-    return pc
 
 
 def _set(session, ifnames, attr, value):
@@ -593,7 +467,11 @@ class ShutdownCommand(Command):
         set_admin_status(self.conn, self.context.ifnames, admin_status)
 
 
-class AdminStatusCommand(Command):
+def eth_config(data, key):
+    return dig_dict(data, ["ethernet", "config", key])
+
+
+class AdminStatusCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return ["up", "down"]
@@ -610,8 +488,19 @@ class AdminStatusCommand(Command):
                 )
             set_admin_status(self.conn, self.context.ifnames, line[0].upper())
 
+    @staticmethod
+    def to_command(conn, data):
+        config = data.get("config")
+        if not config:
+            return
+        v = config.get("admin-status")
+        if v == "DOWN":
+            return "admin-status down"
+        elif v == "UP":
+            return "admin-status up"
 
-class FECCommand(Command):
+
+class FECCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return ["none", "fc", "rs"]
@@ -628,8 +517,14 @@ class FECCommand(Command):
                 )
             set_fec(self.conn, self.context.ifnames, line[0].upper())
 
+    @staticmethod
+    def to_command(conn, data):
+        fec = eth_config(data, "fec")
+        if fec:
+            return f"fec {fec.lower()}"
 
-class SpeedCommand(Command):
+
+class SpeedCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return valid_speeds(self.conn)
@@ -646,8 +541,14 @@ class SpeedCommand(Command):
                 )
             set_speed(self.conn, self.context.ifnames, line[0])
 
+    @staticmethod
+    def to_command(conn, data):
+        speed = eth_config(data, "speed")
+        if speed:
+            return f"speed {speed_yang_to_human(speed)}"
 
-class InterfaceTypeOTNCommand(Command):
+
+class InterfaceTypeOTNCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return ["otl", "foic"]
@@ -665,7 +566,7 @@ class InterfaceTypeOTNCommand(Command):
             set_otn_interface_type(self.conn, self.context.ifnames, line[0])
 
 
-class InterfaceTypeCommand(Command):
+class InterfaceTypeCommand(ConfigCommand):
     COMMAND_DICT = {"otn": InterfaceTypeOTNCommand}
 
     def arguments(self):
@@ -684,8 +585,20 @@ class InterfaceTypeCommand(Command):
                 )
             set_interface_type(self.conn, self.context.ifnames, line[0])
 
+    @staticmethod
+    def to_command(conn, data):
+        otn = data.get("otn")
+        if otn:
+            mfi = otn.get("config", {}).get("mfi-type")
+            if mfi:
+                return f"interface-type otn {mfi.lower()}"
 
-class MTUCommand(Command):
+        iftype = eth_config(data, "interface-type")
+        if iftype:
+            return f"interface-type {iftype}"
+
+
+class MTUCommand(ConfigCommand):
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
@@ -701,6 +614,12 @@ class MTUCommand(Command):
                 set_mtu(self.conn, self.context.ifnames, mtu)
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
+
+    @staticmethod
+    def to_command(conn, data):
+        mtu = eth_config(data, "mtu")
+        if mtu:
+            return f"mtu {mtu}"
 
 
 class AutoNegoAdvertiseCommand(Command):
@@ -721,7 +640,7 @@ class AutoNegoAdvertiseCommand(Command):
             set_auto_nego_adv_speed(self.conn, self.context.ifnames, line[0])
 
 
-class AutoNegoCommand(Command):
+class AutoNegoCommand(ConfigCommand):
     COMMAND_DICT = {
         "advertise": AutoNegoAdvertiseCommand,
     }
@@ -742,8 +661,26 @@ class AutoNegoCommand(Command):
                 )
             set_auto_nego(self.conn, self.context.ifnames, line[0] == "enable")
 
+    @staticmethod
+    def to_command(conn, data):
+        config = dig_dict(data, ["ethernet", "auto-negotiate", "config"])
+        if not config:
+            return None
+        v = config.get("enabled")
+        lines = []
+        if v:
+            value = "enable" if v else "disable"
+            lines.append(f"auto-negotiate {value}")
 
-class BreakoutCommand(Command):
+        v = config.get("advertised-speeds")
+        if v:
+            v = ",".join(speed_yang_to_human(s) for s in v)
+            lines.append(f"auto-negotiate advatise {v}")
+
+        return lines
+
+
+class BreakoutCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return ["2X50G", "2X20G", "4X25G", "4X10G"]
@@ -776,8 +713,15 @@ class BreakoutCommand(Command):
                 input_values[1],
             )
 
+    @staticmethod
+    def to_command(conn, data):
+        config = dig_dict(data, ["ethernet", "breakout", "config"])
+        if not config:
+            return None
+        return breakout_yang_to_human(config)
 
-class StaticMACSECCommand(Command):
+
+class StaticMACSECCommand(ConfigCommand):
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
@@ -800,6 +744,44 @@ class StaticMACSECCommand(Command):
 
     def usage(self):
         return f"usage: {self.name_all()} <static-macsec-key> (<uint32>,<uint32>,<uint32>,<uint32>)"
+
+    @staticmethod
+    def to_command(conn, data):
+        key = dig_dict(data, ["ethernet", "static-macsec", "config", "key"])
+        if key:
+            key = static_macsec_key_to_human(key)
+            return f"static-macsec-key {key}"
+
+
+class TXTimingModeCommand(ConfigCommand):
+    def arguments(self):
+        if self.root.name != "no":
+            return valid_tx_timing_mode(self.conn)
+
+    def exec(self, line):
+        if self.root.name == "no":
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            for name in self.context.ifnames:
+                self.conn.delete(
+                    f"{ifxpath(name)}/ethernet/goldstone-synce:synce/config/tx-timing-mode"
+                )
+            self.conn.apply()
+        else:
+            if len(line) != 1:
+                raise InvalidInput(self.usage())
+
+            attr = "ethernet/goldstone-synce:synce/config/tx-timing-mode"
+            _set(self.conn, self.context.ifnames, attr, line[0])
+
+    def usage(self):
+        return f"usage: {self.name_all()} [{'|'.join(self.list())}]"
+
+    @staticmethod
+    def to_command(conn, data):
+        mode = dig_dict(data, ["ethernet", "synce", "config", "tx-timing-mode"])
+        if mode:
+            return f"tx-timing-mode {mode}"
 
 
 class InterfaceMACSECCounterCommand(Command):
@@ -870,31 +852,6 @@ class InterfaceCounterCommand(Command):
         show_counters(self.conn, ifnames, table)
 
 
-class TXTimingModeCommand(Command):
-    def arguments(self):
-        if self.root.name != "no":
-            return valid_tx_timing_mode(self.conn)
-
-    def exec(self, line):
-        if self.root.name == "no":
-            if len(line) != 0:
-                raise InvalidInput(f"usage: {self.name_all()}")
-            for name in self.context.ifnames:
-                self.conn.delete(
-                    f"{ifxpath(name)}/ethernet/goldstone-synce:synce/config/tx-timing-mode"
-                )
-            self.conn.apply()
-        else:
-            if len(line) != 1:
-                raise InvalidInput(self.usage())
-
-            attr = "ethernet/goldstone-synce:synce/config/tx-timing-mode"
-            _set(self.conn, self.context.ifnames, attr, line[0])
-
-    def usage(self):
-        return f"usage: {self.name_all()} [{'|'.join(self.list())}]"
-
-
 class InterfaceShowCommand(Command):
     COMMAND_DICT = {"counters": InterfaceCounterCommand}
 
@@ -911,20 +868,22 @@ class InterfaceContext(Context):
     def __init__(self, parent, ifname):
         super().__init__(parent)
         self.name = ifname
-        ifnames = interface_names(self.conn, ifname)
 
-        if len(ifnames) == 0:
-            raise InvalidInput(f"no interface found: {ifname}")
-        elif len(ifnames) > 1:
-            stdout.info(f"Selected interfaces: {ifnames}")
+        if ifname:  # ifname == None when running config
+            ifnames = interface_names(self.conn, ifname)
 
-            @self.command()
-            def selected(args):
-                if len(args) != 0:
-                    raise InvalidInput("usage: selected[cr]")
-                stdout.info(", ".join(ifnames))
+            if len(ifnames) == 0:
+                raise InvalidInput(f"no interface found: {ifname}")
+            elif len(ifnames) > 1:
+                stdout.info(f"Selected interfaces: {ifnames}")
 
-        self.ifnames = ifnames
+                @self.command()
+                def selected(args):
+                    if len(args) != 0:
+                        raise InvalidInput("usage: selected[cr]")
+                    stdout.info(", ".join(ifnames))
+
+            self.ifnames = ifnames
 
         self.add_command("shutdown", ShutdownCommand, add_no=True)
         self.add_command("admin-status", AdminStatusCommand, add_no=True)
@@ -954,6 +913,43 @@ class InterfaceContext(Context):
 
     def __str__(self):
         return "interface({})".format(self.name)
+
+    def run_conf(self):
+        interface_list = get_interface_list(self.conn, "running")
+        if not interface_list:
+            return
+
+        for data in interface_list:
+            ifname = data.get("name")
+            stdout.info(f"interface {ifname}")
+
+            registered = []
+
+            def gen(cmd):
+                if isinstance(cmd, type) and issubclass(cmd, ConfigCommand):
+                    lines = cmd.to_command(self.conn, data)
+                    if not lines:
+                        return
+
+                    if type(lines) == str:
+                        lines = [lines]
+
+                    for line in lines:
+                        stdout.info("  " + line)
+
+            for k, (cmd, options) in self._command.subcommand_dict.items():
+                if "registered" in options:
+                    registered.append(cmd)
+                    continue
+                gen(cmd)
+
+            for cmd in registered:
+                gen(cmd)
+
+            stdout.info("  quit")
+            stdout.info("!")
+
+        stdout.info("!")
 
 
 class Show(Command):
@@ -1004,7 +1000,7 @@ GlobalClearCommand.register_command(
 class Run(Command):
     def exec(self, line):
         if len(line) == 0:
-            return run_conf(self.conn)
+            return InterfaceContext(self.context, None).run_conf()
         else:
             stderr.info(self.usage())
 

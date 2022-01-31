@@ -19,6 +19,12 @@ class Command(BaseCommand):
         return self.context.conn
 
 
+class ConfigCommand(Command):
+    @staticmethod
+    def to_command(conn, data):
+        raise Exception("ConfigCommand subclass must implement to_command()")
+
+
 class RunningConfigCommand(Command):
     REGISTERED_COMMANDS = {}
 
