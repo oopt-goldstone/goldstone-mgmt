@@ -67,8 +67,6 @@ spec:
                 mountPath: /sys
               - name: host-lib
                 mountPath: /lib/aarch64-linux-gnu/libonlp-platform.so.1
-              - name: host-i2c-lib
-                mountPath: /lib/aarch64-linux-gnu/libi2c.so.0
               securityContext:
                 privileged: true
                 capabilities:
@@ -109,6 +107,3 @@ spec:
             - name: host-lib
               hostPath:
                 path: /lib/aarch64-linux-gnu/libonlp-platform.so
-            - name: host-i2c-lib
-              hostPath:
-                path: /usr/lib/aarch64-linux-gnu/libi2c.so.0.1.1

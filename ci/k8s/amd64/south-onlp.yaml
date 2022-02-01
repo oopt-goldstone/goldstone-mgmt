@@ -65,8 +65,6 @@ spec:
                 mountPath: /etc/onl/
               - name: host-lib
                 mountPath: /lib/x86_64-linux-gnu/libonlp-platform.so.1
-              - name: host-i2c-lib
-                mountPath: /lib/x86_64-linux-gnu/libi2c.so.0
               securityContext:
                 privileged: true
                 capabilities:
@@ -104,6 +102,3 @@ spec:
             - name: host-lib
               hostPath:
                 path: /lib/x86_64-linux-gnu/libonlp-platform.so
-            - name: host-i2c-lib
-              hostPath:
-                path: /usr/lib/x86_64-linux-gnu/libi2c.so.0.1.1
