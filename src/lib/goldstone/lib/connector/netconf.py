@@ -6,8 +6,6 @@ from .base import (
 
 import libyang
 import logging
-import urllib.parse
-from functools import cache
 import threading
 from pathlib import Path
 
@@ -22,6 +20,8 @@ from pyang import syntax
 import io
 import json
 
+from xml.dom.minidom import parseString
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,28 +34,30 @@ def str2bool(d, key):
         d[key] = True
 
 
-def get_schema(conn, model, cache_dir=None):
-    cache_file = Path(f"{cache_dir}/schema/{model}.yang") if cache_dir else None
-    if cache_file and cache_file.exists():
-        with cache_file.open() as f:
+def get_schema(conn, schema_dir, model, revision=None):
+    revision_str = "@" + revision if revision else ""
+    schema_file = (
+        Path(f"{schema_dir}/schema/{model}{revision_str}.yang") if schema_dir else None
+    )
+    if schema_file.exists():
+        with schema_file.open() as f:
             return f.read()
 
-    schema = conn.get_schema(identifier=model)
+    schema = conn.get_schema(identifier=model, version=revision)
     schema = schema._data
-    if cache_file:
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        with cache_file.open("w") as f:
-            f.write(schema)
+    schema_file.parent.mkdir(parents=True, exist_ok=True)
+    with schema_file.open("w") as f:
+        f.write(schema)
     return schema
 
 
-def jsonxsl_xformer(models, cache_dir=None):
-    cache_file = Path(f"{cache_dir}/xsl/goldstone-json.xsl") if cache_dir else None
-    if cache_file and cache_file.exists():
-        with cache_file.open() as f:
+def jsonxsl_xformer(models, schema_dir):
+    schema_file = Path(f"{schema_dir}/xsl/goldstone-json.xsl")
+    if schema_file.exists():
+        with schema_file.open() as f:
             xslt = f.read()
     else:
-        repos = repository.FileRepository()
+        repos = repository.FileRepository(schema_dir)
 
         ctx = context.Context(repos)
 
@@ -84,10 +86,9 @@ def jsonxsl_xformer(models, cache_dir=None):
         jsonxsl.emit(ctx, modules, buf)
         xslt = buf.getvalue()
 
-        if cache_file:
-            cache_file.parent.mkdir(parents=True, exist_ok=True)
-            with cache_file.open("w") as f:
-                f.write(xslt)
+        schema_file.parent.mkdir(parents=True, exist_ok=True)
+        with schema_file.open("w") as f:
+            f.write(parseString(xslt).toprettyxml())
 
     # no idea why we need this, but without this, it failes to resolv URL
     # there might be a better and cleaner way
@@ -178,60 +179,87 @@ class Session(BaseSession):
 
 class Connector(BaseConnector):
     def __init__(self, **kwargs):
-        cache_dir = kwargs.pop("cache_dir", None)
+        if "host" not in kwargs:
+            raise Error("missing host option")
+        schema_dir = kwargs.pop("schema_dir", None)
+        if schema_dir == None:
+            raise Error("missing schema_dir option")
         str2bool(kwargs, "hostkey_verify")
         self._connect_args = kwargs
         self.sess = self.new_session()
         self.conn = self.sess.netconf_conn
         self._models = {}
-        xform_models = []
+        # it is important to make sure the schema dir exists before
+        # creating the libyang context. Otherwise, libyang won't
+        # search for the schemas in the directory.
+        Path(schema_dir).mkdir(parents=True, exist_ok=True)
+        self.ctx = libyang.Context(schema_dir)
 
-        for cap in self.conn.server_capabilities:
-            t = urllib.parse.urlparse(cap)
-            q = [v.split("=") for v in t.query.split("&") if v]
-            q = {q[0]: q[1] for q in q}
-            m = q.get("module")
-            if not m:
-                continue
+        data = self._get_remote_modules(schema_dir)
 
-            if t.scheme == "http":
-                ns = cap.split("?")[0]
-            elif t.scheme == "urn":
-                ns = f"urn:{t.path}"
-            else:
-                raise Error(f"unsupported scheme: {t.scheme}")
-            self._models[m] = {"query": q, "ns": ns}
+        logger.info("getting schemas...")
 
-            schema = get_schema(self.conn, m, cache_dir)
+        for m in data["module"]:
+            if m["name"] not in self._models:
+                self._models[m["name"]] = []
+            m["import-only"] = False
+            m["filename"] = f"{m['name']}@{m['revision']}.yang"
+            logger.debug(f"getting schema {m['filename']} ..")
+            m["schema"] = get_schema(self.conn, schema_dir, m["name"], m["revision"])
+            self._models[m["name"]].append(m)
 
-            xform_models.append((m + ".yang", schema))
-            self._models[m]["schema"] = schema
+        for m in data["import-only-module"]:
+            if m["name"] not in self._models:
+                self._models[m["name"]] = []
+            m["import-only"] = True
+            m["filename"] = f"{m['name']}@{m['revision']}.yang"
+            logger.debug(f"getting schema {m['filename']} ..")
+            m["schema"] = get_schema(self.conn, schema_dir, m["name"], m["revision"])
+            self._models[m["name"]].append(m)
 
-        # load models which don't show up in the server capabilities
-        for m in ["ietf-interfaces"]:
-            schema = get_schema(self.conn, m, cache_dir)
-            xform_models.append((m + ".yang", schema))
-            self._models[m] = {"schema": schema}
+        logger.info("parsing schemas...")
 
-        ctx = libyang.Context()
-        failed = []
-        for k, m in self._models.items():
-            schema = m.get("schema")
-            if schema:
-                try:
-                    mm = ctx.parse_module_str(schema)
-                except libyang.util.LibyangError as e:
-                    # depends on the order loading may fail due to dependency
-                    failed.append(m)
+        for k, ms in self._models.items():
+            logger.debug(f"parsing {k} ..")
+            for m in ms:
+                if not m["import-only"]:
+                    schema = m["schema"]
+                    self.ctx.parse_module_str(schema)
 
-        # try loading the failed module again
-        for f in failed:
-            mm = ctx.parse_module_str(f["schema"])
+        for m in self.ctx:
+            logger.info(
+                f"loaded module: {m}, revisions: {', '.join(str(r) for r in m.revisions())}"
+            )
 
-        self.ctx = ctx
+    def _get_remote_modules(self, schema_dir):
+        schema = get_schema(self.conn, schema_dir, "ietf-yang-library", None)
+        # we can't use libyang to parse the XML data of yang-library since
+        # libyang handles yang-library information differently
+        # use jsonxsl to do the parsing
+        xformer = jsonxsl_xformer([("ietf-yang-library.yang", schema)], schema_dir)
 
-        f = jsonxsl_xformer(xform_models, cache_dir)
-        self.xform = lambda v: json.loads(str(f(v)))
+        def xform(data):
+            data = etree.fromstring(data.data_xml.encode())
+            return json.loads(str(xformer(data)))
+
+        data = self._get(
+            "/ietf-yang-library:yang-library/*",
+            {
+                "ietf-yang-library": "urn:ietf:params:xml:ns:yang:ietf-yang-library",
+            },
+            "operational",
+            xform,
+        )
+        if not data:
+            raise Error("failed to get ietf-yang-library:yang-library")
+        sets = list(data["ietf-yang-library:yang-library"]["module-set"])
+        assert len(sets) > 0
+        module_set = sets[0]
+        if len(sets) > 1:
+            logger.warning(
+                f"more than 1 module-set. using the first one: {module_set['name']}"
+            )
+        return module_set
 
     def new_session(self, ds="running"):
         return Session(self, ds)
@@ -248,7 +276,7 @@ class Connector(BaseConnector):
         model = xpath[0][0]
         v = self._models.get(model)
         if v:
-            root = new_ele_ns(node, v["ns"])
+            root = new_ele_ns(node, v[0]["namespace"])
         else:
             root = new_ele(node)
 
@@ -262,7 +290,7 @@ class Connector(BaseConnector):
                 ccur.text = cond[1]
 
         if value:
-            cur.text = value
+            cur.text = str(value)
         else:
             cur.set("{urn:ietf:params:xml:ns:netconf:base:1.0}operation", "delete")
 
@@ -275,7 +303,7 @@ class Connector(BaseConnector):
     def get_ns_from_xpath(self, xpath):
         try:
             return {
-                elem[0]: self._models.get(elem[0])["ns"]
+                elem[0]: self._models.get(elem[0])[0]["namespace"]
                 for elem in libyang.xpath_split(xpath)
                 if elem[0]  # elem[0] == prefix
             }
@@ -308,6 +336,31 @@ class Connector(BaseConnector):
     def discard_changes(self):
         self.conn.discard_changes()
 
+    # when xform is given, use it to xlate XML to Python dict.
+    # Otherwise, use libyang to do the parsing
+    def _get(self, xpath, nss, ds, xform=None):
+        logger.debug(f"{xpath=}, {ds=}, {nss=}")
+        options = {}
+        if ds == "operational":
+            v = self.conn.get(filter=("xpath", (nss, xpath)))
+            options["get"] = True
+        elif ds == "running":
+            v = self.conn.get_config(source=ds, filter=("xpath", (nss, xpath)))
+            options["getconfig"] = True
+        else:
+            raise Error(f"not supported ds: {ds}")
+
+        logger.debug(f"data_xml: {v.data_xml}")
+        if xform:
+            data = xform(v)
+        else:
+            if not len(v.data):
+                return None
+            data = self.ctx.parse_data_mem(
+                etree.tostring(v.data[0]), fmt="xml", **options
+            ).print_dict()
+        return data
+
     def get(
         self,
         xpath,
@@ -320,18 +373,15 @@ class Connector(BaseConnector):
         nss = self.get_ns_from_xpath(xpath)
         if nss == None:
             return default
-        logger.debug(f"{xpath=}, {ds=}, {nss=}")
-
-        if ds == "operational":
-            v = self.conn.get(filter=("xpath", (nss, xpath)))
-        elif ds == "running":
-            v = self.conn.get_config(source=ds, filter=("xpath", (nss, xpath)))
+        if ds in ["running", "operational"]:
+            data = self._get(xpath, nss, ds)
         else:
-            super().get(xpath, default, include_implicit_defaults, strip, one, ds)
+            return super().get(
+                xpath, default, include_implicit_defaults, strip, one, ds
+            )
 
-        logger.debug(f"data_xml: {v.data_xml}")
-
-        data = self.xform(etree.fromstring(v.data_xml.encode()))
+        if data == None:
+            return default
 
         assert len(data.keys()) < 2
         if len(data.keys()) == 1:
