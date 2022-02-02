@@ -572,7 +572,7 @@ module goldstone-transponder {
         enum loss-of-frame;
         enum loss-of-multiframe;
         enum backward-defect-indication;
-        enum alarm-inidication-signal;
+        enum alarm-indication-signal;
         enum err;
       }
     }
@@ -581,8 +581,8 @@ module goldstone-transponder {
         "Rx ODU Status with Open ROADM Multi-Source Agreement";
       type enumeration {
         enum backward-defect-indication;
-        enum alarm-inidication-signal;
-        enum open-connection-inidication;
+        enum alarm-indication-signal;
+        enum open-connection-indication;
         enum locked-defect;
         enum err;
       }
@@ -817,5 +817,4 @@ module goldstone-transponder {
     uses transponder-network-interface-config;
     uses transponder-network-interface-state;
   }
-
 }

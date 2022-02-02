@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 from enum import Enum
 from jinja2 import Environment
 
-from tai import TAIHeader, TAIAttributeFlag
+from tai_meta_generator.main import TAIHeader, TAIAttributeFlag
 
 IGNORE_TYPE_LIST = [
     "tai_pointer_t",
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         h.add_custom(c)
 
     m = Statement("module", "goldstone-transponder")
-    k = Statement("yang-version", '1')
+    k = Statement("yang-version", "1")
     m.add(k)
     m.add(Statement("namespace", '"http://goldstone.net/yang/transponder"'))
     m.add(Statement("prefix", '"gs-transponder"'))
@@ -197,7 +197,9 @@ if __name__ == "__main__":
         )
         o.add(
             Statement(
-                "container", "config", Statement("uses", "transponder-{}-config".format(name))
+                "container",
+                "config",
+                Statement("uses", "transponder-{}-config".format(name)),
             )
         )
         o.add(

@@ -7,7 +7,7 @@ FROM $GS_MGMT_BUILDER_IMAGE AS builder
 FROM python:3-buster
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp software-properties-common make pkg-config curl git cmake libssh-4 libssh-dev libpcre3-dev quilt
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp software-properties-common make pkg-config curl git cmake libssh-4 libssh-dev libpcre3-dev quilt libclang1-6.0
 
 RUN apt-add-repository non-free
 
@@ -65,5 +65,8 @@ RUN pip install GitPython # for tools/release.py
 
 RUN --mount=type=bind,source=src/lib,target=/src,rw pip install /src
 RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
+
+RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
+    cd /root/sm/oopt-tai/tools/meta-generator && pip install .
 
 # vim:filetype=dockerfile
