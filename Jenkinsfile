@@ -13,24 +13,24 @@ pipeline {
           sh 'env'
           script {
               env.SKIP = 0
-              if (env.BRANCH_NAME == 'master' ) {
-                  env.BUILD_BUILDER = 1 // always build builder
-              } else if ( env.BRANCH_NAME.startsWith('PR') ) {
+              if ( env.BRANCH_NAME.startsWith('PR') ) {
                   env.GS_MGMT_IMAGE_PREFIX = 'gs-test/'
-                  // if sm/, patches/, builder.Dockerfile, build_onlp.sh is updated
-                  // build the builder
-                  env.BUILD_BUILDER = sh(returnStatus: true, script: "git diff --compact-summary HEAD origin/master | grep 'sm/\\|patches/\\|builder.Dockerfile'") ? 0 : 1
               } else {
                   env.SKIP = 1
-                  env.BUILD_BUILDER = 0
                   currentBuild.result = 'SUCCESS'
                   echo "no need to build ${env.BRANCH_NAME}"
               }
-              if ( params.FORCE_BUILD_BUILDER ) {
-                  env.BUILD_BUILDER = 1
-              }
           }
           sh 'env'
+      }
+    }
+
+    stage('Build Builder for amd64') {
+      when {
+        environment name: 'SKIP', value: '0'
+      }
+      steps {
+          sh 'make builder'
       }
     }
 
@@ -58,24 +58,16 @@ pipeline {
 
     stage('Build') {
       failFast true
+      when {
+        environment name: 'SKIP', value: '0'
+      }
       parallel {
         stage('amd64') {
           environment {
             ARCH = 'amd64'
           }
           stages {
-            stage('Build Builder') {
-              when {
-                environment name: 'BUILD_BUILDER', value: '1'
-              }
-              steps {
-                  sh 'make builder'
-              }
-            }
             stage('Build') {
-              when {
-                environment name: 'SKIP', value: '0'
-              }
               steps {
                   sh 'make snmpd'
                   sh 'make base-image'
@@ -91,20 +83,9 @@ pipeline {
             ARCH = 'arm64'
           }
           stages {
-            stage('Build Builder') {
-              when {
-                environment name: 'BUILD_BUILDER', value: '1'
-              }
-              steps {
-                  sh 'make builder'
-              }
-            }
-
             stage('Build') {
-              when {
-                environment name: 'SKIP', value: '0'
-              }
               steps {
+                  sh 'make builder' // builder for arm64 is not built yet
                   sh 'make snmpd'
                   sh 'make base-image'
                   sh 'make images'
