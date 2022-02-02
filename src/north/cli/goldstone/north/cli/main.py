@@ -160,15 +160,16 @@ def main():
                 sys.exit(1)
             opts[v[0]] = v[1]
 
-    if args.connector == "sysrepo":
-        conn = SysrepoConnector()
-        prefix = ""
-    elif args.connector == "netconf":
-        if "host" not in opts:
-            stderr.info(f"host options is mandatory for NETCONF connector")
-            sys.exit(1)
-        conn = NETCONFConnector(**opts)
-        prefix = f"netconf({opts['host']})|"
+    try:
+        if args.connector == "sysrepo":
+            conn = SysrepoConnector()
+            prefix = ""
+        elif args.connector == "netconf":
+            conn = NETCONFConnector(**opts)
+            prefix = f"netconf({opts['host']})|"
+    except Error as e:
+        stderr.info(f"failed to create {args.connector} connector: {e}")
+        sys.exit(1)
 
     shell = GoldstoneShell(conn, prefix=prefix)
 
