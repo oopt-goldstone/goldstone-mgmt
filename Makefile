@@ -39,6 +39,8 @@ BUILDER ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
 BASE ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
 TAI_META_CUSTOM_FILES ?= $(abspath $(wildcard scripts/tai/*))
 
+TRANSPONDER_YANG ?= ./yang/goldstone-transponder.yang
+
 all: builder base-image images tester host-packages
 
 docker:
@@ -112,10 +114,8 @@ snmpd:
 tester:
 	IMAGE_NAME=$(GS_MGMT_TEST_IMAGE) DOCKER_FILE=docker/tester.Dockerfile $(MAKE) image
 
-yang: yang/goldstone-transponder.yang
-
-yang/goldstone-transponder.yang: ./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h $(TAI_META_CUSTOM_FILES)
-	./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h $(TAI_META_CUSTOM_FILES) | pyang -f yang > /data/$@
+yang:
+	./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h $(TAI_META_CUSTOM_FILES) | pyang -f yang > $(TRANSPONDER_YANG)
 
 bash:
 	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd
@@ -133,7 +133,8 @@ system:
 	cd src/south/system && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
 
 lint:
-	exit `black -q --diff --exclude src/north/snmp/src src | wc -l`
+	which black && exit `black -q --diff --exclude src/north/snmp/src src | wc -l`
+	TRANSPONDER_YANG=/tmp/test.yang $(MAKE) yang && diff /tmp/test.yang $(TRANSPONDER_YANG)
 	scripts/gs-yang.py --lint south-sonic south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
 	scripts/gs-yang.py --lint south-gearbox south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
 	grep -rnI 'print(' src || exit 0 && exit 1
