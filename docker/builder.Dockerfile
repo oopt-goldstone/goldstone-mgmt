@@ -97,7 +97,6 @@ FROM python AS tai
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
     cd /root/sm/oopt-tai/tools/taish && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
     && mkdir -p /usr/share/wheels/tai && cp dist/*.whl /usr/share/wheels/tai
-ADD sm/oopt-tai/meta/main.py /usr/local/lib/python3.7/dist-packages/tai.py
 
 FROM python AS cli
 
@@ -129,7 +128,8 @@ COPY --from=pam /usr/share/debs/tacacs /usr/share/debs/tacacs
 COPY --from=pam /usr/local/sonic /usr/local/sonic
 
 COPY --from=tai /usr/share/wheels/tai /usr/share/wheels/tai
-COPY --from=tai /usr/local/lib/python3.7/dist-packages/tai.py /usr/local/lib/python3.7/dist-packages/tai.py
+RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
+    cd /root/sm/oopt-tai/tools/meta-generator && pip install .
 
 COPY --from=sysrepo /usr/share/debs/libyang /usr/share/debs/libyang
 COPY --from=sysrepo /usr/share/wheels/libyang /usr/share/wheels/libyang
