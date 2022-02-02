@@ -8,7 +8,7 @@ from .common import *
 
 def run_np2_cli(host, user, password, command):
     return run(
-        f"gscli --connector netconf --connector-opts host={host},username={user},password={password},hostkey_verify=false -c '{command}'"
+        f"gscli --connector netconf --connector-opts host={host},username={user},password={password},hostkey_verify=false,schema_dir=.gscli/{host} -c '{command}'"
     )
 
 

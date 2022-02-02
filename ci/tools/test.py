@@ -36,7 +36,7 @@ class TestBase(unittest.TestCase):
             return self.ssh(f'gscli -c "{command}"')
         elif GSCLI_CONNECTOR == "netconf":
             return run(
-                f'gscli --connector netconf --connector-opts host={HOST},username={USERNAME},password={PASSWORD},hostkey_verify=false,cache_dir=.gscli/{HOST} -c "{command}"'
+                f'gscli --connector netconf --connector-opts host={HOST},username={USERNAME},password={PASSWORD},hostkey_verify=false,schema_dir=.gscli/{HOST} -c "{command}"'
             )
 
 
