@@ -108,7 +108,7 @@ async def loop_async(shell):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-v", "--verbose", action="count", default=0)
     parser.add_argument("-c", "--command-string")
     parser.add_argument("-k", "--keep-open", action="store_true")
     parser.add_argument("-x", "--stdin", action="store_true")
@@ -119,18 +119,22 @@ def main():
 
     args = parser.parse_args()
 
-    if args.verbose:
-        formatter = logging.Formatter(
-            "[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        console = logging.StreamHandler()
-        console.setLevel(logging.DEBUG)
-        console.setFormatter(formatter)
-
-        logger = logging.getLogger("goldstone")
+    formatter = logging.Formatter(
+        "[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger = logging.getLogger("goldstone")
+    logger.addHandler(console)
+    console.setLevel(logging.DEBUG)  # emit all messages sent to this handler
+    v = args.verbose
+    if v == 0:
+        logger.setLevel(logging.ERROR)
+    elif v == 1:
+        logger.setLevel(logging.INFO)
+    else:  # v > 1
         logger.setLevel(logging.DEBUG)
-        logger.addHandler(console)
 
     sh = logging.StreamHandler(sys.stdout)
     sh.setLevel(logging.DEBUG)
@@ -140,7 +144,7 @@ def main():
     stdout.setLevel(logging.DEBUG)
     stdout.addHandler(sh)
 
-    sh2 = logging.StreamHandler()
+    sh2 = logging.StreamHandler(sys.stderr)
     sh2.setLevel(logging.DEBUG)
     sh2.setFormatter(shf)
 
