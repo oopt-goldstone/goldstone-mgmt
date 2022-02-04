@@ -5,8 +5,11 @@ from aiohttp import web
 import inspect
 import json
 import asyncio
+import os
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_REVERT_TIMEOUT = int(os.getenv("GOLDSTONE_DEFAULT_REVERT_TIMEOUT", 6))
 
 
 async def start_probe(route, host, port):
@@ -74,7 +77,7 @@ NoOp = ChangeHandler
 
 
 class ServerBase(object):
-    def __init__(self, conn, module):
+    def __init__(self, conn, module, revert_timeout=DEFAULT_REVERT_TIMEOUT):
         self.sess = conn.start_session()
         ctx = self.sess.get_ly_ctx()
         m = ctx.get_module(module)
@@ -85,6 +88,7 @@ class ServerBase(object):
         self.handlers = {}
         self._current_handlers = None  # (req_id, handlers, user)
         self._stop_event = asyncio.Event()
+        self.revert_timeout = revert_timeout
 
     def get_sr_data(
         self,
@@ -246,7 +250,7 @@ class ServerBase(object):
         await call(self.post, user)
 
         async def do_revert():
-            await asyncio.sleep(2)
+            await asyncio.sleep(self.revert_timeout)
             logging.warning("client timeout happens? reverting changes we made")
             for done in reversed(handlers):
                 await call(done.revert, user)
