@@ -645,44 +645,53 @@ class InterfaceServer(ServerBase):
         if counter_only:
             return i
 
-        try:
-            i["state"]["admin-status"] = (
-                "DOWN" if await obj.get("tx-dis") == "true" else "UP"
-            )
-        except taish.TAIException:
-            pass
+        (
+            tx_dis,
+            signal_rate,
+            connected,
+            mfi_type,
+            fec_type,
+            mtu,
+            tx_timing_mode,
+            current_tx_timing_mode,
+        ) = await obj.get_multiple(
+            [
+                "tx-dis",
+                "signal-rate",
+                "connected-interface",
+                "otn-mfi-type",
+                "fec-type",
+                "mtu",
+                "tx-timing-mode",
+                "current-tx-timing-mode",
+            ]
+        )
 
-        signal_rate = await obj.get("signal-rate")
-        connected = await obj.get("connected-interface")
+        i["state"]["admin-status"] = "DOWN" if tx_dis == "true" else "UP"
         i["state"]["is-connected"] = connected != "oid:0x0"
+
         if signal_rate == "otu4":
             i["state"]["oper-status"] = (
                 "UP"
                 if connected != "oid:0x0" and i["state"]["admin-status"] == "UP"
                 else "DOWN"
             )
-            state = {}
-            try:
-                state["mfi-type"] = (await obj.get("otn-mfi-type")).upper()
-            except taish.TAIException:
-                pass
-            i["otn"] = {"state": state}
+            i["otn"] = {"state": {"mfi-type": mfi_type.upper()}}
             return i
 
-        state = {}
-        try:
-            state["fec"] = (await obj.get("fec-type")).upper()
-        except taish.TAIException:
-            pass
-
-        try:
-            state["mtu"] = int(await obj.get("mtu"))
-        except taish.TAIException:
-            pass
-
-        state["speed"] = "SPEED_100G" if signal_rate == "100-gbe" else "SPEED_UNKNOWN"
-
-        i["ethernet"] = {"state": state}
+        i["ethernet"] = {
+            "state": {
+                "fec": fec_type.upper(),
+                "mtu": int(mtu),
+                "speed": "SPEED_100G" if signal_rate == "100-gbe" else "SPEED_UNKNOWN",
+            },
+            "synce": {
+                "state": {
+                    "tx-timing-mode": tx_timing_mode,
+                    "current-tx-timing-mode": current_tx_timing_mode,
+                }
+            },
+        }
 
         if isinstance(obj, taish.NetIf):
             # check if static MACSEC is configured
@@ -722,19 +731,14 @@ class InterfaceServer(ServerBase):
             i["ethernet"]["auto-negotiate"] = {"state": anlt}
 
         try:
-            attrs = await obj.get_multiple(["tx-timing-mode", "current-tx-timing-mode"])
-            i["ethernet"]["synce"] = {
-                "state": {
-                    "tx-timing-mode": attrs[0],
-                    "current-tx-timing-mode": attrs[1],
-                }
-            }
-        except taish.TAIException as e:
-            logger.warning(f"failed to get tx-timing-mode info")
-
-        try:
-            pcs = json.loads(await obj.get("pcs-status", json=True))
-            serdes = json.loads(await obj.get("serdes-status", json=True))
+            attrs = [
+                json.loads(v)
+                for v in await obj.get_multiple(
+                    ["pcs-status", "serdes-status"], json=True
+                )
+            ]
+            pcs = attrs[0]
+            serdes = attrs[1]
             i["state"]["oper-status"] = pcs_status2oper_status(pcs)
             state = {"pcs-status": pcs, "serdes-status": serdes}
             i["ethernet"]["pcs"] = {"state": state}
