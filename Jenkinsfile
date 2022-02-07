@@ -217,6 +217,38 @@ pipeline {
       }
     }
 
+    stage('Performance Measurement') {
+      failFast true
+      parallel {
+        stage('amd64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'amd64'
+          }
+          steps {
+            sh 'make tester'
+            sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.pm ${params.DEVICE} --arch ${ARCH}"
+          }
+        }
+        stage('arm64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'arm64'
+          }
+          steps {
+            sh 'ARCH=amd64 make tester'
+            sh "docker run -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.pm ${params.ARM_DEVICE} --arch ${ARCH}"
+          }
+        }
+      }
+    }
+
     stage('Test NETCONF') {
       failFast true
       parallel {

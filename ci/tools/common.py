@@ -19,17 +19,20 @@ class SSHException(ProcException):
     pass
 
 
-def ssh(cli, cmd):
-    print(f'ssh: "{cmd}"')
+def ssh(cli, cmd, no_print=False):
+    if not no_print:
+        print(f'ssh: "{cmd}"')
     _, stdout, stderr = cli.exec_command(cmd)
     output = []
     err = []
     for line in stdout:
         output.append(line)
-        print(f"stdout: {line}", end="")
+        if not no_print:
+            print(f"stdout: {line}", end="")
     for line in stderr:
         err.append(line)
-        print(f"stderr: {line}", end="")
+        if not no_print:
+            print(f"stderr: {line}", end="")
     ret = stdout.channel.recv_exit_status()
     if ret != 0:
         raise SSHException(
