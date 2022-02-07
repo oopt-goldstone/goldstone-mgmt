@@ -6,6 +6,7 @@ import inspect
 import json
 import asyncio
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -141,13 +142,8 @@ class ServerBase(object):
         self.sess.subscribe_module_change(
             self.module, None, self.change_cb, asyncio_register=asyncio_register
         )
-        asyncio_register = inspect.iscoroutinefunction(self.oper_cb)
         self.sess.subscribe_oper_data_request(
-            self.module,
-            self.top,
-            self.oper_cb,
-            oper_merge=True,
-            asyncio_register=asyncio_register,
+            self.module, self.top, self._oper_cb, oper_merge=True, asyncio_register=True
         )
 
         return [self._stop_event.wait()]
@@ -265,9 +261,17 @@ class ServerBase(object):
     def post(self, user):
         pass
 
+    async def _oper_cb(self, xpath, priv):
+        logger.debug(f"xpath: {xpath}")
+        time_start = time.perf_counter_ns()
+        data = await call(self.oper_cb, xpath, priv)
+        time_end = time.perf_counter_ns()
+        elapsed = (time_end - time_start) / 1000_1000_10
+        logger.debug(f"xpath: {xpath}, elapsed: {elapsed}sec")
+        return data
+
     def oper_cb(self, xpath, priv):
-        logger.debug(f"{xpath=}")
-        return
+        pass
 
     def send_notification(self, name, notification):
         ly_ctx = self.sess.get_ly_ctx()
