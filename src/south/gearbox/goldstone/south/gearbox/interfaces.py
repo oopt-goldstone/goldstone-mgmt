@@ -603,9 +603,7 @@ class InterfaceServer(ServerBase):
             return obj
 
     async def oper_cb(self, xpath, priv):
-        logger.debug(f"xpath: {xpath}")
         xpath = list(libyang.xpath_split(xpath))
-        logger.debug(f"xpath: {xpath}")
 
         counter_only = "counters" in xpath and "static-macsec" not in xpath
 
