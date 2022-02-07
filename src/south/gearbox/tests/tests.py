@@ -134,7 +134,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return mock.MagicMock()
 
         async def get_multiple(*args, **kwargs):
-            return [await get(name) for name in args[0]]
+            return [await get(name, **kwargs) for name in args[0]]
 
         async def get_attribute_capability(*args, **kwargs):
             m = mock.MagicMock()
