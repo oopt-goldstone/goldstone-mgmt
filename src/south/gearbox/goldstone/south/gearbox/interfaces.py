@@ -602,10 +602,151 @@ class InterfaceServer(ServerBase):
         else:
             return obj
 
-    async def oper_cb(self, xpath, priv):
-        xpath = list(libyang.xpath_split(xpath))
+    async def oper_cb_intf(self, xpath, counter_only, ifname, obj, module):
+        i = {
+            "name": ifname,
+            "config": {"name": ifname},
+            "state": {"associated-gearbox": module.obj.location},
+        }
 
+        if len(xpath) == 3 and xpath[2][1] == "name":
+            return i
+
+        p = self.platform_info.get(ifname)
+        if p:
+            v = {}
+            if "component" in p:
+                v["platform"] = {"component": p["component"]["name"]}
+            if "tai" in p:
+                t = {
+                    "module": p["tai"]["module"]["name"],
+                    "host-interface": p["tai"]["hostif"]["name"],
+                }
+                v["transponder"] = t
+            i["component-connection"] = v
+
+        if len(xpath) == 3 and xpath[2][1] == "component-connection":
+            return i
+
+        if (await module.get("admin-status")) != "up":
+            i["state"]["admin-status"] = "DOWN"
+            i["state"]["oper-status"] = "DOWN"
+            return i
+
+        counters = {}
+        try:
+            attrs = await obj.get_multiple(
+                ["pmon-enet-mac-rx", "pmon-enet-mac-tx", "pmon-enet-phy-rx"]
+            )
+            i["state"]["counters"] = parse_counters(attrs)
+        except taish.TAIException as e:
+            logger.warning(f"failed to get counter info: {e}")
+
+        if counter_only:
+            return i
+
+        try:
+            i["state"]["admin-status"] = (
+                "DOWN" if await obj.get("tx-dis") == "true" else "UP"
+            )
+        except taish.TAIException:
+            pass
+
+        signal_rate = await obj.get("signal-rate")
+        connected = await obj.get("connected-interface")
+        i["state"]["is-connected"] = connected != "oid:0x0"
+        if signal_rate == "otu4":
+            i["state"]["oper-status"] = (
+                "UP"
+                if connected != "oid:0x0" and i["state"]["admin-status"] == "UP"
+                else "DOWN"
+            )
+            state = {}
+            try:
+                state["mfi-type"] = (await obj.get("otn-mfi-type")).upper()
+            except taish.TAIException:
+                pass
+            i["otn"] = {"state": state}
+            return i
+
+        state = {}
+        try:
+            state["fec"] = (await obj.get("fec-type")).upper()
+        except taish.TAIException:
+            pass
+
+        try:
+            state["mtu"] = int(await obj.get("mtu"))
+        except taish.TAIException:
+            pass
+
+        state["speed"] = "SPEED_100G" if signal_rate == "100-gbe" else "SPEED_UNKNOWN"
+
+        i["ethernet"] = {"state": state}
+
+        if isinstance(obj, taish.NetIf):
+            # check if static MACSEC is configured
+            key = self.get_running_data(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/goldstone-static-macsec:static-macsec/config/key"
+            )
+            if key:
+                state = {"key": key}
+                try:
+                    attrs = await obj.get_multiple(
+                        [
+                            "macsec-ingress-sa-stats",
+                            "macsec-egress-sa-stats",
+                            "macsec-ingress-secy-stats",
+                            "macsec-egress-secy-stats",
+                            "macsec-ingress-channel-stats",
+                            "macsec-egress-channel-stats",
+                        ]
+                    )
+                    counters = parse_macsec_counters(attrs)
+                    state["counters"] = counters
+                except taish.TAIException as e:
+                    logger.warning(f"failed to get MACSEC counters: {e}")
+
+                i["ethernet"]["static-macsec"] = {"state": state}
+
+        elif isinstance(obj, taish.HostIf):
+            enabled = await obj.get("auto-negotiation")
+            anlt = {"enabled": enabled == "true"}
+            if enabled == "true":
+                try:
+                    status = json.loads(await obj.get("anlt-defect", json=True))
+                    anlt["status"] = status
+                except taish.TAIException as e:
+                    logger.warning(f"failed to get Autonego defect info: {e}")
+
+            i["ethernet"]["auto-negotiate"] = {"state": anlt}
+
+        try:
+            attrs = await obj.get_multiple(["tx-timing-mode", "current-tx-timing-mode"])
+            i["ethernet"]["synce"] = {
+                "state": {
+                    "tx-timing-mode": attrs[0],
+                    "current-tx-timing-mode": attrs[1],
+                }
+            }
+        except taish.TAIException as e:
+            logger.warning(f"failed to get tx-timing-mode info")
+
+        try:
+            pcs = json.loads(await obj.get("pcs-status", json=True))
+            serdes = json.loads(await obj.get("serdes-status", json=True))
+            i["state"]["oper-status"] = pcs_status2oper_status(pcs)
+            state = {"pcs-status": pcs, "serdes-status": serdes}
+            i["ethernet"]["pcs"] = {"state": state}
+        except taish.TAIException as e:
+            logger.warning(f"failed to get PCS/SERDES status: {e}")
+            i["state"]["oper-status"] = "DOWN"
+
+        return i
+
+    async def oper_cb(self, xpath, priv):
         counter_only = "counters" in xpath and "static-macsec" not in xpath
+        xpath = list(libyang.xpath_split(xpath))
 
         if len(xpath) < 2 or len(xpath[1][2]) < 1:
             ifnames = await self.get_ifname_list()
@@ -620,155 +761,11 @@ class InterfaceServer(ServerBase):
                 logger.warn(f"invalid request: {xpath}")
                 return
 
-        interfaces = []
-        for ifname, obj, module in ifnames:
-            i = {
-                "name": ifname,
-                "config": {"name": ifname},
-                "state": {"associated-gearbox": module.obj.location},
-            }
+        tasks = [
+            self.oper_cb_intf(xpath, counter_only, ifname, obj, module)
+            for ifname, obj, module in ifnames
+        ]
 
-            if len(xpath) == 3 and xpath[2][1] == "name":
-                interfaces.append(i)
-                continue
-
-            p = self.platform_info.get(ifname)
-            if p:
-                v = {}
-                if "component" in p:
-                    v["platform"] = {"component": p["component"]["name"]}
-                if "tai" in p:
-                    t = {
-                        "module": p["tai"]["module"]["name"],
-                        "host-interface": p["tai"]["hostif"]["name"],
-                    }
-                    v["transponder"] = t
-                i["component-connection"] = v
-
-            if len(xpath) == 3 and xpath[2][1] == "component-connection":
-                interfaces.append(i)
-                continue
-
-            if (await module.get("admin-status")) != "up":
-                i["state"]["admin-status"] = "DOWN"
-                i["state"]["oper-status"] = "DOWN"
-                interfaces.append(i)
-                continue
-
-            counters = {}
-            try:
-                attrs = await obj.get_multiple(
-                    ["pmon-enet-mac-rx", "pmon-enet-mac-tx", "pmon-enet-phy-rx"]
-                )
-                i["state"]["counters"] = parse_counters(attrs)
-            except taish.TAIException as e:
-                logger.warning(f"failed to get counter info: {e}")
-
-            if counter_only:
-                interfaces.append(i)
-                continue
-
-            try:
-                i["state"]["admin-status"] = (
-                    "DOWN" if await obj.get("tx-dis") == "true" else "UP"
-                )
-            except taish.TAIException:
-                pass
-
-            signal_rate = await obj.get("signal-rate")
-            connected = await obj.get("connected-interface")
-            i["state"]["is-connected"] = connected != "oid:0x0"
-            if signal_rate == "otu4":
-                i["state"]["oper-status"] = (
-                    "UP"
-                    if connected != "oid:0x0" and i["state"]["admin-status"] == "UP"
-                    else "DOWN"
-                )
-                state = {}
-                try:
-                    state["mfi-type"] = (await obj.get("otn-mfi-type")).upper()
-                except taish.TAIException:
-                    pass
-                i["otn"] = {"state": state}
-            else:
-                state = {}
-                try:
-                    state["fec"] = (await obj.get("fec-type")).upper()
-                except taish.TAIException:
-                    pass
-
-                try:
-                    state["mtu"] = int(await obj.get("mtu"))
-                except taish.TAIException:
-                    pass
-
-                state["speed"] = (
-                    "SPEED_100G" if signal_rate == "100-gbe" else "SPEED_UNKNOWN"
-                )
-
-                i["ethernet"] = {"state": state}
-
-                if isinstance(obj, taish.NetIf):
-                    # check if static MACSEC is configured
-                    key = self.get_running_data(
-                        f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/goldstone-static-macsec:static-macsec/config/key"
-                    )
-                    if key:
-                        state = {"key": key}
-                        try:
-                            attrs = await obj.get_multiple(
-                                [
-                                    "macsec-ingress-sa-stats",
-                                    "macsec-egress-sa-stats",
-                                    "macsec-ingress-secy-stats",
-                                    "macsec-egress-secy-stats",
-                                    "macsec-ingress-channel-stats",
-                                    "macsec-egress-channel-stats",
-                                ]
-                            )
-                            counters = parse_macsec_counters(attrs)
-                            state["counters"] = counters
-                        except taish.TAIException as e:
-                            logger.warning(f"failed to get MACSEC counters: {e}")
-
-                        i["ethernet"]["static-macsec"] = {"state": state}
-
-                elif isinstance(obj, taish.HostIf):
-                    enabled = await obj.get("auto-negotiation")
-                    anlt = {"enabled": enabled == "true"}
-                    if enabled == "true":
-                        try:
-                            status = json.loads(await obj.get("anlt-defect", json=True))
-                            anlt["status"] = status
-                        except taish.TAIException as e:
-                            logger.warning(f"failed to get Autonego defect info: {e}")
-
-                    i["ethernet"]["auto-negotiate"] = {"state": anlt}
-
-                try:
-                    attrs = await obj.get_multiple(
-                        ["tx-timing-mode", "current-tx-timing-mode"]
-                    )
-                    i["ethernet"]["synce"] = {
-                        "state": {
-                            "tx-timing-mode": attrs[0],
-                            "current-tx-timing-mode": attrs[1],
-                        }
-                    }
-                except taish.TAIException as e:
-                    logger.warning(f"failed to get tx-timing-mode info")
-
-                try:
-                    pcs = json.loads(await obj.get("pcs-status", json=True))
-                    serdes = json.loads(await obj.get("serdes-status", json=True))
-                    i["state"]["oper-status"] = pcs_status2oper_status(pcs)
-                    state = {"pcs-status": pcs, "serdes-status": serdes}
-                    i["ethernet"]["pcs"] = {"state": state}
-                except taish.TAIException as e:
-                    logger.warning(f"failed to get PCS/SERDES status: {e}")
-                    i["state"]["oper-status"] = "DOWN"
-                    pass
-
-            interfaces.append(i)
+        interfaces = await asyncio.gather(*tasks)
 
         return {"goldstone-interfaces:interfaces": {"interface": interfaces}}
