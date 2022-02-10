@@ -456,7 +456,10 @@ class TransponderServer(ServerBase):
                 continue
             self.event_obj[location] = {"lock": asyncio.Lock()}
             try:
-                if "PRESENT" in c["piu"]["state"]["status"]:
+                if (
+                    "PRESENT" in c["piu"]["state"]["status"]
+                    and c["piu"]["state"]["cfp2-presence"] == "PRESENT"
+                ):
                     modules.append((c["name"], location))
             except KeyError:
                 pass
