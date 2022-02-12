@@ -278,21 +278,19 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         self.set_logs = []
 
-        await gbserver.start()
+        tasks = await gbserver.start()
 
         self.assertEqual(
             self.set_logs,
             [
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
-                ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("auto-negotiation", "false"),
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
-                ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
@@ -306,6 +304,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         )
 
         gbserver.stop()
+        await asyncio.gather(*tasks)
         gbserver = GearboxServer(self.conn, ifserver)
 
         self.set_logs = []
@@ -324,21 +323,19 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.to_thread(setup)
 
-        await gbserver.start()
+        tasks = await gbserver.start()
 
         self.assertEqual(
             self.set_logs,
             [
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
-                ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("auto-negotiation", "false"),
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
-                ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
@@ -351,6 +348,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             ],
         )
         gbserver.stop()
+        asyncio.gather(*tasks)
         gbserver = GearboxServer(self.conn, ifserver)
 
         self.set_logs = []
@@ -369,21 +367,19 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.to_thread(setup)
 
-        await gbserver.start()
+        tasks = await gbserver.start()
 
         self.assertEqual(
             self.set_logs,
             [
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
-                ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("auto-negotiation", "false"),
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
-                ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
@@ -397,6 +393,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         )
 
         gbserver.stop()
+        await asyncio.gather(*tasks)
         gbserver = GearboxServer(self.conn, ifserver)
 
         self.set_logs = []
@@ -416,21 +413,19 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.to_thread(setup)
 
-        await gbserver.start()
+        tasks = await gbserver.start()
 
         self.assertEqual(
             self.set_logs,
             [
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
-                ("tx-dis", "false"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("auto-negotiation", "false"),
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
-                ("tx-dis", "true"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
@@ -442,6 +437,9 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("admin-status", "up"),
             ],
         )
+
+        gbserver.stop()
+        await asyncio.gather(*tasks)
 
     async def test_fec(self):
 
@@ -585,7 +583,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         ifserver = InterfaceServer(self.conn, "", platform_info)
         gbserver = GearboxServer(self.conn, ifserver)
 
-        await gbserver.start()
+        tasks = await gbserver.start()
 
         self.set_logs = []  # clear set_logs
 
@@ -603,6 +601,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(connection[0]["line-interface"], "Interface1/1/1")
 
         await asyncio.to_thread(test_oper_cb)
+        gbserver.stop()
+        await asyncio.gather(*tasks)
 
     async def test_gearbox_invalid_creation(self):
 
@@ -612,7 +612,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         ifserver = InterfaceServer(self.conn, "", platform_info)
         gbserver = GearboxServer(self.conn, ifserver)
 
-        await gbserver.start()
+        tasks = await gbserver.start()
 
         self.set_logs = []  # clear set_logs
 
@@ -625,6 +625,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     sess.apply_changes()
 
         await asyncio.to_thread(test)
+        gbserver.stop()
+        await asyncio.gather(*tasks)
 
     async def test_gearbox_enable_flexible_connection(self):
 
@@ -634,7 +636,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         ifserver = InterfaceServer(self.conn, "", platform_info)
         gbserver = GearboxServer(self.conn, ifserver)
 
-        await gbserver.start()
+        tasks = await gbserver.start()
 
         self.set_logs = []  # clear set_logs
 
@@ -658,6 +660,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
 
         await asyncio.to_thread(test)
+        gbserver.stop()
+        await asyncio.gather(*tasks)
 
     async def test_gearbox_create_connection(self):
 
@@ -667,7 +671,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         ifserver = InterfaceServer(self.conn, "", platform_info)
         gbserver = GearboxServer(self.conn, ifserver)
 
-        await gbserver.start()
+        tasks = await gbserver.start()
 
         self.set_logs = []  # clear set_logs
 
@@ -699,6 +703,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 sess.apply_changes()
 
         await asyncio.to_thread(test)
+        gbserver.stop()
+        await asyncio.gather(*tasks)
 
     async def test_interface_otn(self):
 
@@ -728,9 +734,9 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
-                ("provision-mode", "serdes-only"),
+                ("provision-mode", "none"),
                 ("signal-rate", "otu4"),
-                ("tx-dis", "true"),
+                ("provision-mode", "none"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
@@ -768,8 +774,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
-                ("tx-dis", "true"),
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
                 ("macsec-static-key", "50462976,117835012,185207048,252579084"),
                 ("mtu", DEFAULT_MTU),
@@ -819,8 +825,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
-                ("tx-dis", "true"),
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
                 ("auto-negotiation", "true"),
                 ("mtu", DEFAULT_MTU),
@@ -888,8 +894,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.set_logs,
             [
-                ("tx-dis", "true"),
-                ("provision-mode", "normal"),
+                ("provision-mode", "none"),
+                ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
                 ("tx-timing-mode", "synce-ref-clk"),
                 ("mtu", DEFAULT_MTU),
