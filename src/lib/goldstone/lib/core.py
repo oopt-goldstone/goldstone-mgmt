@@ -58,7 +58,10 @@ class ChangeHandler(object):
         cache = user.get("cache")
         if not cache:
             cache = self.server.get_running_data(
-                self.server.top, default={}, strip=False
+                self.server.top,
+                default={},
+                strip=False,
+                include_implicit_defaults=True,
             )
             sysrepo.update_config_cache(cache, user["changes"])
             user["cache"] = cache
@@ -149,6 +152,7 @@ class ServerBase(object):
         return [self._stop_event.wait()]
 
     def stop(self):
+        self._stop_event.set()
         self.sess.stop()
 
     async def reconcile(self):
