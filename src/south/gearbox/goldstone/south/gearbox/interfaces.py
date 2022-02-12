@@ -108,10 +108,26 @@ class IfChangeHandler(ChangeHandler):
 class AdminStatusHandler(IfChangeHandler):
     async def _init(self, user):
         await super()._init(user)
-        self.tai_attr_name = "tx-dis"
+        self.user = user
+        self.tai_attr_name = "provision-mode"
 
     def to_tai_value(self, v, attr_name):
-        return "false" if v == "UP" else "true"
+        if v == "UP":
+            cache = self.setup_cache(self.user)
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{self.ifname}']/config"
+            t = libyang.xpath_get(
+                cache,
+                f"{xpath}/interface-type",
+                self.server.get_default("interface-type"),
+            )
+            if t == "IF_ETHERNET":
+                return "normal"
+            elif t == "IF_OTN":
+                return "serdes-only"
+            else:
+                raise sysrepo.SysrepoInvalArgError(f"unsupported interface-type: {t}")
+        else:
+            return "none"
 
 
 class FECHandler(IfChangeHandler):
@@ -135,14 +151,25 @@ class MTUHandler(IfChangeHandler):
 class InterfaceTypeHandler(IfChangeHandler):
     async def _init(self, user):
         await super()._init(user)
+        self.user = user
         self.tai_attr_name = ["provision-mode", "signal-rate"]
 
     def to_tai_value(self, v, attr_name):
         if attr_name == "provision-mode":
-            if v == "IF_ETHERNET":
+            cache = self.setup_cache(self.user)
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{self.ifname}']/config"
+            a = libyang.xpath_get(
+                cache, f"{xpath}/admin-status", self.server.get_default("admin-status")
+            )
+            if a == "DOWN":
+                return "none"
+            elif v == "IF_ETHERNET":
                 return "normal"
             elif v == "IF_OTN":
                 return "serdes-only"
+            else:
+                raise sysrepo.SysrepoInvalArgError(f"unsupported interface-type: {v}")
+
         elif attr_name == "signal-rate":
             if v == "IF_ETHERNET":
                 return "100-gbe"
@@ -422,29 +449,28 @@ class InterfaceServer(ServerBase):
             iftype = config.get("config", {}).get(
                 "interface-type", self.get_default("interface-type")
             )
+            admin_status = config.get("config", {}).get(
+                "admin-status", self.get_default("admin-status")
+            )
             if iftype == "IF_OTN":
                 mfi = (
                     config.get("otn", {})
                     .get("config", {})
                     .get("mfi-type", self.get_default("mfi-type"))
                 )
+                mode = "serdes-only" if admin_status == "UP" else "none"
                 await obj.set_multiple(
                     [
-                        ("provision-mode", "serdes-only"),
+                        ("provision-mode", mode),
                         ("signal-rate", "otu4"),
                         ("otn-mfi-type", mfi.lower()),
                     ]
                 )
             elif iftype == "IF_ETHERNET":
+                mode = "normal" if admin_status == "UP" else "none"
                 await obj.set_multiple(
-                    [("provision-mode", "normal"), ("signal-rate", "100-gbe")]
+                    [("provision-mode", mode), ("signal-rate", "100-gbe")]
                 )
-
-            admin_status = config.get("config", {}).get(
-                "admin-status", self.get_default("admin-status")
-            )
-            value = "false" if admin_status == "UP" else "true"
-            await obj.set("tx-dis", value)
 
             fec = config.get("ethernet", {}).get("config", {}).get("fec")
             if fec == None:
@@ -646,7 +672,7 @@ class InterfaceServer(ServerBase):
             return i
 
         (
-            tx_dis,
+            prov_mode,
             signal_rate,
             connected,
             mfi_type,
@@ -656,7 +682,7 @@ class InterfaceServer(ServerBase):
             current_tx_timing_mode,
         ) = await obj.get_multiple(
             [
-                "tx-dis",
+                "provision-mode",
                 "signal-rate",
                 "connected-interface",
                 "otn-mfi-type",
@@ -667,7 +693,7 @@ class InterfaceServer(ServerBase):
             ]
         )
 
-        i["state"]["admin-status"] = "DOWN" if tx_dis == "true" else "UP"
+        i["state"]["admin-status"] = "DOWN" if prov_mode == "none" else "UP"
         i["state"]["is-connected"] = connected != "oid:0x0"
 
         if signal_rate == "otu4":
