@@ -71,6 +71,16 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             for a in args[0]:
                 self.set_logs.append(a)
 
+        async def module_get(*args, **kwargs):
+            if args[0] in ["alarm-notification", "notify"]:
+                return "(nil)"
+            elif args[0] == "oper-status":
+                return "ready"
+            elif args[0] == "admin-status":
+                return "up"
+            elif args[0] == "tributary-mapping":
+                return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
+
         async def get(*args, **kwargs):
             if args[0] in ["alarm-notification", "notify"]:
                 return "(nil)"
@@ -86,7 +96,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             elif args[0] == "signal-rate":
                 return "100-gbe"
             elif args[0] == "oper-status":
-                return "ready"
+                return "up"
             elif args[0] == "admin-status":
                 return "up"
             elif args[0] == "mtu":
@@ -104,8 +114,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return '["resolved", "completed"]'
             elif args[0] == "auto-negotiation":
                 return "true"
-            elif args[0] == "tributary-mapping":
-                return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
             elif args[0] == "macsec-static-key":
                 return "50462976,117835012,185207048,252579084"
             elif args[0] == "macsec-ingress-sa-stats":
@@ -163,13 +171,13 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
             msg = mock.MagicMock()
             attr = mock.MagicMock()
-            attr.value = '["ready"]'
+            attr.value = "up"
             msg.attrs = [attr]
             await args[1](obj, None, msg)
 
             await asyncio.sleep(1)
 
-            attr.value = '["ready", "rx-remote-fault"]'
+            attr.value = "down"
             msg.attrs = [attr]
             await args[1](obj, None, msg)
 
@@ -195,7 +203,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         module = taish.get_module.return_value
         module.monitor = monitor
-        module.get = get
+        module.get = module_get
         module.set = set_
         module.oid = 1
         module.get_netif = get_netif
