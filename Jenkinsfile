@@ -12,8 +12,10 @@ pipeline {
       steps {
           sh 'env'
           script {
-              env.SKIP = 0
-              if ( env.BRANCH_NAME.startsWith('PR') ) {
+              if (env.BRANCH_NAME == 'master' ) {
+                  env.SKIP = 0
+              } else if ( env.BRANCH_NAME.startsWith('PR') ) {
+                  env.SKIP = 0
                   env.GS_MGMT_IMAGE_PREFIX = 'gs-test/'
               } else {
                   env.SKIP = 1
