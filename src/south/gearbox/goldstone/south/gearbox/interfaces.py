@@ -238,17 +238,6 @@ class TXTimingModeHandler(IfChangeHandler):
         return v
 
 
-def pcs_status2oper_status(pcs):
-    status = "DOWN"
-    if (
-        "ready" in pcs
-        and ("rx-remote-fault" not in pcs)
-        and ("rx-local-fault" not in pcs)
-    ):
-        status = "UP"
-    return status
-
-
 def parse_counters(attrs):
     counters = {}
     mac_rx = [int(v) for v in attrs[0].split(",")]
@@ -534,7 +523,7 @@ class InterfaceServer(ServerBase):
     async def notification_tasks(self):
         async def task(obj, attr):
             try:
-                await obj.monitor(attr, self.tai_cb, json=True)
+                await obj.monitor(attr, self.tai_cb)
             except asyncio.exceptions.CancelledError as e:
                 while True:
                     await asyncio.sleep(0.1)
@@ -568,10 +557,9 @@ class InterfaceServer(ServerBase):
 
             for attr in msg.attrs:
                 meta = await obj.get_attribute_metadata(attr.attr_id)
-                if meta.short_name != "pcs-status":
+                if meta.short_name != "oper-status":
                     continue
-                status = pcs_status2oper_status(json.loads(attr.value))
-                notif = {"if-name": ifname, "oper-status": status}
+                notif = {"if-name": ifname, "oper-status": attr.value.upper()}
                 self.send_notification(eventname, notif)
 
         async def notif_loop():
@@ -680,6 +668,7 @@ class InterfaceServer(ServerBase):
             mtu,
             tx_timing_mode,
             current_tx_timing_mode,
+            oper_status,
         ) = await obj.get_multiple(
             [
                 "provision-mode",
@@ -690,10 +679,12 @@ class InterfaceServer(ServerBase):
                 "mtu",
                 "tx-timing-mode",
                 "current-tx-timing-mode",
+                "oper-status",
             ]
         )
 
         i["state"]["admin-status"] = "DOWN" if prov_mode == "none" else "UP"
+        i["state"]["oper-status"] = oper_status.upper()
         i["state"]["is-connected"] = connected != "oid:0x0"
 
         if signal_rate == "otu4":
@@ -765,7 +756,6 @@ class InterfaceServer(ServerBase):
             ]
             pcs = attrs[0]
             serdes = attrs[1]
-            i["state"]["oper-status"] = pcs_status2oper_status(pcs)
             state = {"pcs-status": pcs, "serdes-status": serdes}
             i["ethernet"]["pcs"] = {"state": state}
         except taish.TAIException as e:
