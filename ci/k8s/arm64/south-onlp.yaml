@@ -39,6 +39,7 @@ spec:
             labels:
                 app: south-onlp
         spec:
+            hostNetwork: true # access to can0 interface
             serviceAccountName: south-onlp
             initContainers:
             - name: wait-prep
