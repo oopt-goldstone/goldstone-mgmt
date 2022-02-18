@@ -40,3 +40,6 @@
 [submodule "sm/sysrepo2-rs"]
 	path = sm/sysrepo2-rs
 	url = https://github.com/ishidawataru/sysrepo2-rs.git
+[submodule "sm/gnmi"]
+	path = sm/gnmi
+	url = https://github.com/openconfig/gnmi.git

@@ -97,6 +97,29 @@ RUN --mount=type=bind,from=snmp-builder,source=/sonic-py-swsssdk,target=/src,rw 
 RUN --mount=type=bind,source=src/north/snmp,target=/src,rw pip install /src
 
 #---
+# north-gnmi
+#---
+
+FROM builder AS gnmi-builder
+
+RUN --mount=type=bind,source=.,target=/build,rw cd /build/src/north/gnmi \
+    && make proto \
+    && mkdir -p /tmp/build/goldstone/north/gnmi \
+    && cp -r goldstone/north/gnmi/proto /tmp/build/goldstone/north/gnmi/
+
+FROM base AS north-gnmi
+
+COPY --from=gnmi-builder /tmp/build/goldstone/north/gnmi/proto /tmp/build/goldstone/north/gnmi/proto
+
+RUN --mount=type=bind,source=src/north/gnmi,target=/src,rw cp -r /tmp/build/goldstone/north/gnmi/proto /src/goldstone/north/gnmi/ \
+    && pip install /src
+
+RUN rm -rf /tmp/build
+
+RUN mkdir -p /current
+RUN --mount=type=bind,source=scripts/,target=/scripts,rw cp /scripts/gnmi-supported-models.json /current
+
+#---
 # south-system
 #---
 
