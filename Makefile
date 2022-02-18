@@ -40,7 +40,7 @@ all: builder images tester host-packages
 images: south-images north-images xlate-images
 
 GS_SOUTH_AGENTS ?= south-sonic south-tai south-onlp south-system south-gearbox south-dpll south-netlink
-GS_NORTH_AGENTS ?= north-cli north-snmp north-netconf north-notif
+GS_NORTH_AGENTS ?= north-cli north-snmp north-netconf north-notif north-gnmi
 GS_XLATE_AGENTS ?= xlate-oc
 
 south-images: $(GS_SOUTH_AGENTS)
@@ -89,12 +89,13 @@ cmd:
 
 lint:
 	which black && exit `black -q --diff --exclude src/north/snmp/src src | wc -l`
+	which black && exit `black -q --diff --exclude "src/north/snmp/src|src/north/gnmi/goldstone/north/gnmi/proto" src | wc -l`
 	TRANSPONDER_YANG=/tmp/test.yang $(MAKE) yang && diff /tmp/test.yang $(TRANSPONDER_YANG)
 	scripts/gs-yang.py --lint south-sonic south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
 	scripts/gs-yang.py --lint south-gearbox south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
 	grep -rnI 'print(' src || exit 0 && exit 1
 
-unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-sonic
+unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-sonic unittest-gnmi
 
 rust-unittest: unittest-netlink
 
@@ -153,3 +154,10 @@ unittest-netlink:
 	$(MAKE) clean-sysrepo
 	scripts/gs-yang.py --install south-netlink --search-dirs yang
 	cd src/south/netlink && cargo test -- --nocapture
+
+unittest-gnmi:
+	$(MAKE) clean-sysrepo
+	cd src/north/gnmi && make proto
+	scripts/gs-yang.py --install xlate-oc --search-dirs yang sm/openconfig
+	cd src/north/gnmi && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
+	cd src/north/gnmi && make clean
