@@ -219,6 +219,9 @@ FROM base AS xlate-oc
 
 RUN --mount=type=bind,source=src/xlate/openconfig,target=/src,rw pip install /src
 
+RUN mkdir -p /current
+RUN --mount=type=bind,source=scripts/,target=/scripts,rw cp /scripts/operational-modes.json /current
+
 #---
 # default image
 #---

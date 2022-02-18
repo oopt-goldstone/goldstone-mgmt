@@ -39,10 +39,19 @@ MODELS = {
     ],
     "xlate-oc": [
         "iana-if-type",
+        "types/openconfig-types",
+        "types/openconfig-yang-types",
         "interfaces/openconfig-interfaces",
+        "interfaces/openconfig-if-ethernet",
+        "platform/openconfig-platform",
         "platform/openconfig-platform-types",
         "platform/openconfig-platform-port",
-        "platform/openconfig-platform",
+        "platform/openconfig-platform-transceiver",
+        "platform/openconfig-platform-fan",
+        "platform/openconfig-platform-psu",
+        "optical-transport/openconfig-terminal-device",
+        "optical-transport/openconfig-transport-line-common",
+        "optical-transport/openconfig-transport-types",
     ],
 }
 
