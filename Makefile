@@ -134,7 +134,7 @@ unittest-dpll:
 
 unittest-openconfig:
 	$(MAKE) clean-sysrepo
-	scripts/gs-yang.py --install xlate-oc south-sonic --search-dirs yang sm/openconfig
+	scripts/gs-yang.py --install xlate-oc south-onlp south-tai south-gearbox south-system --search-dirs yang sm/openconfig
 	cd src/xlate/openconfig && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-tai:

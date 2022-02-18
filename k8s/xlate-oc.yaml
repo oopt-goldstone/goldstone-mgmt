@@ -49,12 +49,35 @@ spec:
             - name: xlate-openconfig
               image: ghcr.io/oopt-goldstone/mgmt/xlate-oc:latest
               imagePullPolicy: IfNotPresent
-              command: ['gsxlated-openconfig', '-v']
+              command: ['gsxlated-openconfig']
+              args: ['--verbose', '$(OPERATIONAL_MODES_FILE)']
+              env:
+              - name: OPERATIONAL_MODES_FILE
+                value: /current/operational-modes.json
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
+              # NOTE: Enable if you want to overwrite default /current/operational-modes.json.
+              # - name: current
+              #   mountPath: /current
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 10
+                periodSeconds: 5
+                timeoutSeconds: 5
+              startupProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 30
+                periodSeconds: 10
+              ports:
+              - name: liveness-port
+                containerPort: 8080
             volumes:
             - name: shm
               hostPath:
@@ -62,3 +85,7 @@ spec:
             - name: sysrepo
               hostPath:
                   path: /var/lib/sysrepo
+            # NOTE: Enable if you want to overwrite default /current/operational-modes.json.
+            # - name: current
+            #   hostPath:
+            #       path: /var/lib/goldstone/device/current
