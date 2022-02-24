@@ -471,7 +471,10 @@ class TransponderServer(ServerBase):
                 f"/goldstone-transponder:modules/module[name='{name}']", {}
             )
             logger.debug(f"running configuration for {location}: {config}")
-            await self.initialize_piu(config, location)
+            try:
+                await self.initialize_piu(config, location)
+            except Exception as e:
+                logger.error(f"failed to initialize PIU: {e}")
 
         self.sess.subscribe_notification(
             "goldstone-platform",
