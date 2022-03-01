@@ -19,12 +19,15 @@ def wrap_sysrepo_error(func):
         sess = args[0].session
         try:
             return func(*args, **kwargs)
+        except sysrepo.SysrepoLockedError as error:
+            sess.discard_changes()
+            target = "datastore"
+            if len(args) >= 2:
+                target = args[1]
+            raise DatastoreLocked(f"{target} is locked", error)
         except sysrepo.SysrepoError as error:
             sess.discard_changes()
             raise Error(error.details[0][1])
-        except sysrepo.SysrepoLockedError as error:
-            sess.discard_changes()
-            raise DatastoreLocked(f"{xpath} is locked", error)
         except libyang.LibyangError as error:
             sess.discard_changes()
             raise Error(str(error))
@@ -139,7 +142,7 @@ class Connector(BaseConnector):
 
     def save(self, model):
         try:
-            self.startup_session.copy_config("running", m)
+            self.startup_session.copy_config("running", model)
         except sysrepo.SysrepoError as e:
             raise Error(str(e))
 
