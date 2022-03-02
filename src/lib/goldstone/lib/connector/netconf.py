@@ -282,7 +282,11 @@ class Connector(BaseConnector):
 
         cur = root
         for i, e in enumerate(xpath[1:]):
-            cur = sub_ele(cur, e[1])
+            if e[0]:
+                v = self._models.get(e[0])
+                cur = sub_ele_ns(cur, e[1], v[0]["namespace"])
+            else:
+                cur = sub_ele(cur, e[1])
             for cond in e[2]:
                 ccur = cur
                 for cc in cond[0].split("/"):
