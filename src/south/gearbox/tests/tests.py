@@ -56,11 +56,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             sess.replace_config({}, "goldstone-interfaces")
             sess.apply_changes()
 
-        def noop():
-            pass
-
         taish = mock.AsyncMock()
-        taish.close = noop
 
         self.set_logs = []
 
