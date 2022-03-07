@@ -520,8 +520,8 @@ class InterfaceServer(ServerBase):
         index = int(await obj.get("index"))
         return f"Interface{loc}/{type_}/{index+1}"
 
-    async def notification_tasks(self):
-        async def task(obj, attr):
+    async def notification_task(self):
+        async def monitor(obj, attr):
             try:
                 await obj.monitor(attr, self.tai_cb)
             except asyncio.exceptions.CancelledError as e:
@@ -533,10 +533,24 @@ class InterfaceServer(ServerBase):
                         return
                 raise e
 
-        return [
-            task(obj, "alarm-notification")
-            for ifname, obj, module in await self.get_ifname_list()
+        tasks = [
+            asyncio.create_task(monitor(obj, "alarm-notification"), name=ifname)
+            for ifname, obj, _ in await self.get_ifname_list()
         ]
+
+        while True:
+            done, pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
+            )
+
+            for d in done:
+                ifname = d.get_name()
+                logger.info(f"alarm notification task for {ifname} ended")
+
+            if not pending:
+                return
+
+            tasks = pending
 
     async def start(self):
         async def ping():
@@ -571,11 +585,11 @@ class InterfaceServer(ServerBase):
         tasks = await super().start()
         self.is_initializing = False
 
-        return tasks + [ping(), notif_loop()] + await self.notification_tasks()
+        return tasks + [ping(), notif_loop(), self.notification_task()]
 
     async def stop(self):
         logger.info(f"stop server")
-        self.taish.close()
+        await self.taish.close()
         super().stop()
 
     def pre(self, user):
