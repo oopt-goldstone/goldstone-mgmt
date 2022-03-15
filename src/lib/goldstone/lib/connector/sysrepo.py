@@ -1,6 +1,7 @@
 from .base import (
     Connector as BaseConnector,
     Session as BaseSession,
+    NotFound,
     Error,
     DatastoreLocked,
 )
@@ -24,13 +25,16 @@ def wrap_sysrepo_error(func):
             target = "datastore"
             if len(args) >= 2:
                 target = args[1]
-            raise DatastoreLocked(f"{target} is locked", error)
+            raise DatastoreLocked(f"{target} is locked", error) from error
+        except sysrepo.SysrepoNotFoundError as error:
+            sess.discard_changes()
+            raise NotFound(error.details[0][1]) from error
         except sysrepo.SysrepoError as error:
             sess.discard_changes()
-            raise Error(error.details[0][1])
+            raise Error(error.details[0][1]) from error
         except libyang.LibyangError as error:
             sess.discard_changes()
-            raise Error(str(error))
+            raise Error(str(error)) from error
 
     return f
 
@@ -41,6 +45,7 @@ class Session(BaseSession):
         self.session = conn.conn.start_session(ds)
         self.ds = ds
 
+    @wrap_sysrepo_error
     def get(
         self,
         xpath,
@@ -61,8 +66,6 @@ class Session(BaseSession):
                 f"xpath: {xpath}, ds: {self.ds}, not found. returning {default}"
             )
             return default
-        except sysrepo.SysrepoError as e:
-            raise Error(e)
 
         if strip:
             data = libyang.xpath_get(
@@ -141,14 +144,13 @@ class Connector(BaseConnector):
 
     @property
     def models(self):
-        ctx = self.conn.get_ly_ctx()
-        return [m.name() for m in ctx]
+        return [m.name() for m in self.ctx]
 
     def save(self, model):
         try:
             self.startup_session.copy_config("running", model)
         except sysrepo.SysrepoError as e:
-            raise Error(str(e))
+            raise Error(str(e)) from e
 
     def rpc(self, xpath, args):
         return self.running_session.rpc(xpath, args)
@@ -165,7 +167,7 @@ class Connector(BaseConnector):
     def apply(self):
         return self.running_session.apply()
 
-    def discard_changes(self, model):
+    def discard_changes(self):
         return self.running_session.discard_changes()
 
     def get(
@@ -201,3 +203,9 @@ class Connector(BaseConnector):
 
     def get_startup(self, xpath):
         return self.get(xpath, ds="startup")
+
+    def stop(self):
+        self.running_session.stop()
+        self.operational_session.stop()
+        self.startup_session.stop()
+        self.conn.disconnect()
