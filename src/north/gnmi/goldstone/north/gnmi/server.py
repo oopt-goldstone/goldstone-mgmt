@@ -475,8 +475,10 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
 def serve(
     repo,
     max_workers=10,
-    secure_port=50051,
+    secure_port=51051,
     insecure_port=None,
+    private_key_file=None,
+    certificate_chain_file=None,
     supported_models_file=None,
 ):
     """Run a gNMI server.
@@ -487,13 +489,18 @@ def serve(
         secure_port (int): gNMI server listens this port number for secure connections.
         insecure_port (int): gNMI server listens this port number for insecure connections.
             If it is None, the gNMI server does not accept insecure connection.
-        supported_models_file (str): Path to JSON file which is listed yang models supported by the gNMI server.
+        private_key_file (str): Path to a PEM-encoded private key file.
+        certificate_chain_file (str): Path to a PEM-encoded certificate chain file.
+        supported_models_file (str): Path to a JSON file which is listed yang models supported by the gNMI server.
     """
     logger.info(
-        "gNMI server serves as: max_workers=%d, secure_port=%d, insecure_port=%d, supported_models_file=%s",
+        "gNMI server serves as: max_workers=%d, secure_port=%d, insecure_port=%s,"
+        " private_key_file=%s, certificate_chain_file=%s, supported_models_file=%s",
         max_workers,
         secure_port,
         insecure_port,
+        private_key_file,
+        certificate_chain_file,
         supported_models_file,
     )
 
@@ -503,14 +510,22 @@ def serve(
         except json.JSONDecodeError as e:
             logger.error("%s is not JSON format.: %s", supported_models_file, e)
             exit()
-
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
     gnmi_pb2_grpc.add_gNMIServicer_to_server(
         gNMIServicer(repo, supported_models), server
     )
-    # TODO: Add credentials and enable a secure connection.
-    # server.add_secure_port("[::]:{}"".format(secure_port), credentials)
+    port = None
+    if private_key_file is not None and certificate_chain_file is not None:
+        with open(private_key_file, "rb") as f:
+            private_key = f.read()
+        with open(certificate_chain_file, "rb") as f:
+            certificate_chain = f.read()
+        credentials = grpc.ssl_server_credentials(((private_key, certificate_chain),))
+        port = server.add_secure_port(f"[::]:{secure_port}", credentials)
     if insecure_port is not None:
-        server.add_insecure_port(f"[::]:{insecure_port}")
+        port = server.add_insecure_port(f"[::]:{insecure_port}")
+    if port is None:
+        logger.error("No ports to listen.")
+        exit()
     server.start()
     server.wait_for_termination()

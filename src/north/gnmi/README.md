@@ -48,7 +48,7 @@ sudo pip3 install .
 
 ```sh
 $ gsnorthd-gnmi -h
-usage: gsnorthd-gnmi [-h] [-v] [-p SECURE_PORT] [-i INSECURE_PORT] supported_models_file
+usage: gsnorthd-gnmi [-h] [-v] [-p SECURE_PORT] [-i INSECURE_PORT] [-k PRIVATE_KEY_FILE] [-c CERTIFICATE_CHAIN_FILE] supported_models_file
 
 positional arguments:
   supported_models_file
@@ -59,10 +59,34 @@ options:
   -v, --verbose
   -p SECURE_PORT, --secure-port SECURE_PORT
   -i INSECURE_PORT, --insecure-port INSECURE_PORT
+  -k PRIVATE_KEY_FILE, --private-key-file PRIVATE_KEY_FILE
+                        path to a PEM-encoded private key file
+  -c CERTIFICATE_CHAIN_FILE, --certificate-chain-file CERTIFICATE_CHAIN_FILE
+                        path to a PEM-encoded certificate chain file
 ```
 
-Example:
+Examples:
+
+Listen to port 51052 for insecure connections.
 
 ```sh
-gsnorthd-gnmi gnmi-supported-models.json
+gsnorthd-gnmi -i 51052 gnmi-supported-models.json
+```
+
+Listen to default secure port 51051 for secure connections.
+
+```sh
+gsnorthd-gnmi -k server.key -c server.crt gnmi-supported-models.json
+```
+
+Listen to specified secure port 51050 for secure connections.
+
+```sh
+gsnorthd-gnmi -p 51050 -k server.key -c server.crt gnmi-supported-models.json
+```
+
+Listen to both secure and insecure ports.
+
+```sh
+gsnorthd-gnmi -i 51052 -k server.key -c server.crt gnmi-supported-models.json
 ```
