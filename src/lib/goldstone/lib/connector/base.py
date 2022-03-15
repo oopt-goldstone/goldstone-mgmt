@@ -15,6 +15,10 @@ class DatastoreLocked(Error):
         super().__init__(what)
 
 
+class NotFound(Error):
+    pass
+
+
 class Node(object):
     def __init__(self, node):
         self.node = node
@@ -23,7 +27,7 @@ class Node(object):
         return self.node.name()
 
     def children(self):
-        return [Node(v) for v in self.node]
+        return [Node(v) for v in self.node.children()]
 
     def type(self):
         return str(self.node.type())
@@ -33,6 +37,13 @@ class Node(object):
 
     def range(self):
         return self.node.type().range()
+
+    def keys(self):
+        keys = getattr(self.node, "keys", None)
+        if keys is not None:
+            return keys()
+        else:
+            return []
 
 
 class Session(object):
