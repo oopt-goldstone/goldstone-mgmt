@@ -2,7 +2,7 @@ from kubernetes.client.rest import ApiException
 from kubernetes import client, config
 import pydoc
 import logging
-from prompt_toolkit.completion import merge_completers
+from prompt_toolkit.completion import merge_completers, FuzzyWordCompleter
 
 from .base import Command as BaseCommand, Context as BaseContext, InvalidInput
 
@@ -174,10 +174,12 @@ class GlobalShowCommand(Command):
 
 
 def remove_switched_vlan_configuration(sess):
-    for vlan in sess.get(
-        "/goldstone-interfaces:interfaces/interface/goldstone-vlan:switched-vlan", []
-    ):
-        sess.delete(vlan.xpath)
+    prefix = "/goldstone-interfaces:interfaces/interface"
+    for intf in sess.get(prefix, []):
+        if "switched-vlan" in intf:
+            name = intf["name"]
+            xpath = prefix + f"[name='{name}']/goldstone-vlan:switched-vlan"
+            sess.delete(xpath)
     sess.apply()
 
 
@@ -212,11 +214,13 @@ class ClearDatastoreGroupCommand(Command):
 
         sess.apply()
 
-    def get(self, arg):
-        elected = self.complete_subcommand(arg)
-        if elected == None:
-            return None
-        return Choice(["running", "startup"], self.context, self, elected)
+    def get(self, v):
+        return Command(
+            self.context,
+            self,
+            v,
+            additional_completer=FuzzyWordCompleter(["running", "startup"]),
+        )
 
     def arguments(self):
         cmds = [m for m in self.conn.models if "goldstone" in m]
