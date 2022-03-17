@@ -84,6 +84,10 @@ class Session(BaseSession):
         return self.session.set_item(xpath, value)
 
     @wrap_sysrepo_error
+    def copy_config(self, datastore, model):
+        return self.session.copy_config(datastore, model)
+
+    @wrap_sysrepo_error
     def delete(self, xpath):
         return self.session.delete_item(xpath)
 
