@@ -14,6 +14,7 @@ libyang-python/xpath:_support_getting_leaves_and_non-key_conditions.patch
 libyang-python/xpath:_support_passing_keyedlist_with_filter_option.patch
 libyang-python/remove_debug_log.patch
 libyang-python/fix_for_notification.patch
+libyang-python/fix_xpath_find.patch
 
 # sysrepo-python patches
 sysrepo-python/add_oper_merge_subscribe_flag.patch
