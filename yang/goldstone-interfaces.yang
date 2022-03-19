@@ -62,6 +62,13 @@ module goldstone-interfaces {
     }
   }
 
+  typedef interface-pin-mode {
+    type enumeration {
+      enum NRZ;
+      enum PAM4;
+    }
+  }
+
   /*
    * Data nodes
    */
@@ -565,6 +572,10 @@ module goldstone-interfaces {
 
     leaf interface-type {
       type interface-type;
+    }
+
+    leaf pin-mode {
+      type interface-pin-mode;
     }
 
   }
