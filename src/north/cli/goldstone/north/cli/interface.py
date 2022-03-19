@@ -399,6 +399,7 @@ def show(session, ifnames):
         add_to_rows("name", config)
         add_to_rows("admin-status", state, lambda v: v.lower())
         add_to_rows("oper-status", state, lambda v: v.lower())
+        add_to_rows("pin-mode", state, lambda v: v.lower())
         add_to_rows("alias", state)
         add_to_rows("lanes", state)
         #        add_to_rows("interface-type", config, lambda v: v.lower().replace("if_", ""))

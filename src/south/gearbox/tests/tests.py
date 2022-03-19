@@ -77,7 +77,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             elif args[0] == "tributary-mapping":
                 return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
 
-        async def get(*args, **kwargs):
+        async def get(spec, *args, **kwargs):
             if args[0] in ["alarm-notification", "notify"]:
                 return "(nil)"
             elif args[0] == "pcs-status":
@@ -134,11 +134,16 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return "synce-ref-clk"
             elif args[0] == "current-tx-timing-mode":
                 return "synce-ref-clk"
+            elif args[0] == "pin-mode":
+                if isinstance(spec, NetIf):
+                    return "pam4"
+                else:
+                    return "nrz"
             else:
                 return mock.MagicMock()
 
-        async def get_multiple(*args, **kwargs):
-            return [await get(name, **kwargs) for name in args[0]]
+        async def get_multiple(spec, *args, **kwargs):
+            return [await get(spec, name, **kwargs) for name in args[0]]
 
         async def get_attribute_capability(*args, **kwargs):
             m = mock.MagicMock()
@@ -155,14 +160,14 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             m.short_name = "pcs-status"
             return m
 
-        async def monitor(*args, **kwargs):
+        async def monitor(spec, *args, **kwargs):
             logger.debug(f"monitoring.. {args}, {kwargs}")
             await asyncio.sleep(1)
 
             obj = mock.MagicMock(spec=NetIf(None, None, None))
             obj.obj = mock.MagicMock()
             obj.obj.module_oid = 1
-            obj.get = get
+            obj.get = lambda *args, **kwargs: get(spec, *args, **kwargs)
             obj.get_attribute_metadata = get_attribute_metadata
 
             msg = mock.MagicMock()
@@ -181,11 +186,13 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         def f(oid, spec):
             obj = mock.AsyncMock(spec=spec)
-            obj.monitor = monitor
-            obj.get = get
+            obj.monitor = lambda *args, **kwargs: monitor(spec, *args, **kwargs)
+            obj.get = lambda *args, **kwargs: get(spec, *args, **kwargs)
             obj.set = set_
             obj.set_multiple = set_multiple
-            obj.get_multiple = get_multiple
+            obj.get_multiple = lambda *args, **kwargs: get_multiple(
+                spec, *args, **kwargs
+            )
             obj.get_attribute_capability = get_attribute_capability
             obj.index = 0
             obj.oid = oid
@@ -205,6 +212,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         module.get_netif = get_netif
         module.get_hostif = get_hostif
         module.obj.location = "1"
+        module.location = "1"
         module.obj.netifs = [get_netif()]
         module.obj.hostifs = [get_hostif()]
         module.netifs = [get_netif()]
@@ -289,12 +297,14 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
+                ("pin-mode", "nrz"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("auto-negotiation", "false"),
                 ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
+                ("pin-mode", "pam4"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
@@ -334,12 +344,14 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
+                ("pin-mode", "nrz"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("auto-negotiation", "false"),
                 ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
+                ("pin-mode", "pam4"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
@@ -378,12 +390,14 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
+                ("pin-mode", "nrz"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("auto-negotiation", "false"),
                 ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
+                ("pin-mode", "pam4"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
@@ -424,12 +438,14 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "normal"),
                 ("signal-rate", "100-gbe"),
+                ("pin-mode", "nrz"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("auto-negotiation", "false"),
                 ("provision-mode", "none"),
                 ("signal-rate", "100-gbe"),
+                ("pin-mode", "pam4"),
                 ("fec-type", "rs"),
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
@@ -741,8 +757,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("provision-mode", "none"),
                 ("signal-rate", "otu4"),
                 ("provision-mode", "none"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
                 ("auto-negotiation", "false"),
                 ("tx-timing-mode", "auto"),
@@ -780,10 +794,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("macsec-static-key", "50462976,117835012,185207048,252579084"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
                 ("tx-timing-mode", "auto"),
             ],
@@ -831,10 +841,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("auto-negotiation", "true"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
                 ("tx-timing-mode", "auto"),
             ],
         )
@@ -900,10 +906,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("tx-timing-mode", "synce-ref-clk"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
                 ("fec-type", "rs"),
                 ("auto-negotiation", "false"),
             ],
@@ -925,6 +927,40 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 )
 
         await asyncio.to_thread(test)
+
+    async def test_pin_mode(self):
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                    "Interface1/1/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/pin-mode",
+                    "PAM4",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("provision-mode", "none"),
+                ("provision-mode", "none"),
+                ("fec-type", "rs"),
+                ("tx-timing-mode", "auto"),
+            ],
+        )
 
     async def asyncTearDown(self):
         [p.stop() for p in self.patchers]
