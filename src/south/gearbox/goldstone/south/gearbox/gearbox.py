@@ -29,6 +29,7 @@ class GearboxChangeHandler(IfChangeHandler):
 
         self.obj = await self.server.taish.get_module(self.module_name)
         self.tai_attr_name = None
+        self.ifname = None
 
 
 class AdminStatusHandler(GearboxChangeHandler):
@@ -51,8 +52,6 @@ class GearboxServer(ServerBase):
         super().__init__(conn, "goldstone-gearbox")
         self.ifserver = interface_server
         self.taish = self.ifserver.taish
-        self.oidmap = {}  # key: oid, value: obj
-        self.ifnamemap = {}  # key: ifname, value: oid
         self.handlers = {
             "gearboxes": {
                 "gearbox": {
@@ -73,13 +72,7 @@ class GearboxServer(ServerBase):
             }
         }
 
-    def get_default_mapping(self, module):
-        mapping = []
-        for netif, hostif in zip(module.obj.netifs, module.obj.hostifs):
-            mapping.append({f"oid:0x{netif.oid:08x}": [f"oid:0x{hostif.oid:08x}"]})
-        return json.dumps(mapping)
-
-    def get_default(self, key):
+    def get_default(self, key, _):
         ctx = self.sess.get_ly_ctx()
         keys = [["gearboxes", "gearbox", "config", key]]
 
@@ -95,73 +88,60 @@ class GearboxServer(ServerBase):
 
         return None
 
+    async def set_tributary_mapping(self, m, config):
+        loc = m.location
+        prefix = "/goldstone-gearbox:gearboxes/gearbox"
+        xpath = f"{prefix}[name='{loc}']/config/enable-flexible-connection"
+        flex = libyang.xpath_get(config, xpath, False)
+
+        if not flex:
+            mapping = self.ifserver.get_default_mapping(m)
+            logger.debug(f"setting the default mapping({loc}): {mapping}")
+        else:
+            xpath = f"{prefix}[name='{loc}']/connections/connection"
+            connections = self.get_running_data(xpath, [])
+            mapping = []
+            for c in connections:
+                line = await self.ifserver.ifname2taiobj(c["config"]["line-interface"])
+                line = line.oid
+                client = await self.ifserver.ifname2taiobj(
+                    c["config"]["client-interface"]
+                )
+                client = client.oid
+
+                mapping.append({f"oid:0x{line:08x}": [f"oid:0x{client:08x}"]})
+            mapping = json.dumps(mapping)
+            logger.debug(f"setting mapping({loc}): {mapping}")
+
+        await m.set("tributary-mapping", mapping)
+
     async def post(self, user):
         if not user.get("update-tributary-mapping"):
             return
 
-        cache = user.get("cache")
+        config = user.get("cache")
 
         modules = await self.ifserver.list_modules()
-        prefix = "/goldstone-gearbox:gearboxes/gearbox"
-        for loc in modules.keys():
-            m = await self.taish.get_module(loc)
-            xpath = f"{prefix}[name='{loc}']/config/enable-flexible-connection"
-            flex = libyang.xpath_get(cache, xpath, False)
-
-            if not flex:
-                mapping = self.get_default_mapping(m)
-                logger.debug(f"setting the default mapping({loc}): {mapping}")
-            else:
-                xpath = f"{prefix}[name='{loc}']/connections/connection"
-                connections = libyang.xpath_get(cache, xpath, [])
-                mapping = []
-                for c in connections:
-                    line = self.ifnamemap[c["config"]["line-interface"]]
-                    client = self.ifnamemap[c["config"]["client-interface"]]
-                    mapping.append({f"oid:0x{line:08x}": [f"oid:0x{client:08x}"]})
-                mapping = json.dumps(mapping)
-                logger.debug(f"setting mapping({loc}): {mapping}")
-
-            await m.set("tributary-mapping", mapping)
+        for module in modules.values():
+            await self.set_tributary_mapping(module, config)
 
     async def reconcile(self):
         modules = await self.ifserver.list_modules()
-        prefix = "/goldstone-gearbox:gearboxes/gearbox"
 
         for loc in modules.keys():
             m = await self.taish.get_module(loc)
-            for i in range(len(m.obj.netifs)):
-                obj = m.get_netif(i)
-                self.oidmap[obj.oid] = obj
-                name = f"Interface{loc}/1/{i+1}"
-                self.ifnamemap[name] = obj.oid
+            for obj in m.netifs:
+                self.ifserver.oidmap[obj.oid] = obj
 
-            for i in range(len(m.obj.hostifs)):
-                obj = m.get_hostif(i)
-                self.oidmap[obj.oid] = obj
-                name = f"Interface{loc}/0/{i+1}"
-                self.ifnamemap[name] = obj.oid
+            for obj in m.hostifs:
+                self.ifserver.oidmap[obj.oid] = obj
+
+        prefix = "/goldstone-gearbox:gearboxes/gearbox"
+        config = self.get_running_data(prefix, {})
 
         async def init(loc):
             m = await self.taish.get_module(loc)
-            xpath = f"{prefix}[name='{loc}']/config/enable-flexible-connection"
-            flex = self.get_running_data(xpath, False)
-
-            if not flex:
-                mapping = self.get_default_mapping(m)
-                logger.debug(f"setting the default mapping({loc}): {mapping}")
-            else:
-                xpath = f"{prefix}[name='{loc}']/connections/connection"
-                connections = self.get_running_data(xpath, [])
-                mapping = []
-                for c in connections:
-                    line = self.ifnamemap[c["config"]["line-interface"]]
-                    client = self.ifnamemap[c["config"]["client-interface"]]
-                    mapping.append({f"oid:0x{line:08x}": [f"oid:0x{client:08x}"]})
-                mapping = json.dumps(mapping)
-                logger.debug(f"setting mapping({loc}): {mapping}")
-
-            await m.set("tributary-mapping", mapping)
+            await self.set_tributary_mapping(m, config)
 
             xpath = f"{prefix}[name='{loc}']/config/admin-status"
             admin_status = self.get_running_data(xpath, "UP")
@@ -245,13 +225,13 @@ class GearboxServer(ServerBase):
                         continue
                     hostif = hostif[0]
 
-                obj = self.oidmap.get(int(netif.replace("oid:", ""), 0))
+                obj = self.ifserver.oidmap.get(int(netif.replace("oid:", ""), 0))
                 if not obj:
                     logger.warning(f"not found {netif}")
                     continue
                 netif = await self.ifserver.taiobj2ifname(m.obj.location, 1, obj)
 
-                obj = self.oidmap.get(int(hostif.replace("oid:", ""), 0))
+                obj = self.ifserver.oidmap.get(int(hostif.replace("oid:", ""), 0))
                 if not obj:
                     logger.warning(f"not found {hostif}")
                     continue

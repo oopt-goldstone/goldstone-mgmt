@@ -58,7 +58,7 @@ class IfChangeHandler(ChangeHandler):
 
             if self.type == "deleted":
                 leaf = self.xpath[-1][1]
-                d = self.server.get_default(leaf)
+                d = self.server.get_default(leaf, self.ifname)
                 if d != None:
                     self.value.append(self.to_tai_value(d, name))
                 elif cap.default_value == "":  # and is_deleted
@@ -91,18 +91,26 @@ class IfChangeHandler(ChangeHandler):
         if not self.tai_attr_name:
             return
         self.original_value = await self.obj.get_multiple(self.tai_attr_name)
-        logger.debug(
-            f"applying: {self.tai_attr_name} {self.original_value} => {self.value}"
-        )
-        await self.obj.set_multiple(list(zip(self.tai_attr_name, self.value)))
+        _v = []
+        for i, name in enumerate(self.tai_attr_name):
+            if str(self.original_value[i]) != str(self.value[i]):
+                logger.debug(
+                    f"applying: {name} {self.original_value[i]} => {self.value[i]}"
+                )
+                _v.append((name, self.value[i]))
+        await self.obj.set_multiple(_v)
 
     async def revert(self, user):
         if not self.tai_attr_name:
             return
-        logger.warning(
-            f"reverting: {self.tai_attr_name} {self.value} => {self.original_value}"
-        )
-        await self.obj.set_multiple(list(zip(self.tai_attr_name, self.original_value)))
+        _v = []
+        for i, name in enumerate(self.tai_attr_name):
+            if str(self.original_value[i]) != str(self.value[i]):
+                logger.warning(
+                    f"reverting: {self.name} {self.value[i]} => {self.original_value[i]}"
+                )
+                _v.append((name, self.original_value[i]))
+        await self.obj.set_multiple(_v)
 
 
 class AdminStatusHandler(IfChangeHandler):
@@ -118,7 +126,7 @@ class AdminStatusHandler(IfChangeHandler):
             t = libyang.xpath_get(
                 cache,
                 f"{xpath}/interface-type",
-                self.server.get_default("interface-type"),
+                self.server.get_default("interface-type", self.ifname),
             )
             if t == "IF_ETHERNET":
                 return "normal"
@@ -159,7 +167,9 @@ class InterfaceTypeHandler(IfChangeHandler):
             cache = self.setup_cache(self.user)
             xpath = f"/goldstone-interfaces:interfaces/interface[name='{self.ifname}']/config"
             a = libyang.xpath_get(
-                cache, f"{xpath}/admin-status", self.server.get_default("admin-status")
+                cache,
+                f"{xpath}/admin-status",
+                self.server.get_default("admin-status", self.ifname),
             )
             if a == "DOWN":
                 return "none"
@@ -175,6 +185,104 @@ class InterfaceTypeHandler(IfChangeHandler):
                 return "100-gbe"
             elif v == "IF_OTN":
                 return "otu4"
+
+
+class PinModeHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.user = user
+        self.tai_attr_name = "pin-mode"
+        self._removed = []
+        self._created = []
+
+    async def validate(self, user):
+        await super().validate(user)
+
+        info = self.server.get_platform_info(self.ifname)
+        if not info:
+            raise sysrepo.SysrepoInvalArgError(
+                f"pin-mode setting not supported. no platform info"
+            )
+
+        valids = [i["interface"]["pin-mode"] for i in info]
+
+        if self.value[0] not in valids:
+            raise sysrepo.SysrepoInvalArgError(
+                f"supported values are {valids}. given {self.value[0]}"
+            )
+
+        cache = self.setup_cache(self.user)
+
+        # conflicting interfaces must not have any configuration
+        for ifname in self.server.get_conflicting_ifnames(self.ifname, self.value[0]):
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+            a = libyang.xpath_get(cache, xpath)
+            if a:
+                raise sysrepo.SysrepoInvalArgError(
+                    f"conflicting configuration exists for {ifname}"
+                )
+
+    # remove conflicting TAI objects for a given pin-mode
+    async def remove(self, ifnames=None):
+        if ifnames == None:
+            ifnames = self.server.get_conflicting_ifnames(self.ifname, self.value[0])
+
+        i = []
+        for ifname in ifnames:
+            try:
+                obj_to_remove, module = await self.server.ifname2taiobj(
+                    ifname, with_module=True
+                )
+            except taish.TAIException:
+                pass
+            else:
+                new_mapping = await self.server.get_new_mapping(module, ifname)
+                logger.debug(f"new mapping: {new_mapping}")
+                await module.set("tributary-mapping", json.dumps(new_mapping))
+
+                logger.debug(f"removing 0x{obj_to_remove.oid:08x}")
+                await self.server.taish.remove(obj_to_remove.oid)
+                i.append(ifname)
+        return i
+
+    # create removed TAI objects that *were* conflicting and not any more
+    # with the given pin-mode
+    async def create(self, ifnames=None):
+        if ifnames == None:
+            # interfaces that have been removed due to the original pin-mode
+            ifnames = set(
+                self.server.get_conflicting_ifnames(self.ifname, self.original_value[0])
+            )
+            # exclude the interfaces that conflicts with the current pin-mode
+            ifnames = ifnames - set(
+                self.server.get_conflicting_ifnames(self.ifname, self.value[0])
+            )
+
+        cache = self.setup_cache(self.user)
+        i = []
+        for ifname in ifnames:
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+            config = libyang.xpath_get(cache, xpath, {})
+            obj, module = await self.server.create_interface(ifname, config)
+            logger.debug(f"created {ifname}, oid: 0x{obj.oid:08x}")
+            mapping = self.server.get_default_mapping(module)
+            logger.debug(f"new mapping: {mapping}")
+            await module.set("tributary-mapping", mapping)
+            i.append(ifname)
+        return i
+
+    def to_tai_value(self, v, attr_name):
+        return v.lower()
+
+    async def apply(self, user):
+        self._removed = await self.remove()
+        await super().apply(user)
+        self._created = await self.create()
+
+    async def revert(self, user):
+        await self.remove(self._created)
+        await super().revert(user)
+        await self.create(self._removed)
 
 
 class MFITypeHandler(IfChangeHandler):
@@ -350,13 +458,19 @@ class InterfaceServer(ServerBase):
         info = {}
         for i in platform_info:
             if "interface" in i:
-                ifname = f"Interface{i['interface']['suffix']}"
-                info[ifname] = i
-        self.platform_info = info
+                assert "name" in i["interface"]
+                assert "pin-mode" in i["interface"]
+                if i["interface"]["name"] not in info:
+                    info[i["interface"]["name"]] = []
+                info[i["interface"]["name"]].append(i)
+
+        self._platform_info = info
         self.conn = conn
         self.taish = taish.AsyncClient(*taish_server.split(":"))
         self.notif_q = asyncio.Queue()
+        self.notif_task_q = asyncio.Queue()
         self.is_initializing = True
+        self.oidmap = {}  # key: oid, value: obj
         self.handlers = {
             "interfaces": {
                 "interface": {
@@ -366,6 +480,7 @@ class InterfaceServer(ServerBase):
                         "name": NoOp,
                         "description": NoOp,
                         "interface-type": InterfaceTypeHandler,
+                        "pin-mode": PinModeHandler,
                     },
                     "ethernet": {
                         "config": {
@@ -397,10 +512,24 @@ class InterfaceServer(ServerBase):
             }
         }
 
-    def get_default(self, key):
+    def get_default(self, key, ifname):
         # static-macsec/config/key
         if key == "key":
             return ""
+        elif key == "pin-mode":
+            info = self.get_platform_info(ifname)
+            if not info:
+                return None
+
+            if len(info) == 1:
+                return info[0]["interface"]["pin-mode"].upper()
+
+            for i in info:
+                if i["interface"]["default"]:
+                    return i["interface"]["pin-mode"].upper()
+
+            return None
+
         ctx = self.sess.get_ly_ctx()
         keys = [
             ["interfaces", "interface", "config", key],
@@ -428,75 +557,85 @@ class InterfaceServer(ServerBase):
 
         return None
 
+    async def reconcile_interface(self, ifname, obj, config):
+        iftype = config.get("config", {}).get(
+            "interface-type", self.get_default("interface-type", ifname)
+        )
+        admin_status = config.get("config", {}).get(
+            "admin-status", self.get_default("admin-status", ifname)
+        )
+
+        if iftype == "IF_OTN":
+            mfi = (
+                config.get("otn", {})
+                .get("config", {})
+                .get("mfi-type", self.get_default("mfi-type", ifname))
+            )
+            mode = "serdes-only" if admin_status == "UP" else "none"
+            attrs = [
+                ("provision-mode", mode),
+                ("signal-rate", "otu4"),
+                ("otn-mfi-type", mfi.lower()),
+            ]
+        elif iftype == "IF_ETHERNET":
+            mode = "normal" if admin_status == "UP" else "none"
+            attrs = [("provision-mode", mode), ("signal-rate", "100-gbe")]
+
+        pin_mode = await self.get_pin_mode(ifname)
+        if pin_mode:
+            attrs.append(("pin-mode", pin_mode.lower()))
+        else:
+            logger.warning(f"no pin-mode configuration for {ifname}")
+
+        await obj.set_multiple(attrs)
+
+        fec = config.get("ethernet", {}).get("config", {}).get("fec")
+        if fec == None:
+            fec = self.get_default("fec", ifname)
+        await obj.set("fec-type", fec.lower())
+
+        mtu = config.get("ethernet", {}).get("config", {}).get("mtu")
+        if mtu == None:
+            mtu = int(self.get_default("mtu", ifname))
+        await obj.set("mtu", mtu)
+        await obj.set("mru", mtu)
+
+        if isinstance(obj, taish.NetIf):
+            key = (
+                config.get("ethernet", {})
+                .get("static-macsec", {})
+                .get("config", {})
+                .get("key")
+            )
+            if key:
+                key = struct.unpack("IIII", base64.b64decode(key))
+                key = ",".join((str(i) for i in key))
+            else:
+                key = ""
+
+            await obj.set("macsec-static-key", key)
+
+        elif isinstance(obj, taish.HostIf):
+            anlt = (
+                config.get("ethernet", {})
+                .get("auto-negotiate", {})
+                .get("config", {})
+                .get("enabled", self.get_default("enabled", ifname))
+            )
+            await obj.set("auto-negotiation", "true" if anlt else "false")
+
     async def reconcile(self):
         prefix = "/goldstone-interfaces:interfaces/interface"
-        for ifname, obj, module in await self.get_ifname_list():
+
+        for ifname, obj, _ in await self.get_ifname_list():
             xpath = f"{prefix}[name='{ifname}']"
             config = self.get_running_data(
                 xpath, default={}, include_implicit_defaults=True
             )
-            iftype = config.get("config", {}).get(
-                "interface-type", self.get_default("interface-type")
-            )
-            admin_status = config.get("config", {}).get(
-                "admin-status", self.get_default("admin-status")
-            )
-            if iftype == "IF_OTN":
-                mfi = (
-                    config.get("otn", {})
-                    .get("config", {})
-                    .get("mfi-type", self.get_default("mfi-type"))
-                )
-                mode = "serdes-only" if admin_status == "UP" else "none"
-                await obj.set_multiple(
-                    [
-                        ("provision-mode", mode),
-                        ("signal-rate", "otu4"),
-                        ("otn-mfi-type", mfi.lower()),
-                    ]
-                )
-            elif iftype == "IF_ETHERNET":
-                mode = "normal" if admin_status == "UP" else "none"
-                await obj.set_multiple(
-                    [("provision-mode", mode), ("signal-rate", "100-gbe")]
-                )
-
-            fec = config.get("ethernet", {}).get("config", {}).get("fec")
-            if fec == None:
-                fec = self.get_default("fec")
-            await obj.set("fec-type", fec.lower())
-
-            mtu = config.get("ethernet", {}).get("config", {}).get("mtu")
-            if mtu == None:
-                mtu = int(self.get_default("mtu"))
-            await obj.set("mtu", mtu)
-            await obj.set("mru", mtu)
-
-            if isinstance(obj, taish.NetIf):
-                key = (
-                    config.get("ethernet", {})
-                    .get("static-macsec", {})
-                    .get("config", {})
-                    .get("key")
-                )
-                if key:
-                    key = struct.unpack("IIII", base64.b64decode(key))
-                    key = ",".join((str(i) for i in key))
-                else:
-                    key = ""
-
-                await obj.set("macsec-static-key", key)
-
-            elif isinstance(obj, taish.HostIf):
-                anlt = (
-                    config.get("ethernet", {})
-                    .get("auto-negotiate", {})
-                    .get("config", {})
-                    .get("enabled", self.get_default("enabled"))
-                )
-                await obj.set("auto-negotiation", "true" if anlt else "false")
+            await self.reconcile_interface(ifname, obj, config)
 
     async def tai_cb(self, obj, attr_meta, msg):
+        logger.info(f"{obj}, {obj.obj}")
         m_oid = obj.obj.module_oid
         modules = await self.list_modules()
 
@@ -538,14 +677,31 @@ class InterfaceServer(ServerBase):
             for ifname, obj, _ in await self.get_ifname_list()
         ]
 
+        tasks.append(asyncio.create_task(self.notif_task_q.get(), name="create-task"))
+
         while True:
             done, pending = await asyncio.wait(
                 tasks, return_when=asyncio.FIRST_COMPLETED
             )
 
+            pending = list(pending)
+
             for d in done:
-                ifname = d.get_name()
-                logger.info(f"alarm notification task for {ifname} ended")
+                name = d.get_name()
+                if name == "create-task":
+                    ifname, obj = d.result()
+                    logger.info(f"creating alarm notification task for {ifname}")
+                    task = asyncio.create_task(
+                        monitor(obj.obj, "alarm-notification"), name=ifname
+                    )
+                    pending.append(task)
+                    pending.append(
+                        asyncio.create_task(self.notif_task_q.get(), name="create-task")
+                    )
+                else:
+                    logger.info(
+                        f"alarm notification task for {name} ended. exception: {d.exception()}"
+                    )
 
             if not pending:
                 return
@@ -620,15 +776,67 @@ class InterfaceServer(ServerBase):
         v = [int(v) for v in ifname.replace("Interface", "").split("/")]
         m = await self.taish.get_module(str(v[0]))
         obj = None
+
+        index = v[2] - 1
         if v[1] == 0:  # hostif
-            obj = m.get_hostif(v[2] - 1)
+            obj = m.get_hostif(index)
         elif v[1] == 1:  # netif
-            obj = m.get_netif(v[2] - 1)
+            obj = m.get_netif(index)
 
         if with_module:
             return (obj, m)
         else:
             return obj
+
+    async def create_interface(self, ifname, config):
+        v = [int(v) for v in ifname.replace("Interface", "").split("/")]
+        m = await self.taish.get_module(str(v[0]))
+
+        index = v[2] - 1
+        if v[1] == 0:  # hostif
+            obj = await m.create_hostif(index)
+        elif v[1] == 1:  # netif
+            obj = await m.create_netif(index)
+
+        await self.reconcile_interface(ifname, obj, config)
+
+        await self.notif_task_q.put((ifname, obj))
+
+        self.oidmap[obj.oid] = obj
+
+        return obj, m
+
+    def get_platform_info(self, ifname, pin_mode=None):
+        info = self._platform_info.get(ifname)
+        if not info:
+            logger.warning(f"no platform info found for {ifname}")
+            return None
+
+        if pin_mode == None:
+            return info
+
+        if len(info) == 1:
+            return info[0]
+
+        for i in info:
+            if i["interface"]["pin-mode"] == pin_mode:
+                return i
+
+        logger.error(f"no platform info found for {ifname}")
+
+    def get_conflicting_ifnames(self, ifname, pin_mode):
+        info = self.get_platform_info(ifname, pin_mode)
+        if not info:
+            return []
+        return info["interface"].get("conflicts-with", [])
+
+    async def get_pin_mode(self, ifname):
+        prefix = "/goldstone-interfaces:interfaces/interface"
+        pin_mode = self.get_running_data(f"{prefix}[name='{ifname}']/config/pin-mode")
+        if pin_mode:
+            return pin_mode
+
+        return self.get_default("pin-mode", ifname)
 
     async def oper_cb_intf(self, xpath, counter_only, ifname, obj, module):
         i = {
@@ -640,7 +848,9 @@ class InterfaceServer(ServerBase):
         if len(xpath) == 3 and xpath[2][1] == "name":
             return i
 
-        p = self.platform_info.get(ifname)
+        obj = await self.ifname2taiobj(ifname)
+        pm = await obj.get("pin-mode")
+        p = self.get_platform_info(ifname, pm)
         if p:
             v = {}
             if "component" in p:
@@ -683,6 +893,7 @@ class InterfaceServer(ServerBase):
             tx_timing_mode,
             current_tx_timing_mode,
             oper_status,
+            pin_mode,
         ) = await obj.get_multiple(
             [
                 "provision-mode",
@@ -694,12 +905,14 @@ class InterfaceServer(ServerBase):
                 "tx-timing-mode",
                 "current-tx-timing-mode",
                 "oper-status",
+                "pin-mode",
             ]
         )
 
         i["state"]["admin-status"] = "DOWN" if prov_mode == "none" else "UP"
         i["state"]["oper-status"] = oper_status.upper()
         i["state"]["is-connected"] = connected != "oid:0x0"
+        i["state"]["pin-mode"] = pin_mode.upper()
 
         if signal_rate == "otu4":
             i["state"]["oper-status"] = (
@@ -777,6 +990,49 @@ class InterfaceServer(ServerBase):
             i["state"]["oper-status"] = "DOWN"
 
         return i
+
+    def get_default_mapping(self, module):
+        _m = {}
+        mapping = []
+        for netif in module.netifs:
+            _m[netif.index] = netif
+
+        for hostif in module.hostifs:
+            if hostif.index in _m:
+                netif = _m[hostif.index]
+                mapping.append({f"oid:0x{netif.oid:08x}": [f"oid:0x{hostif.oid:08x}"]})
+
+        return json.dumps(mapping)
+
+    async def get_new_mapping(self, module, ifname_to_exclude):
+        new_mapping = []
+        for v in json.loads(await module.get("tributary-mapping", json=True)):
+            if len(v) != 1:
+                logger.warning(f"invalid tributary-mapping item: {v}")
+                continue
+            for netif, hostif in v.items():
+                if len(hostif) != 1:
+                    logger.warning(f"invalid tributary-mapping item: {v}")
+                    continue
+                hostif = hostif[0]
+
+            obj = self.oidmap.get(int(netif.replace("oid:", ""), 0))
+            if not obj:
+                logger.warning(f"not found {netif}")
+                continue
+            netif = await self.taiobj2ifname(module.obj.location, 1, obj)
+
+            obj = self.oidmap.get(int(hostif.replace("oid:", ""), 0))
+            if not obj:
+                logger.warning(f"not found {hostif}")
+                continue
+            hostif = await self.taiobj2ifname(module.obj.location, 0, obj)
+
+            if ifname_to_exclude == netif or ifname_to_exclude == hostif:
+                logger.debug(f"removing entry {v} from the tributary-mapping attribute")
+                continue
+            new_mapping.append(v)
+        return new_mapping
 
     async def oper_cb(self, xpath, priv):
         counter_only = "counters" in xpath and "static-macsec" not in xpath
