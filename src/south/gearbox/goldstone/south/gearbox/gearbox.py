@@ -74,7 +74,10 @@ class GearboxServer(ServerBase):
         }
 
     def get_default_mapping(self, module):
-        return "[]"
+        mapping = []
+        for netif, hostif in zip(module.obj.netifs, module.obj.hostifs):
+            mapping.append({f"oid:0x{netif.oid:08x}": [f"oid:0x{hostif.oid:08x}"]})
+        return json.dumps(mapping)
 
     def get_default(self, key):
         ctx = self.sess.get_ly_ctx()

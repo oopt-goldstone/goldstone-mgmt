@@ -299,7 +299,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("macsec-static-key", ""),
-                ("tributary-mapping", "[]"),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
                 ("admin-status", "up"),
             ],
         )
@@ -341,7 +344,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("macsec-static-key", ""),
-                ("tributary-mapping", "[]"),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
                 ("admin-status", "down"),
             ],
         )
@@ -382,7 +388,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("macsec-static-key", ""),
-                ("tributary-mapping", "[]"),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
                 ("admin-status", "up"),
             ],
         )
@@ -425,7 +434,10 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("mtu", DEFAULT_MTU),
                 ("mru", DEFAULT_MTU),
                 ("macsec-static-key", ""),
-                ("tributary-mapping", "[]"),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
                 ("admin-status", "up"),
             ],
         )
