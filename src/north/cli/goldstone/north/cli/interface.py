@@ -199,6 +199,10 @@ def set_admin_status(session, ifnames, value):
     return _set(session, ifnames, "config/admin-status", value)
 
 
+def set_pin_mode(session, ifnames, value):
+    return _set(session, ifnames, "config/pin-mode", value)
+
+
 def set_fec(session, ifnames, value):
     return _set(session, ifnames, "ethernet/config/fec", value)
 
@@ -498,6 +502,35 @@ class AdminStatusCommand(ConfigCommand):
             return "admin-status down"
         elif v == "UP":
             return "admin-status up"
+
+
+class PinModeCommand(ConfigCommand):
+    def arguments(self):
+        if self.root.name != "no":
+            return ["pam4", "nrz"]
+
+    def exec(self, line):
+        if self.root.name == "no":
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            set_pin_mode(self.conn, self.context.ifnames, None)
+        else:
+            if len(line) != 1:
+                raise InvalidInput(
+                    f"usage: {self.name_all()} [{'|'.join(self.list())}]"
+                )
+            set_pin_mode(self.conn, self.context.ifnames, line[0].upper())
+
+    @staticmethod
+    def to_command(conn, data):
+        config = data.get("config")
+        if not config:
+            return
+        v = config.get("pin-mode")
+        if v == "PAM4":
+            return "pin-mode pam4"
+        elif v == "NRZ":
+            return "pin-mode nrz"
 
 
 class FECCommand(ConfigCommand):
@@ -887,6 +920,7 @@ class InterfaceContext(Context):
 
         self.add_command("shutdown", ShutdownCommand, add_no=True)
         self.add_command("admin-status", AdminStatusCommand, add_no=True)
+        self.add_command("pin-mode", PinModeCommand, add_no=True)
         self.add_command("fec", FECCommand, add_no=True)
         self.add_command(
             "speed",
