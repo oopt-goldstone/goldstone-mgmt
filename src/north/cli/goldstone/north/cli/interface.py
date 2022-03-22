@@ -752,7 +752,7 @@ class BreakoutCommand(ConfigCommand):
         config = dig_dict(data, ["ethernet", "breakout", "config"])
         if not config:
             return None
-        return breakout_yang_to_human(config)
+        return "breakout " + breakout_yang_to_human(config)
 
 
 class StaticMACSECCommand(ConfigCommand):
