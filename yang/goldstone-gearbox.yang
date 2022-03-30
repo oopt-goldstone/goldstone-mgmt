@@ -60,6 +60,40 @@ module goldstone-gearbox {
     }
   }
 
+  grouping gearbox-synce-reference-clock-config {
+    leaf name {
+      type string;
+    }
+    leaf reference-interface {
+      type gs-if:interface-ref;
+    }
+  }
+
+  grouping gearbox-synce-reference-clock-state {
+
+  }
+
+  grouping gearbox-synce-top {
+    container synce-reference-clocks {
+      list synce-reference-clock {
+        key "name";
+        leaf name {
+          type leafref {
+            path "../config/name";
+          }
+        }
+        container config {
+          uses gearbox-synce-reference-clock-config;
+        }
+        container state {
+          config false;
+          uses gearbox-synce-reference-clock-config;
+          uses gearbox-synce-reference-clock-state;
+        }
+      }
+    }
+  }
+
   grouping gearbox-config {
     leaf name {
       type string;
@@ -112,6 +146,8 @@ module goldstone-gearbox {
         }
 
         uses gearbox-connection-top;
+
+        uses gearbox-synce-top;
       }
     }
   }
