@@ -43,7 +43,17 @@ class IfChangeHandler(ChangeHandler):
             user["cap-cache"] = {}
 
         for name in self.tai_attr_name:
-            t = "netif" if isinstance(self.obj, taish.NetIf) else "hostif"
+            if isinstance(self.obj, taish.Module):
+                t = "module"
+            elif isinstance(self.obj, taish.NetIf):
+                t = "netif"
+            elif isinstance(self.obj, taish.HostIf):
+                t = "hostif"
+            else:
+                raise sysrepo.SysrepoInvalArgError(
+                    f"unsupported object type: {type(self.obj)}"
+                )
+
             cap = user["cap-cache"].get(f"{t}:{name}")
             if cap == None:
                 try:
@@ -647,16 +657,15 @@ class InterfaceServer(ServerBase):
             logger.error(f"module not found: {m_oid}")
             return
 
-        ifname = await self.taiobj2ifname(
-            loc, 1 if isinstance(obj, taish.NetIf) else 0, obj
-        )
+        ifname = await self.taiobj2ifname(loc, obj)
         if not ifname:
             return
 
         await self.notif_q.put({"ifname": ifname, "msg": msg, "obj": obj})
 
-    async def taiobj2ifname(self, loc, type_, obj):
+    async def taiobj2ifname(self, loc, obj):
         index = int(await obj.get("index"))
+        type_ = 1 if isinstance(obj, taish.NetIf) else 0
         return f"Interface{loc}/{type_}/{index+1}"
 
     async def notification_task(self):
@@ -1004,6 +1013,15 @@ class InterfaceServer(ServerBase):
 
         return json.dumps(mapping)
 
+    async def oid2ifname(self, module, oid):
+        if type(oid) == str:
+            oid = int(oid.replace("oid:", ""), 0)
+        obj = self.oidmap.get(oid)
+        if not obj:
+            return None
+        v = await self.taiobj2ifname(module.obj.location, obj)
+        return v
+
     async def get_new_mapping(self, module, ifname_to_exclude):
         new_mapping = []
         for v in json.loads(await module.get("tributary-mapping", json=True)):
@@ -1020,13 +1038,13 @@ class InterfaceServer(ServerBase):
             if not obj:
                 logger.warning(f"not found {netif}")
                 continue
-            netif = await self.taiobj2ifname(module.obj.location, 1, obj)
+            netif = await self.taiobj2ifname(module.obj.location, obj)
 
             obj = self.oidmap.get(int(hostif.replace("oid:", ""), 0))
             if not obj:
                 logger.warning(f"not found {hostif}")
                 continue
-            hostif = await self.taiobj2ifname(module.obj.location, 0, obj)
+            hostif = await self.taiobj2ifname(module.obj.location, obj)
 
             if ifname_to_exclude == netif or ifname_to_exclude == hostif:
                 logger.debug(f"removing entry {v} from the tributary-mapping attribute")
