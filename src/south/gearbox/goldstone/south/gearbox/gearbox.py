@@ -1,4 +1,4 @@
-from goldstone.lib.core import ServerBase
+from goldstone.lib.core import ServerBase, NoOp
 import libyang
 import asyncio
 import sysrepo
@@ -47,6 +47,39 @@ class UpdateTributaryMapping(GearboxChangeHandler):
         user["update-tributary-mapping"] = True
 
 
+class ReferenceClockNameHandler(GearboxChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+
+        n = len((await self.obj.get("pgmrclk-assignment")).split(","))
+        assert self.xpath[3][2][0][0] == "name"
+        name = int(self.xpath[3][2][0][1])
+        if not (name < n):
+            raise sysrepo.SysrepoInvalArgError(f"Invalid reference clock name: {name}")
+
+
+class ReferenceInterfaceHandler(GearboxChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        assert self.xpath[3][2][0][0] == "name"
+        self.clock_name = int(self.xpath[3][2][0][1])
+        self.tai_attr_name = ["pgmrclk-assignment"]
+
+    async def validate(self, user):
+        assignment = user.get("current-pgmrclk-assignment")
+        if not assignment:
+            assignment = (await self.obj.get("pgmrclk-assignment")).split(",")
+            user["current-pgmrclk-assignment"] = assignment
+
+        if self.type == "deleted":
+            assignment[self.clock_name] = "oid:0x0"
+        else:
+            obj = await self.server.ifserver.ifname2taiobj(self.change.value)
+            assignment[self.clock_name] = f"oid:0x{obj.oid:08x}"
+
+        self.value = [",".join(assignment)]
+
+
 class GearboxServer(ServerBase):
     def __init__(self, conn, interface_server):
         super().__init__(conn, "goldstone-gearbox")
@@ -66,6 +99,15 @@ class GearboxServer(ServerBase):
                             "client-interface": UpdateTributaryMapping,
                             "line-interface": UpdateTributaryMapping,
                             "config": UpdateTributaryMapping,
+                        }
+                    },
+                    "synce-reference-clocks": {
+                        "synce-reference-clock": {
+                            "name": ReferenceClockNameHandler,
+                            "config": {
+                                "name": NoOp,
+                                "reference-interface": ReferenceInterfaceHandler,
+                            },
                         }
                     },
                 }
@@ -225,17 +267,17 @@ class GearboxServer(ServerBase):
                         continue
                     hostif = hostif[0]
 
-                obj = self.ifserver.oidmap.get(int(netif.replace("oid:", ""), 0))
-                if not obj:
+                ifname = await self.ifserver.oid2ifname(m, netif)
+                if not ifname:
                     logger.warning(f"not found {netif}")
                     continue
-                netif = await self.ifserver.taiobj2ifname(m.obj.location, 1, obj)
+                netif = ifname
 
-                obj = self.ifserver.oidmap.get(int(hostif.replace("oid:", ""), 0))
-                if not obj:
+                ifname = await self.ifserver.oid2ifname(m, hostif)
+                if not ifname:
                     logger.warning(f"not found {hostif}")
                     continue
-                hostif = await self.ifserver.taiobj2ifname(m.obj.location, 0, obj)
+                hostif = ifname
 
                 connections.append(
                     {
@@ -245,6 +287,29 @@ class GearboxServer(ServerBase):
                 )
 
             g["connections"] = {"connection": connections}
+
+            clocks = []
+
+            assignment = await m.get("pgmrclk-assignment")
+
+            for i, v in enumerate(assignment.split(",")):
+                clock = {
+                    "name": str(i),
+                    "config": {
+                        "name": str(i),
+                    },
+                    "state": {
+                        "name": str(i),
+                    },
+                }
+
+                ifname = await self.ifserver.oid2ifname(m, v)
+                if ifname:
+                    clock["state"]["reference-interface"] = ifname
+
+                clocks.append(clock)
+
+            g["synce-reference-clocks"] = {"synce-reference-clock": clocks}
 
             gearboxes.append(g)
 

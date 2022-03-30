@@ -12,8 +12,7 @@ import time
 import itertools
 from goldstone.lib.core import ServerBase
 from concurrent.futures import ProcessPoolExecutor
-from taish import NetIf
-from taish import HostIf
+from taish import NetIf, HostIf, Module
 import base64
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
@@ -56,8 +55,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             sess.replace_config({}, "goldstone-interfaces")
             sess.apply_changes()
 
-        taish = mock.AsyncMock()
-
         self.set_logs = []
 
         async def set_(*args):
@@ -76,6 +73,13 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return "up"
             elif args[0] == "tributary-mapping":
                 return '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]'
+            elif args[0] == "pgmrclk-assignment":
+                if kwargs.get("json"):
+                    return '["oid:0x2000000010000", "oid:0x3000000010000"]'
+                else:
+                    return "oid:0x2000000010000,oid:0x3000000010000"
+            elif args[0] == "num-pgmrclk":
+                return "4"
 
         async def get(spec, *args, **kwargs):
             if args[0] in ["alarm-notification", "notify"]:
@@ -160,6 +164,12 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             m.short_name = "pcs-status"
             return m
 
+        async def get_attribute_capability(*args, **kwargs):
+            m = mock.MagicMock()
+            m.min = ""
+            m.max = ""
+            return m
+
         async def monitor(spec, *args, **kwargs):
             logger.debug(f"monitoring.. {args}, {kwargs}")
             await asyncio.sleep(1)
@@ -204,24 +214,29 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         def get_hostif(*args):
             return f(0x2000000010000, HostIf(None, None, None))
 
-        module = taish.get_module.return_value
+        module = mock.AsyncMock(spec=Module(None, None))
         module.monitor = monitor
         module.get = module_get
         module.set = set_
+        module.set_multiple = set_multiple
+        module.get_multiple = lambda *args, **kwargs: get_multiple(
+            Module(None, None), *args, **kwargs
+        )
         module.oid = 1
         module.get_netif = get_netif
         module.get_hostif = get_hostif
-        module.obj.location = "1"
+        module.get_attribute_capability = get_attribute_capability
         module.location = "1"
-        module.obj.netifs = [get_netif()]
-        module.obj.hostifs = [get_hostif()]
         module.netifs = [get_netif()]
         module.hostifs = [get_hostif()]
 
-        cap = module.get_attribute_capability.return_value
-        cap.min = ""
-        cap.max = ""
+        module.obj = mock.AsyncMock()
+        module.obj.location = "1"
+        module.obj.netifs = [get_netif()]
+        module.obj.hostifs = [get_hostif()]
 
+        taish = mock.AsyncMock()
+        taish.get_module.return_value = module
         taish.list.return_value = {"1": module}
 
         self.patchers = [
@@ -620,6 +635,15 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(connection[0]["client-interface"], "Interface1/0/1")
                 self.assertEqual(connection[0]["line-interface"], "Interface1/1/1")
 
+                clock = list(data["synce-reference-clocks"]["synce-reference-clock"])
+                self.assertEqual(len(clock), 2)
+                self.assertEqual(
+                    clock[0]["state"]["reference-interface"], "Interface1/0/1"
+                )
+                self.assertEqual(
+                    clock[1]["state"]["reference-interface"], "Interface1/1/1"
+                )
+
         await asyncio.to_thread(test_oper_cb)
         gbserver.stop()
         await asyncio.gather(*tasks)
@@ -959,6 +983,52 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("provision-mode", "none"),
                 ("fec-type", "rs"),
                 ("tx-timing-mode", "auto"),
+            ],
+        )
+
+    async def test_synce_reference_clocks(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+        gbserver = GearboxServer(self.conn, ifserver)
+
+        tasks = await gbserver.start()
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
+                )
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/synce-reference-clocks/synce-reference-clock[name='0']/config/name",
+                    "0",
+                )
+                sess.set_item(
+                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/synce-reference-clocks/synce-reference-clock[name='0']/config/reference-interface",
+                    "Interface1/1/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                    "Interface1/1/1",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+        gbserver.stop()
+        await asyncio.gather(*tasks)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("pgmrclk-assignment", "oid:0x3000000010000,oid:0x3000000010000"),
+                (
+                    "tributary-mapping",
+                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                ),
             ],
         )
 
