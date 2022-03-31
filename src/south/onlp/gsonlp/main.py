@@ -6,9 +6,15 @@ import signal
 import ctypes
 import onlp.onlp
 import json
+import re
 from pathlib import Path
 
 libonlp = onlp.onlp.libonlp
+
+
+class InvalidXPath(Exception):
+    pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,19 @@ class Server(object):
         logger.info(f"stop server")
         self.sess.stop()
         self.conn.disconnect()
+
+    async def parse_oper_req(self, xpath):
+        if xpath == "/goldstone-onlp:*":
+            return None
+        prefix = "/goldstone-onlp:components"
+        if not xpath.startswith(prefix):
+            raise InvalidXPath()
+        xpath = xpath[len(prefix) :]
+        if xpath == "" or xpath == "/component":
+            return None
+        c = re.search(r"/component\[state/type\=\'(?P<item>.+?)\'\]", xpath)
+        item = c.group("item")
+        return item
 
     def get_thermal_info(self):
         thermal = onlp.onlp.onlp_thermal_info()
@@ -367,11 +386,25 @@ class Server(object):
     async def oper_cb(self, sess, xpath, req_xpath, parent, priv):
         self.components = {"goldstone-onlp:components": {"component": []}}
         logger.debug(f"oper_cb: {xpath}, {req_xpath}")
-        self.get_thermal_info()
-        self.get_fan_info()
-        self.get_psu_info()
-        self.get_led_info()
-        self.get_sys_info()
+        item = await self.parse_oper_req(req_xpath)
+        if item == None:
+            self.get_thermal_info()
+            self.get_fan_info()
+            self.get_psu_info()
+            self.get_led_info()
+            self.get_sys_info()
+        elif item == "THERMAL":
+            self.get_thermal_info()
+        elif item == "FAN":
+            self.get_fan_info()
+        elif item == "PSU":
+            self.get_psu_info()
+        elif item == "LED":
+            self.get_led_info()
+        elif item == "SYS":
+            self.get_sys_info()
+        elif item == "PIU" or "SFP":
+            pass
         return self.components
 
     def send_notifcation(self, notif):

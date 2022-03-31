@@ -20,9 +20,9 @@ from .base import *
 
 KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 
-stdout = logging.getLogger("stdout")
-
 logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 
 class InterfaceGroupCommand(Command):
@@ -73,6 +73,38 @@ class VlanGroupCommand(Command):
         return "usage:\n" f" {self.parent.name} {self.name} details"
 
 
+class UfdGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.sonic = Sonic(context.conn)
+        self.ufd = self.sonic.ufd
+
+    def exec(self, line):
+        if len(line) == 0:
+            return self.ufd.show()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return " >> usage:\n" f" {self.parent.name} {self.name} "
+
+
+class PortchannelGroupCommand(Command):
+    def __init__(self, context, parent, name):
+        super().__init__(context, parent, name)
+        self.sonic = Sonic(context.conn)
+        self.pc = self.sonic.pc
+
+    def exec(self, line):
+        if len(line) == 0:
+            return self.pc.show()
+        else:
+            stderr.info(self.usage())
+
+    def usage(self):
+        return " >> usage:\n" f" {self.parent.name} {self.name} "
+
+
 class ArpGroupCommand(Command):
     def __init__(self, context, parent, name):
         super().__init__(context, parent, name)
@@ -98,7 +130,7 @@ class ArpGroupCommand(Command):
             raise InvalidInput(str(error))
 
         headers = ["Address", "HWaddress", "Iface"]
-        print(tabulate(rows, headers, tablefmt="plain"))
+        stdout.info(tabulate(rows, headers, tablefmt="plain"))
 
 
 class IPRouteShowCommand(Command):
@@ -125,7 +157,7 @@ class IPRouteShowCommand(Command):
                 else:
                     line = line + "is directly connected"
                 lines.append(line)
-            print("\n".join(lines))
+            stdout.info("\n".join(lines))
         except (KeyError, sr.errors.SysrepoNotFoundError) as error:
             raise InvalidInput(str(error))
 
@@ -164,7 +196,7 @@ class TransponderGroupCommand(Command):
             else:
                 return self.transponder.show_transponder(line[0])
         else:
-            print(self.usage())
+            stderr.info(self.usage())
 
     def exec_runconf(self, line):
         self.transponder.run_conf()
@@ -219,7 +251,7 @@ class AAAGroupCommand(Command):
         if len(line) == 0:
             return self.aaa.show_aaa()
         else:
-            print(self.usage())
+            stderr.info(self.usage())
 
     def usage(self):
         return "usage:\n" f" {self.parent.name} {self.name}"
@@ -234,7 +266,7 @@ class TACACSGroupCommand(Command):
         if len(line) == 0:
             return self.tacacs.show_tacacs()
         else:
-            print(self.usage())
+            stderr.info(self.usage())
 
     def usage(self):
         return "usage:\n" f" {self.parent.name} {self.name}"
@@ -248,6 +280,8 @@ class RunningConfigCommand(Command):
         "interface": Command,
         "aaa": Command,
         "mgmt-if": Command,
+        "ufd": Command,
+        "portchannel": Command,
     }
 
     def exec(self, line):
@@ -268,15 +302,23 @@ class RunningConfigCommand(Command):
             system.run_conf()
 
         elif module == "mgmt-if":
-            print("!")
+            stdout.info("!")
             system.mgmt_run_conf()
 
         elif module == "interface":
-            print("!")
+            stdout.info("!")
             sonic.port_run_conf()
 
+        elif module == "ufd":
+            stdout.info("!")
+            sonic.ufd_run_conf()
+
+        elif module == "portchannel":
+            stdout.info("!")
+            sonic.portchannel_run_conf()
+
         elif module == "vlan":
-            print("!")
+            stdout.info("!")
             sonic.vlan_run_conf()
 
 
@@ -285,6 +327,8 @@ class GlobalShowCommand(Command):
         "interface": InterfaceGroupCommand,
         "vlan": VlanGroupCommand,
         "arp": ArpGroupCommand,
+        "ufd": UfdGroupCommand,
+        "portchannel": PortchannelGroupCommand,
         "ip": IPGroupCommand,
         "datastore": Command,
         "tech-support": Command,
@@ -322,7 +366,7 @@ class GlobalShowCommand(Command):
             dss = list(DATASTORE_VALUES.keys())
             fmt = "default"
             if len(line) < 2:
-                print(f'usage: show datastore <XPATH> [{"|".join(dss)}] [json|]')
+                stderr.info(f'usage: show datastore <XPATH> [{"|".join(dss)}] [json|]')
                 return
 
             if len(line) == 2:
@@ -339,11 +383,11 @@ class GlobalShowCommand(Command):
             if fmt == "default" or fmt == "json":
                 pass
             else:
-                print(f"unsupported format: {fmt}. supported: {json}")
+                stderr.info(f"unsupported format: {fmt}. supported: {json}")
                 return
 
             if ds not in dss:
-                print(f"unsupported datastore: {ds}. candidates: {dss}")
+                stderr.info(f"unsupported datastore: {ds}. candidates: {dss}")
                 return
 
             sess.switch_datastore(ds)
@@ -356,13 +400,13 @@ class GlobalShowCommand(Command):
             try:
                 data = sess.get_data(line[1], include_implicit_defaults=defaults)
             except Exception as e:
-                print(e)
+                stderr.info(e)
                 return
 
             if fmt == "json":
-                print(json.dumps(data), indent=4)
+                stdout.info(json.dumps(data), indent=4)
             else:
-                print(data)
+                stdout.info(data)
 
     def get_version(self, line):
         conn = self.context.conn
@@ -370,7 +414,7 @@ class GlobalShowCommand(Command):
             xpath = "/goldstone-system:system/state/software-version"
             sess.switch_datastore("operational")
             data = sess.get_data(xpath)
-            print(data["system"]["state"]["software-version"])
+            stdout.info(data["system"]["state"]["software-version"])
 
     def display_log(self, line):
         log_filter = ["sonic", "tai", "onlp"]
@@ -433,7 +477,7 @@ class GlobalShowCommand(Command):
             pydoc.pager(log)
 
         except ApiException as e:
-            print("Found exception in reading the logs : {}".format(str(e)))
+            stderr.info("Found exception in reading the logs : {}".format(str(e)))
 
     def tech_support(self, line):
         datastore_list = ["operational", "running", "candidate", "startup"]
@@ -442,6 +486,8 @@ class GlobalShowCommand(Command):
             "/goldstone-vlan:vlan/VLAN_MEMBER/VLAN_MEMBER_LIST",
             "/goldstone-interfaces:interfaces/interface",
             "/goldstone-mgmt-interfaces:interfaces/interface",
+            "/goldstone-uplink-failure-detection:ufd-groups/ufd-group",
+            "/goldstone-portchannel:portchannel",
             "/goldstone-routing:routing/static-routes/ipv4/route",
             "/goldstone-tai:modules",
             "/goldstone-aaa:aaa",
@@ -456,21 +502,21 @@ class GlobalShowCommand(Command):
         transponder.tech_support()
         system.tech_support()
         onlp_component.tech_support()
-        print("\nshow datastore:\n")
+        stdout.info("\nshow datastore:\n")
 
         with self.context.conn.start_session() as session:
             for ds in datastore_list:
                 session.switch_datastore(ds)
-                print("{} DB:\n".format(ds))
+                stdout.info("{} DB:\n".format(ds))
                 for index in range(len(xpath_list)):
                     try:
-                        print(f"{xpath_list[index]} : \n")
-                        print(session.get_data(xpath_list[index]))
-                        print("\n")
+                        stdout.info(f"{xpath_list[index]} : \n")
+                        stdout.info(session.get_data(xpath_list[index]))
+                        stdout.info("\n")
                     except Exception as e:
-                        print(e)
+                        stderr.info(e)
 
-        print("\nRunning Config:\n")
+        stdout.info("\nRunning Config:\n")
         self(["running-config"])
 
     def usage(self):
@@ -481,12 +527,14 @@ class GlobalShowCommand(Command):
             f" {self.name} ip route\n"
             f" {self.name} transponder (<transponder_name>|summary)\n"
             f" {self.name} chassis-hardware (fan|psu|led|transceiver|thermal|system|all)\n"
+            f" {self.name} ufd \n"
+            f" {self.name} portchannel \n"
             f" {self.name} logging [sonic|tai|onlp|] [<num_lines>|]\n"
             f" {self.name} version \n"
             f" {self.name} aaa \n"
             f" {self.name} tacacs \n"
             f" {self.name} datastore <XPATH> [running|startup|candidate|operational|] [json|]\n"
-            f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|]\n"
+            f" {self.name} running-config [transponder|onlp|vlan|interface|aaa|ufd|portchannel]\n"
             f" {self.name} tech-support"
         )
 
@@ -514,7 +562,7 @@ class ClearArpGroupCommand(Command):
     def exec(self, line):
         conn = self.context.root().conn
         with conn.start_session() as sess:
-            print(sess.rpc_send("/goldstone-routing:clear_arp", {}))
+            stdout.info(sess.rpc_send("/goldstone-routing:clear_arp", {}))
 
 
 class ClearInterfaceGroupCommand(Command):
@@ -530,7 +578,7 @@ class ClearInterfaceGroupCommand(Command):
             if len(line) == 1:
                 if line[0] == "counters":
                     sess.rpc_send("/goldstone-interfaces:clear_counters", {})
-                    print("Interface counters are cleared.\n")
+                    stdout.info("Interface counters are cleared.\n")
             else:
                 raise InvalidInput(self.usage())
 
@@ -556,6 +604,14 @@ class ClearDatastoreGroupCommand(Command):
                 if line[0] == "all":
                     ctx = root.conn.get_ly_ctx()
                     modules = [m.name() for m in ctx if "goldstone" in m.name()]
+                    # interface model may has dependency to other models (e.g. vlan, ufd )
+                    # we need to the clear interface model lastly
+                    # TODO invent cleaner way when we have more dependency among models
+                    try:
+                        modules.remove("goldstone-interfaces")
+                        modules.append("goldstone-interfaces")
+                    except ValueError:
+                        pass
                 else:
                     modules = [line[0]]
 

@@ -49,8 +49,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
+    fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format=fmt)
+        # pyroute2 debug log is too verbose. change it to INFO level
+        logging.getLogger("pyroute2").setLevel(logging.INFO)
     else:
         logging.basicConfig(level=logging.INFO)
     asyncio.run(_main())

@@ -5,9 +5,14 @@ from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
 from .common import sysrepo_wrap
 import re
+import logging
+
+logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 
-class Mgmt_CLI(Object):
+class ManagementInterface(Object):
     def __init__(self, conn, parent, ifname):
         super().__init__(parent)
         self.session = conn.start_session()
@@ -73,13 +78,14 @@ class Mgmt_CLI(Object):
         def show(args):
             if len(args) != 0:
                 return parent.show(args)
+            self.mgmt.show(ifname)
 
     def __str__(self):
         return "interface({})".format(self.name)
 
     def no_usage(self):
         no_keys = list(self.no_dict.keys())
-        print(f'usage: no [{"|".join(no_keys)}]')
+        stderr.info(f'usage: no [{"|".join(no_keys)}]')
 
     def usage(self):
         return "usage:\n ip address A.B.C.D/<mask>\n ip route <dst_prefix>\n"

@@ -4,6 +4,11 @@ from .common import sysrepo_wrap, print_tabular
 from natsort import natsorted
 import json
 import re
+import logging
+
+logger = logging.getLogger(__name__)
+stdout = logging.getLogger("stdout")
+stderr = logging.getLogger("stderr")
 
 
 class Mgmtif(object):
@@ -70,6 +75,9 @@ class Mgmtif(object):
 
         self.sr_op.delete_data(f"{xpath}")
 
+    def show(self, ifname):
+        stdout.info(self.sr_op.get_data(self.xpath_mgmt(ifname), "operational"))
+
     def run_conf(self):
         mgmt_dict = {}
         try:
@@ -84,7 +92,7 @@ class Mgmtif(object):
                 "/goldstone-mgmt-interfaces:interfaces/interface"
             )
             mgmt_intf = list(mgmt_intf_dict["interfaces"]["interface"])[0]
-            print(f"interface {mgmt_intf['name']}")
+            stdout.info(f"interface {mgmt_intf['name']}")
         except (sr.SysrepoNotFoundError, KeyError) as e:
             return
 
@@ -95,7 +103,7 @@ class Mgmtif(object):
                 ip_addr = item["ip"]
                 ip_addr += "/" + str(item["prefix-length"])
                 mgmt_dict.update({"ip_addr": ip_addr})
-                print(f"  ip address {mgmt_dict['ip_addr']}")
+                stdout.info(f"  ip address {mgmt_dict['ip_addr']}")
         except Exception as e:
             pass
         try:
@@ -103,7 +111,7 @@ class Mgmtif(object):
                 "/goldstone-routing:routing/static-routes/ipv4/route"
             )
         except sr.SysrepoNotFoundError as e:
-            print("!")
+            stdout.info("!")
             return
         try:
             route_conf_list = list(
@@ -112,11 +120,11 @@ class Mgmtif(object):
             for route in route_conf_list:
                 dst_addr = route["destination-prefix"]
                 mgmt_dict.update({"dst_addr": dst_addr})
-                print(f"  ip route {mgmt_dict['dst_addr']}")
+                stdout.info(f"  ip route {mgmt_dict['dst_addr']}")
         except Exception as e:
-            print("!")
+            stdout.info("!")
             return
-        print("!")
+        stdout.info("!")
 
 
 class TACACS(object):
@@ -177,7 +185,7 @@ class TACACS(object):
                 ]
             )
 
-        print(tabulate(rows, headers, tablefmt="pretty"))
+        stdout.info(tabulate(rows, headers, tablefmt="pretty"))
 
 
 class AAA(object):
@@ -228,7 +236,7 @@ class System(object):
         server_run_conf = ["address", "timeout"]
         tacacs_run_conf = ["port", "secret-key"]
         aaa_run_conf = ["authentication"]
-        print("!")
+        stdout.info("!")
 
         self.mgmt_run_conf()
 
@@ -267,28 +275,28 @@ class System(object):
                         elif (tacacs_dict["port"] is None) and (
                             tacacs_dict["timeout"] is None
                         ):
-                            print(
+                            stdout.info(
                                 f" tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']}"
                             )
                         elif tacacs_dict["port"] is None:
-                            print(
+                            stdout.info(
                                 f" tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} timeout {tacacs_dict['timeout']}"
                             )
                         elif tacacs_dict["timeout"] is None:
-                            print(
+                            stdout.info(
                                 f" tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']}"
                             )
                         else:
-                            print(
+                            stdout.info(
                                 f" tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']} timeout {tacacs_dict['timeout']}"
                             )
         except Exception as e:
             return
-        print("exit")
+        stdout.info("exit")
         try:
             aaa_data = self.sr_op.get_data("/goldstone-aaa:aaa/authentication")
         except sr.SysrepoNotFoundError as e:
-            print(e)
+            stderr.info(e)
         try:
             conf_data = aaa_data["aaa"]["authentication"]["config"]
             auth_method_list = conf_data.get("authentication-method")
@@ -296,18 +304,18 @@ class System(object):
             if auth_method is None:
                 pass
             elif auth_method == "local":
-                print(f" aaa authentication login default local ")
+                stdout.info(f" aaa authentication login default local ")
             else:
-                print(f" aaa authentication login default group tacacs ")
+                stdout.info(f" aaa authentication login default group tacacs ")
         except Exception as e:
             return
-        print("exit")
-        print("!")
+        stdout.info("exit")
+        stdout.info("!")
 
     def tech_support(self):
-        print("AAA details")
+        stdout.info("AAA details")
         self.aaa.show_aaa()
-        print("Tacacs server details")
+        stdout.info("Tacacs server details")
         self.tacacs.show_tacacs()
 
 

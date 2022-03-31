@@ -1,4 +1,5 @@
 # sysrepo patches
+sysrepo-python/support_getting_detailed_error_info.patch
 sysrepo-python/add_get_module_access_and_set_module_access.patch
 sysrepo/sysrepoctl-install.patch
 sysrepo/skip_test.patch
@@ -43,3 +44,6 @@ nss/0006-fix-compiling-warning-about-token-dereference.patch
 sonic-py-swsssdk/comment_out_getting_lag_name_map.patch
 sysrepo/add_debug_log_in_locking_methods.patch
 sysrepo/add_log.patch
+libyang/revert_a_fix_not_working_for_debian10.patch
+sysrepo/sysrepoctl_install.patch
+sysrepo/revert_packages_bugfix_exact_main_package_version_dependency.patch

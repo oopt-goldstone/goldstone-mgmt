@@ -1,5 +1,5 @@
 module goldstone-tai {
-  yang-version 1.1;
+  yang-version "1";
   namespace "http://goldstone.net/yang/tai";
   prefix gs-tai;
 
@@ -727,6 +727,9 @@ module goldstone-tai {
       description
         "list of valid attribute name stored in the event";
     }
+    leaf module-name {
+      type string;
+    }
     uses tai-module-config;
     uses tai-module-state;
   }
@@ -736,6 +739,9 @@ module goldstone-tai {
       type string;
       description
         "list of valid attribute name stored in the event";
+    }
+    leaf module-name {
+      type string;
     }
     uses tai-host-interface-config;
     uses tai-host-interface-state;
@@ -747,6 +753,9 @@ module goldstone-tai {
       description
         "list of valid attribute name stored in the event";
     }
+    leaf module-name {
+      type string;
+    }
     uses tai-host-interface-config;
     uses tai-host-interface-state;
   }
@@ -757,6 +766,9 @@ module goldstone-tai {
       description
         "list of valid attribute name stored in the event";
     }
+    leaf module-name {
+      type string;
+    }
     uses tai-network-interface-config;
     uses tai-network-interface-state;
   }
@@ -766,6 +778,9 @@ module goldstone-tai {
       type string;
       description
         "list of valid attribute name stored in the event";
+    }
+    leaf module-name {
+      type string;
     }
     uses tai-network-interface-config;
     uses tai-network-interface-state;

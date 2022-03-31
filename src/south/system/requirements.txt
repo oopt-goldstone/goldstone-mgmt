@@ -1,4 +1,4 @@
-pyroute2
+pyroute2==0.5.19
 tabulate
 dbus-python
 kubernetes_asyncio

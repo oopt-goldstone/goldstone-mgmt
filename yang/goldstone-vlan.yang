@@ -1,7 +1,9 @@
 module goldstone-vlan {
+
+  yang-version "1";
+
   namespace "http://goldstone.net/yang/goldstone-vlan"; 
   prefix gs-vlan;
-  yang-version 1.1;
 
   import goldstone-interfaces {
     prefix gs-if;
@@ -59,9 +61,7 @@ module goldstone-vlan {
         }
 
         leaf-list members {
-          type leafref {
-            path "/gs-if:interfaces/gs-if:interface/gs-if:name";
-          }
+          type gs-if:interface-ref;
         }
       }
     }

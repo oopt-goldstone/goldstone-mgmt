@@ -1,5 +1,7 @@
 module goldstone-interfaces {
-  yang-version 1.1;
+
+  yang-version "1";
+
   namespace "http://goldstone.net/yang/goldstone-interfaces";
   prefix gs-if;
 
@@ -59,6 +61,11 @@ module goldstone-interfaces {
   identity SPEED_10GB {
     base ETHERNET_SPEED;
     description "10 Gbps Ethernet";
+  }
+
+  identity SPEED_20GB {
+    base ETHERNET_SPEED;
+    description "20 Gbps Ethernet";
   }
 
   identity SPEED_25GB {
@@ -137,9 +144,7 @@ module goldstone-interfaces {
         must "not(../num-channels) and not(../channel-speed)" {
           error-message "Sub-interface should not have num-channels and channel-speed configured";
         }
-        type leafref {
-          path "/gs-if:interfaces/gs-if:interface/gs-if:name";
-        }
+        type interface-ref;
       }
     }
   }
@@ -276,6 +281,73 @@ module goldstone-interfaces {
           "RFC 2863: The Interfaces Group MIB - ifAlias";
       }
 
+      leaf fec {
+        when "not (../auto-nego = 'yes')";
+        type enumeration {
+          enum fc {
+            value 1;
+          }
+          enum rs {
+            value 2;
+          }
+          enum none {
+            value 3;
+          }
+        }
+      }
+     
+      leaf auto-nego{
+        type enumeration{
+          enum yes{
+            value 1;
+          }
+          enum no{
+            value 2;
+          }
+        }
+      }
+
+      leaf interface-type{
+         when "not (../auto-nego = 'yes')";
+         type enumeration{
+           enum SR{
+            value 1;
+         }
+           enum SR2{
+            value 2;
+         }
+           enum SR4{
+            value 3;
+         }
+           enum CR{
+            value 4;
+         }
+           enum CR2{
+            value 5;
+         }
+           enum CR4{
+            value 6;
+         }
+           enum LR{
+            value 7;
+         }
+           enum LR2{
+            value 8;
+         }
+           enum LR4{
+            value 9;
+         }
+           enum KR{
+            value 10;
+         }
+           enum KR2{
+            value 11;
+         }
+           enum KR4{
+            value 12;
+         }
+       }  
+    }
       leaf admin-status {
         type enumeration {
           enum up {
@@ -334,8 +406,9 @@ module goldstone-interfaces {
       }
 
       leaf speed {
+        when "not (../auto-nego = 'yes')";
         type yang:gauge64 {
-               range "1000|10000|25000|40000|50000|100000|400000" {
+               range "1000|10000|20000|25000|40000|50000|100000|400000" {
                        error-message "Invalid Ethernet interface speed";
                        error-app-tag port-speed-invalid;
                }
