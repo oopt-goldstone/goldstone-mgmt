@@ -18,6 +18,12 @@ def gbxpath(name):
     return f"{XPATH}[name='{name}']"
 
 
+def gb_ref_clock_xpath(gbname, name):
+    return (
+        f"{gbxpath(gbname)}/synce-reference-clocks/synce-reference-clock[name='{name}']"
+    )
+
+
 class AdminStatusCommand(Command):
     def arguments(self):
         if self.root.name != "no":
@@ -181,8 +187,8 @@ class ConnectionCommand(Command):
         )
         v = self.conn.get_operational(xpath, {}, strip=False)
         interfaces = v.get("interfaces", {}).get("interface", [])
-        return (
-            i["name"] for i in interfaces if kind in i.get("component-connection", {})
+        return natsorted(
+            [i["name"] for i in interfaces if kind in i.get("component-connection", {})]
         )
 
     def client_interfaces(self):
@@ -214,6 +220,108 @@ class EnableFlexibleConnectionCommand(Command):
         self.conn.apply()
 
 
+class ReferenceInterfaceCommand(Command):
+    def arguments(self):
+        gbname = self.context.parent.name
+        xpath = (
+            "/goldstone-interfaces:interfaces"
+            f"/interface[state/goldstone-gearbox:associated-gearbox='{gbname}']/name"
+        )
+        v = self.conn.get_operational(xpath, {}, strip=False)
+        return natsorted(
+            [i["name"] for i in v.get("interfaces", {}).get("interface", [])]
+        )
+
+    def exec(self, line):
+        gbname = self.context.parent.name
+        name = self.context.name
+        parent_xpath = gbxpath(gbname)
+        xpath = gb_ref_clock_xpath(gbname, name)
+
+        if self.root.name == "no":
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            self.conn.delete(f"{xpath}/config/reference-interface")
+        else:
+            if len(line) != 1:
+                raise InvalidInput(
+                    f"usage: {self.name_all()} [{'|'.join(self.list())}]"
+                )
+            ifname = line[0]
+            self.conn.set(f"{parent_xpath}/config/name", gbname)
+            self.conn.set(f"{xpath}/config/name", name)
+            self.conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
+                ifname,
+            )
+            self.conn.set(f"{xpath}/config/reference-interface", ifname)
+        self.conn.apply()
+
+
+class SyncERefClockContext(Context):
+    def __init__(self, parent: Context, name: str):
+        self.name = name
+        super().__init__(parent)
+        self.add_command("reference-interface", ReferenceInterfaceCommand, add_no=True)
+
+        @self.command(parent.get_completer("show"))
+        def show(args):
+            if len(args) != 0:
+                parent.exec(f"show {' '.join(args)}")
+            else:
+                data = self.conn.get_operational(
+                    gb_ref_clock_xpath(self.parent.name, self.name),
+                    {},
+                    one=True,
+                )
+
+                state = data.get("state", {})
+                cc = state.get("component-connection", {})
+                dpll = cc.get("dpll")
+                ref = cc.get("input-reference")
+                if dpll and ref:
+                    connected_to = f"dpll({dpll})/input-reference({ref})"
+                else:
+                    connected_to = "-"
+
+                stdout.info(
+                    tabulate(
+                        [
+                            (
+                                "reference interface",
+                                state.get("reference-interface", "-"),
+                            ),
+                            ("connected to", connected_to),
+                        ]
+                    )
+                )
+
+    def __str__(self):
+        return f"synce-reference-clock({self.name})"
+
+
+class SyncERefClockCommand(Command):
+    def arguments(self):
+        data = self.conn.get_operational(
+            f"/goldstone-gearbox:gearboxes/gearbox[name='{self.context.name}']",
+            {},
+            one=True,
+        )
+        clocks = data.get("synce-reference-clocks", {}).get("synce-reference-clock", [])
+        return natsorted([c["name"] for c in clocks])
+
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput(f"usage: {self.name_all()} <name>")
+
+        if self.root.name != "no":
+            return SyncERefClockContext(self.context, line[0])
+        else:
+            xpath = gb_ref_clock_xpath(self.context.name, line[0])
+            self.conn.delete(xpath)
+            self.conn.apply()
+
+
 class GearboxContext(Context):
     def __init__(self, parent: Context, name: str):
         self.name = name
@@ -224,6 +332,7 @@ class GearboxContext(Context):
             "enable-flexible-connection", EnableFlexibleConnectionCommand, add_no=True
         )
         self.add_command("connection", ConnectionCommand, add_no=True)
+        self.add_command("synce-reference-clock", SyncERefClockCommand, add_no=True)
 
         @self.command(parent.get_completer("show"))
         def show(args):
@@ -247,6 +356,7 @@ class GearboxContext(Context):
                 stdout.info(tabulate(rows))
 
                 stdout.info("")
+                stdout.info("Interface connection information:")
 
                 connections = []
 
@@ -258,7 +368,46 @@ class GearboxContext(Context):
                         (c["client-interface"], "<---->", c["line-interface"])
                     )
 
-                stdout.info(tabulate(connections, ["client", "", "line"]))
+                stdout.info(
+                    tabulate(
+                        connections,
+                        ["client-interface", "", "line-interface"],
+                    )
+                )
+
+                stdout.info("")
+                stdout.info("SyncE reference clock information:")
+
+                clocks = []
+
+                for c in natsorted(
+                    data.get("synce-reference-clocks", {}).get(
+                        "synce-reference-clock", []
+                    ),
+                    key=lambda v: v["name"],
+                ):
+                    cc = c["state"].get("component-connection", {})
+                    dpll = cc.get("dpll")
+                    ref = cc.get("input-reference")
+                    if dpll and ref:
+                        connected_to = f"dpll({dpll})/input-reference({ref})"
+                    else:
+                        connected_to = "-"
+
+                    clocks.append(
+                        [
+                            c["name"],
+                            c["state"].get("reference-interface", "-"),
+                            connected_to,
+                        ]
+                    )
+
+                stdout.info(
+                    tabulate(
+                        clocks,
+                        ["clock", "reference interface", "connected to"],
+                    )
+                )
 
     def __str__(self):
         return f"gearbox({self.name})"
@@ -333,6 +482,18 @@ class Run(Command):
                     f"  connection {conn['client-interface']} {conn['line-interface']}"
                 )
                 stdout.info(f"    quit")
+
+            clocks = d.get("synce-reference-clocks", {}).get(
+                "synce-reference-clock", []
+            )
+
+            for clock in clocks:
+                c = clock.get("config", {})
+                stdout.info(f"  synce-reference-clocks {clock['name']}")
+                if "reference-interface" in c:
+                    stdout.info(f"    reference-interface {c['reference-interface']}")
+                stdout.info(f"    quit")
+
             stdout.info(f"  quit")
 
 
