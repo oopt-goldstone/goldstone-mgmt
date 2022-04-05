@@ -147,25 +147,25 @@ pipeline {
     stage('Test') {
       failFast true
       parallel {
-//        stage('test south SONiC on amd64') {
-//          when {
-//            branch pattern: "^PR.*", comparator: "REGEXP"
-//            environment name: 'SKIP', value: '0'
-//          }
-//          environment {
-//            ARCH = 'amd64'
-//          }
-//          stages {
-//            stage('Test') {
-//              steps {
-//                sh 'make tester'
-//                timeout(time: 30, unit: 'MINUTES') {
-//                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthSONiC"
-//                }
-//              }
-//            }
-//          }
-//        }
+        stage('test south SONiC on amd64') {
+          when {
+            branch pattern: "^PR.*", comparator: "REGEXP"
+            environment name: 'SKIP', value: '0'
+          }
+          environment {
+            ARCH = 'amd64'
+          }
+          stages {
+            stage('Test') {
+              steps {
+                sh 'make tester'
+                timeout(time: 30, unit: 'MINUTES') {
+                  sh "docker run -v /var/run/docker.sock:/var/run/docker.sock -e GS_TEST_HOST=${params.DEVICE} -t -v `pwd`:`pwd` -w `pwd` gs-test/gs-mgmt-test:latest-amd64 python3 -m ci.tools.test -f -v TestSouthSONiC"
+                }
+              }
+            }
+          }
+        }
         stage('test south TAI, ONLP and system on amd64') {
           when {
             branch pattern: "^PR.*", comparator: "REGEXP"
