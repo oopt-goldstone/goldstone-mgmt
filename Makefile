@@ -17,6 +17,7 @@ GS_MGMT_TAI_IMAGE     ?= gs-mgmt-south-tai
 GS_MGMT_ONLP_IMAGE    ?= gs-mgmt-south-onlp
 GS_MGMT_SYSTEM_IMAGE  ?= gs-mgmt-south-system
 GS_MGMT_GEARBOX_IMAGE ?= gs-mgmt-south-gearbox
+GS_MGMT_DPLL_IMAGE    ?= gs-mgmt-south-dpll
 GS_MGMT_CLI_IMAGE     ?= gs-mgmt-north-cli
 GS_MGMT_SNMP_IMAGE    ?= gs-mgmt-north-snmp
 GS_MGMT_SNMPD_IMAGE   ?= gs-mgmt-snmpd
@@ -65,7 +66,7 @@ host-packages:
 
 images: south-images north-images xlate-images
 
-south-images: south-sonic south-tai south-onlp south-system south-gearbox
+south-images: south-sonic south-tai south-onlp south-system south-gearbox south-dpll
 
 north-images: north-cli north-snmp north-netconf north-notif
 
@@ -86,6 +87,9 @@ south-tai:
 
 south-gearbox:
 	IMAGE_NAME=$(GS_MGMT_GEARBOX_IMAGE) DOCKER_FILE=docker/south-gearbox.Dockerfile $(MAKE) image
+
+south-dpll:
+	IMAGE_NAME=$(GS_MGMT_DPLL_IMAGE) DOCKER_FILE=docker/south-dpll.Dockerfile $(MAKE) image
 
 south-onlp:
 	IMAGE_NAME=$(GS_MGMT_ONLP_IMAGE) DOCKER_FILE=docker/south-onlp.Dockerfile $(MAKE) image
@@ -139,7 +143,7 @@ lint:
 	scripts/gs-yang.py --lint south-gearbox south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
 	grep -rnI 'print(' src || exit 0 && exit 1
 
-unittest: unittest-lib unittest-cli unittest-gearbox unittest-openconfig unittest-tai unittest-sonic
+unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-sonic
 	cd src/south/sonic && make proto
 	scripts/gs-yang.py --install south-sonic south-tai --search-dirs yang
 	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
@@ -163,6 +167,10 @@ unittest-cli:
 unittest-gearbox:
 	scripts/gs-yang.py --install south-gearbox --search-dirs yang
 	cd src/south/gearbox    && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+
+unittest-dpll:
+	scripts/gs-yang.py --install south-dpll --search-dirs yang
+	cd src/south/dpll && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 
 unittest-openconfig:
 	scripts/gs-yang.py --install xlate-oc south-sonic --search-dirs yang sm/openconfig
