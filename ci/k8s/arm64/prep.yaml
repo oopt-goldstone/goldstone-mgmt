@@ -10,7 +10,7 @@ spec:
             - name: prep-sysrepo
               image: docker.io/gs-test/gs-mgmt:latest-arm64
               imagePullPolicy: IfNotPresent
-              command: ["gs-yang.py", "--install", "south-onlp", "south-gearbox", "south-tai", "south-system", "xlate-oc"]
+              command: ["gs-yang.py", "--install", "south-onlp", "south-gearbox", "south-dpll", "south-tai", "south-system", "xlate-oc"]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm

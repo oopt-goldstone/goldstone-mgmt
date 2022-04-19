@@ -1,0 +1,71 @@
+module goldstone-dpll {
+  yang-version "1";
+
+  namespace "http://goldstone.net/yang/goldstone-dpll";
+  prefix gs-dpll;
+
+  organization
+    "Goldstone";
+
+  description
+    "This module contains a collection of YANG definitions for
+     managing DPLLs.";
+
+  revision 2022-04-19 {
+    description
+      "Initial version.";
+    reference
+      "0.1.0";
+  }
+
+  grouping dpll-config {
+    leaf name {
+      type string;
+    }
+    leaf mode {
+      type enumeration {
+        enum unknown;
+        enum freerun;
+        enum forced-holdover;
+        enum forced-reference-lock;
+        enum automatic;
+        enum nco;
+      }
+    }
+  }
+
+  grouping dpll-state {
+    leaf state {
+      type enumeration {
+        enum freerun;
+        enum holdover;
+        enum fast-lock;
+        enum acquiring;
+        enum lock;
+      }
+    }
+  }
+
+  grouping dpll-top {
+    container dplls {
+      list dpll {
+        key "name";
+        leaf name {
+          type leafref {
+            path "../config/name";
+          }
+        }
+        container config {
+          uses dpll-config;
+        }
+        container state {
+          config false;
+          uses dpll-config;
+          uses dpll-state;
+        }
+      }
+    }
+  }
+
+  uses dpll-top;
+}

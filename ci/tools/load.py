@@ -24,7 +24,7 @@ def main(host, username, password, arch, image_prefix, image_tag):
         if arch == "amd64":
             ssh(cli, "systemctl restart usonic")
         elif arch == "arm64":
-            ssh(cli, "systemctl restart tai-gearbox")
+            ssh(cli, "systemctl restart tai-gearbox tai-dpll")
 
         # restart TAI service
         ssh(cli, "systemctl restart tai || true")  # can fail
@@ -43,6 +43,7 @@ def main(host, username, password, arch, image_prefix, image_tag):
             apps.append("south-sonic")
         elif arch == "arm64":
             apps.append("south-gearbox")
+            apps.append("south-dpll")
 
         for app in apps:
             ssh(cli, f"gs-mgmt.py stop {app} || true")  # can fail
@@ -71,6 +72,7 @@ def main(host, username, password, arch, image_prefix, image_tag):
             images.append("gs-mgmt-south-sonic")
         elif arch == "arm64":
             images.append("gs-mgmt-south-gearbox")
+            images.append("gs-mgmt-south-dpll")
 
         images = " ".join(f"{image_prefix}{name}:{image_tag}" for name in images)
 
@@ -148,6 +150,7 @@ def main(host, username, password, arch, image_prefix, image_tag):
             check_pod(cli, "south-sonic")
         elif arch == "arm64":
             check_pod(cli, "south-gearbox")
+            check_pod(cli, "south-dpll")
 
         check_pod(cli, "south-onlp")
         check_pod(cli, "south-tai")
