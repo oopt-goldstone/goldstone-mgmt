@@ -18,6 +18,12 @@ module goldstone-dpll {
       "0.1.0";
   }
 
+  typedef dpll-input-reference-ref {
+    type leafref {
+      path "/gs-dpll:dplls/gs-dpll:dpll/gs-dpll:dpll-input-references/gs-dpll:dpll-input-reference/gs-dpll:name";
+    }
+  }
+
   grouping dpll-config {
     leaf name {
       type string;
@@ -44,6 +50,43 @@ module goldstone-dpll {
         enum lock;
       }
     }
+    leaf selected-reference {
+      type dpll-input-reference-ref;
+    }
+  }
+
+  grouping dpll-input-references-config {
+    leaf name {
+      type string;
+    }
+    leaf priority {
+      type uint8;
+    }
+  }
+
+  grouping dpll-input-references-state {
+
+  }
+
+  grouping dpll-input-reference-top {
+    container dpll-input-references {
+      list dpll-input-reference {
+        key "name";
+        leaf name {
+          type leafref {
+            path "../config/name";
+          }
+        }
+        container config {
+          uses dpll-input-references-config;
+        }
+        container state {
+          config false;
+          uses dpll-input-references-config;
+          uses dpll-input-references-state;
+        }
+      }
+    }
   }
 
   grouping dpll-top {
@@ -63,6 +106,8 @@ module goldstone-dpll {
           uses dpll-config;
           uses dpll-state;
         }
+
+        uses dpll-input-reference-top;
       }
     }
   }

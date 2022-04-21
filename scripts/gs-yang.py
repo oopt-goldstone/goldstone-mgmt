@@ -26,6 +26,7 @@ MODELS = {
         "goldstone-component-connection",
         "goldstone-static-macsec",
         "goldstone-synce",
+        "goldstone-dpll",
     ],
     "south-dpll": ["goldstone-dpll"],
     "south-system": [
