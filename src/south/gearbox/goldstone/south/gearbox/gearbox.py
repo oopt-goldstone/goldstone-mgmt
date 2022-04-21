@@ -293,19 +293,28 @@ class GearboxServer(ServerBase):
             assignment = await m.get("pgmrclk-assignment")
 
             for i, v in enumerate(assignment.split(",")):
+                clockname = str(i)
                 clock = {
-                    "name": str(i),
+                    "name": clockname,
                     "config": {
-                        "name": str(i),
+                        "name": clockname,
                     },
                     "state": {
-                        "name": str(i),
+                        "name": clockname,
                     },
                 }
 
                 ifname = await self.ifserver.oid2ifname(m, v)
                 if ifname:
                     clock["state"]["reference-interface"] = ifname
+
+                info = self.ifserver.synce_ref_clock_info.get((name, clockname))
+                if info:
+                    cc = {
+                        "input-reference": info["input-reference"]["name"],
+                        "dpll": info["input-reference"]["dpll"]["name"],
+                    }
+                    clock["state"]["component-connection"] = cc
 
                 clocks.append(clock)
 

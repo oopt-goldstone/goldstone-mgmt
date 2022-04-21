@@ -641,7 +641,15 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                     clock[0]["state"]["reference-interface"], "Interface1/0/1"
                 )
                 self.assertEqual(
+                    clock[0]["state"]["component-connection"],
+                    {"input-reference": "0", "dpll": "1"},
+                )
+                self.assertEqual(
                     clock[1]["state"]["reference-interface"], "Interface1/1/1"
+                )
+                self.assertEqual(
+                    clock[1]["state"]["component-connection"],
+                    {"input-reference": "1", "dpll": "1"},
                 )
 
         await asyncio.to_thread(test_oper_cb)
