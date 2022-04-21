@@ -208,10 +208,10 @@ class PinModeHandler(IfChangeHandler):
     async def validate(self, user):
         await super().validate(user)
 
-        info = self.server.get_platform_info(self.ifname)
+        info = self.server.get_interface_info(self.ifname)
         if not info:
             raise sysrepo.SysrepoInvalArgError(
-                f"pin-mode setting not supported. no platform info"
+                f"pin-mode setting not supported. no interface info"
             )
 
         valids = [i["interface"]["pin-mode"] for i in info]
@@ -465,16 +465,21 @@ def parse_macsec_counters(attrs):
 class InterfaceServer(ServerBase):
     def __init__(self, conn, taish_server, platform_info):
         super().__init__(conn, "goldstone-interfaces")
-        info = {}
+        ifinfo = {}
+        clkinfo = {}
         for i in platform_info:
             if "interface" in i:
                 assert "name" in i["interface"]
                 assert "pin-mode" in i["interface"]
-                if i["interface"]["name"] not in info:
-                    info[i["interface"]["name"]] = []
-                info[i["interface"]["name"]].append(i)
+                if i["interface"]["name"] not in ifinfo:
+                    ifinfo[i["interface"]["name"]] = []
+                ifinfo[i["interface"]["name"]].append(i)
+            elif "synce-reference-clock" in i:
+                c = i["synce-reference-clock"]
+                clkinfo[(c["gearbox"]["name"], c["name"])] = i
 
-        self._platform_info = info
+        self._interface_info = ifinfo
+        self.synce_ref_clock_info = clkinfo
         self.conn = conn
         self.taish = taish.AsyncClient(*taish_server.split(":"))
         self.notif_q = asyncio.Queue()
@@ -527,7 +532,7 @@ class InterfaceServer(ServerBase):
         if key == "key":
             return ""
         elif key == "pin-mode":
-            info = self.get_platform_info(ifname)
+            info = self.get_interface_info(ifname)
             if not info:
                 return None
 
@@ -815,10 +820,10 @@ class InterfaceServer(ServerBase):
 
         return obj, m
 
-    def get_platform_info(self, ifname, pin_mode=None):
-        info = self._platform_info.get(ifname)
+    def get_interface_info(self, ifname, pin_mode=None):
+        info = self._interface_info.get(ifname)
         if not info:
-            logger.warning(f"no platform info found for {ifname}")
+            logger.warning(f"no interface info found for {ifname}")
             return None
 
         if pin_mode == None:
@@ -831,10 +836,10 @@ class InterfaceServer(ServerBase):
             if i["interface"]["pin-mode"] == pin_mode:
                 return i
 
-        logger.error(f"no platform info found for {ifname}")
+        logger.error(f"no interface info found for {ifname}")
 
     def get_conflicting_ifnames(self, ifname, pin_mode):
-        info = self.get_platform_info(ifname, pin_mode)
+        info = self.get_interface_info(ifname, pin_mode)
         if not info:
             return []
         return info["interface"].get("conflicts-with", [])
@@ -859,7 +864,7 @@ class InterfaceServer(ServerBase):
 
         obj = await self.ifname2taiobj(ifname)
         pm = await obj.get("pin-mode")
-        p = self.get_platform_info(ifname, pm)
+        p = self.get_interface_info(ifname, pm)
         if p:
             v = {}
             if "component" in p:

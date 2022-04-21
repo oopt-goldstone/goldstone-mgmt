@@ -6,6 +6,7 @@ module goldstone-gearbox {
   prefix gs-gb;
 
   import goldstone-interfaces { prefix gs-if; }
+  import goldstone-dpll { prefix gs-dpll; }
 
   organization
     "Goldstone";
@@ -70,7 +71,18 @@ module goldstone-gearbox {
   }
 
   grouping gearbox-synce-reference-clock-state {
-
+    container component-connection {
+      leaf dpll {
+        type leafref {
+          path "/gs-dpll:dplls/gs-dpll:dpll/gs-dpll:name";
+        }
+      }
+      leaf input-reference {
+        type leafref {
+          path "/gs-dpll:dplls/gs-dpll:dpll/gs-dpll:dpll-input-references/gs-dpll:dpll-input-reference/gs-dpll:name";
+        }
+      }
+    }
   }
 
   grouping gearbox-synce-top {
