@@ -24,6 +24,7 @@ from . import portchannel
 from . import vlan
 from . import mgmt_if
 from . import gearbox
+from . import dpll
 
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
