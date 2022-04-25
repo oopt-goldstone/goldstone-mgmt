@@ -69,7 +69,6 @@ class ReferenceInterfaceHandler(GearboxChangeHandler):
         assignment = user.get("current-pgmrclk-assignment")
         if not assignment:
             assignment = (await self.obj.get("pgmrclk-assignment")).split(",")
-            user["current-pgmrclk-assignment"] = assignment
 
         if self.type == "deleted":
             assignment[self.clock_name] = "oid:0x0"
@@ -78,6 +77,7 @@ class ReferenceInterfaceHandler(GearboxChangeHandler):
             assignment[self.clock_name] = f"oid:0x{obj.oid:08x}"
 
         self.value = [",".join(assignment)]
+        user["current-pgmrclk-assignment"] = assignment
 
 
 class GearboxServer(ServerBase):

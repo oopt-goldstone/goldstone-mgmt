@@ -79,7 +79,7 @@ module goldstone-gearbox {
       }
       leaf input-reference {
         type leafref {
-          path "/gs-dpll:dplls/gs-dpll:dpll/gs-dpll:dpll-input-references/gs-dpll:dpll-input-reference/gs-dpll:name";
+          path "/gs-dpll:dplls/gs-dpll:dpll/gs-dpll:input-references/gs-dpll:input-reference/gs-dpll:name";
         }
       }
     }
