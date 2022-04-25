@@ -119,10 +119,40 @@ class ModeChangeHandler(DPLLChangeHandler):
         return v
 
 
+class PriorityChangeHandler(DPLLChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        assert self.xpath[3][2][0][0] == "name"
+        self.ref_name = int(self.xpath[3][2][0][1])
+        self.tai_attr_name = ["input-reference-priority"]
+
+    async def validate(self, user):
+        prio = user.get("current-input-reference-priority")
+        if not prio:
+            prio = (await self.obj.get("input-reference-priority")).split(",")
+
+        if self.type == "deleted":
+            prio[self.ref_name] = str(self.ref_name)
+        else:
+            prio[self.ref_name] = str(self.change.value)
+
+        self.value = [",".join(prio)]
+        user["current-input-reference-priority"] = prio
+
+
 class DPLLServer(ServerBase):
     def __init__(self, conn, taish_server, platform_info):
         super().__init__(conn, "goldstone-dpll")
         self.taish = taish.AsyncClient(*taish_server.split(":"))
+        self.refinfo = {}
+        for i in platform_info:
+            if "input-reference" in i:
+                c = i["input-reference"]
+                dpll = c["dpll"]["name"]
+                if dpll not in self.refinfo:
+                    self.refinfo[dpll] = {}
+                self.refinfo[dpll][c["name"]] = i
+
         self.handlers = {
             "dplls": {
                 "dpll": {
@@ -130,6 +160,12 @@ class DPLLServer(ServerBase):
                     "config": {
                         "name": NoOp,
                         "mode": ModeChangeHandler,
+                    },
+                    "input-references": {
+                        "input-reference": {
+                            "name": NoOp,
+                            "config": {"name": NoOp, "priority": PriorityChangeHandler},
+                        },
                     },
                 },
             },
@@ -159,10 +195,27 @@ class DPLLServer(ServerBase):
                 continue
 
             m = await self.taish.get_module(name)
-            v = await m.get_multiple(["dpll-mode", "dpll-state"])
+            v = await m.get_multiple(
+                ["dpll-mode", "dpll-state", "input-reference-priority"]
+            )
 
             d["state"] = {"mode": v[0], "state": v[1]}
+            prios = v[2].split(",")
+            refs = []
 
+            for ref in self.refinfo.get(name, {}).keys():
+                r = {"name": ref, "config": {"name": ref}}
+                try:
+                    prio = prios[int(ref)]
+                    state = {"priority": int(prio)}
+                    v = await m.get(f"ref-alarm-{ref}")
+                    state["alarm"] = v.split("|")
+                    r["state"] = state
+                except:
+                    pass
+                refs.append(r)
+
+            d["input-references"] = {"input-reference": refs}
             dplls.append(d)
 
         return {"goldstone-dpll:dplls": {"dpll": dplls}}

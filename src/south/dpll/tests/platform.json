@@ -42,5 +42,13 @@
   {"component": {"name": "piu1"}, "tai": {"module": {"name": "piu1", "location": "1"}, "netif": {"name": "0", "index": 0}}},
   {"component": {"name": "piu2"}, "tai": {"module": {"name": "piu2", "location": "2"}, "netif": {"name": "0", "index": 0}}},
   {"component": {"name": "piu3"}, "tai": {"module": {"name": "piu3", "location": "3"}, "netif": {"name": "0", "index": 0}}},
-  {"component": {"name": "piu4"}, "tai": {"module": {"name": "piu4", "location": "4"}, "netif": {"name": "0", "index": 0}}}
+  {"component": {"name": "piu4"}, "tai": {"module": {"name": "piu4", "location": "4"}, "netif": {"name": "0", "index": 0}}},
+  {"synce-reference-clock": {"name": "0", "index": 0, "gearbox": {"name": "1"}}, "input-reference": {"name": "0", "index": 0, "dpll": {"name": "1"}}},
+  {"synce-reference-clock": {"name": "1", "index": 1, "gearbox": {"name": "1"}}, "input-reference": {"name": "1", "index": 1, "dpll": {"name": "1"}}},
+  {"synce-reference-clock": {"name": "2", "index": 2, "gearbox": {"name": "1"}}, "input-reference": {"name": "2", "index": 2, "dpll": {"name": "1"}}},
+  {"synce-reference-clock": {"name": "3", "index": 3, "gearbox": {"name": "1"}}, "input-reference": {"name": "3", "index": 3, "dpll": {"name": "1"}}},
+  {"synce-reference-clock": {"name": "0", "index": 0, "gearbox": {"name": "2"}}, "input-reference": {"name": "4", "index": 4, "dpll": {"name": "1"}}},
+  {"synce-reference-clock": {"name": "1", "index": 1, "gearbox": {"name": "2"}}, "input-reference": {"name": "5", "index": 5, "dpll": {"name": "1"}}},
+  {"synce-reference-clock": {"name": "2", "index": 2, "gearbox": {"name": "2"}}, "input-reference": {"name": "6", "index": 6, "dpll": {"name": "1"}}},
+  {"synce-reference-clock": {"name": "3", "index": 3, "gearbox": {"name": "2"}}, "input-reference": {"name": "7", "index": 7, "dpll": {"name": "1"}}}
 ]
