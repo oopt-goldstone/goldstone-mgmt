@@ -376,7 +376,24 @@ def parse_counters(attrs):
     counters["out-discards"] = mac_tx[29]  # tx_pkts_drained
     counters["out-errors"] = mac_tx[4]
 
-    return counters
+    pcs = {
+        "bip-error": sum(phy_rx[:20]),
+        "virtual-lane-loss": sum(phy_rx[20:40]),
+        "serdes-lane-fec-symbol-error": sum(phy_rx[40:56]),
+        "corrected-fec-error": phy_rx[56],
+        "uncorrected-fec-error": phy_rx[57],
+        "fec-symbol-error": phy_rx[58],
+        "fc-fec-corrected-error": sum(phy_rx[59:63]),
+        "fc-fec-uncorrected-error": sum(phy_rx[63:67]),
+        "sync-header-error": phy_rx[67],
+        "hiber": phy_rx[68],
+        "test-pattern-error": phy_rx[69],
+        "loss-of-block-lock": phy_rx[70],
+        "ber-elapsed-sec": phy_rx[71],
+        "ber-elapsed-usec": phy_rx[72],
+    }
+
+    return counters, pcs
 
 
 def parse_macsec_counters(attrs):
@@ -885,12 +902,12 @@ class InterfaceServer(ServerBase):
             i["state"]["oper-status"] = "DOWN"
             return i
 
-        counters = {}
+        pcs_counters = None
         try:
-            attrs = await obj.get_multiple(
+            counters = await obj.get_multiple(
                 ["pmon-enet-mac-rx", "pmon-enet-mac-tx", "pmon-enet-phy-rx"]
             )
-            i["state"]["counters"] = parse_counters(attrs)
+            i["state"]["counters"], pcs_counters = parse_counters(counters)
         except taish.TAIException as e:
             logger.warning(f"failed to get counter info: {e}")
 
@@ -998,6 +1015,8 @@ class InterfaceServer(ServerBase):
             pcs = attrs[0]
             serdes = attrs[1]
             state = {"pcs-status": pcs, "serdes-status": serdes}
+            if pcs_counters:
+                state["counters"] = pcs_counters
             i["ethernet"]["pcs"] = {"state": state}
         except taish.TAIException as e:
             logger.warning(f"failed to get PCS/SERDES status: {e}")
