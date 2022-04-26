@@ -154,6 +154,46 @@ def show_counters(session, ifnames, table):
         stdout.info(tabulate(rows_, headers))
 
 
+def show_pcs_counters(session, ifnames):
+    for ifname in ifnames:
+        if len(ifnames) > 1:
+            stdout.info(f"Interface {ifname}:")
+
+        xpath = f"{ifxpath(ifname)}/ethernet/pcs/state/counters"
+        data = session.get_operational(xpath, one=True)
+        if not data:
+            msg = f"no PCS counters for {ifname}"
+            if len(ifnames) == 1:
+                raise InvalidInput(msg)
+            else:
+                stderr.info(msg)
+                continu
+
+        stdout.info(
+            tabulate(
+                [
+                    (k, data.get(k, "-"))
+                    for k in [
+                        "bip-error",
+                        "virtual-lane-loss",
+                        "serdes-lane-fec-symbol-error",
+                        "corrected-fec-error",
+                        "uncorrected-fec-error",
+                        "fec-symbol-error",
+                        "fc-fec-corrected-fec-error",
+                        "fc-fc-fec-uncorrected-error",
+                        "sync-header-error",
+                        "hiber",
+                        "test-pattern-error",
+                        "loss-of-block-lock",
+                        "ber-elapsed-sec",
+                        "ber-elapsed-usec",
+                    ]
+                ]
+            )
+        )
+
+
 def show_macsec_counters(session, ifnames):
     for ifname in ifnames:
         if len(ifnames) > 1:
@@ -818,6 +858,24 @@ class TXTimingModeCommand(ConfigCommand):
             return f"tx-timing-mode {mode}"
 
 
+class InterfacePCSCounterCommand(Command):
+    def arguments(self):
+        if self.parent.parent.name == "interface":
+            return interface_names(self.conn)
+
+    def exec(self, line):
+        if self.parent.parent.name == "interface":
+            if len(line) != 1:
+                raise InvalidInput(f"usage: {self.name_all()} <interface name>")
+            ifnames = [line[0]]
+        else:
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            ifnames = self.context.ifnames
+
+        show_pcs_counters(self.conn, ifnames)
+
+
 class InterfaceMACSECCounterCommand(Command):
     def arguments(self):
         if self.parent.parent.name == "interface":
@@ -845,6 +903,8 @@ class InterfaceMACSECCounterCommand(Command):
 class InterfaceCounterCommand(Command):
     def __init__(self, context, parent, name, **options):
         super().__init__(context, parent, name, **options)
+
+        self.add_command("pcs", InterfacePCSCounterCommand)
 
         if ModelExists("goldstone-static-macsec")(self):
             self.add_command("static-macsec", InterfaceMACSECCounterCommand)
