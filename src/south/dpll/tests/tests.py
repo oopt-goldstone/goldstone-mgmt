@@ -32,7 +32,12 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
 
         self.set_logs = []
 
-        self.attrs = {"input-reference-priority": "0,1,2,3,4,5,6,7"}
+        self.attrs = {
+            "input-reference-priority": "0,1,2,3,4,5,6,7",
+            "dpll-mode": "freerun",
+            "dpll-state": "freerun",
+            "selected-reference": "5",
+        }
 
         async def set_(*args):
             self.set_logs.append(args[0])
@@ -42,11 +47,7 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
             return [await set_(arg, **kwargs) for arg in args[0]]
 
         async def get(*args, **kwargs):
-            if args[0] == "dpll-mode":
-                return "freerun"
-            elif args[0] == "dpll-state":
-                return "freerun"
-            elif args[0] == "input-reference-priority":
+            if args[0] in self.attrs:
                 return self.attrs[args[0]]
             elif args[0].startswith("ref-alarm-"):
                 return "scm|gst"
@@ -175,7 +176,11 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
                                         ]
                                     },
                                     "config": {"name": "1"},
-                                    "state": {"mode": "freerun", "state": "freerun"},
+                                    "state": {
+                                        "mode": "freerun",
+                                        "state": "freerun",
+                                        "selected-reference": "4",
+                                    },
                                 }
                             ]
                         }

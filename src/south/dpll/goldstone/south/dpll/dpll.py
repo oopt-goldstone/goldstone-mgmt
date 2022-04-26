@@ -132,7 +132,7 @@ class PriorityChangeHandler(DPLLChangeHandler):
             prio = (await self.obj.get("input-reference-priority")).split(",")
 
         if self.type == "deleted":
-            prio[self.ref_name] = str(self.ref_name)
+            prio[self.ref_name] = str(self.ref_name)  # TODO proper default handling
         else:
             prio[self.ref_name] = str(self.change.value)
 
@@ -151,7 +151,12 @@ class DPLLServer(ServerBase):
                 dpll = c["dpll"]["name"]
                 if dpll not in self.refinfo:
                     self.refinfo[dpll] = {}
-                self.refinfo[dpll][c["name"]] = i
+
+                try:
+                    self.refinfo[dpll][int(c["name"])] = i
+                except ValueError as e:
+                    logger.error("input-reference name must be int")
+                    raise
 
         self.handlers = {
             "dplls": {
@@ -195,18 +200,24 @@ class DPLLServer(ServerBase):
                 continue
 
             m = await self.taish.get_module(name)
-            v = await m.get_multiple(
-                ["dpll-mode", "dpll-state", "input-reference-priority"]
+            mode, state, prios, selected = await m.get_multiple(
+                [
+                    "dpll-mode",
+                    "dpll-state",
+                    "input-reference-priority",
+                    "selected-reference",
+                ]
             )
 
-            d["state"] = {"mode": v[0], "state": v[1]}
-            prios = v[2].split(",")
+            d["state"] = {"mode": mode, "state": state}
+
+            prios = prios.split(",")
             refs = []
 
             for ref in self.refinfo.get(name, {}).keys():
-                r = {"name": ref, "config": {"name": ref}}
+                r = {"name": str(ref), "config": {"name": str(ref)}}
                 try:
-                    prio = prios[int(ref)]
+                    prio = prios[ref]
                     state = {"priority": int(prio)}
                     v = await m.get(f"ref-alarm-{ref}")
                     state["alarm"] = v.split("|")
@@ -214,6 +225,11 @@ class DPLLServer(ServerBase):
                 except:
                     pass
                 refs.append(r)
+
+            selected = int(selected) - 1
+
+            if selected in self.refinfo.get(name, {}):
+                d["state"]["selected-reference"] = str(selected)
 
             d["input-references"] = {"input-reference": refs}
             dplls.append(d)
