@@ -154,6 +154,117 @@ def show_counters(session, ifnames, table):
         stdout.info(tabulate(rows_, headers))
 
 
+def show_detail_counters(session, ifnames):
+    for ifname in ifnames:
+        if len(ifnames) > 1:
+            stdout.info(f"Interface {ifname}:")
+
+        xpath = f"{ifxpath(ifname)}/ethernet/state/counters"
+        data = session.get_operational(xpath, one=True)
+        if not data:
+            msg = f"no Ethernet counters for {ifname}"
+            if len(ifnames) == 1:
+                raise InvalidInput(msg)
+            else:
+                stderr.info(msg)
+                continu
+
+        stdout.info("Rx:")
+        stdout.info(
+            tabulate(
+                [
+                    (k[3:], data.get(k, "-"))  # remove 'rx-' prefix
+                    for k in [
+                        "rx-octets-all",
+                        "rx-octets-good",
+                        "rx-pkts-all",
+                        "rx-pkts-good",
+                        "rx-pkts-err",
+                        "rx-pkts-long",
+                        "rx-pkts-crc-err",
+                        "rx-pkts-all-crc-err",
+                        "rx-pkts-jabber",
+                        "rx-pkts-stomped",
+                        "rx-pkts-vlan",
+                        "rx-pkts-mac-ctrl",
+                        "rx-pkts-broadcast",
+                        "rx-pkts-multicast",
+                        "rx-pkts-unicast",
+                        "rx-pkts-0-63-b",
+                        "rx-pkts-64-b",
+                        "rx-pkts-65-127-b",
+                        "rx-pkts-128-255-b",
+                        "rx-pkts-256-511-b",
+                        "rx-pkts-512-1023-b",
+                        "rx-pkts-1024-1518-b",
+                        "rx-pkts-1519-2047-b",
+                        "rx-pkts-2048-4095-b",
+                        "rx-pkts-4096-8191-b",
+                        "rx-pkts-8192-max-b",
+                        "rx-err-blk",
+                        "rx-valid-err-blk",
+                        "rx-unknown-err-blk",
+                        "rx-inv-err-blk",
+                        "rx-pkts-pause",
+                        "rx-pkts-pause-pfc0",
+                        "rx-pkts-pfc1",
+                        "rx-pkts-pfc2",
+                        "rx-pkts-pfc3",
+                        "rx-pkts-pfc4",
+                        "rx-pkts-pfc5",
+                        "rx-pkts-pfc6",
+                        "rx-pkts-pfc7",
+                        "rx-pkts-link-pause",
+                    ]
+                ]
+            )
+        )
+
+        stdout.info("Tx:")
+        stdout.info(
+            tabulate(
+                [
+                    (k[3:], data.get(k, "-"))  # remove 'tx-' prefix
+                    for k in [
+                        "tx-octets-all",
+                        "tx-octets-good",
+                        "tx-pkts-all",
+                        "tx-pkts-good",
+                        "tx-pkts-err",
+                        "tx-pkts-unicast",
+                        "tx-pkts-multicast",
+                        "tx-pkts-broadcast",
+                        "tx-pkts-pause",
+                        "tx-pkts-pause-pfc0",
+                        "tx-pkts-pfc1",
+                        "tx-pkts-pfc2",
+                        "tx-pkts-pfc3",
+                        "tx-pkts-pfc4",
+                        "tx-pkts-pfc5",
+                        "tx-pkts-pfc6",
+                        "tx-pkts-pfc7",
+                        "tx-pkts-vlan",
+                        "tx-pkts-0-63-b",
+                        "tx-pkts-64-b",
+                        "tx-pkts-65-127-b",
+                        "tx-pkts-128-255-b",
+                        "tx-pkts-256-511-b",
+                        "tx-pkts-512-1023-b",
+                        "tx-pkts-1024-1518-b",
+                        "tx-pkts-1519-2047-b",
+                        "tx-pkts-2048-4095-b",
+                        "tx-pkts-4096-8191-b",
+                        "tx-pkts-8192-max-b",
+                        "tx-pkts-drained",
+                        "tx-pkts-jabbered",
+                        "tx-pkts-padded",
+                        "tx-pkts-trunc",
+                    ]
+                ]
+            )
+        )
+
+
 def show_pcs_counters(session, ifnames):
     for ifname in ifnames:
         if len(ifnames) > 1:
@@ -180,8 +291,8 @@ def show_pcs_counters(session, ifnames):
                         "corrected-fec-error",
                         "uncorrected-fec-error",
                         "fec-symbol-error",
-                        "fc-fec-corrected-fec-error",
-                        "fc-fc-fec-uncorrected-error",
+                        "fc-fec-corrected-error",
+                        "fc-fec-uncorrected-error",
                         "sync-header-error",
                         "hiber",
                         "test-pattern-error",
@@ -858,6 +969,24 @@ class TXTimingModeCommand(ConfigCommand):
             return f"tx-timing-mode {mode}"
 
 
+class InterfaceDetailCounterCommand(Command):
+    def arguments(self):
+        if self.parent.parent.name == "interface":
+            return interface_names(self.conn)
+
+    def exec(self, line):
+        if self.parent.parent.name == "interface":
+            if len(line) != 1:
+                raise InvalidInput(f"usage: {self.name_all()} <interface name>")
+            ifnames = [line[0]]
+        else:
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            ifnames = self.context.ifnames
+
+        show_detail_counters(self.conn, ifnames)
+
+
 class InterfacePCSCounterCommand(Command):
     def arguments(self):
         if self.parent.parent.name == "interface":
@@ -905,6 +1034,7 @@ class InterfaceCounterCommand(Command):
         super().__init__(context, parent, name, **options)
 
         self.add_command("pcs", InterfacePCSCounterCommand)
+        self.add_command("detail", InterfaceDetailCounterCommand)
 
         if ModelExists("goldstone-static-macsec")(self):
             self.add_command("static-macsec", InterfaceMACSECCounterCommand)

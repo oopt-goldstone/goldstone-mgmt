@@ -357,24 +357,24 @@ class TXTimingModeHandler(IfChangeHandler):
 
 
 def parse_counters(attrs):
-    counters = {}
     mac_rx = [int(v) for v in attrs[0].split(",")]
     mac_tx = [int(v) for v in attrs[1].split(",")]
     phy_rx = [int(v) for v in attrs[2].split(",")]
 
-    counters["in-octets"] = mac_rx[0]
-    counters["in-unicast-pkts"] = mac_rx[14]
-    counters["in-broadcast-pkts"] = mac_rx[12]
-    counters["in-multicast-pkts"] = mac_rx[13]
-    # counters["in-discards"]
-    counters["in-errors"] = mac_rx[4]
+    common = {}
+    common["in-octets"] = mac_rx[0]
+    common["in-unicast-pkts"] = mac_rx[14]
+    common["in-broadcast-pkts"] = mac_rx[12]
+    common["in-multicast-pkts"] = mac_rx[13]
+    # common["in-discards"]
+    common["in-errors"] = mac_rx[4]
 
-    counters["out-octets"] = mac_tx[0]
-    counters["out-unicast-pkts"] = mac_tx[5]
-    counters["out-broadcast-pkts"] = mac_tx[7]
-    counters["out-multicast-pkts"] = mac_tx[6]
-    counters["out-discards"] = mac_tx[29]  # tx_pkts_drained
-    counters["out-errors"] = mac_tx[4]
+    common["out-octets"] = mac_tx[0]
+    common["out-unicast-pkts"] = mac_tx[5]
+    common["out-broadcast-pkts"] = mac_tx[7]
+    common["out-multicast-pkts"] = mac_tx[6]
+    common["out-discards"] = mac_tx[29]  # tx_pkts_drained
+    common["out-errors"] = mac_tx[4]
 
     pcs = {
         "bip-error": sum(phy_rx[:20]),
@@ -393,7 +393,98 @@ def parse_counters(attrs):
         "ber-elapsed-usec": phy_rx[72],
     }
 
-    return counters, pcs
+    mac = {
+        k: mac_rx[i]
+        for i, k in enumerate(
+            [
+                "rx-octets-all",
+                "rx-octets-good",
+                "rx-pkts-all",
+                "rx-pkts-good",
+                "rx-pkts-err",
+                "rx-pkts-long",
+                "rx-pkts-crc-err",
+                "rx-pkts-all-crc-err",
+                "rx-pkts-jabber",
+                "rx-pkts-stomped",
+                "rx-pkts-vlan",
+                "rx-pkts-mac-ctrl",
+                "rx-pkts-broadcast",
+                "rx-pkts-multicast",
+                "rx-pkts-unicast",
+                "rx-pkts-0-63-b",
+                "rx-pkts-64-b",
+                "rx-pkts-65-127-b",
+                "rx-pkts-128-255-b",
+                "rx-pkts-256-511-b",
+                "rx-pkts-512-1023-b",
+                "rx-pkts-1024-1518-b",
+                "rx-pkts-1519-2047-b",
+                "rx-pkts-2048-4095-b",
+                "rx-pkts-4096-8191-b",
+                "rx-pkts-8192-max-b",
+                "rx-err-blk",
+                "rx-valid-err-blk",
+                "rx-unknown-err-blk",
+                "rx-inv-err-blk",
+                "rx-pkts-pause",
+                "rx-pkts-pause-pfc0",
+                "rx-pkts-pfc1",
+                "rx-pkts-pfc2",
+                "rx-pkts-pfc3",
+                "rx-pkts-pfc4",
+                "rx-pkts-pfc5",
+                "rx-pkts-pfc6",
+                "rx-pkts-pfc7",
+                "rx-pkts-link-pause",
+            ]
+        )
+    }
+
+    mac.update(
+        {
+            k: mac_tx[i]
+            for i, k in enumerate(
+                [
+                    "tx-octets-all",
+                    "tx-octets-good",
+                    "tx-pkts-all",
+                    "tx-pkts-good",
+                    "tx-pkts-err",
+                    "tx-pkts-unicast",
+                    "tx-pkts-multicast",
+                    "tx-pkts-broadcast",
+                    "tx-pkts-pause",
+                    "tx-pkts-pause-pfc0",
+                    "tx-pkts-pfc1",
+                    "tx-pkts-pfc2",
+                    "tx-pkts-pfc3",
+                    "tx-pkts-pfc4",
+                    "tx-pkts-pfc5",
+                    "tx-pkts-pfc6",
+                    "tx-pkts-pfc7",
+                    "tx-pkts-vlan",
+                    "tx-pkts-0-63-b",
+                    "tx-pkts-64-b",
+                    "tx-pkts-65-127-b",
+                    "tx-pkts-128-255-b",
+                    "tx-pkts-256-511-b",
+                    "tx-pkts-512-1023-b",
+                    "tx-pkts-1024-1518-b",
+                    "tx-pkts-1519-2047-b",
+                    "tx-pkts-2048-4095-b",
+                    "tx-pkts-4096-8191-b",
+                    "tx-pkts-8192-max-b",
+                    "tx-pkts-drained",
+                    "tx-pkts-jabbered",
+                    "tx-pkts-padded",
+                    "tx-pkts-trunc",
+                ]
+            )
+        }
+    )
+
+    return (common, pcs, mac)
 
 
 def parse_macsec_counters(attrs):
@@ -903,11 +994,16 @@ class InterfaceServer(ServerBase):
             return i
 
         pcs_counters = None
+        mac_counters = None
         try:
             counters = await obj.get_multiple(
                 ["pmon-enet-mac-rx", "pmon-enet-mac-tx", "pmon-enet-phy-rx"]
             )
-            i["state"]["counters"], pcs_counters = parse_counters(counters)
+            (
+                i["state"]["counters"],
+                pcs_counters,
+                mac_counters,
+            ) = parse_counters(counters)
         except taish.TAIException as e:
             logger.warning(f"failed to get counter info: {e}")
 
@@ -967,6 +1063,9 @@ class InterfaceServer(ServerBase):
                 }
             },
         }
+
+        if mac_counters:
+            i["ethernet"]["state"]["counters"] = mac_counters
 
         if isinstance(obj, taish.NetIf):
             # check if static MACSEC is configured
@@ -1077,8 +1176,8 @@ class InterfaceServer(ServerBase):
         return new_mapping
 
     async def oper_cb(self, xpath, priv):
-        counter_only = "counters" in xpath and "static-macsec" not in xpath
         xpath = list(libyang.xpath_split(xpath))
+        counter_only = False
 
         if len(xpath) < 2 or len(xpath[1][2]) < 1:
             ifnames = await self.get_ifname_list()
@@ -1089,6 +1188,8 @@ class InterfaceServer(ServerBase):
                 ifnames = [(name, obj, module)]
             elif xpath[1][2][0][0] == "state/goldstone-gearbox:associated-gearbox":
                 ifnames = await self.get_ifname_list(xpath[1][2][0][1])
+            elif len(xpath) == 4 and xpath[3][1] == "counters":
+                counter_only = True
             else:
                 logger.warn(f"invalid request: {xpath}")
                 return
