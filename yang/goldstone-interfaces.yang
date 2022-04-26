@@ -288,7 +288,236 @@ module goldstone-interfaces {
     }
   }
 
+  grouping ethernet-mac-rx-state-counters {
+    leaf rx-octets-all {
+      type yang:counter64;
+    }
+    leaf rx-octets-good {
+      type yang:counter64;
+    }
+    leaf rx-pkts-all {
+      type yang:counter64;
+    }
+    leaf rx-pkts-good {
+      type yang:counter64;
+    }
+    leaf rx-pkts-err {
+      type yang:counter64;
+    }
+    leaf rx-pkts-long {
+      type yang:counter64;
+    }
+    leaf rx-pkts-crc-err {
+      type yang:counter64;
+    }
+    leaf rx-pkts-all-crc-err {
+      type yang:counter64;
+    }
+    leaf rx-pkts-jabber {
+      type yang:counter64;
+    }
+    leaf rx-pkts-stomped {
+      type yang:counter64;
+    }
+    leaf rx-pkts-vlan {
+      type yang:counter64;
+    }
+    leaf rx-pkts-mac-ctrl {
+      type yang:counter64;
+    }
+    leaf rx-pkts-broadcast {
+      type yang:counter64;
+    }
+    leaf rx-pkts-multicast {
+      type yang:counter64;
+    }
+    leaf rx-pkts-unicast {
+      type yang:counter64;
+    }
+    leaf rx-pkts-0-63-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-64-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-65-127-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-128-255-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-256-511-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-512-1023-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-1024-1518-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-1519-2047-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-2048-4095-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-4096-8191-b {
+      type yang:counter64;
+    }
+    leaf rx-pkts-8192-max-b {
+      type yang:counter64;
+    }
+    leaf rx-err-blk {
+      type yang:counter64;
+    }
+    leaf rx-valid-err-blk {
+      type yang:counter64;
+    }
+    leaf rx-unknown-err-blk {
+      type yang:counter64;
+    }
+    leaf rx-inv-err-blk {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pause {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pause-pfc0 {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pfc1 {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pfc2 {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pfc3 {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pfc4 {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pfc5 {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pfc6 {
+      type yang:counter64;
+    }
+    leaf rx-pkts-pfc7 {
+      type yang:counter64;
+    }
+    leaf rx-pkts-link-pause {
+      type yang:counter64;
+    }
+  }
+
+  grouping ethernet-mac-tx-state-counters {
+    leaf tx-octets-all {
+      type yang:counter64;
+    }
+    leaf tx-octets-good {
+      type yang:counter64;
+    }
+    leaf tx-pkts-all {
+      type yang:counter64;
+    }
+    leaf tx-pkts-good {
+      type yang:counter64;
+    }
+    leaf tx-pkts-err {
+      type yang:counter64;
+    }
+    leaf tx-pkts-unicast {
+      type yang:counter64;
+    }
+    leaf tx-pkts-multicast {
+      type yang:counter64;
+    }
+    leaf tx-pkts-broadcast {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pause {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pause-pfc0 {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pfc1 {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pfc2 {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pfc3 {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pfc4 {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pfc5 {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pfc6 {
+      type yang:counter64;
+    }
+    leaf tx-pkts-pfc7 {
+      type yang:counter64;
+    }
+    leaf tx-pkts-vlan {
+      type yang:counter64;
+    }
+    leaf tx-pkts-0-63-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-64-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-65-127-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-128-255-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-256-511-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-512-1023-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-1024-1518-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-1519-2047-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-2048-4095-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-4096-8191-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-8192-max-b {
+      type yang:counter64;
+    }
+    leaf tx-pkts-drained {
+      type yang:counter64;
+    }
+    leaf tx-pkts-jabbered {
+      type yang:counter64;
+    }
+    leaf tx-pkts-padded {
+      type yang:counter64;
+    }
+    leaf tx-pkts-trunc {
+      type yang:counter64;
+    }
+  }
+
   grouping ethernet-interface-state {
+      container counters {
+        uses ethernet-mac-rx-state-counters;
+        uses ethernet-mac-tx-state-counters;
+      }
   }
 
   grouping ethernet-top {
