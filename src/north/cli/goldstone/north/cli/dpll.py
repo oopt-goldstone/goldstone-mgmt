@@ -138,7 +138,7 @@ class DPLLContext(Context):
 
             rows = []
             state = data.get("state", {})
-            for k in ["mode", "state"]:
+            for k in ["mode", "state", "selected-reference"]:
                 v = state.get(k, "-")
                 if type(v) == bool:
                     v = "true" if v else "false"
