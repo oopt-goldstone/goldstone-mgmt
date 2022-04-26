@@ -157,6 +157,51 @@ module goldstone-interfaces {
 
   }
 
+  grouping ethernet-pcs-state-counters {
+    leaf bip-error {
+      type yang:counter32;
+    }
+    leaf virtual-lane-loss {
+      type yang:counter32;
+    }
+    leaf serdes-lane-fec-symbol-error {
+      type yang:counter32;
+    }
+    leaf corrected-fec-error {
+      type yang:counter32;
+    }
+    leaf uncorrected-fec-error {
+      type yang:counter32;
+    }
+    leaf fec-symbol-error {
+      type yang:counter32;
+    }
+    leaf fc-fec-corrected-error {
+      type yang:counter32;
+    }
+    leaf fc-fec-uncorrected-error {
+      type yang:counter32;
+    }
+    leaf sync-header-error {
+      type yang:counter32;
+    }
+    leaf hiber {
+      type yang:counter32;
+    }
+    leaf test-pattern-error {
+      type yang:counter32;
+    }
+    leaf loss-of-block-lock {
+      type yang:counter32;
+    }
+    leaf ber-elapsed-sec {
+      type uint32;
+    }
+    leaf ber-elapsed-usec {
+      type uint32;
+    }
+  }
+
   grouping ethernet-pcs-state {
     leaf-list pcs-status {
       type enumeration {
@@ -180,6 +225,10 @@ module goldstone-interfaces {
         enum tx-fifo-overflow;
         enum rx-fifo-overflow;
       }
+    }
+
+    container counters {
+      uses ethernet-pcs-state-counters;
     }
   }
 
