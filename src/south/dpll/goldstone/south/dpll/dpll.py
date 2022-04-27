@@ -220,7 +220,8 @@ class DPLLServer(ServerBase):
                     prio = prios[ref]
                     state = {"priority": int(prio)}
                     v = await m.get(f"ref-alarm-{ref}")
-                    state["alarm"] = v.split("|")
+                    if v:
+                        state["alarm"] = v.split("|")
                     r["state"] = state
                 except:
                     pass
