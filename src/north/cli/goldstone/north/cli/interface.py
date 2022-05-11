@@ -10,7 +10,7 @@ from .cli import (
     ModelExists,
 )
 from .root import Root
-from .util import dig_dict
+from .util import dig_dict, human_ber
 
 from tabulate import tabulate
 from natsort import natsorted
@@ -346,18 +346,6 @@ def _set(session, ifnames, attr, value):
     session.apply()
 
 
-def set_admin_status(session, ifnames, value):
-    return _set(session, ifnames, "config/admin-status", value)
-
-
-def set_pin_mode(session, ifnames, value):
-    return _set(session, ifnames, "config/pin-mode", value)
-
-
-def set_fec(session, ifnames, value):
-    return _set(session, ifnames, "ethernet/config/fec", value)
-
-
 def set_mtu(session, ifnames, value):
     return _set(session, ifnames, "ethernet/config/mtu", value)
 
@@ -551,6 +539,9 @@ def show(session, ifnames):
         add_to_rows("admin-status", state, lambda v: v.lower())
         add_to_rows("oper-status", state, lambda v: v.lower())
         add_to_rows("pin-mode", state, lambda v: v.lower())
+        add_to_rows("loopback-mode", config, lambda v: v.lower())
+        add_to_rows("prbs-mode", config, lambda v: v.lower())
+        add_to_rows("current-prbs-ber", state, human_ber)
         add_to_rows("alias", state)
         add_to_rows("lanes", state)
         #        add_to_rows("interface-type", config, lambda v: v.lower().replace("if_", ""))
@@ -620,93 +611,78 @@ class ShutdownCommand(Command):
             raise InvalidInput(f"usage: {self.name_all()}")
 
         admin_status = "UP" if self.parent.name == "no" else "DOWN"
-        set_admin_status(self.conn, self.context.ifnames, admin_status)
+        _set(self.conn, self.context.ifnames, "config/admin-status", admin_status)
 
 
 def eth_config(data, key):
     return dig_dict(data, ["ethernet", "config", key])
 
 
-class AdminStatusCommand(ConfigCommand):
+class IfConfigCommand(ConfigCommand):
+    NODE = ["config", "pin-mode"]
+    XPATH = "".join(
+        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
+    )
+
     def arguments(self):
         if self.root.name != "no":
-            return ["up", "down"]
+            node = self.conn.find_node(self.XPATH)
+            return [v[0].lower() for v in node.enums()]
 
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_admin_status(self.conn, self.context.ifnames, None)
+            _set(self.conn, self.context.ifnames, "/".join(self.NODE), None)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_admin_status(self.conn, self.context.ifnames, line[0].upper())
+            _set(self.conn, self.context.ifnames, "/".join(self.NODE), line[0].upper())
 
-    @staticmethod
-    def to_command(conn, data):
-        config = data.get("config")
-        if not config:
-            return
-        v = config.get("admin-status")
-        if v == "DOWN":
-            return "admin-status down"
-        elif v == "UP":
-            return "admin-status up"
+    @classmethod
+    def to_command(cls, conn, data):
+        for n in cls.NODE:
+            data = data.get(n, {})
+
+        if data:
+            return f"{cls.NODE[-1]} {data.lower()}"
 
 
-class PinModeCommand(ConfigCommand):
-    def arguments(self):
-        if self.root.name != "no":
-            return ["pam4", "nrz"]
-
-    def exec(self, line):
-        if self.root.name == "no":
-            if len(line) != 0:
-                raise InvalidInput(f"usage: {self.name_all()}")
-            set_pin_mode(self.conn, self.context.ifnames, None)
-        else:
-            if len(line) != 1:
-                raise InvalidInput(
-                    f"usage: {self.name_all()} [{'|'.join(self.list())}]"
-                )
-            set_pin_mode(self.conn, self.context.ifnames, line[0].upper())
-
-    @staticmethod
-    def to_command(conn, data):
-        config = data.get("config")
-        if not config:
-            return
-        v = config.get("pin-mode")
-        if v == "PAM4":
-            return "pin-mode pam4"
-        elif v == "NRZ":
-            return "pin-mode nrz"
+class AdminStatusCommand(IfConfigCommand):
+    NODE = ["config", "admin-status"]
+    XPATH = "".join(
+        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
+    )
 
 
-class FECCommand(ConfigCommand):
-    def arguments(self):
-        if self.root.name != "no":
-            return ["none", "fc", "rs"]
+class PinModeCommand(IfConfigCommand):
+    NODE = ["config", "pin-mode"]
+    XPATH = "".join(
+        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
+    )
 
-    def exec(self, line):
-        if self.root.name == "no":
-            if len(line) != 0:
-                raise InvalidInput(f"usage: {self.name_all()}")
-            set_fec(self.conn, self.context.ifnames, None)
-        else:
-            if len(line) != 1:
-                raise InvalidInput(
-                    f"usage: {self.name_all()} [{'|'.join(self.list())}]"
-                )
-            set_fec(self.conn, self.context.ifnames, line[0].upper())
 
-    @staticmethod
-    def to_command(conn, data):
-        fec = eth_config(data, "fec")
-        if fec:
-            return f"fec {fec.lower()}"
+class LoopbackModeCommand(IfConfigCommand):
+    NODE = ["config", "loopback-mode"]
+    XPATH = "".join(
+        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
+    )
+
+
+class PRBSModeCommand(IfConfigCommand):
+    NODE = ["config", "prbs-mode"]
+    XPATH = "".join(
+        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
+    )
+
+
+class FECCommand(IfConfigCommand):
+    NODE = ["ethernet", "config", "fec"]
+    XPATH = "".join(
+        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
+    )
 
 
 class SpeedCommand(ConfigCommand):
@@ -726,8 +702,8 @@ class SpeedCommand(ConfigCommand):
                 )
             set_speed(self.conn, self.context.ifnames, line[0])
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         speed = eth_config(data, "speed")
         if speed:
             return f"speed {speed_yang_to_human(speed)}"
@@ -770,8 +746,8 @@ class InterfaceTypeCommand(ConfigCommand):
                 )
             set_interface_type(self.conn, self.context.ifnames, line[0])
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         otn = data.get("otn")
         if otn:
             mfi = otn.get("config", {}).get("mfi-type")
@@ -800,8 +776,8 @@ class MTUCommand(ConfigCommand):
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         mtu = eth_config(data, "mtu")
         if mtu:
             return f"mtu {mtu}"
@@ -846,8 +822,8 @@ class AutoNegoCommand(ConfigCommand):
                 )
             set_auto_nego(self.conn, self.context.ifnames, line[0] == "enable")
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         config = dig_dict(data, ["ethernet", "auto-negotiate", "config"])
         if not config:
             return None
@@ -898,8 +874,8 @@ class BreakoutCommand(ConfigCommand):
                 input_values[1],
             )
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         config = dig_dict(data, ["ethernet", "breakout", "config"])
         if not config:
             return None
@@ -930,8 +906,8 @@ class StaticMACSECCommand(ConfigCommand):
     def usage(self):
         return f"usage: {self.name_all()} <static-macsec-key> (<uint32>,<uint32>,<uint32>,<uint32>)"
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         key = dig_dict(data, ["ethernet", "static-macsec", "config", "key"])
         if key:
             key = static_macsec_key_to_human(key)
@@ -962,8 +938,8 @@ class TXTimingModeCommand(ConfigCommand):
     def usage(self):
         return f"usage: {self.name_all()} [{'|'.join(self.list())}]"
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         mode = dig_dict(data, ["ethernet", "synce", "config", "tx-timing-mode"])
         if mode:
             return f"tx-timing-mode {mode}"
@@ -1112,6 +1088,8 @@ class InterfaceContext(Context):
         self.add_command("shutdown", ShutdownCommand, add_no=True)
         self.add_command("admin-status", AdminStatusCommand, add_no=True)
         self.add_command("pin-mode", PinModeCommand, add_no=True)
+        self.add_command("loopback-mode", LoopbackModeCommand, add_no=True)
+        self.add_command("prbs-mode", PRBSModeCommand, add_no=True)
         self.add_command("fec", FECCommand, add_no=True)
         self.add_command(
             "speed",

@@ -20,9 +20,11 @@ class Command(BaseCommand):
 
 
 class ConfigCommand(Command):
-    @staticmethod
-    def to_command(conn, data):
-        raise Exception("ConfigCommand subclass must implement to_command()")
+    @classmethod
+    def to_command(cls, conn, data):
+        raise Exception(
+            "ConfigCommand subclass must implement to_command() classmethod"
+        )
 
 
 class RunningConfigCommand(Command):
