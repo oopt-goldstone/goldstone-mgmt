@@ -49,7 +49,7 @@ module goldstone-portchannel {
       default 9100;
     }
 
-    uses gs-if:interface-config;
+    uses gs-if:interface-common-config;
 
     leaf-list interface {
       type gs-if:interface-ref;
@@ -61,7 +61,7 @@ module goldstone-portchannel {
   grouping portchannel-state {
     description "portchannel State variables container.";
 
-    uses gs-if:interface-common-state;
+    uses gs-if:interface-state;
 
     // placeholder
   }

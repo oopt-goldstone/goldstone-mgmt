@@ -14,6 +14,8 @@ from goldstone.lib.core import ServerBase
 from concurrent.futures import ProcessPoolExecutor
 from taish import NetIf, HostIf, Module
 import base64
+import struct
+
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -105,6 +107,12 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 return DEFAULT_MTU
             elif args[0] == "index":
                 return 0
+            elif args[0] == "loopback-mode":
+                return "shallow"
+            elif args[0] == "prbs-mode":
+                return "prbs31"
+            elif args[0] == "current-prbs-ber":
+                return "1.200000e-03"
             elif args[0] == "serdes-status":
                 if kwargs.get("json"):
                     return '["tx-ready", "rx-ready"]'
@@ -789,6 +797,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("provision-mode", "none"),
                 ("signal-rate", "otu4"),
                 ("provision-mode", "none"),
+                ("loopback-type", "none"),
+                ("prbs-type", "none"),
                 ("fec-type", "rs"),
                 ("auto-negotiation", "false"),
                 ("tx-timing-mode", "auto"),
@@ -826,6 +836,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("provision-mode", "none"),
+                ("loopback-type", "none"),
+                ("prbs-type", "none"),
                 ("fec-type", "rs"),
                 ("tx-timing-mode", "auto"),
             ],
@@ -873,6 +885,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("provision-mode", "none"),
+                ("loopback-type", "none"),
+                ("prbs-type", "none"),
                 ("tx-timing-mode", "auto"),
             ],
         )
@@ -938,6 +952,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("provision-mode", "none"),
+                ("loopback-type", "none"),
+                ("prbs-type", "none"),
                 ("fec-type", "rs"),
                 ("auto-negotiation", "false"),
             ],
@@ -989,10 +1005,167 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             [
                 ("provision-mode", "none"),
                 ("provision-mode", "none"),
+                ("loopback-type", "none"),
+                ("prbs-type", "none"),
                 ("fec-type", "rs"),
                 ("tx-timing-mode", "auto"),
             ],
         )
+
+    async def test_loopback_mode(self):
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                    "Interface1/1/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
+                    "SHALLOW",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("loopback-type", "shallow"),
+                ("provision-mode", "none"),
+                ("provision-mode", "none"),
+                ("prbs-type", "none"),
+                ("fec-type", "rs"),
+                ("tx-timing-mode", "auto"),
+            ],
+        )
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
+                    "DEEP",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("loopback-type", "deep"),
+            ],
+        )
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.delete_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("loopback-type", "none"),
+            ],
+        )
+        self.set_logs = []  # clear set_logs
+
+    async def test_prbs_mode(self):
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        ifserver = InterfaceServer(self.conn, "", platform_info)
+
+        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
+
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                    "Interface1/1/1",
+                )
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
+                    "PRBS7",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("prbs-type", "prbs7"),
+                ("provision-mode", "none"),
+                ("provision-mode", "none"),
+                ("loopback-type", "none"),
+                ("fec-type", "rs"),
+                ("tx-timing-mode", "auto"),
+            ],
+        )
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.set_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
+                    "PRBS31",
+                )
+                sess.apply_changes()
+
+                sess.switch_datastore("operational")
+                v = sess.get_data(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/state/current-prbs-ber",
+                )
+                v = libyang.xpath_get(
+                    v,
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/state/current-prbs-ber",
+                )
+                v = struct.unpack(">f", base64.b64decode(v))[0]
+                self.assertAlmostEqual(v, 1.20e-03)
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("prbs-type", "prbs31"),
+            ],
+        )
+        self.set_logs = []  # clear set_logs
+
+        def test():
+            with self.conn.start_session("running") as sess:
+                sess.delete_item(
+                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
+                )
+                sess.apply_changes()
+
+        await asyncio.to_thread(test)
+
+        self.assertEqual(
+            self.set_logs,
+            [
+                ("prbs-type", "none"),
+            ],
+        )
+        self.set_logs = []  # clear set_logs
 
     async def test_synce_reference_clocks(self):
 

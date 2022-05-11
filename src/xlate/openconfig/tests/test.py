@@ -21,6 +21,8 @@ class MockGSInterfaceServer(ServerBase):
                         "admin-status": NoOp,
                         "name": NoOp,
                         "description": NoOp,
+                        "loopback-mode": NoOp,
+                        "prbs-mode": NoOp,
                     },
                     "ethernet": NoOp,
                     "switched-vlan": NoOp,
