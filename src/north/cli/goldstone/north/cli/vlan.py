@@ -288,8 +288,8 @@ class SwitchportCommand(ConfigCommand):
     def exec(self, line):
         raise InvalidInput(f"usage : {self.name_all()} mode [trunk|access] vlan <vid>")
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         config = dig_dict(data, ["switched-vlan", "config"])
         if not config:
             return

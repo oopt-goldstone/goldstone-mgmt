@@ -269,8 +269,8 @@ class InterfaceUFDCommand(ConfigCommand):
                 )
             add_ports(self.conn, line[0], self.context.ifnames, line[1])
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         ifname = data.get("name")
         return [f"ufd {v[0]} {v[1]}" for v in get_ufd(conn, ifname)]
 
