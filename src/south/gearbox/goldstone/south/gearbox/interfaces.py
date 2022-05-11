@@ -295,6 +295,24 @@ class PinModeHandler(IfChangeHandler):
         await self.create(self._removed)
 
 
+class LoopbackModeHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "loopback-type"
+
+    def to_tai_value(self, v, attr_name):
+        return v.lower()
+
+
+class PRBSModeHandler(IfChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "prbs-type"
+
+    def to_tai_value(self, v, attr_name):
+        return v.lower()
+
+
 class MFITypeHandler(IfChangeHandler):
     async def _init(self, user):
         await super()._init(user)
@@ -604,6 +622,8 @@ class InterfaceServer(ServerBase):
                         "description": NoOp,
                         "interface-type": InterfaceTypeHandler,
                         "pin-mode": PinModeHandler,
+                        "loopback-mode": LoopbackModeHandler,
+                        "prbs-mode": PRBSModeHandler,
                     },
                     "ethernet": {
                         "config": {
@@ -1120,6 +1140,14 @@ class InterfaceServer(ServerBase):
         except taish.TAIException as e:
             logger.warning(f"failed to get PCS/SERDES status: {e}")
             i["state"]["oper-status"] = "DOWN"
+
+        try:
+            ber = await obj.get("current-prbs-ber")
+            i["state"]["current-prbs-ber"] = base64.b64encode(
+                struct.pack(">f", float(ber))
+            ).decode()
+        except taish.TAIException as e:
+            pass
 
         return i
 

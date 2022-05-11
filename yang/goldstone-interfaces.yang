@@ -563,7 +563,7 @@ module goldstone-interfaces {
     }
   }
 
-  grouping interface-common-state {
+  grouping interface-state {
     leaf oper-status {
       type enumeration {
         enum UP;
@@ -583,6 +583,14 @@ module goldstone-interfaces {
 
     leaf alias {
       type string;
+    }
+
+    leaf current-prbs-ber {
+      description
+        "The current PRBS bit error rate. encoded as IEEE 32-bit floating point number";
+      type binary {
+        length "4";
+      }
     }
 
   }
@@ -816,10 +824,6 @@ module goldstone-interfaces {
   }
 
   grouping interface-common-config {
-
-  }
-
-  grouping interface-config {
     description
       "Configuration data data nodes common to physical interfaces
       and subinterfaces";
@@ -847,7 +851,9 @@ module goldstone-interfaces {
       reference
         "RFC 2863: The Interfaces Group MIB - ifAdminStatus";
     }
+  }
 
+  grouping interface-config {
     leaf interface-type {
       type interface-type;
     }
@@ -856,6 +862,28 @@ module goldstone-interfaces {
       type interface-pin-mode;
     }
 
+    leaf loopback-mode {
+      type enumeration {
+        enum NONE;
+        enum SHALLOW;
+        enum DEEP;
+      }
+      default NONE;
+    }
+
+    leaf prbs-mode {
+      type enumeration {
+        enum NONE;
+        enum PRBS7;
+        enum PRBS9;
+        enum PRBS11;
+        enum PRBS15;
+        enum PRBS20;
+        enum PRBS23;
+        enum PRBS31;
+      }
+      default NONE;
+    }
   }
 
   grouping interfaces-top {
@@ -868,12 +896,14 @@ module goldstone-interfaces {
           }
         }
         container config {
+          uses interface-common-config;
           uses interface-config;
         }
         container state {
           config false;
+          uses interface-common-config;
           uses interface-config;
-          uses interface-common-state;
+          uses interface-state;
           uses interface-counters-state;
         }
 
@@ -894,7 +924,7 @@ module goldstone-interfaces {
       type string;
     }
 
-    uses interface-common-state;
+    uses interface-state;
   }
 
   rpc clear-counters {
