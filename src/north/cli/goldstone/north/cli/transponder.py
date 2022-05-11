@@ -13,6 +13,8 @@ from .cli import (
 )
 
 from .root import Root
+from .util import human_ber
+
 from prompt_toolkit.completion import WordCompleter
 
 import logging
@@ -65,10 +67,6 @@ def human_freq(item):
             return str(round(float(item[:-1]) * multiplier))
     else:
         return "{0:.2f}THz".format(int(item) / 1e12)
-
-
-def human_ber(item):
-    return "{0:.2e}".format(struct.unpack(">f", base64.b64decode(item))[0])
 
 
 def to_human(d, runconf=False):

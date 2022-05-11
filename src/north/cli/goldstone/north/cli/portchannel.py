@@ -276,8 +276,8 @@ class InterfacePortchannelCommand(ConfigCommand):
                 raise InvalidInput(f"usage: {self.name_all()} <portchannel_id>")
             add_interfaces(self.conn, line[0], self.context.ifnames)
 
-    @staticmethod
-    def to_command(conn, data):
+    @classmethod
+    def to_command(cls, conn, data):
         ifname = data.get("name")
         return [f"portchannel {v}" for v in get_portchannel(conn, ifname)]
 
