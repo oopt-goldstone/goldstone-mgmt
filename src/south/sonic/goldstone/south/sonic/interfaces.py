@@ -84,6 +84,24 @@ class IfTypeHandler(IfChangeHandler):
                 )
 
 
+class LoopbackModeHandler(IfChangeHandler):
+    def validate(self, user):
+        if self.type in ["created", "modified"]:
+            if self.change.value != "NONE":
+                raise sysrepo.SysrepoInvalArgError(
+                    f"Unsupported loopback mode {self.change.value}"
+                )
+
+
+class PRBSModeHandler(IfChangeHandler):
+    def validate(self, user):
+        if self.type in ["created", "modified"]:
+            if self.change.value != "NONE":
+                raise sysrepo.SysrepoInvalArgError(
+                    f"Unsupported PRBS mode {self.change.value}"
+                )
+
+
 class EthernetIfTypeHandler(IfChangeHandler):
     def validate(self, user):
         if self.type in ["created", "modified"]:
@@ -263,6 +281,8 @@ class InterfaceServer(ServerBase):
                         "name": NoOp,
                         "description": NoOp,
                         "interface-type": IfTypeHandler,
+                        "loopback-mode": LoopbackModeHandler,
+                        "prbs-mode": PRBSModeHandler,
                     },
                     "ethernet": {
                         "config": {
