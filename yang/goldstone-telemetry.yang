@@ -1,0 +1,295 @@
+module goldstone-telemetry {
+
+  yang-version "1.1";
+
+  namespace "http://goldstone.net/yang/goldstone-telemetry";
+  prefix gs-telemetry;
+
+  organization
+    "Goldstone";
+
+  description
+    "This module contains a collection of YANG definitions for
+    managing telemetry subscriptions. The data schema is inspired by
+    gNMI subscribe request.
+
+    subscribe request: A request from a telemetry collector to
+      subscribe streaming telemetries. It may have multiple
+      subscriptions.
+    subscription: A unit of telemetry notifications. It is tied to
+      a specific data tree path.
+
+    See also:
+      - https://github.com/openconfig/reference/blob/master/rpc/gnmi/gnmi-specification.md
+      - https://github.com/openconfig/gnmi/blob/master/proto/gnmi/gnmi.proto
+    ";
+
+  revision 2022-05-25 {
+    description
+      "Initial version.";
+    reference
+      "0.1.0";
+  }
+
+  grouping subscription-config {
+    description
+      "Configuration parameters relating to the subscription.";
+
+    leaf id {
+      type uint32;
+      description
+        "User defined identifier of the subscription.";
+    }
+
+    leaf path {
+      type string;
+      description
+        "Path to the data tree node to subscribe.";
+    }
+
+    leaf mode {
+      type enumeration {
+        enum TARGET_DEFINED {
+          description
+            "A notification provider selects the relevant mode for
+            each node. ON_CHANGE or SAMPLE.";
+        }
+        enum ON_CHANGE {
+          description
+            "Notifications are sent on value change.";
+        }
+        enum SAMPLE {
+          description
+            "Notifications are sent at sample interval.";
+        }
+      }
+      description
+        "Mode of the subscription.";
+    }
+
+    leaf sample-interval {
+      type uint64;
+      units nanoseconds;
+      description
+        "Sampling interval for SAMPLE mode in nanoseconds.";
+    }
+
+    leaf suppress-redundant {
+      type boolean;
+      description
+        "Notifications for leaf nodes which value has not changed
+        since the last notification are not sent. Notifications are
+        sent for those individual leaf nodes in the subscription that
+        have changed. It is an optional parameter for SAMPLE mode.";
+    }
+
+    leaf heartbeat-interval {
+      type uint64;
+      units nanoseconds;
+      description
+        "Maximum allowable silent period in nanoseconds. If the mode
+        is ON_CHANGE, a notification will be sent once per heartbeat
+        interval regardless of whether the value has changed or not.
+        If the mode is SAMPLE, a notification will be sent per
+        heartbeat interval regardless of whether the
+        suppress-redundant is set to true. The value 0 means
+        heartbeat updates are disabled.";
+    }
+  }
+
+  grouping subscription-state {
+    description
+      "Operational state data relating to the subscription.";
+  }
+
+  grouping subscription-top {
+    description
+      "Top level grouping for subscription configuration and
+      operational state data.";
+
+    container subscriptions {
+      description
+        "Top level container for subscriptions.";
+
+      list subscription {
+        key "id";
+        description
+          "List of subscribe requests.";
+
+        leaf id {
+          type leafref {
+            path "../config/id";
+          }
+          description
+            "Reference to the identifier of the subscription.";
+        }
+
+        container config {
+          description
+            "Configuration parameters of the subscription.";
+          uses subscription-config;
+        }
+
+        container state {
+          config false;
+          description
+            "Operational stetes of the subscription.";
+          uses subscription-config;
+          uses subscription-state;
+        }
+      }
+    }
+  }
+
+  grouping subscribe-request-config {
+    description
+      "Configuration parameters relating to the subscribe request.";
+
+    leaf id {
+      type uint32;
+      description
+        "User defined identifier of the subscribe request.";
+    }
+
+    leaf mode {
+      type enumeration {
+        enum STREAM {
+          description
+            "Notifications are streamed.";
+        }
+        enum ONCE {
+          description
+            "Notifications are sent once-off.";
+        }
+        enum POLL {
+          description
+            "Notifications are sent as response to a polling
+            request.";
+        }
+      }
+      description
+        "Mode of the subscribe request.";
+    }
+
+    leaf updates-only {
+      type boolean;
+      description
+        "Send only updates to current state. The initial state is not
+        sent. If mode is ONCE or POLL, notifications will never be
+        sent.";
+    }
+  }
+
+  grouping subscribe-request-state {
+    description
+      "Operational state data relating to the subscribe request.";
+  }
+
+  grouping telemetry-top {
+    description
+      "Top level grouping for telemetry configuration and operational
+      state data.";
+
+    container subscribe-requests {
+      description
+        "Top level container for subscribe requests.";
+
+      list subscribe-request {
+        key "id";
+        description
+          "List of subscribe requests.";
+
+        leaf id {
+          type leafref {
+            path "../config/id";
+          }
+          description
+            "Reference to the identifier of the subscribe request.";
+        }
+
+        container config {
+          description
+            "Configuration parameters of the subscribe request.";
+          uses subscribe-request-config;
+        }
+
+        container state {
+          config false;
+          description
+            "Operational stetes of the subscribe request.";
+          uses subscribe-request-config;
+          uses subscribe-request-state;
+        }
+
+        uses subscription-top;
+      }
+    }
+  }
+
+  uses telemetry-top;
+
+  rpc poll {
+    description
+      "Polling request for a subscribe request. This will trigger a
+      polled update process if the mode is POLL.";
+    input {
+      leaf id {
+        type leafref {
+          path
+            "/gs-telemetry:subscribe-requests" +
+            "/gs-telemetry:subscribe-request" +
+            "/gs-telemetry:id";
+        }
+      }
+    }
+  }
+
+  notification telemetry-notify-event {
+    description
+      "Telemetry notification.";
+
+    leaf type {
+      type enumeration {
+        enum UPDATE {
+          description
+            "The data tree node is created or updated.";
+        }
+        enum DELETE {
+          description
+            "The data tree node is deleted.";
+        }
+        enum SYNC_RESPONSE {
+          description
+            "Indicates that all data values have been transmitted at least
+            once.";
+        }
+      }
+    }
+
+    leaf request-id {
+      type uint32;
+      description
+        "Reference to the identifier of the subscribe request.";
+    }
+
+    leaf subscription-id {
+      type uint32;
+      description
+        "Reference to the identifier of the subscription in the
+        subscribe request.";
+    }
+
+    leaf path {
+      type string;
+      description
+        "Path to the data tree node of the notification.";
+    }
+
+    leaf json-data {
+      type string;
+      description
+        "Value of the node in json string.";
+    }
+  }
+}
+
