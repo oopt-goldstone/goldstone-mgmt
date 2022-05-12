@@ -21,8 +21,6 @@ import logging
 from tabulate import tabulate
 from natsort import natsorted
 import re
-import base64
-import struct
 
 logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
@@ -256,6 +254,8 @@ class NoCommand(Command):
 
 
 class TransponderBaseContext(Context):
+    DETAILED_ATTRS = []
+
     def __init__(self, conn, parent):
         super().__init__(parent, fuzzy_completion=True)
 
@@ -267,6 +267,7 @@ class TransponderBaseContext(Context):
             self.add_command(v.name(), SetCommand(self, v))
 
         self.add_command("no", NoCommand(self, node))
+        self.add_command("show", TransponderShowCommand(self))
 
     def set(self, node, value):
         if type(node) == str:
@@ -275,21 +276,37 @@ class TransponderBaseContext(Context):
             name = node.name()
 
         self.conn.set(f"{self.module_xpath()}/config/name", self.module_name())
-        self.conn.set(f"{self.xpath()}/config/name", self.name)
-        self.conn.set(f"{self.xpath()}/config/{name}", value)
+
+        for obj in self.objs:
+            self.conn.set(f"{self.xpath(obj)}/config/name", obj)
+            self.conn.set(f"{self.xpath(obj)}/config/{name}", value)
+
         self.conn.apply()
 
     def delete(self, name):
-        self.conn.delete(f"{self.xpath()}/config/{name}")
+        for obj in self.objs:
+            self.conn.delete(f"{self.xpath(obj)}/config/{name}")
         self.conn.apply()
+
+    def components(self, type_, ptn=None):
+        xpath = f"{self.module_xpath()}/{type_}/name"
+        data = self.conn.get_operational(xpath, [], one=True)
+
+        if ptn:
+            try:
+                ptn = re.compile(ptn)
+            except re.error:
+                raise InvalidInput(f"failed to compile {ptn} as a regular expression")
+            f = ptn.match
+        else:
+            f = lambda _: True
+        return natsorted(v for v in data if f(v))
 
 
 class TransponderShowCommand(ShowCommand):
     COMMAND_DICT = {
         "details": Command,
     }
-    OBJECT_TYPE = ""
-    DETAILED_ATTRS = []
     SKIP_ATTRS = ["index", "location"]
 
     def exec(self, line):
@@ -303,30 +320,77 @@ class TransponderShowCommand(ShowCommand):
 
     def show(self, detail=False):
         ctx = self.context
-        xpath = ctx.xpath() + "/state"
-        data = self.conn.get_operational(xpath, one=True)
-        if data == None:
-            raise InvalidInput("Not able to fetch data from operational database")
+        for obj in self.context.objs:
+            if len(self.context.objs) > 1:
+                stdout.info(f"{self.context.SHORT_OBJECT_TYPE}({obj}):")
 
-        data = to_human(data)
+            xpath = ctx.xpath(obj) + "/state"
+            data = self.conn.get_operational(xpath, one=True)
+            if data == None:
+                raise InvalidInput("Not able to fetch data from operational database")
 
-        table = []
-        for k, v in data.items():
-            if k in self.SKIP_ATTRS:
-                continue
-            if not detail and k in self.DETAILED_ATTRS:
-                continue
-            table.append([k, v])
+            data = to_human(data)
 
-        stdout.info(tabulate(table))
+            table = []
+            for k, v in data.items():
+                if k in self.SKIP_ATTRS:
+                    continue
+                if not detail and k in self.context.DETAILED_ATTRS:
+                    continue
+                table.append([k, v])
+
+            stdout.info(tabulate(table))
 
 
-class HostIfShowCommand(TransponderShowCommand):
+class InterfaceContext(TransponderBaseContext):
+    def module_xpath(self):
+        return self.parent.xpath()
+
+    def xpath(self, name=None):
+        if name == None:
+            name = self.name
+        return f"{self.module_xpath()}/{self.OBJECT_TYPE}[name='{name}']"
+
+    def module_name(self):
+        return self.parent.name
+
+    def __init__(self, conn, parent, name):
+        super().__init__(conn, parent)
+        objs = self.components(self.OBJECT_TYPE, name)
+        if len(objs) == 0:
+            raise InvalidInput(f"No {self.SHORT_OBJECT_TYPE} with name {name}")
+        elif len(objs) > 1 or objs[0] != name:
+            stdout.info(f"Selected interfaces: {objs}")
+
+            @self.command()
+            def selected(args):
+                if len(args) != 0:
+                    raise InvalidInput("usage: selected[cr]")
+                stdout.info(", ".join(objs))
+
+        self.name = name
+        self.objs = objs
+
+    def __str__(self):
+        return f"{self.SHORT_OBJECT_TYPE}({self.name})"
+
+
+class HostIf(InterfaceContext):
     OBJECT_TYPE = "host-interface"
+    SHORT_OBJECT_TYPE = "hostif"
+    CONFIG_XPATH = "".join(
+        f"/goldstone-transponder:{v}"
+        for v in ["modules", "module", OBJECT_TYPE, "config"]
+    )
 
 
-class NetIfShowCommand(TransponderShowCommand):
+class NetIf(InterfaceContext):
     OBJECT_TYPE = "network-interface"
+    SHORT_OBJECT_TYPE = "netif"
+    CONFIG_XPATH = "".join(
+        f"/goldstone-transponder:{v}"
+        for v in ["modules", "module", OBJECT_TYPE, "config"]
+    )
     DETAILED_ATTRS = [
         "pulse-shaping-tx",
         "pulse-shaping-rx",
@@ -343,59 +407,8 @@ class NetIfShowCommand(TransponderShowCommand):
     ]
 
 
-class ModuleShowCommand(TransponderShowCommand):
-    OBJECT_TYPE = "module"
-
-
-class HostIf(TransponderBaseContext):
-    CONFIG_XPATH = "".join(
-        f"/goldstone-transponder:{v}"
-        for v in ["modules", "module", "host-interface", "config"]
-    )
-
-    def module_xpath(self):
-        return self.parent.xpath()
-
-    def xpath(self):
-        return f"{self.module_xpath()}/host-interface[name='{self.name}']"
-
-    def module_name(self):
-        return self.parent.name
-
-    def __init__(self, conn, parent, name):
-        super().__init__(conn, parent)
-        self.name = name
-        self.add_command("show", HostIfShowCommand(self))
-
-    def __str__(self):
-        return "hostif({})".format(self.name)
-
-
-class NetIf(TransponderBaseContext):
-    CONFIG_XPATH = "".join(
-        f"/goldstone-transponder:{v}"
-        for v in ["modules", "module", "network-interface", "config"]
-    )
-
-    def module_xpath(self):
-        return self.parent.xpath()
-
-    def xpath(self):
-        return f"{self.module_xpath()}/network-interface[name='{self.name}']"
-
-    def module_name(self):
-        return self.parent.name
-
-    def __init__(self, conn, parent, name):
-        super().__init__(conn, parent)
-        self.name = name
-        self.add_command("show", NetIfShowCommand(self))
-
-    def __str__(self):
-        return "netif({})".format(self.name)
-
-
 class TransponderContext(TransponderBaseContext):
+    OBJECT_TYPE = "module"
     XPATH = "/goldstone-transponder:modules/module"
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}" for v in ["modules", "module", "config"]
@@ -404,7 +417,7 @@ class TransponderContext(TransponderBaseContext):
     def module_xpath(self):
         return f"{self.XPATH}[name='{self.name}']"
 
-    def xpath(self):
+    def xpath(self, name=None):
         return self.module_xpath()
 
     def module_name(self):
@@ -413,22 +426,19 @@ class TransponderContext(TransponderBaseContext):
     def __init__(self, conn, parent, name):
         super().__init__(conn, parent)
         self.name = name
+        self.objs = [name]
         self.command_list = ["shutdown"]
 
         @self.command(WordCompleter(self.netifs))
         def netif(args):
             if len(args) != 1:
                 raise InvalidInput("usage: netif <name>")
-            elif args[0] not in self.netifs():
-                raise InvalidInput(f"No network interface with name {args[0]}")
             return NetIf(conn, self, args[0])
 
         @self.command(WordCompleter(self.hostifs))
         def hostif(args):
             if len(args) != 1:
                 raise InvalidInput("usage: hostif <name>")
-            elif args[0] not in self.hostifs():
-                raise InvalidInput(f"No host interface with name {args[0]}")
             return HostIf(conn, self, args[0])
 
         @self.command()
@@ -437,17 +447,11 @@ class TransponderContext(TransponderBaseContext):
                 raise InvalidInput("usage: shutdown")
             self.set("admin-status", "down")
 
-        self.add_command("show", ModuleShowCommand(self))
-
     def netifs(self):
         return self.components("network-interface")
 
     def hostifs(self):
         return self.components("host-interface")
-
-    def components(self, type_):
-        xpath = f"{self.XPATH}[name='{self.name}']/{type_}/name"
-        return natsorted(self.conn.get_operational(xpath, [], one=True))
 
     def __str__(self):
         return "transponder({})".format(self.name)
