@@ -41,6 +41,23 @@ typedef enum _tai_network_interface_mld_t
     TAI_NETWORK_INTERFACE_MLD_MAX
 } tai_network_interface_mld_t;
 
+/** @custom tai_network_interface_fec_type_t */
+typedef enum _tai_network_interface_custom_fec_type_t
+{
+    TAI_NETWORK_INTERFACE_FEC_TYPE_HG_FEC = 4,
+} tai_network_interface_custom_fec_type_t;
+
+typedef enum _tai_network_interface_al_dsp_sync_t
+{
+    TAI_NETWORK_INTERFACE_AL_DSP_SYNC_REF_SYNC,
+    TAI_NETWORK_INTERFACE_AL_DSP_SYNC_LINE_SYNC,
+    TAI_NETWORK_INTERFACE_AL_DSP_SYNC_CLIENT_SYNC_CHA,
+    TAI_NETWORK_INTERFACE_AL_DSP_SYNC_CLIENT_SYNC_CHB,
+    TAI_NETWORK_INTERFACE_AL_DSP_SYNC_CLIENT_SYNC_CHC,
+    TAI_NETWORK_INTERFACE_AL_DSP_SYNC_CLIENT_SYNC_CHD,
+    TAI_NETWORK_INTERFACE_AL_DSP_SYNC_LINE_FRAME_SYNC,
+} tai_network_interface_al_dsp_sync_t;
+
 /** @custom tai_network_interface_client_signal_mapping_type_t */
 typedef enum _tai_network_interface_custom_client_signal_mapping_type_t
 {
@@ -49,8 +66,53 @@ typedef enum _tai_network_interface_custom_client_signal_mapping_type_t
 
 typedef enum _custom_network_interface_attr_t
 {
-    /** Custom range for the NLD0670APB adapter */
-    TAI_NETWORK_INTERFACE_ATTR_CUSTOM_NLD0670_START = TAI_NETWORK_INTERFACE_ATTR_CUSTOM_NLD0670_TRB100_START,
+    /**
+     * @brief RX LOS alarm
+     *
+     * @type bool
+     * @flags READ_ONLY
+     */
+    TAI_NETWORK_INTERFACE_ATTR_RX_LOS = TAI_NETWORK_INTERFACE_ATTR_CUSTOM_RANGE_START,
+
+    /**
+     * @brief Network RX Q margin over PM interval
+     *
+     * @type #tai_float_t
+     * @flags READ_ONLY
+     */
+    TAI_NETWORK_INTERFACE_ATTR_RX_Q_MERGIN,
+
+    /**
+     * @brief Network FEC Uncorrected Blocks Count Over PM interval
+     *
+     * @type #tai_uint32_t
+     * @flags READ_ONLY
+     */
+    TAI_NETWORK_INTERFACE_ATTR_UNCORRECTED_BLOCK_COUNT,
+
+    /**
+     * @brief AL_DSP_SYNC (0x9190)
+     *
+     * @type #tai_s32_list_t #tai_network_interface_al_dsp_sync_t
+     * @flags READ_ONLY
+     */
+    TAI_NETWORK_INTERFACE_ATTR_AL_DSP_SYNC,
+
+    /**
+     * @brief RX current carrier frequency offset in Hz
+     *
+     * @type tai_int64_t
+     * @flags READ_ONLY
+     */
+    TAI_NETWORK_INTERFACE_ATTR_RX_FREQ_OFFSET,
+
+    /**
+     * @brief TAI_NETWORK_INTERFACE_ATTR_TX_LASER_BIAS (0xB320)
+     *
+     * @type #tai_uint16_t
+     * @flags READ_ONLY
+     */
+    TAI_NETWORK_INTERFACE_ATTR_TX_LASER_BIAS,
 
     /**
      * @brief loss of signal detection setting
@@ -200,50 +262,6 @@ typedef enum _custom_network_interface_attr_t
      * @flags READ_ONLY
      */
     TAI_NETWORK_INTERFACE_ATTR_LOADED_LIBACO,
-
-    /**
-     * @brief RX LOS alarm
-     *
-     * @type bool
-     * @flags READ_ONLY
-     */
-    TAI_NETWORK_INTERFACE_ATTR_RX_LOS,
-
-    TAI_NETWORK_INTERFACE_ATTR_CUSTOM_NLD0670_END = TAI_NETWORK_INTERFACE_ATTR_CUSTOM_NLD0670_START + 0x7FFF,
-
-    /** Custom range for the TRB100 adapter */
-    TAI_NETWORK_INTERFACE_ATTR_CUSTOM_TRB100_START,
-
-    /**
-     * @brief TAI independent command interface
-     *
-     * @type #tai_pointer_t
-     */
-    TAI_NETWORK_INTERFACE_ATTR_CUSTOM_TRB100_CMD = TAI_NETWORK_INTERFACE_ATTR_CUSTOM_TRB100_START,
-
-    /**
-     * @brief The RX power low warning threshold in dBm
-     *
-     * @type #tai_float_t
-     * @flags READ_ONLY
-     */
-    TAI_NETWORK_INTERFACE_ATTR_CUSTOM_TRB100_RX_POWER_LOW_WARNING_THRESHOLD,
-
-    /**
-     * @brief The RX power low alarm threshold in dBm
-     *
-     * @type #tai_float_t
-     * @flags READ_ONLY
-     */
-    TAI_NETWORK_INTERFACE_ATTR_CUSTOM_TRB100_RX_POWER_LOW_ALARM_THRESHOLD,
-
-    /**
-     * @brief RX Loss of Signal
-     *
-     * @type bool
-     * @flags READ_ONLY
-     */
-    TAI_NETWORK_INTERFACE_ATTR_CUSTOM_TRB100_RX_LOS,
 
 } custom_network_interface_attr_t;
 
