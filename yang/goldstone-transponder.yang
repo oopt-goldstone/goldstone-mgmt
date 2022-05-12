@@ -147,6 +147,7 @@ module goldstone-transponder {
         enum none;
         enum rs;
         enum fc;
+        enum gfec;
       }
     }
     leaf loopback-type {
@@ -310,6 +311,7 @@ module goldstone-transponder {
         enum sc-fec;
         enum cfec;
         enum ofec;
+        enum hg-fec;
       }
     }
     leaf client-signal-mapping-type {
@@ -642,6 +644,46 @@ module goldstone-transponder {
         fraction-digits 16;
       }
     }
+    leaf rx-los {
+      description
+        "RX LOS alarm";
+      type boolean;
+    }
+    leaf rx-q-mergin {
+      description
+        "Network RX Q margin over PM interval";
+      type decimal64 {
+        fraction-digits 16;
+      }
+    }
+    leaf uncorrected-block-count {
+      description
+        "Network FEC Uncorrected Blocks Count Over PM interval";
+      type uint32;
+    }
+    leaf-list al-dsp-sync {
+      description
+        "AL_DSP_SYNC (0x9190)";
+      type enumeration {
+        enum ref-sync;
+        enum line-sync;
+        enum client-sync-cha;
+        enum client-sync-chb;
+        enum client-sync-chc;
+        enum client-sync-chd;
+        enum line-frame-sync;
+      }
+    }
+    leaf rx-freq-offset {
+      description
+        "RX current carrier frequency offset in Hz";
+      type int64;
+    }
+    leaf tx-laser-bias {
+      description
+        "TAI_NETWORK_INTERFACE_ATTR_TX_LASER_BIAS (0xB320)";
+      type uint16;
+    }
     leaf sync-error {
       type boolean;
     }
@@ -671,30 +713,6 @@ module goldstone-transponder {
       description
         "The loaded libaco library name";
       type string;
-    }
-    leaf rx-los {
-      description
-        "RX LOS alarm";
-      type boolean;
-    }
-    leaf custom-trb100-rx-power-low-warning-threshold {
-      description
-        "The RX power low warning threshold in dBm";
-      type decimal64 {
-        fraction-digits 16;
-      }
-    }
-    leaf custom-trb100-rx-power-low-alarm-threshold {
-      description
-        "The RX power low alarm threshold in dBm";
-      type decimal64 {
-        fraction-digits 16;
-      }
-    }
-    leaf custom-trb100-rx-los {
-      description
-        "RX Loss of Signal";
-      type boolean;
     }
   }
 

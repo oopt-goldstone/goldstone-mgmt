@@ -3,6 +3,12 @@
 
 #include <tai.h>
 
+/** @custom tai_host_interface_fec_type_t */
+typedef enum _tai_host_interface_custom_fec_type_t
+{
+    TAI_HOST_INTERFACE_FEC_TYPE_GFEC = 3,
+} tai_host_interface_custom_fec_type_t;
+
 typedef enum _custom_host_interface_attr_t
 {
     /** Custom range for the NLD0670APB adapter */
