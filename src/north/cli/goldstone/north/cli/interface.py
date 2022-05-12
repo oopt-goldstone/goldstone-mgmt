@@ -1074,7 +1074,7 @@ class InterfaceContext(Context):
 
             if len(ifnames) == 0:
                 raise InvalidInput(f"no interface found: {ifname}")
-            elif len(ifnames) > 1:
+            elif len(ifnames) > 1 or ifnames[0] != ifname:
                 stdout.info(f"Selected interfaces: {ifnames}")
 
                 @self.command()
