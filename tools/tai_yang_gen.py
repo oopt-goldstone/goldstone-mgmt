@@ -2,9 +2,6 @@
 
 import sys
 
-import clang.cindex
-from clang.cindex import Index
-from clang.cindex import Config
 from argparse import ArgumentParser
 from enum import Enum
 from jinja2 import Environment
@@ -58,12 +55,9 @@ def shorten(v, typename):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--clang-lib", default="/usr/lib/llvm-6.0/lib/libclang.so.1")
     parser.add_argument("header")
     parser.add_argument("custom", nargs="*", default=[])
     args = parser.parse_args()
-
-    Config.set_library_file(args.clang_lib)
 
     h = TAIHeader(args.header)
     for c in args.custom:
