@@ -12,6 +12,13 @@ from .repo.repo import NotFoundError, ApplyFailedError
 
 logger = logging.getLogger(__name__)
 
+GRPC_STATUS_CODE_OK = grpc.StatusCode.OK.value[0]
+GRPC_STATUS_CODE_UNKNOWN = grpc.StatusCode.UNKNOWN.value[0]
+GRPC_STATUS_CODE_INVALID_ARGUMENT = grpc.StatusCode.INVALID_ARGUMENT.value[0]
+GRPC_STATUS_CODE_NOT_FOUND = grpc.StatusCode.NOT_FOUND.value[0]
+GRPC_STATUS_CODE_ABORTED = grpc.StatusCode.ABORTED.value[0]
+GRPC_STATUS_CODE_UNIMPLEMENTED = grpc.StatusCode.UNIMPLEMENTED.value[0]
+
 
 class Request:
     """Base class of Request for gNMI services.
@@ -26,6 +33,7 @@ class Request:
         prefix (gnmi_pb2.Path): Path prefix as gNMI Path.
         path (gnmi_pb2.Path): Path as gNMI Path.
         xpath (str): Xpath in absolute path. It is made from prefix and path.
+        status (gnmi_pb2.Error): Processing status of this request.
     """
 
     def __init__(self, repo, prefix, gnmi_path):
@@ -34,6 +42,10 @@ class Request:
         self.gnmi_path = gnmi_path
         self.xpath = self._parse_xpath(prefix) + self._parse_xpath(gnmi_path)
         logger.debug("Requested xpath: %s", self.xpath)
+        self.status = gnmi_pb2.Error(
+            code=GRPC_STATUS_CODE_OK,
+            message=None,
+        )
 
     def _parse_xpath(self, path):
         xpath = ""
@@ -66,8 +78,26 @@ class GetRequest(Request):
     """
 
     def exec(self):
-        self.result = self.repo.get(self.xpath)
         self.timestamp = time.time_ns()
+        try:
+            self.result = self.repo.get(self.xpath)
+        except NotFoundError as e:
+            msg = f"failed to retrieve data from datastore. {self.xpath} is not found. {e}"
+            logger.error(msg)
+            self.status.code = GRPC_STATUS_CODE_NOT_FOUND
+            self.status.message = msg
+        except ValueError as e:
+            msg = (
+                f"failed to retrieve data from datastore. {self.xpath} is invalid. {e}"
+            )
+            logger.error(msg)
+            self.status.code = GRPC_STATUS_CODE_INVALID_ARGUMENT
+            self.status.message = msg
+        except Exception as e:
+            msg = f"failed to retrieve data from datastore. {e}"
+            logger.error(msg)
+            self.status.code = GRPC_STATUS_CODE_UNKNOWN
+            self.status.message = msg
 
     def json_result(self):
         """Get retrieved data in JSON format.
@@ -82,7 +112,6 @@ class SetRequest(Request):
     """Base class for each SetRequest operation; DELETE, REPLACE and UPDATE.
 
     Attributes:
-        status (gnmi_pb2.Error): Include status code and message as a result of the execution.
         val (any): Decoded value to set.
         leaves (dict): Dictionary which returns values to set with xpath of leaf.
     """
@@ -90,10 +119,6 @@ class SetRequest(Request):
     def __init__(self, repo, prefix, gnmi_path):
         super().__init__(repo, prefix, gnmi_path)
         self.leaves = {}
-        self.status = gnmi_pb2.Error(
-            code=grpc.StatusCode.OK.value[0],
-            message=None,
-        )
 
     def _decode_val(self, val):
         if val.HasField("json_val"):
@@ -102,7 +127,7 @@ class SetRequest(Request):
             t = val.WhichOneof("value")
             msg = f"encoding {t} is not supported."
             logger.error(msg)
-            self.status.code = grpc.StatusCode.UNIMPLEMENTED.value[0]
+            self.status.code = GRPC_STATUS_CODE_UNIMPLEMENTED
             self.status.message = msg
 
     def _is_container(self, val):
@@ -117,9 +142,28 @@ class SetRequest(Request):
 
     def _xpath_with_keys(self, container, path):
         keys_str = ""
-        keys = self.repo.get_list_keys(path)
+        try:
+            keys = self.repo.get_list_keys(path)
+        except ValueError as e:
+            msg = f"failed to parse value. {self.xpath} is invalid. {e}"
+            logger.error(msg)
+            self.status.code = GRPC_STATUS_CODE_INVALID_ARGUMENT
+            self.status.message = msg
+            return
+        if len(keys) == 0:
+            msg = f"failed to parse value. '{path}' should not be container-list."
+            logger.error(msg)
+            self.status.code = GRPC_STATUS_CODE_INVALID_ARGUMENT
+            self.status.message = msg
+            return
         for key in keys:
-            val = container[key]
+            val = container.get(key)
+            if val is None:
+                msg = f"failed to parse value. key '{key}' is required for the container-list. xpath: {path}, value: {container}."
+                logger.error(msg)
+                self.status.code = GRPC_STATUS_CODE_INVALID_ARGUMENT
+                self.status.message = msg
+                return
             keys_str = f"{keys_str}[{key}='{val}']"
         return f"{path}{keys_str}"
 
@@ -133,11 +177,11 @@ class SetRequest(Request):
                 next_path = self._xpath_with_keys(container, path)
                 self._get_leaves(container, next_path)
         else:
-            logger.debug("xpath:%s, val:%s", path, val)
             self.leaves[path] = val
 
     def _parse_val_into_leaves(self, val):
         decoded_val = self._decode_val(val)
+        self.val = decoded_val
         if decoded_val is not None:
             if self._is_container(decoded_val) or self._is_container_list(decoded_val):
                 self._get_leaves(decoded_val, self.xpath)
@@ -161,14 +205,20 @@ class DeleteRequest(SetRequest):
             self.repo.delete(self.xpath)
         except NotFoundError:
             # Silently accept.
-            logger.debug(
+            logger.info(
                 "%s is not found. But the DeleteRequest() for the path is accepted.",
                 self.xpath,
             )
+        except ValueError as e:
+            msg = f"failed to delete. {self.xpath} is invalid. {e}"
+            logger.error(msg)
+            self.status.code = GRPC_STATUS_CODE_INVALID_ARGUMENT
+            self.status.message = msg
         except Exception as e:
-            logger.error("Failed to delete %s. %s", self.xpath, e)
-            self.status.code = grpc.StatusCode.UNKNOWN.value[0]
-            self.status.message = f"{self.xpath}, {e}"
+            msg = f"failed to delete. xpath: {self.xpath}. {e}"
+            logger.error(msg)
+            self.status.code = GRPC_STATUS_CODE_UNKNOWN
+            self.status.message = msg
 
 
 class ReplaceRequest(SetRequest):
@@ -210,10 +260,17 @@ class UpdateRequest(SetRequest):
                 logger.debug("Update leaf: %s = %s", k, v)
                 try:
                     self.repo.set(k, v)
+                except ValueError as e:
+                    msg = f"failed to update. xpath: {k} or value: {v} is invalid. {e}"
+                    logger.error(msg)
+                    self.status.code = GRPC_STATUS_CODE_INVALID_ARGUMENT
+                    self.status.message = msg
+                    return
                 except Exception as e:
-                    logger.error("Failed to update xpath: %s, value: %s. %s", k, v, e)
-                    self.status.code = grpc.StatusCode.UNKNOWN.value[0]
-                    self.status.message = f"{self.xpath}, {e}"
+                    msg = f"failed to update. xpath: {k}, value: {v}. {e}"
+                    logger.error(msg)
+                    self.status.code = GRPC_STATUS_CODE_UNKNOWN
+                    self.status.message = msg
                     return
 
 
@@ -224,6 +281,8 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
         repo (Repository): Datastore instance where requested data are get, set or delete.
         supported_models (dict): List of yang models supported by the gNMI server.
     """
+
+    SUPPORTED_ENCODINGS = [gnmi_pb2.Encoding.JSON]
 
     def __init__(self, repo, supported_models):
         super().__init__()
@@ -240,7 +299,7 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
                 )
                 for m in self.supported_models.get("supported_models")
             ],
-            supported_encodings=[gnmi_pb2.Encoding.JSON],
+            supported_encodings=self.SUPPORTED_ENCODINGS,
             gNMI_version="0.6.0",
         )
 
@@ -250,6 +309,15 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
                 return sc
         return grpc.StatusCode.UNKNOWN
 
+    def _verify_encoding(self, encoding):
+        if encoding is not None and encoding not in self.SUPPORTED_ENCODINGS:
+            msg = f"unsupported encoding type '{gnmi_pb2.Encoding.Name(encoding)}' is specified in Get."
+            logger.error(msg)
+            return gnmi_pb2.Error(
+                code=GRPC_STATUS_CODE_UNIMPLEMENTED,
+                message=msg,
+            )
+
     def _collect_get_requests(self, request, repo):
         requests = []
         for path in request.path:
@@ -257,49 +325,26 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
             requests.append(gr)
         return requests
 
-    def _exec_get_request(self, requests):
+    def _exec_get_requests(self, requests):
         for r in requests:
-            try:
-                r.exec()
-            except NotFoundError as e:
-                logger.error(
-                    "Failed to retrieve data from datastore for Get(%s). %s",
-                    r.xpath,
-                    e,
-                )
-                return gnmi_pb2.GetResponse(
-                    error=gnmi_pb2.Error(
-                        code=grpc.StatusCode.NOT_FOUND.value[0],
-                        message=f"XPath: {r.xpath}, {e}",
-                    )
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to retrieve data from datastore for Get(%s). %s",
-                    r.xpath,
-                    e,
-                )
-                return gnmi_pb2.GetResponse(
-                    error=gnmi_pb2.Error(
-                        code=grpc.StatusCode.UNKNOWN.value[0],
-                        message=f"XPath: {r.xpath}, {e}",
-                    )
-                )
+            r.exec()
+            if r.status.code != GRPC_STATUS_CODE_OK:
+                return r.status
 
     def Get(self, request, context):
-        error_response = None
-        requests = []
-        with self.repo() as repo:
-            repo.start()
-            requests = self._collect_get_requests(request, repo)
-            error_response = self._exec_get_request(requests)
-        if error_response is not None:
-            status_code = self._get_status_code(error_response.error.code)
-            details = error_response.error.message
+        error = self._verify_encoding(request.encoding)
+        if error is None:
+            with self.repo() as repo:
+                repo.start()
+                requests = self._collect_get_requests(request, repo)
+                error = self._exec_get_requests(requests)
+        if error is not None:
+            status_code = self._get_status_code(error.code)
+            details = error.message
             context.set_code(status_code)
             context.set_details(details)
             logger.debug("gRPC StatusCode: %s, details: %s", status_code, details)
-            return error_response
+            return gnmi_pb2.GetResponse(error=error)
         notifications = []
         for r in requests:
             tv = gnmi_pb2.TypedValue()
@@ -323,6 +368,8 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
         delete_requests = []
         replace_requests = []
         update_requests = []
+        error_requests = []
+        error = None
         for r in request.delete:
             dr = DeleteRequest(repo, prefix, r)
             delete_requests.append(dr)
@@ -332,51 +379,65 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
         for r in request.update:
             ur = UpdateRequest(repo, prefix, r.path, r.val)
             update_requests.append(ur)
-        return delete_requests, replace_requests, update_requests
+        requests = delete_requests + replace_requests + update_requests
+        for r in requests:
+            if r.status.code != GRPC_STATUS_CODE_OK:
+                error_requests.append(r)
+                if error is None:
+                    error = gnmi_pb2.Error(
+                        code=GRPC_STATUS_CODE_ABORTED,
+                        message=r.status.message,
+                    )
+                else:
+                    error.message = error.message + " " + r.status.message
+        return requests, error_requests, error
 
-    def _exec_set_requests(self, requests, status):
+    def _exec_set_requests(self, requests):
+        error_requests = []
+        error = None
         for r in requests:
             r.exec()
-            if (
-                r.status.code is not grpc.StatusCode.OK.value[0]
-                and status.code is grpc.StatusCode.OK.value[0]
-            ):
-                status.MergeFrom(r.status)
-
-    def _apply_set_requests(self, repo, status):
-        if status.code == grpc.StatusCode.OK.value[0]:
-            try:
-                repo.apply()
-            except ApplyFailedError as e:
-                logger.error("Failed to apply changes for Set(). %s", e)
-                repo.discard()
-                status.MergeFrom(
-                    gnmi_pb2.Error(
-                        code=grpc.StatusCode.INTERNAL.value[0],
-                        message=f"{e}",
-                    )
+            if r.status.code != GRPC_STATUS_CODE_OK:
+                error_requests.append(r)
+                error = gnmi_pb2.Error(
+                    code=GRPC_STATUS_CODE_ABORTED,
+                    message=r.status.message,
                 )
-                # TODO: Update r.status to describe it was failed.
-                #       But how to know which request(s) was failed?
-        else:
-            logger.error("Set() discards all changes.")
-            repo.discard()
+                break
+        return error_requests, error
+
+    def _set_status_code_aborted(self, requests, error_requests):
+        for r in requests:
+            if r in error_requests:
+                continue
+            r.status.code = GRPC_STATUS_CODE_ABORTED
+
+    def _apply_set_requests(self, repo):
+        try:
+            repo.apply()
+        except ApplyFailedError as e:
+            # TODO: Update r.status to describe it was failed.
+            #       But how to know which request(s) was failed?
+            msg = f"failed to apply changes. {e}, {type(e)}"
+            logger.error(msg)
+            return gnmi_pb2.Error(
+                code=GRPC_STATUS_CODE_ABORTED,
+                message=msg,
+            )
 
     def Set(self, request, context):
         with self.repo() as repo:
             repo.start()
-            deletes, replaces, updates = self._collect_set_requests(request, repo)
-            status = gnmi_pb2.Error(
-                code=grpc.StatusCode.OK.value[0],
-                message=None,
-            )
-            self._exec_set_requests(deletes, status)
-            self._exec_set_requests(replaces, status)
-            self._exec_set_requests(updates, status)
-            self._apply_set_requests(repo, status)
-
+            requests, error_requests, error = self._collect_set_requests(request, repo)
+            if error is None:
+                error_requests, error = self._exec_set_requests(requests)
+            if error is None:
+                error = self._apply_set_requests(repo)
+            if error is not None:
+                self._set_status_code_aborted(requests, error_requests)
+                logger.error("Set() discards all changes.")
+                repo.discard()
         timestamp = time.time_ns()
-        requests = deletes + replaces + updates
         results = []
         for r in requests:
             ur = gnmi_pb2.UpdateResult(
@@ -386,18 +447,27 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
                 op=r.operation,
             )
             results.append(ur)
-        response = gnmi_pb2.SetResponse(
+        if error is not None:
+            status_code = self._get_status_code(error.code)
+            details = error.message
+            context.set_code(status_code)
+            context.set_details(details)
+            logger.debug("gRPC StatusCode: %s, details: %s", status_code, details)
+            logger.debug(
+                "SetRequest StatusCode: %s", self._get_status_code(error.code).name
+            )
+            for r in requests:
+                logger.debug(
+                    "%s, StatusCode: %s",
+                    gnmi_pb2.UpdateResult.Operation.Name(r.operation),
+                    self._get_status_code(r.status.code).name,
+                )
+        return gnmi_pb2.SetResponse(
             prefix=request.prefix,
             response=results,
-            message=status,
+            message=error,
             timestamp=timestamp,
         )
-        status_code = self._get_status_code(status.code)
-        details = status.message
-        context.set_code(status_code)
-        context.set_details(details)
-        logger.debug("gRPC StatusCode: %s, details: %s", status_code, details)
-        return response
 
     # TODO: Implement Subscribe().
 

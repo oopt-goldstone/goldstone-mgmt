@@ -42,6 +42,7 @@ class Repository:
 
         Raises:
             NotFoundError: Matched data is not found.
+            ValueError: 'xpath' is invalid.
         """
         pass
 
@@ -56,6 +57,9 @@ class Repository:
             xpath (str): Xpath to set.
             data (Any): Data to set. Structured types (e.g. list, dict) are not supported, you need to set() items one
               by one.
+
+        Raises:
+            ValueError: 'xpath' is invalid.
         """
         pass
 
@@ -69,6 +73,7 @@ class Repository:
 
         Raises:
             NotFoundError: Matched data is not found.
+            ValueError: 'xpath' is invalid.
         """
         pass
 
@@ -85,5 +90,8 @@ class Repository:
 
         Args:
             path (str): Path to the contianer list.
+
+        Raises:
+            ValueError: 'path' has an invalid value.
         """
         pass

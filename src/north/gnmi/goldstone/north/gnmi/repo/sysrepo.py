@@ -71,6 +71,9 @@ class Sysrepo(Repository):
             else:
                 name = name.split(":")[-1]
                 node = self._next_node(node, name)
+            if node is None:
+                msg = f"node '{elem}' not found."
+                raise ValueError(msg)
             elem_keys = self._find_keys(elem)
             if len(elem_keys) > 0:
                 key_defined = True
@@ -95,13 +98,22 @@ class Sysrepo(Repository):
         except ConnectorNotFound as e:
             logger.error("%s not found. %s", xpath, e)
             raise NotFoundError(xpath) from e
+        except ConnectorError as e:
+            msg = f"failed to get. {xpath}: invalid xpath. {e}"
+            logger.debug(msg)
+            raise ValueError(msg) from e
         logger.debug("result: %s", r)
         if r is None:
             raise NotFoundError(xpath)
         return r
 
     def set(self, xpath, data):
-        self._connector.set(xpath, data)
+        try:
+            self._connector.set(xpath, data)
+        except ConnectorError as e:
+            msg = f"failed to set. xpath: {xpath}, value: {data}. {e}"
+            logger.debug(msg)
+            raise ValueError(msg) from e
 
     def delete(self, xpath):
         try:
@@ -109,6 +121,10 @@ class Sysrepo(Repository):
         except ConnectorNotFound as e:
             logger.error("%s not found. %s", xpath, e)
             raise NotFoundError(xpath) from e
+        except ConnectorError as e:
+            msg = f"failed to delete. xpath: {xpath}. {e}"
+            logger.debug(msg)
+            raise ValueError(msg) from e
 
     def apply(self):
         try:
@@ -131,6 +147,9 @@ class Sysrepo(Repository):
             else:
                 name = name.split(":")[-1]
                 node = self._next_node(node, name)
+                if node is None:
+                    msg = f"node '{elem}' not found."
+                    raise ValueError(msg)
         keys = []
         for key in node.keys():
             keys.append(key.name())
