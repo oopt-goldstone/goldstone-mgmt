@@ -179,7 +179,7 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
                                     "state": {
                                         "mode": "freerun",
                                         "state": "freerun",
-                                        "selected-reference": "4",
+                                        "selected-reference": "5",
                                     },
                                 }
                             ]

@@ -227,10 +227,8 @@ class DPLLServer(ServerBase):
                     pass
                 refs.append(r)
 
-            selected = int(selected) - 1
-
-            if selected in self.refinfo.get(name, {}):
-                d["state"]["selected-reference"] = str(selected)
+            if int(selected) in self.refinfo.get(name, {}):
+                d["state"]["selected-reference"] = selected
 
             d["input-references"] = {"input-reference": refs}
             dplls.append(d)
