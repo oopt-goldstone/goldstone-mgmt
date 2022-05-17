@@ -5,6 +5,7 @@ import logging
 from prompt_toolkit.completion import merge_completers, FuzzyWordCompleter
 
 from .base import Command as BaseCommand, Context as BaseContext, InvalidInput
+from .util import get_object_list
 
 KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 
@@ -21,7 +22,7 @@ class Command(BaseCommand):
 
 class ConfigCommand(Command):
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         raise Exception(
             "ConfigCommand subclass must implement to_command() classmethod"
         )
@@ -35,20 +36,38 @@ class RunningConfigCommand(Command):
             raise InvalidInput(f"usage: {self.name_all()} {self.usage()}")
 
         for cmd in self.list():
+            self.num_lines = 0
             self(cmd)
+
+            # if anything printed, print '!' as a delimiter
+            if self.num_lines:
+                stdout.info("!")
 
     def usage(self):
         return f"[ {' | '.join(self.list())} ]"
 
 
+class Run(Command):
+    def exec(self, line):
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+        ctx = self.options["ctx"]
+        self.parent.num_lines = ctx(self.context).run_conf()
+
+    def usage(self):
+        return "usage: {self.name_all()}"
+
+
 class TechSupportCommand(Command):
     REGISTERED_COMMANDS = {}
+
+    def __init__(self, context, parent, name, **options):
+        super().__init__(context, parent, name, **options)
+        self.xpath_list = []
 
     def exec(self, line):
         if len(line) != 0:
             raise InvalidInput(f"usage: {self.name_all()}")
-
-        self.xpath_list = []
 
         for cmd in self.list():
             self(cmd)
@@ -271,9 +290,16 @@ def ConnectorType(t):
 
 
 class Context(BaseContext):
-    def __init__(self, parent, fuzzy_completion=None):
+    SUB_CONTEXTS = []
+    OBJECT_NAME = ""
+
+    def __init__(self, parent, name=None, fuzzy_completion=None):
         self.conn = parent.root().conn if parent != None else self.conn
+        self.name = name
         super().__init__(parent, fuzzy_completion)
+
+        assert self.conn != None
+
         self.add_command("show", GlobalShowCommand)
         self.add_command("clear", GlobalClearCommand)
 
@@ -292,3 +318,50 @@ class Context(BaseContext):
             self.no = NoCommand(self, None, name="no")
             self.add_command("no", self.no)
         self.no.add_command(name, cmd, **options)
+
+    def xpath(self):
+        raise Exception("Context subclass must implement xpath() method")
+
+    def __str__(self):
+        return f"{self.OBJECT_NAME}({self.name})"
+
+    def run_conf(self, indent="") -> int:
+        assert self.name == None
+        objs = get_object_list(self.conn, self.xpath(), "running")
+        if not objs:
+            return 0
+
+        n = 0
+
+        for i, data in enumerate(objs):
+            name = data.get("name")
+            self.name = name
+
+            n += 2
+            stdout.info(indent + f"{self.OBJECT_NAME} {name}")
+
+            for k, (cmd, options) in self._command.list_subcommands():
+                if isinstance(cmd, type) and issubclass(cmd, ConfigCommand):
+                    lines = cmd.to_command(self.conn, data, **options)
+                    if not lines:
+                        continue
+
+                    if type(lines) == str:
+                        lines = [lines]
+
+                    for line in lines:
+                        stdout.info(indent + "  " + line)
+
+                    n += len(lines)
+
+            for ctx in self.SUB_CONTEXTS:
+                n += ctx(self).run_conf(indent + "  ")
+
+            stdout.info(indent + "  quit")
+
+            if i < (len(objs) - 1):
+                stdout.info("!")
+
+        self.name = None
+
+        return n

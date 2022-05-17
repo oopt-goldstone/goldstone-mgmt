@@ -23,8 +23,7 @@ EXPECTED_RUN_CONF = """transponder piu1
   netif 0
     tx-dis true
     quit
-  quit
-!"""
+  quit"""
 
 
 class MockConnector(Connector):

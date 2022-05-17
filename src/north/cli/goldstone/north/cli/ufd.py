@@ -147,11 +147,14 @@ def show(session, id=None):
 
 def run_conf(session):
     d_list = session.get(f"{XPATH}/ufd-group")
+    n = 0
     for id in get_id(session):
         data = d_list[id]
+        n += 3
         stdout.info("ufd {}".format(data["config"]["ufd-id"]))
         stdout.info("  quit")
         stdout.info("!")
+    return n
 
 
 class UFDContext(Context):
@@ -186,10 +189,9 @@ GlobalShowCommand.register_command(
 
 class Run(Command):
     def exec(self, line):
-        if len(line) == 0:
-            return run_conf(self.conn)
-        else:
-            stderr.info(self.usage())
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+        self.parent.num_lines = run_conf(self.conn)
 
 
 RunningConfigCommand.register_command(
@@ -270,7 +272,7 @@ class InterfaceUFDCommand(ConfigCommand):
             add_ports(self.conn, line[0], self.context.ifnames, line[1])
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         ifname = data.get("name")
         return [f"ufd {v[0]} {v[1]}" for v in get_ufd(conn, ifname)]
 

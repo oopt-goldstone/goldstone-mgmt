@@ -337,7 +337,7 @@ class TestSouthGearbox(TestBase):
         assert "0  Interface1/0/4" in output
         output = self.gscli("show running-config")
         assert "gearbox 1" in output
-        assert "synce-reference-clocks 0" in output
+        assert "synce-reference-clock 0" in output
         assert "reference-interface Interface1/0/4" in output
 
         self.gscli("gearbox 1; synce-reference-clock 0; no reference-interface")
@@ -345,13 +345,13 @@ class TestSouthGearbox(TestBase):
         assert "0  -" in output
         output = self.gscli("show running-config")
         assert "gearbox 1" in output
-        assert "synce-reference-clocks 0" in output
+        assert "synce-reference-clock 0" in output
         assert "reference-interface Interface1/0/4" not in output
 
         self.gscli("gearbox 1; no synce-reference-clock 0")
         output = self.gscli("show running-config")
         assert "gearbox 1" in output
-        assert "synce-reference-clocks 0" not in output
+        assert "synce-reference-clock 0" not in output
         assert "reference-interface Interface1/0/4" not in output
 
     def test_tx_timing_mode(self):

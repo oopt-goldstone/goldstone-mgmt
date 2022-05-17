@@ -1,20 +1,20 @@
 from .base import InvalidInput
+
 from .cli import (
     Command,
     ConfigCommand,
     Context,
     GlobalShowCommand,
+    Run,
     RunningConfigCommand,
     GlobalClearCommand,
     TechSupportCommand,
     ModelExists,
 )
 from .root import Root
-from .util import dig_dict, human_ber
+from .util import dig_dict, human_ber, object_names, get_object_list
 
 from tabulate import tabulate
-from natsort import natsorted
-import re
 import logging
 import base64
 import struct
@@ -71,23 +71,11 @@ def ifxpath(ifname):
 
 
 def interface_names(session, ptn=None):
-    data = session.get_operational(f"{XPATH}/name", [])
-
-    if ptn:
-        try:
-            ptn = re.compile(ptn)
-        except re.error:
-            raise InvalidInput(f"failed to compile {ptn} as a regular expression")
-        f = ptn.match
-    else:
-        f = lambda _: True
-    return natsorted(v for v in data if f(v))
+    return object_names(session, XPATH, ptn)
 
 
 def get_interface_list(session, datastore):
-    imp = datastore == "operational"
-    interfaces = session.get(XPATH, [], ds=datastore, include_implicit_defaults=imp)
-    return natsorted(interfaces, key=lambda x: x["name"])
+    return get_object_list(session, XPATH, datastore)
 
 
 def show_interface(session, details="description"):
@@ -619,7 +607,7 @@ def eth_config(data, key):
 
 
 class IfConfigCommand(ConfigCommand):
-    NODE = ["config", "pin-mode"]
+    NODE = []
     XPATH = "".join(
         f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
     )
@@ -642,7 +630,7 @@ class IfConfigCommand(ConfigCommand):
             _set(self.conn, self.context.ifnames, "/".join(self.NODE), line[0].upper())
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         for n in cls.NODE:
             data = data.get(n, {})
 
@@ -703,7 +691,7 @@ class SpeedCommand(ConfigCommand):
             set_speed(self.conn, self.context.ifnames, line[0])
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         speed = eth_config(data, "speed")
         if speed:
             return f"speed {speed_yang_to_human(speed)}"
@@ -747,7 +735,7 @@ class InterfaceTypeCommand(ConfigCommand):
             set_interface_type(self.conn, self.context.ifnames, line[0])
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         otn = data.get("otn")
         if otn:
             mfi = otn.get("config", {}).get("mfi-type")
@@ -777,7 +765,7 @@ class MTUCommand(ConfigCommand):
                 raise InvalidInput("Argument must be numbers and not letters")
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         mtu = eth_config(data, "mtu")
         if mtu:
             return f"mtu {mtu}"
@@ -823,7 +811,7 @@ class AutoNegoCommand(ConfigCommand):
             set_auto_nego(self.conn, self.context.ifnames, line[0] == "enable")
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         config = dig_dict(data, ["ethernet", "auto-negotiate", "config"])
         if not config:
             return None
@@ -875,7 +863,7 @@ class BreakoutCommand(ConfigCommand):
             )
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         config = dig_dict(data, ["ethernet", "breakout", "config"])
         if not config:
             return None
@@ -907,7 +895,7 @@ class StaticMACSECCommand(ConfigCommand):
         return f"usage: {self.name_all()} <static-macsec-key> (<uint32>,<uint32>,<uint32>,<uint32>)"
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         key = dig_dict(data, ["ethernet", "static-macsec", "config", "key"])
         if key:
             key = static_macsec_key_to_human(key)
@@ -939,7 +927,7 @@ class TXTimingModeCommand(ConfigCommand):
         return f"usage: {self.name_all()} [{'|'.join(self.list())}]"
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         mode = dig_dict(data, ["ethernet", "synce", "config", "tx-timing-mode"])
         if mode:
             return f"tx-timing-mode {mode}"
@@ -1064,10 +1052,10 @@ class InterfaceShowCommand(Command):
 
 class InterfaceContext(Context):
     REGISTERED_COMMANDS = {}
+    OBJECT_NAME = "interface"
 
-    def __init__(self, parent, ifname):
-        super().__init__(parent)
-        self.name = ifname
+    def __init__(self, parent, ifname=None):
+        super().__init__(parent, name=ifname)
 
         if ifname:  # ifname == None when running config
             ifnames = interface_names(self.conn, ifname)
@@ -1114,45 +1102,8 @@ class InterfaceContext(Context):
             additional_completer=parent.get_completer("show"),
         )
 
-    def __str__(self):
-        return "interface({})".format(self.name)
-
-    def run_conf(self):
-        interface_list = get_interface_list(self.conn, "running")
-        if not interface_list:
-            return
-
-        for data in interface_list:
-            ifname = data.get("name")
-            stdout.info(f"interface {ifname}")
-
-            registered = []
-
-            def gen(cmd):
-                if isinstance(cmd, type) and issubclass(cmd, ConfigCommand):
-                    lines = cmd.to_command(self.conn, data)
-                    if not lines:
-                        return
-
-                    if type(lines) == str:
-                        lines = [lines]
-
-                    for line in lines:
-                        stdout.info("  " + line)
-
-            for k, (cmd, options) in self._command.subcommand_dict.items():
-                if "registered" in options:
-                    registered.append(cmd)
-                    continue
-                gen(cmd)
-
-            for cmd in registered:
-                gen(cmd)
-
-            stdout.info("  quit")
-            stdout.info("!")
-
-        stdout.info("!")
+    def xpath(self):
+        return XPATH
 
 
 class Show(Command):
@@ -1200,19 +1151,8 @@ GlobalClearCommand.register_command(
 )
 
 
-class Run(Command):
-    def exec(self, line):
-        if len(line) == 0:
-            return InterfaceContext(self.context, None).run_conf()
-        else:
-            stderr.info(self.usage())
-
-    def usage(self):
-        return "usage: {self.name_all()}"
-
-
 RunningConfigCommand.register_command(
-    "interface", Run, when=ModelExists("goldstone-interfaces")
+    "interface", Run, when=ModelExists("goldstone-interfaces"), ctx=InterfaceContext
 )
 
 
