@@ -8,7 +8,7 @@ OpenConfig dynamic-subscription is represented as the DynamicSubscription class.
 """
 
 
-from .lib import OpenConfigObjectFactory, OpenConfigServer
+from .lib import OpenConfigObjectFactory, OpenConfigObjectTree, OpenConfigServer
 
 
 class DynamicSubscription:
@@ -109,15 +109,14 @@ class DynamicSubscriptionFactory(OpenConfigObjectFactory):
         return result
 
 
-class TelemetryServer(OpenConfigServer):
-    """TelemetryServer provides a service for the openconfig-telemetry module to central datastore.
+class TelemetryObjectTree(OpenConfigObjectTree):
+    """OpenConfigObjectTree for the openconfig-telemetry module.
 
-    The server provides operational state information of subscriptions.
+    It creates an operational state data tree of the openconfig-telemetry module.
     """
 
-    def __init__(self, conn, reconciliation_interval=10):
-        super().__init__(conn, "openconfig-telemetry", reconciliation_interval)
-        self.handlers = {"telemetry-system": {}}
+    def __init__(self):
+        super().__init__()
         self.objects = {
             "telemetry-system": {
                 "subscriptions": {
@@ -127,3 +126,15 @@ class TelemetryServer(OpenConfigServer):
                 }
             }
         }
+
+
+class TelemetryServer(OpenConfigServer):
+    """TelemetryServer provides a service for the openconfig-telemetry module to central datastore.
+
+    The server provides operational state information of subscriptions.
+    """
+
+    def __init__(self, conn, cache, reconciliation_interval=10):
+        super().__init__(conn, "openconfig-telemetry", cache, reconciliation_interval)
+        self.handlers = {"telemetry-system": {}}
+        self._object_tree = TelemetryObjectTree()

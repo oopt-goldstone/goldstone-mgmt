@@ -20,6 +20,7 @@ from goldstone.lib.errors import NotFoundError
 from .lib import (
     OpenConfigChangeHandler,
     OpenConfigObjectFactory,
+    OpenConfigObjectTree,
     OpenConfigServer,
 )
 
@@ -1724,6 +1725,26 @@ class ComponentFactory(OpenConfigObjectFactory):
         return result
 
 
+class PlatformObjectTree(OpenConfigObjectTree):
+    """OpenConfigObjectTree for the openconfig-platform module.
+
+    It creates an operational state data tree of the openconfig-platform module.
+
+    Args:
+        operational_modes (dict): Supported operational-modes.
+    """
+
+    def __init__(self, operational_modes):
+        super().__init__()
+        self.objects = {
+            "components": {
+                "component": ComponentFactory(
+                    operational_modes, ComponentNameResolver()
+                )
+            }
+        }
+
+
 class PlatformServer(OpenConfigServer):
     """PlatformServer provides a service for the openconfig-platform module to central datastore.
 
@@ -1735,8 +1756,8 @@ class PlatformServer(OpenConfigServer):
         cnr (ComponentNameResolver): OpenConfig component name resolver.
     """
 
-    def __init__(self, conn, operational_modes, reconciliation_interval=10):
-        super().__init__(conn, "openconfig-platform", reconciliation_interval)
+    def __init__(self, conn, cache, operational_modes, reconciliation_interval=10):
+        super().__init__(conn, "openconfig-platform", cache, reconciliation_interval)
         self.handlers = {
             "components": {
                 "component": {
@@ -1767,11 +1788,7 @@ class PlatformServer(OpenConfigServer):
         }
         self.operational_modes = operational_modes
         self.cnr = ComponentNameResolver()
-        self.objects = {
-            "components": {
-                "component": ComponentFactory(self.operational_modes, self.cnr)
-            }
-        }
+        self._object_tree = PlatformObjectTree(self.operational_modes)
 
     async def reconcile(self):
         # TODO: implement

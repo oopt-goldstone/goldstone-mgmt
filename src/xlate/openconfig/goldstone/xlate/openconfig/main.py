@@ -12,9 +12,17 @@ from .interfaces import InterfaceServer
 from .platform import PlatformServer
 from .terminal_device import TerminalDeviceServer
 from .telemetry import TelemetryServer
+from .cache import InMemoryCache
+from .cache_updater import CacheUpdater
 
 
 logger = logging.getLogger(__name__)
+
+
+CACHES = {
+    "none": None,
+    "in-memory": InMemoryCache,
+}
 
 
 def load_operational_modes(operational_modes_file):
@@ -44,18 +52,22 @@ def load_operational_modes(operational_modes_file):
 
 
 def main():
-    async def _main(operational_modes):
+    async def _main(cache, operational_modes):
         loop = asyncio.get_event_loop()
         stop_event = asyncio.Event()
         loop.add_signal_handler(signal.SIGINT, stop_event.set)
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
         conn = Connector()
-        ifserver = InterfaceServer(conn)
-        pfserver = PlatformServer(conn, operational_modes)
-        tdserver = TerminalDeviceServer(conn, operational_modes)
-        tlserver = TelemetryServer(conn)
+        ifserver = InterfaceServer(conn, cache)
+        pfserver = PlatformServer(conn, cache, operational_modes)
+        tdserver = TerminalDeviceServer(conn, cache, operational_modes)
+        # NOTE: Disable caching for the openconfig-telemetry to avoid a deadlock with the telemetry server.
+        tlserver = TelemetryServer(conn, None)
         servers = [ifserver, pfserver, tdserver, tlserver]
+        if cache is not None:
+            cacheupdater = CacheUpdater(cache, operational_modes)
+            servers.append(cacheupdater)
 
         try:
             tasks = list(
@@ -77,7 +89,7 @@ def main():
                 await runner.cleanup()
             for s in servers:
                 await call(s.stop)
-            conn.disconnect()
+            conn.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -87,6 +99,13 @@ def main():
         "operational_modes_file",
         metavar="operational-modes-file",
         help="path to operational-modes config file",
+    )
+    parser.add_argument(
+        "-c",
+        "--cache-datastore",
+        choices=CACHES.keys(),
+        default="none",
+        help="select cache datastore",
     )
     args = parser.parse_args()
 
@@ -103,9 +122,12 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 
+    cache = CACHES[args.cache_datastore]
+    if cache is not None:
+        cache = cache()
     operational_modes = load_operational_modes(args.operational_modes_file)
 
-    asyncio.run(_main(operational_modes))
+    asyncio.run(_main(cache, operational_modes))
 
 
 if __name__ == "__main__":

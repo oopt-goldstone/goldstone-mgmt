@@ -1,4 +1,4 @@
-"""Tests of OpenConfig translater for openconfig-platform."""
+"""Tests of OpenConfig translator for openconfig-platform."""
 
 
 import unittest
@@ -2853,7 +2853,7 @@ class TestPlatformPortAdminStateHandlerTerminalLine(unittest.TestCase):
     # Test for terminal line port.
     def test_set_terminal_line_module_not_configured(self):
         # Target module has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='line-piu1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -2899,7 +2899,7 @@ class TestPlatformPortAdminStateHandlerTerminalLine(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='line-piu1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -2950,7 +2950,7 @@ class TestPlatformPortAdminStateHandlerTerminalLine(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='line-piu1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -2988,7 +2988,7 @@ class TestPlatformPortAdminStateHandlerTerminalLine(unittest.TestCase):
 
     def test_delete_terminal_line_module_not_configured(self):
         # Target module has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='line-piu1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3033,7 +3033,7 @@ class TestPlatformPortAdminStateHandlerTerminalLine(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='line-piu1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3083,7 +3083,7 @@ class TestPlatformPortAdminStateHandlerTerminalLine(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='line-piu1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3199,7 +3199,7 @@ class TestPlatformPortAdminStateHandlerTerminalClient(unittest.TestCase):
 
     def test_set_terminal_client_interface_not_configured(self):
         # Target interface has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='client-port1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3258,7 +3258,7 @@ class TestPlatformPortAdminStateHandlerTerminalClient(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='client-port1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3326,7 +3326,7 @@ class TestPlatformPortAdminStateHandlerTerminalClient(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='client-port1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3376,7 +3376,7 @@ class TestPlatformPortAdminStateHandlerTerminalClient(unittest.TestCase):
 
     def test_delete_terminal_client_interface_not_configured(self):
         # Target interface has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='client-port1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3429,7 +3429,7 @@ class TestPlatformPortAdminStateHandlerTerminalClient(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='client-port1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3490,7 +3490,7 @@ class TestPlatformPortAdminStateHandlerTerminalClient(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='client-port1']/port/"
             "openconfig-transport-line-common:optical-port/config/admin-state"
@@ -3553,7 +3553,7 @@ class TestPlatformOpticalChannelFrequencyHandler(unittest.TestCase):
 
     def test_set_module_not_configured(self):
         # Target module has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/frequency"
@@ -3610,7 +3610,7 @@ class TestPlatformOpticalChannelFrequencyHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/frequency"
@@ -3673,7 +3673,7 @@ class TestPlatformOpticalChannelFrequencyHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/frequency"
@@ -3742,7 +3742,7 @@ class TestPlatformOpticalChannelFrequencyHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/frequency"
@@ -3796,7 +3796,7 @@ class TestPlatformOpticalChannelFrequencyHandler(unittest.TestCase):
     def test_delete_module_not_configured(self):
         # Target module has not been configured.
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/frequency"
@@ -3843,7 +3843,7 @@ class TestPlatformOpticalChannelFrequencyHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/frequency"
@@ -3896,7 +3896,7 @@ class TestPlatformOpticalChannelFrequencyHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/frequency"
@@ -3955,7 +3955,7 @@ class TestPlatformOpticalChannelFrequencyHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/frequency"
@@ -4018,7 +4018,7 @@ class TestPlatformOpticalChannelTargetOutputPowerHandler(unittest.TestCase):
 
     def test_set_module_not_configured(self):
         # Target module has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/target-output-power"
@@ -4075,7 +4075,7 @@ class TestPlatformOpticalChannelTargetOutputPowerHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/target-output-power"
@@ -4138,7 +4138,7 @@ class TestPlatformOpticalChannelTargetOutputPowerHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/target-output-power"
@@ -4207,7 +4207,7 @@ class TestPlatformOpticalChannelTargetOutputPowerHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/target-output-power"
@@ -4260,7 +4260,7 @@ class TestPlatformOpticalChannelTargetOutputPowerHandler(unittest.TestCase):
 
     def test_delete_module_not_configured(self):
         # Target module has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/target-output-power"
@@ -4307,7 +4307,7 @@ class TestPlatformOpticalChannelTargetOutputPowerHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/target-output-power"
@@ -4360,7 +4360,7 @@ class TestPlatformOpticalChannelTargetOutputPowerHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/target-output-power"
@@ -4419,7 +4419,7 @@ class TestPlatformOpticalChannelTargetOutputPowerHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/target-output-power"
@@ -4482,7 +4482,7 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
 
     def test_set_module_not_configured(self):
         # Target module has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/operational-mode"
@@ -4561,7 +4561,7 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/operational-mode"
@@ -4646,7 +4646,7 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/operational-mode"
@@ -4752,7 +4752,7 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/operational-mode"
@@ -4843,7 +4843,7 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
 
     def test_delete_module_not_configured(self):
         # Target module has not been configured.
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/operational-mode"
@@ -4898,7 +4898,7 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/operational-mode"
@@ -4959,7 +4959,7 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/operational-mode"
@@ -5041,7 +5041,7 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = PlatformServer(self.conn, operational_modes)
+        server = PlatformServer(self.conn, None, operational_modes)
         xpath = (
             "/openconfig-platform:components/component[name='och-transceiver-line-piu1-1']/"
             "openconfig-terminal-device:optical-channel/config/operational-mode"

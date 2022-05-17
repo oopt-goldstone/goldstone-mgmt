@@ -1,4 +1,4 @@
-"""Tests of OpenConfig translater for openconfig-terminal-device."""
+"""Tests of OpenConfig translator for openconfig-terminal-device."""
 
 
 import unittest
@@ -3120,7 +3120,6 @@ class TestLogicalChannelFactory(unittest.TestCase):
                 },
             },
         ]
-        self.maxDiff = None
         self.assertEqual(data, expected)
 
     def test_create_twice(self):

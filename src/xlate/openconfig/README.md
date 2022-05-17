@@ -50,7 +50,7 @@ sudo pip3 install .
 
 ```sh
 $ gsxlated-openconfig -h
-usage: gsxlated-openconfig [-h] [-v] operational-modes-file
+usage: gsxlated-openconfig [-h] [-v] [-c {none,in-memory}] operational-modes-file
 
 positional arguments:
   operational-modes-file
@@ -59,10 +59,12 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -v, --verbose         enable detailed output
+  -c {none,in-memory}, --cache-datastore {none,in-memory}
+                        select cache datastore
 ```
 
 Example:
 
 ```sh
-gsxlated-openconfig operational-modes.json
+gsxlated-openconfig -c none operational-modes.json
 ```
