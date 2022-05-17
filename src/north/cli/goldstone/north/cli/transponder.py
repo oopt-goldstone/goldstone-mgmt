@@ -1,19 +1,21 @@
-from .base import InvalidInput, Completer
+from .base import InvalidInput
 
 from goldstone.lib.connector import Error
 
 from .cli import (
     Command,
     Context,
+    Run,
     RunningConfigCommand,
     GlobalShowCommand,
     ModelExists,
     TechSupportCommand,
     ShowCommand,
+    ConfigCommand,
 )
 
 from .root import Root
-from .util import human_ber
+from .util import dig_dict, human_ber, object_names
 
 from prompt_toolkit.completion import WordCompleter
 
@@ -27,6 +29,17 @@ stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
 _FREQ_RE = re.compile(r".+[kmgt]?hz$")
+
+XPATH = "/goldstone-transponder:modules/module"
+
+
+def modulexpath(name):
+    return f"{XPATH}[name='{name}']"
+
+
+def module_names(session, ptn=None):
+    return object_names(session, XPATH, ptn)
+
 
 # Function to print data from show command with tabulate library
 def print_tabular(h, table_title=""):
@@ -83,224 +96,114 @@ def to_human(d, runconf=False):
     return d
 
 
-class Transponder(object):
-    XPATH = "/goldstone-transponder:modules/module"
+def show_transponder(session, name):
+    xpath = modulexpath(name)
+    data = session.get_operational(xpath, one=True)
+    if data == None:
+        stderr.info(f"no operational info found for {name}")
+        return
 
-    def xpath(self, name):
-        return f"{self.XPATH}[name='{name}']"
+    # module info
+    print_tabular(data["state"])
 
-    def __init__(self, conn):
-        self.conn = conn
+    for netif in natsorted(data.get("network-interface", []), key=lambda v: v["name"]):
+        print_tabular(to_human(netif["state"]), f"Network Interface {netif['name']}")
 
-    def show_transponder(self, name):
-        if name not in self.get_modules():
-            stderr.info(
-                f"Enter the correct transponder name. {name} is not a valid transponder name"
-            )
-            return
-        xpath = self.xpath(name)
-        data = self.conn.get_operational(xpath, one=True)
-        if data == None:
-            raise InvalidInput(f"no operational info found for {name}")
+    for hostif in natsorted(data.get("host-interface", []), key=lambda v: v["name"]):
+        print_tabular(to_human(hostif["state"]), f"Host Interface {hostif['name']}")
 
-        try:
-            # module info
-            print_tabular(data["state"])
 
-            for netif in natsorted(data["network-interface"], key=lambda v: v["name"]):
-                print_tabular(to_human(netif["state"]), f"Network Interface {netif}")
-
-            for hostif in natsorted(data["host-interface"], key=lambda v: v["name"]):
-                print_tabular(to_human(hostif["state"]), f"Host Interface {netif}")
-
-        except KeyError as e:
-            stderr.info(f"Error while fetching values from operational database: {e}")
-            return
-
-    def show_transponder_summary(self):
-        attrs = [
-            "vendor-name",
-            "vendor-part-number",
-            "vendor-serial-number",
-            "admin-status",
-            "oper-status",
-        ]
-        rows = []
-        for module in self.get_modules():
-            prefix = self.xpath(module)
-            data = [module]
-            for attr in attrs:
-                xpath = f"{prefix}/state/{attr}"
-                try:
-                    v = self.conn.get_operational(xpath, "N/A", one=True)
-                except Error:
-                    v = "N/A"
-                data.append(v)
-            rows.append(data)
-
-        # insert "transponder" for the header use
-        attrs.insert(0, "transponder")
-
-        stdout.info(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
-
-    def run_conf(self):
-        transponder_conf_blacklist = ["name"]
-        netif_conf_blacklist = ["name"]
-        hostif_conf_blacklist = ["name"]
-
-        for module in self.conn.get(self.XPATH, []):
-            stdout.info("transponder {}".format(module.get("name")))
-
-            m = to_human(module.get("config", {}))
-            for k, v in m.items():
-                if k in transponder_conf_blacklist:
-                    continue
-                stdout.info(f"  {k} {v}")
-
-            for netif in module.get("network-interface", []):
-                stdout.info(f"  netif {netif['name']}")
-                n = to_human(netif.get("config", {}), runconf=True)
-                for k, v in n.items():
-                    if k in netif_conf_blacklist:
-                        continue
-                    stdout.info(f"    {k} {v}")
-                stdout.info("    quit")
-
-            for hostif in module.get("host-interface", []):
-                stdout.info(f"  hostif {hostif['name']}")
-                h = to_human(hostif.get("config", {}), runconf=True)
-                for k, v in h.items():
-                    if k in hostif_conf_blacklist:
-                        continue
-                    stdout.info(f"    {k} {v}")
-                stdout.info("    quit")
-
-            stdout.info("  quit")
-
-        stdout.info("!")
-
-    def tech_support(self):
-        stdout.info("\nshow transponder details:\n")
-        modules = self.get_modules()
-        for module in modules:
+def show_transponder_summary(session):
+    attrs = [
+        "vendor-name",
+        "vendor-part-number",
+        "vendor-serial-number",
+        "admin-status",
+        "oper-status",
+    ]
+    rows = []
+    for module in module_names(session):
+        prefix = modulexpath(module)
+        data = [module]
+        for attr in attrs:
+            xpath = f"{prefix}/state/{attr}"
             try:
-                self.show_transponder(module)
-            except InvalidInput as e:
-                stdout.info(e)
+                v = session.get_operational(xpath, "N/A", one=True)
+            except Error:
+                v = "N/A"
+            data.append(v)
+        rows.append(data)
 
-    def get_modules(self):
-        path = "/goldstone-transponder:modules/module/name"
-        return natsorted(self.conn.get_operational(path, []))
+    # insert "transponder" for the header use
+    attrs.insert(0, "transponder")
+
+    stdout.info(tabulate(rows, attrs, tablefmt="pretty", colalign="left"))
 
 
-class SetCommand(Command):
-    def __init__(self, context, node):
-        self.node = node
-        super().__init__(context, None, node.name())
-
+class SetCommand(ConfigCommand):
     def exec(self, line):
-        if len(line) < 1:
-            raise InvalidInput(self.usage())
-
-        enum_values = self.arguments()
-        if len(enum_values) and line[0] not in enum_values:
-            raise InvalidInput(self.usage())
-
-        if self.node.name() == "tx-laser-freq":
-            value = human_freq(line[0])
+        node = self.options["node"]
+        if self.root.name == "no":
+            self.context.delete(node)
         else:
-            value = line[0]
+            if len(line) != 1:
+                raise InvalidInput(self.usage())
 
-        self.context.set(self.node, value)
+            enum_values = self.arguments()
+            if len(enum_values) and line[0] not in enum_values:
+                raise InvalidInput(self.usage())
+
+            if node.name() == "tx-laser-freq":
+                value = human_freq(line[0])
+            else:
+                value = line[0]
+
+            self.context.set(node, value)
 
     def arguments(self):
-        if self.node.type() == "boolean":
+        if self.root.name == "no":
+            return
+        node = self.options["node"]
+        if node.type() == "boolean":
             return ["true", "false"]
-        return [v[0] for v in self.node.enums() if v[0] != "unknown"]
+        return [v[0] for v in node.enums() if v[0] != "unknown"]
 
     def usage(self):
         enum_values = self.arguments()
-        v = f"<{self.node.type()}>"
+        node = self.options["node"]
         if len(enum_values):
             v = "[" + "|".join(enum_values) + "]"
-        return f"usage: {self.node.name()} {v}"
+        else:
+            v = f"<{node.type()}>"
+        return f"usage: {node.name()} {v}"
+
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        node = options["node"]
+        data = dig_dict(data, ["config", node.name()])
+        if data:
+            if node.type() == "boolean":
+                v = "true" if data else "false"
+            elif "freq" in node.name():
+                v = human_freq(data)
+            elif type(data) == str:
+                v = data.lower()
+            else:
+                v = data
+            return f"{node.name()} {v}"
 
 
-class NoCommand(Command):
-    def __init__(self, context, node):
-        self._arguments = [v.name() for v in node.children() if v.name() != "name"]
-        if "admin-status" in self._arguments:
-            self._arguments.append("shutdown")
-        super().__init__(context, None, "no")
-
+class ShutdownCommand(Command):
     def exec(self, line):
-        if len(line) < 1:
-            raise InvalidInput(self.usage())
-
-        if line[0] not in self.arguments():
-            raise InvalidInput(self.usage())
-
-        # special handling for "shutdown", backward compatibility
-        if line[0] == "shutdown":
+        if self.root.name == "no":
             self.context.set("admin-status", "up")
         else:
-            self.context.delete(line[0])
-
-    def arguments(self):
-        return self._arguments
+            if len(line) != 0:
+                raise InvalidInput(self.usage())
+            self.context.set("admin-status", "down")
 
     def usage(self):
-        return f"usage: no [{'|'.join(self.arguments())}]"
-
-
-class TransponderBaseContext(Context):
-    DETAILED_ATTRS = []
-
-    def __init__(self, conn, parent):
-        super().__init__(parent, fuzzy_completion=True)
-
-        node = self.conn.find_node(self.CONFIG_XPATH)
-
-        for v in node.children():
-            if v.name() == "name":
-                continue
-            self.add_command(v.name(), SetCommand(self, v))
-
-        self.add_command("no", NoCommand(self, node))
-        self.add_command("show", TransponderShowCommand(self))
-
-    def set(self, node, value):
-        if type(node) == str:
-            name = node
-        else:
-            name = node.name()
-
-        self.conn.set(f"{self.module_xpath()}/config/name", self.module_name())
-
-        for obj in self.objs:
-            self.conn.set(f"{self.xpath(obj)}/config/name", obj)
-            self.conn.set(f"{self.xpath(obj)}/config/{name}", value)
-
-        self.conn.apply()
-
-    def delete(self, name):
-        for obj in self.objs:
-            self.conn.delete(f"{self.xpath(obj)}/config/{name}")
-        self.conn.apply()
-
-    def components(self, type_, ptn=None):
-        xpath = f"{self.module_xpath()}/{type_}/name"
-        data = self.conn.get_operational(xpath, [], one=True)
-
-        if ptn:
-            try:
-                ptn = re.compile(ptn)
-            except re.error:
-                raise InvalidInput(f"failed to compile {ptn} as a regular expression")
-            f = ptn.match
-        else:
-            f = lambda _: True
-        return natsorted(v for v in data if f(v))
+        return f"usage: shutdown"
 
 
 class TransponderShowCommand(ShowCommand):
@@ -314,7 +217,8 @@ class TransponderShowCommand(ShowCommand):
         if len(line) != 0:
             if line[0] == "details":
                 return self.show(detail=True)
-            return ctx.root().exec(f"show {' '.join(line)}")
+            ctx.root().exec(f"show {' '.join(line)}")
+            return ctx
 
         self.show()
 
@@ -322,7 +226,7 @@ class TransponderShowCommand(ShowCommand):
         ctx = self.context
         for obj in self.context.objs:
             if len(self.context.objs) > 1:
-                stdout.info(f"{self.context.SHORT_OBJECT_TYPE}({obj}):")
+                stdout.info(f"{self.context.OBJECT_NAME}({obj}):")
 
             xpath = ctx.xpath(obj) + "/state"
             data = self.conn.get_operational(xpath, one=True)
@@ -342,23 +246,82 @@ class TransponderShowCommand(ShowCommand):
             stdout.info(tabulate(table))
 
 
+class TransponderBaseContext(Context):
+    DETAILED_ATTRS = []
+
+    def __init__(self, parent, name):
+        super().__init__(parent, name, fuzzy_completion=True)
+        node = self.conn.find_node(self.CONFIG_XPATH)
+
+        for v in node.children():
+            if v.name() == "name":
+                continue
+            self.add_command(v.name(), SetCommand, add_no=True, node=v)
+
+            # special handling for "shutdown", backward compatibility
+            if v.name() == "admin-status":
+                self.add_command("shutdown", ShutdownCommand, add_no=True)
+
+        self.add_command("show", TransponderShowCommand(self))
+
+    def set(self, node, value):
+        if type(node) == str:
+            name = node
+        else:
+            name = node.name()
+
+        self.conn.set(f"{self.module_xpath()}/config/name", self.module_name())
+
+        for obj in self.objs:
+            self.conn.set(f"{self.xpath(obj)}/config/name", obj)
+            self.conn.set(f"{self.xpath(obj)}/config/{name}", value)
+
+        self.conn.apply()
+
+    def delete(self, node):
+        name = node.name()
+
+        for obj in self.objs:
+            self.conn.delete(f"{self.xpath(obj)}/config/{name}")
+        self.conn.apply()
+
+    def components(self, type_, ptn=None):
+        xpath = f"{self.module_xpath()}/{type_}/name"
+        data = self.conn.get_operational(xpath, [], one=True)
+
+        if ptn:
+            try:
+                ptn = re.compile(ptn)
+            except re.error:
+                raise InvalidInput(f"failed to compile {ptn} as a regular expression")
+            f = ptn.match
+        else:
+            f = lambda _: True
+        return natsorted(v for v in data if f(v))
+
+
 class InterfaceContext(TransponderBaseContext):
     def module_xpath(self):
-        return self.parent.xpath()
+        return self.parent.module_xpath()
 
     def xpath(self, name=None):
-        if name == None:
-            name = self.name
-        return f"{self.module_xpath()}/{self.OBJECT_TYPE}[name='{name}']"
+        v = f"{self.module_xpath()}/{self.OBJECT_TYPE}"
+        if name != None:
+            v += f"[name='{name}']"
+        return v
 
     def module_name(self):
         return self.parent.name
 
-    def __init__(self, conn, parent, name):
-        super().__init__(conn, parent)
+    def __init__(self, parent, name=None):
+        super().__init__(parent, name)
+
+        if name == None:  # running config context
+            return
+
         objs = self.components(self.OBJECT_TYPE, name)
         if len(objs) == 0:
-            raise InvalidInput(f"No {self.SHORT_OBJECT_TYPE} with name {name}")
+            raise InvalidInput(f"No {self.OBJECT_NAME} with name {name}")
         elif len(objs) > 1 or objs[0] != name:
             stdout.info(f"Selected interfaces: {objs}")
 
@@ -368,16 +331,12 @@ class InterfaceContext(TransponderBaseContext):
                     raise InvalidInput("usage: selected[cr]")
                 stdout.info(", ".join(objs))
 
-        self.name = name
         self.objs = objs
-
-    def __str__(self):
-        return f"{self.SHORT_OBJECT_TYPE}({self.name})"
 
 
 class HostIf(InterfaceContext):
     OBJECT_TYPE = "host-interface"
-    SHORT_OBJECT_TYPE = "hostif"
+    OBJECT_NAME = "hostif"
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}"
         for v in ["modules", "module", OBJECT_TYPE, "config"]
@@ -386,7 +345,7 @@ class HostIf(InterfaceContext):
 
 class NetIf(InterfaceContext):
     OBJECT_TYPE = "network-interface"
-    SHORT_OBJECT_TYPE = "netif"
+    OBJECT_NAME = "netif"
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}"
         for v in ["modules", "module", OBJECT_TYPE, "config"]
@@ -409,43 +368,43 @@ class NetIf(InterfaceContext):
 
 class TransponderContext(TransponderBaseContext):
     OBJECT_TYPE = "module"
+    OBJECT_NAME = "transponder"
     XPATH = "/goldstone-transponder:modules/module"
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}" for v in ["modules", "module", "config"]
     )
+    SUB_CONTEXTS = [NetIf, HostIf]
 
     def module_xpath(self):
         return f"{self.XPATH}[name='{self.name}']"
 
     def xpath(self, name=None):
+        if name == None:
+            return self.XPATH
         return self.module_xpath()
 
     def module_name(self):
         return self.name
 
-    def __init__(self, conn, parent, name):
-        super().__init__(conn, parent)
-        self.name = name
+    def __init__(self, parent, name=None):
+        super().__init__(parent, name)
+
+        if name == None:  # running config context
+            return
+
         self.objs = [name]
-        self.command_list = ["shutdown"]
 
         @self.command(WordCompleter(self.netifs))
         def netif(args):
             if len(args) != 1:
                 raise InvalidInput("usage: netif <name>")
-            return NetIf(conn, self, args[0])
+            return NetIf(self, args[0])
 
         @self.command(WordCompleter(self.hostifs))
         def hostif(args):
             if len(args) != 1:
                 raise InvalidInput("usage: hostif <name>")
-            return HostIf(conn, self, args[0])
-
-        @self.command()
-        def shutdown(args):
-            if len(args) != 0:
-                raise InvalidInput("usage: shutdown")
-            self.set("admin-status", "down")
+            return HostIf(self, args[0])
 
     def netifs(self):
         return self.components("network-interface")
@@ -453,33 +412,22 @@ class TransponderContext(TransponderBaseContext):
     def hostifs(self):
         return self.components("host-interface")
 
-    def __str__(self):
-        return "transponder({})".format(self.name)
-
 
 class Show(Command):
-    COMMAND_DICT = {
-        "summary": Command,
-    }
-
-    def __init__(self, context, parent, name):
-        super().__init__(context, parent, name)
-        self.transponder = Transponder(self.conn)
-
     def arguments(self):
-        return self.transponder.get_modules()
+        return ["summary"] + module_names(self.conn)
 
     def exec(self, line):
-        if len(line) == 1:
-            if line[0] == "summary":
-                return self.transponder.show_transponder_summary()
-            else:
-                return self.transponder.show_transponder(line[0])
+        if len(line) != 1:
+            raise InvalidInput(self.usage())
+
+        if line[0] == "summary":
+            return show_transponder_summary(self.conn)
         else:
-            stderr.info(self.usage())
+            return show_transponder(self.conn, line[0])
 
     def usage(self):
-        return "{ <transponder_name> | summary }"
+        return f"usage: {self.name_all()} {{ summary | <transponder_name> }}"
 
 
 GlobalShowCommand.register_command(
@@ -487,25 +435,21 @@ GlobalShowCommand.register_command(
 )
 
 
-class Run(Command):
-    def exec(self, line):
-        if len(line) == 0:
-            return Transponder(self.conn).run_conf()
-        else:
-            stderr.info(self.usage())
-
-    def usage(self):
-        return "usage: {self.name_all()}"
-
-
 RunningConfigCommand.register_command(
-    "transponder", Run, when=ModelExists("goldstone-transponder")
+    "transponder",
+    Run,
+    when=ModelExists("goldstone-transponder"),
+    ctx=TransponderContext,
 )
 
 
 class TechSupport(Command):
     def exec(self, line):
-        Transponder(self.conn).tech_support()
+        stdout.info("\nshow transponder details:\n")
+        modules = module_names(self.conn)
+        for module in modules:
+            stdout.info(f"Transponder {module}")
+            show_transponder(self.conn, module)
         self.parent.xpath_list.append("/goldstone-transponder:modules")
 
 
@@ -515,19 +459,23 @@ TechSupportCommand.register_command(
 
 
 class TransponderCommand(Command):
-    def __init__(self, context, parent, name, **options):
-        super().__init__(context, parent, name, **options)
-        self.transponder = Transponder(self.conn)
-
     def arguments(self):
-        return self.transponder.get_modules()
+        return module_names(self.conn)
 
     def exec(self, line):
         if len(line) != 1:
-            raise InvalidInput("usage: transponder <name>")
-        return TransponderContext(self.conn, self.context, line[0])
+            raise InvalidInput(f"usage: {self.name_all()} <name>")
+        if self.root.name == "no":
+            for name in module_names(self.conn, line[0]):
+                self.conn.delete(modulexpath(name))
+            self.conn.apply()
+        else:
+            return TransponderContext(self.context, line[0])
 
 
 Root.register_command(
-    "transponder", TransponderCommand, when=ModelExists("goldstone-transponder")
+    "transponder",
+    TransponderCommand,
+    when=ModelExists("goldstone-transponder"),
+    add_no=True,
 )

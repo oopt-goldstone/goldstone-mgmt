@@ -1,6 +1,16 @@
 from .base import InvalidInput
-from .cli import GlobalShowCommand, ModelExists, Context, RunningConfigCommand, Command
+from .cli import (
+    GlobalShowCommand,
+    ModelExists,
+    Context,
+    Run,
+    RunningConfigCommand,
+    Command,
+    ConfigCommand,
+)
 from .root import Root
+from .util import dig_dict
+
 import logging
 from prompt_toolkit.completion import Completion, Completer
 
@@ -24,7 +34,7 @@ def gb_ref_clock_xpath(gbname, name):
     )
 
 
-class AdminStatusCommand(Command):
+class AdminStatusCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return ["up", "down"]
@@ -44,6 +54,12 @@ class AdminStatusCommand(Command):
             self.conn.set(f"{xpath}/config/name", name)
             self.conn.set(f"{xpath}/config/admin-status", line[0].upper())
         self.conn.apply()
+
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        data = dig_dict(data, ["config", "admin-status"])
+        if data:
+            return f"admin-status {data.lower()}"
 
 
 class ConnectionCompleter(Completer):
@@ -66,7 +82,7 @@ class ConnectionCompleter(Completer):
                     yield Completion(c, start_position=-len(text))
 
 
-class ConnectionCommand(Command):
+class ConnectionCommand(ConfigCommand):
     # this command takes two positional arguments client-interface and line-interface
     def __init__(self, context, parent, name, **options):
         options["additional_completer"] = ConnectionCompleter(self)
@@ -197,6 +213,19 @@ class ConnectionCommand(Command):
     def line_interfaces(self, client):
         return self._interfaces("transponder")
 
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        connections = data.get("connections", {}).get("connection", [])
+
+        lines = []
+
+        for conn in connections:
+            lines.append(
+                f"connection {conn['client-interface']} {conn['line-interface']}"
+            )
+
+        return lines
+
 
 class EnableFlexibleConnectionCommand(Command):
     def arguments(self):
@@ -219,8 +248,15 @@ class EnableFlexibleConnectionCommand(Command):
             self.conn.set(f"{xpath}/config/enable-flexible-connection", line[0])
         self.conn.apply()
 
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        data = dig_dict(data, ["config", "enable-flexible-connection"])
+        if data:
+            v = "true" if data else "false"
+            return f"enable-flexible-connection {v}"
 
-class ReferenceInterfaceCommand(Command):
+
+class ReferenceInterfaceCommand(ConfigCommand):
     def arguments(self):
         gbname = self.context.parent.name
         xpath = (
@@ -257,11 +293,18 @@ class ReferenceInterfaceCommand(Command):
             self.conn.set(f"{xpath}/config/reference-interface", ifname)
         self.conn.apply()
 
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        data = dig_dict(data, ["config", "reference-interface"])
+        if data:
+            return f"reference-interface {data}"
+
 
 class SyncERefClockContext(Context):
-    def __init__(self, parent: Context, name: str):
-        self.name = name
-        super().__init__(parent)
+    OBJECT_NAME = "synce-reference-clock"
+
+    def __init__(self, parent: Context, name: str = None):
+        super().__init__(parent, name)
         self.add_command("reference-interface", ReferenceInterfaceCommand, add_no=True)
 
         @self.command(parent.get_completer("show"))
@@ -296,8 +339,9 @@ class SyncERefClockContext(Context):
                     )
                 )
 
-    def __str__(self):
-        return f"synce-reference-clock({self.name})"
+    def xpath(self):
+        gb = gbxpath(self.parent.name)
+        return f"{gb}/synce-reference-clocks/synce-reference-clock"
 
 
 class SyncERefClockCommand(Command):
@@ -323,9 +367,11 @@ class SyncERefClockCommand(Command):
 
 
 class GearboxContext(Context):
-    def __init__(self, parent: Context, name: str):
-        self.name = name
-        super().__init__(parent)
+    OBJECT_NAME = "gearbox"
+    SUB_CONTEXTS = [SyncERefClockContext]
+
+    def __init__(self, parent: Context, name: str = None):
+        super().__init__(parent, name)
 
         self.add_command("admin-status", AdminStatusCommand, add_no=True)
         self.add_command(
@@ -409,8 +455,8 @@ class GearboxContext(Context):
                     )
                 )
 
-    def __str__(self):
-        return f"gearbox({self.name})"
+    def xpath(self):
+        return XPATH
 
 
 class GearboxCommand(Command):
@@ -459,44 +505,6 @@ GlobalShowCommand.register_command(
 )
 
 
-class Run(Command):
-    def exec(self, line):
-        if len(line) != 0:
-            raise InvalidInput(f"usage: {self.name_all()}")
-        data = self.conn.get("/goldstone-gearbox:gearboxes/gearbox", [])
-        for d in data:
-            stdout.info(f"gearbox {d['name']}")
-            config = d.get("config")
-            if config:
-                for key, value in config.items():
-                    if key == "admin-status":
-                        stdout.info(f"  admin-status {value.lower()}")
-                    elif key == "enable-flexible-connection":
-                        stdout.info(
-                            f"  enable-flexible-connection {'true' if value else 'false'}"
-                        )
-            connections = d.get("connections", {}).get("connection", [])
-
-            for conn in connections:
-                stdout.info(
-                    f"  connection {conn['client-interface']} {conn['line-interface']}"
-                )
-                stdout.info(f"    quit")
-
-            clocks = d.get("synce-reference-clocks", {}).get(
-                "synce-reference-clock", []
-            )
-
-            for clock in clocks:
-                c = clock.get("config", {})
-                stdout.info(f"  synce-reference-clocks {clock['name']}")
-                if "reference-interface" in c:
-                    stdout.info(f"    reference-interface {c['reference-interface']}")
-                stdout.info(f"    quit")
-
-            stdout.info(f"  quit")
-
-
 RunningConfigCommand.register_command(
-    "gearbox", Run, when=ModelExists("goldstone-gearbox")
+    "gearbox", Run, when=ModelExists("goldstone-gearbox"), ctx=GearboxContext
 )

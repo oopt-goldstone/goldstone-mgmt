@@ -101,10 +101,13 @@ def show(session, vid):
 
 
 def run_conf(session):
+    n = 0
     for vid in get_vids(session):
+        n += 2
         stdout.info(f"vlan {vid}")
         stdout.info(f"  quit")
-    stdout.info("!")
+
+    return n
 
 
 def parse_vlan_range(r: str) -> list[int]:
@@ -172,10 +175,9 @@ GlobalShowCommand.register_command("vlan", Show, when=ModelExists("goldstone-vla
 
 class Run(Command):
     def exec(self, line):
-        if len(line) == 0:
-            return run_conf(self.conn)
-        else:
-            stderr.info(self.usage())
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+        self.parent.num_lines = run_conf(self.conn)
 
 
 RunningConfigCommand.register_command("vlan", Run, when=ModelExists("goldstone-vlan"))
@@ -289,7 +291,7 @@ class SwitchportCommand(ConfigCommand):
         raise InvalidInput(f"usage : {self.name_all()} mode [trunk|access] vlan <vid>")
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         config = dig_dict(data, ["switched-vlan", "config"])
         if not config:
             return

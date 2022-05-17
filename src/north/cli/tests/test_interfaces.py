@@ -58,9 +58,7 @@ interface Interface1
   switchport mode trunk vlan 200
   ufd 1 downlink
   portchannel PortChannel10
-  quit
-!
-!"""
+  quit"""
 
 
 def ifxpath(ifname):

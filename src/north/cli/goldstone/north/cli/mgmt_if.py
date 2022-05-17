@@ -71,21 +71,26 @@ def show(session, ifname):
 def run_conf(session):
     conf = session.get("/goldstone-mgmt-interfaces:interfaces/interface", [])
 
+    n = 0
+
     for c in conf:
         stdout.info(f"mgmt-if {c['name']}")
         if "admin-status" in c:
+            n += 1
             stdout.info(f"  admin-status {c['admin-status']}")
 
         for addr in c.get("ipv4", {}).get("address", []):
+            n += 1
             stdout.info(f"  ip address {addr['ip']}/{addr['prefix-length']}")
 
     conf = session.get("/goldstone-routing:routing/static-routes/ipv4/route", [])
 
     for c in conf:
         r = c["destination-prefix"]
+        n += 1
         stdout.info(f"  ip route {r}")
 
-    stdout.info("!")
+    return n
 
 
 class ManagementInterface(Context):
@@ -252,10 +257,9 @@ GlobalClearCommand.register_command(
 
 class Run(Command):
     def exec(self, line):
-        if len(line) == 0:
-            return run_conf(self.conn)
-        else:
-            stderr.info(self.usage())
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+        self.parent.num_lines = run_conf(self.conn)
 
     def usage(self):
         return "usage: {self.name_all()}"
