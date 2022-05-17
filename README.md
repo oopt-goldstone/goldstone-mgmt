@@ -12,6 +12,8 @@ The components in this repo are pre-installed in Goldstone NOS.
     - e.g) Switch ASIC, Transponder, Gearbox, Peripheral devices(Thermal sensors, LED, fan etc..)
 - Goldstone management translation daemons that translate standarized YANG models and Goldstone YANG models (Red boxes in the following diagram)
     - OpenConfig Translator
+- Goldstone management system daemons that provide service to north daemons by only interacting with south or xlate daemons
+    - Streaming telemetry Server
 - Goldstone YANG models
     - The schemas that are used between north and south daemons
 
@@ -85,7 +87,7 @@ The intention to have native YANG models is to fully cover what the underneath h
 
 Using the standard YANG models ([OpenConfig](https://www.openconfig.net/), [OpenROADM](http://openroadm.org/) etc..) is also supported by using translater daemons.
 
-`goldstone-mgmt` framework has three kinds of daemon which interact with sysrepo datastore.
+`goldstone-mgmt` framework has four kinds of daemon which interact with sysrepo datastore.
 
 - north daemon
     - provides northbound API (CLI, NETCONF, SNMP, RESTCONF, gNMI etc..)
@@ -97,6 +99,10 @@ Using the standard YANG models ([OpenConfig](https://www.openconfig.net/), [Open
 - translation daemon
     - translator of the standarized YANG models and Goldstone YANG models
     - source code under [`src/xlate`](https://github.com/oopt-goldstone/goldstone-mgmt/tree/master/src/xlate)
+- system daemon
+    - provides system utility services for north daemons
+    - optionally uses native YANG models to interact with sysrepo
+    - source code under [`src/system`](https://github.com/oopt-goldstone/goldstone-mgmt/tree/master/src/system)
 
 ### How to build
 

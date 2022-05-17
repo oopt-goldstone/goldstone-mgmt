@@ -279,6 +279,14 @@ RUN mkdir -p /current
 RUN --mount=type=bind,source=scripts/,target=/scripts,rw cp /scripts/operational-modes.json /current
 
 #---
+# system-telemetry
+#---
+
+FROM base AS system-telemetry
+
+RUN --mount=type=bind,source=src/system/telemetry,target=/src,rw pip install /src
+
+#---
 # default image
 #---
 
