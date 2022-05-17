@@ -115,7 +115,6 @@ class System(object):
         server_run_conf = ["address", "timeout"]
         tacacs_run_conf = ["port", "secret-key"]
         aaa_run_conf = ["authentication"]
-        stdout.info("!")
 
         output = []
 
@@ -184,6 +183,8 @@ class System(object):
                 stdout.info(line)
             stdout.info("  quit")
             stdout.info("!")
+            return 3 + len(output)
+        return 0
 
     def tech_support(self):
         stdout.info("AAA details")
@@ -253,7 +254,7 @@ GlobalShowCommand.register_command("aaa", Show, when=ModelExists("goldstone-aaa"
 class Run(Command):
     def exec(self, line):
         if len(line) == 0:
-            return System(self.conn).run_conf()
+            self.parent.num_lines = System(self.conn).run_conf()
         else:
             stderr.info(self.usage())
 

@@ -1,6 +1,15 @@
 from .base import InvalidInput
-from .cli import GlobalShowCommand, ModelExists, Context, RunningConfigCommand, Command
+from .cli import (
+    GlobalShowCommand,
+    ModelExists,
+    Context,
+    Run,
+    RunningConfigCommand,
+    ConfigCommand,
+    Command,
+)
 from .root import Root
+from .util import dig_dict
 import logging
 from prompt_toolkit.completion import Completion, Completer
 
@@ -22,7 +31,7 @@ def dpll_input_ref_xpath(dpll, name):
     return f"{dpll_xpath(dpll)}/input-references/input-reference[name='{name}']"
 
 
-class ModeCommand(Command):
+class ModeCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return ["automatic", "freerun"]
@@ -43,8 +52,15 @@ class ModeCommand(Command):
             self.conn.set(f"{xpath}/config/mode", line[0])
         self.conn.apply()
 
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        config = dig_dict(data, ["config", "mode"])
+        if not config:
+            return None
+        return f"mode {config}"
 
-class PriorityCommand(Command):
+
+class PriorityCommand(ConfigCommand):
     def exec(self, line):
         dpll = self.context.parent.name
         name = self.context.name
@@ -63,11 +79,19 @@ class PriorityCommand(Command):
             self.conn.set(f"{xpath}/config/priority", line[0])
         self.conn.apply()
 
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        config = dig_dict(data, ["config", "priority"])
+        if not config:
+            return None
+        return f"priority {config}"
+
 
 class InputRefContext(Context):
-    def __init__(self, parent: Context, name: str):
-        self.name = name
-        super().__init__(parent)
+    OBJECT_NAME = "input-reference"
+
+    def __init__(self, parent: Context, name: str = None):
+        super().__init__(parent, name)
         self.add_command("priority", PriorityCommand, add_no=True)
 
         @self.command(parent.get_completer("show"))
@@ -91,8 +115,9 @@ class InputRefContext(Context):
                 rows.append((k, v))
             stdout.info(tabulate(rows))
 
-    def __str__(self):
-        return f"input-reference({self.name})"
+    def xpath(self):
+        dpll = dpll_xpath(self.parent.name)
+        return f"{dpll}/input-references/input-reference"
 
 
 class InputRefCommand(Command):
@@ -118,9 +143,11 @@ class InputRefCommand(Command):
 
 
 class DPLLContext(Context):
-    def __init__(self, parent: Context, name: str):
-        self.name = name
-        super().__init__(parent)
+    OBJECT_NAME = "dpll"
+    SUB_CONTEXTS = [InputRefContext]
+
+    def __init__(self, parent: Context, name: str = None):
+        super().__init__(parent, name=name)
         self.add_command("mode", ModeCommand, add_no=True)
         self.add_command("input-reference", InputRefCommand, add_no=True)
 
@@ -197,8 +224,8 @@ class DPLLContext(Context):
                 )
             )
 
-    def __str__(self):
-        return f"dpll({self.name})"
+    def xpath(self):
+        return XPATH
 
 
 class DPLLCommand(Command):
@@ -238,20 +265,6 @@ class Show(Command):
 GlobalShowCommand.register_command("dpll", Show, when=ModelExists("goldstone-dpll"))
 
 
-class Run(Command):
-    def exec(self, line):
-        if len(line) != 0:
-            raise InvalidInput(f"usage: {self.name_all()}")
-        data = self.conn.get(XPATH, [])
-        for d in data:
-            stdout.info(f"dpll {d['name']}")
-            config = d.get("config")
-            if config:
-                for key, value in config.items():
-                    if key == "mode":
-                        stdout.info(f"  mode {value.lower()}")
-
-            stdout.info(f"  quit")
-
-
-RunningConfigCommand.register_command("dpll", Run, when=ModelExists("goldstone-dpll"))
+RunningConfigCommand.register_command(
+    "dpll", Run, when=ModelExists("goldstone-dpll"), ctx=DPLLContext
+)

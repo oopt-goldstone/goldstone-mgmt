@@ -97,14 +97,20 @@ def remove_interfaces(session, ifnames):
 
 
 def run_conf(session):
+
+    n = 0
     for data in get_list(session, "running", False):
         stdout.info("portchannel {}".format(data["config"]["portchannel-id"]))
         config = data.get("config", {})
         for key, value in config.items():
             if key == "admin-status":
+                n += 1
                 stdout.info(f"  {key} {value.lower()}")
+        n += 2
         stdout.info("  quit")
         stdout.info("!")
+
+    return 0
 
 
 def show(session, id=None):
@@ -195,10 +201,9 @@ GlobalShowCommand.register_command(
 
 class Run(Command):
     def exec(self, line):
-        if len(line) == 0:
-            return run_conf(self.conn)
-        else:
-            stderr.info(self.usage())
+        if len(line) != 0:
+            raise InvalidInput(self.usage())
+        self.parent.num_lines = run_conf(self.conn)
 
     def usage(self):
         return "usage: {self.name_all()}"
@@ -277,7 +282,7 @@ class InterfacePortchannelCommand(ConfigCommand):
             add_interfaces(self.conn, line[0], self.context.ifnames)
 
     @classmethod
-    def to_command(cls, conn, data):
+    def to_command(cls, conn, data, **options):
         ifname = data.get("name")
         return [f"portchannel {v}" for v in get_portchannel(conn, ifname)]
 

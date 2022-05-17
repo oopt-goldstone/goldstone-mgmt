@@ -106,6 +106,9 @@ class Command(object):
 
         return " ".join(reversed(r))
 
+    def usage(self):
+        return f"usage: {self.name_all()}"
+
     def add_command(self, name: str, cmd: typing.Type[Command], **options):
         self.subcommand_dict[name] = (cmd, options)
 
@@ -116,6 +119,7 @@ class Command(object):
         cls.REGISTERED_COMMANDS[name] = (cmd, when, options)
 
     def list_subcommands(self, include_hidden=False):
+        registered = []
         for k, v in chain(self.COMMAND_DICT.items(), self.subcommand_dict.items()):
             if type(v) == tuple:
                 cls, options = v
@@ -125,7 +129,15 @@ class Command(object):
             if not include_hidden and options.get("hidden"):
                 continue
 
+            # return registered commands after normal commands
+            if options.get("registered"):
+                registered.append((k, (cls, options)))
+                continue
+
             yield k, (cls, options)
+
+        for t in registered:
+            yield t
 
     # derived class overrides this method in typical case
     def arguments(self) -> List[str]:
