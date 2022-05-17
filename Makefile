@@ -37,11 +37,12 @@ TRANSPONDER_YANG ?= ./yang/goldstone-transponder.yang
 
 all: builder images tester host-packages
 
-images: south-images north-images xlate-images
+images: south-images north-images xlate-images system-images
 
 GS_SOUTH_AGENTS ?= south-sonic south-tai south-onlp south-system south-gearbox south-dpll south-netlink
 GS_NORTH_AGENTS ?= north-cli north-snmp north-netconf north-notif north-gnmi
 GS_XLATE_AGENTS ?= xlate-oc
+GS_SYSTEM_AGENTS ?= system-telemetry
 
 south-images: $(GS_SOUTH_AGENTS)
 
@@ -49,7 +50,9 @@ north-images: $(GS_NORTH_AGENTS)
 
 xlate-images: $(GS_XLATE_AGENTS)
 
-$(GS_SOUTH_AGENTS) $(GS_NORTH_AGENTS) $(GS_XLATE_AGENTS):
+system-images: $(GS_SYSTEM_AGENTS)
+
+$(GS_SOUTH_AGENTS) $(GS_NORTH_AGENTS) $(GS_XLATE_AGENTS) $(GS_SYSTEM_AGENTS):
 	$(call build_agent_image,$@)
 
 north-snmp: snmpd
@@ -90,11 +93,11 @@ cmd:
 lint:
 	which black && exit `black -q --diff --exclude "src/north/snmp/src|src/north/gnmi/goldstone/north/gnmi/proto" src | wc -l`
 	TRANSPONDER_YANG=/tmp/test.yang $(MAKE) yang && diff /tmp/test.yang $(TRANSPONDER_YANG)
-	scripts/gs-yang.py --lint south-sonic south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
-	scripts/gs-yang.py --lint south-gearbox south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
+	scripts/gs-yang.py --lint south-sonic south-onlp south-tai south-system xlate-oc system-telemetry --search-dirs yang sm/openconfig
+	scripts/gs-yang.py --lint south-gearbox south-onlp south-tai south-system xlate-oc system-telemetry --search-dirs yang sm/openconfig
 	grep -rnI 'print(' src || exit 0 && exit 1
 
-unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-sonic unittest-gnmi
+unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-sonic unittest-gnmi unittest-telemetry
 
 rust-unittest: unittest-netlink
 
@@ -136,6 +139,11 @@ unittest-openconfig:
 	$(MAKE) clean-sysrepo
 	scripts/gs-yang.py --install xlate-oc south-onlp south-tai south-gearbox south-system --search-dirs yang sm/openconfig
 	cd src/xlate/openconfig && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
+
+unittest-telemetry:
+	$(MAKE) clean-sysrepo
+	scripts/gs-yang.py --install system-telemetry south-gearbox --search-dirs yang sm/openconfig
+	cd src/system/telemetry && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-tai:
 	$(MAKE) clean-sysrepo

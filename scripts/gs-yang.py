@@ -53,6 +53,9 @@ MODELS = {
         "optical-transport/openconfig-transport-line-common",
         "optical-transport/openconfig-transport-types",
     ],
+    "system-telemetry": [
+        "goldstone-telemetry",
+    ],
 }
 
 DEFAULT_YANG_DIR = "/var/lib/goldstone/yang"
