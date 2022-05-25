@@ -60,6 +60,61 @@ class ModeCommand(ConfigCommand):
         return f"mode {config}"
 
 
+class PhaseSlopeLimitCommand(ConfigCommand):
+    def arguments(self):
+        if self.root.name != "no":
+            return ["unlimitted"]
+
+    def exec(self, line):
+        name = self.context.name
+        xpath = dpll_xpath(name)
+        if self.root.name == "no":
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            self.conn.delete(f"{xpath}/config/phase-slope-limit")
+        else:
+            if len(line) != 1:
+                raise InvalidInput(f'usage: {self.name_all()} ["unlimitted"|<value>]')
+
+            if "unlimitted".startswith(line[0]):
+                line[0] = "unlimitted"
+
+            self.conn.set(f"{xpath}/config/name", name)
+            self.conn.set(f"{xpath}/config/phase-slope-limit", line[0])
+        self.conn.apply()
+
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        config = dig_dict(data, ["config", "phase-slope-limit"])
+        if not config:
+            return None
+        return f"phase-slope-limit {config}"
+
+
+class LoopBandwidthCommand(ConfigCommand):
+    def exec(self, line):
+        name = self.context.name
+        xpath = dpll_xpath(name)
+        if self.root.name == "no":
+            if len(line) != 0:
+                raise InvalidInput(f"usage: {self.name_all()}")
+            self.conn.delete(f"{xpath}/config/loop-bandwidth")
+        else:
+            if len(line) != 1:
+                raise InvalidInput(f"usage: {self.name_all()} <value>")
+
+            self.conn.set(f"{xpath}/config/name", name)
+            self.conn.set(f"{xpath}/config/loop-bandwidth", line[0])
+        self.conn.apply()
+
+    @classmethod
+    def to_command(cls, conn, data, **options):
+        config = dig_dict(data, ["config", "loop-bandwidth"])
+        if not config:
+            return None
+        return f"loop-bandwidth {config}"
+
+
 class PriorityCommand(ConfigCommand):
     def exec(self, line):
         dpll = self.context.parent.name
@@ -149,6 +204,13 @@ class DPLLContext(Context):
     def __init__(self, parent: Context, name: str = None):
         super().__init__(parent, name=name)
         self.add_command("mode", ModeCommand, add_no=True)
+        self.add_command(
+            "phase-slope-limit",
+            PhaseSlopeLimitCommand,
+            add_no=True,
+            no_completion_on_exec=True,  # this command can take "unlimitted" and numeric value as an argument
+        )
+        self.add_command("loop-bandwidth", LoopBandwidthCommand, add_no=True)
         self.add_command("input-reference", InputRefCommand, add_no=True)
 
         @self.command(parent.get_completer("show"))
@@ -165,11 +227,25 @@ class DPLLContext(Context):
 
             rows = []
             state = data.get("state", {})
-            for k in ["mode", "state", "selected-reference"]:
+            for k in [
+                "mode",
+                "phase-slope-limit",
+                "loop-bandwidth",
+                "state",
+                "selected-reference",
+            ]:
                 v = state.get(k, "-")
-                if type(v) == bool:
+                if k == "phase-slope-limit":
+                    if type(v) == int:
+                        v = f"{v}ns/s"
+                elif k == "loop-bandwidth":
+                    v = f"{v}Hz"
+                elif type(v) == bool:
                     v = "true" if v else "false"
-                rows.append((k, v.lower()))
+                elif type(v) == str:
+                    v = v.lower()
+
+                rows.append((k, v))
             stdout.info(tabulate(rows))
             stdout.info("")
             stdout.info("Input reference information:")
