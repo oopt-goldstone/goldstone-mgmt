@@ -119,6 +119,26 @@ class ModeChangeHandler(DPLLChangeHandler):
         return v
 
 
+class PhaseSlopeLimitHandler(DPLLChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "phase-slope-limit"
+
+    def to_tai_value(self, v, attr_name):
+        if v == "unlimitted":
+            return "0"
+        return str(v)
+
+
+class LoopBandwidthHandler(DPLLChangeHandler):
+    async def _init(self, user):
+        await super()._init(user)
+        self.tai_attr_name = "loop-bandwidth"
+
+    def to_tai_value(self, v, attr_name):
+        return str(v)
+
+
 class PriorityChangeHandler(DPLLChangeHandler):
     async def _init(self, user):
         await super()._init(user)
@@ -165,6 +185,8 @@ class DPLLServer(ServerBase):
                     "config": {
                         "name": NoOp,
                         "mode": ModeChangeHandler,
+                        "phase-slope-limit": PhaseSlopeLimitHandler,
+                        "loop-bandwidth": LoopBandwidthHandler,
                     },
                     "input-references": {
                         "input-reference": {
@@ -200,16 +222,26 @@ class DPLLServer(ServerBase):
                 continue
 
             m = await self.taish.get_module(name)
-            mode, state, prios, selected = await m.get_multiple(
+            mode, psl, bw, state, prios, selected = await m.get_multiple(
                 [
                     "dpll-mode",
+                    "phase-slope-limit",
+                    "loop-bandwidth",
                     "dpll-state",
                     "input-reference-priority",
                     "selected-reference",
                 ]
             )
 
-            d["state"] = {"mode": mode, "state": state}
+            if psl == "0":
+                psl = "unlimitted"
+
+            d["state"] = {
+                "mode": mode,
+                "phase-slope-limit": psl,
+                "loop-bandwidth": float(bw),
+                "state": state,
+            }
 
             prios = prios.split(",")
             refs = []
