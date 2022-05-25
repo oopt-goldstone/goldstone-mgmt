@@ -37,6 +37,8 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
             "dpll-mode": "freerun",
             "dpll-state": "freerun",
             "selected-reference": "5",
+            "phase-slope-limit": "7500",
+            "loop-bandwidth": "1.0",
         }
 
         async def set_(*args):
@@ -100,6 +102,7 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(v, ["1"])
 
                 v = sess.get_data("/goldstone-dpll:dplls/dpll")
+
                 self.assertEqual(
                     v,
                     {
@@ -178,6 +181,8 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
                                     "config": {"name": "1"},
                                     "state": {
                                         "mode": "freerun",
+                                        "phase-slope-limit": 7500,
+                                        "loop-bandwidth": 1.0,
                                         "state": "freerun",
                                         "selected-reference": "5",
                                     },
@@ -265,6 +270,67 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
                     [
                         ("input-reference-priority", "10,1,2,3,4,5,6,7"),
                         ("input-reference-priority", "0,1,2,3,4,5,6,7"),
+                    ],
+                )
+
+        tasks.append(asyncio.to_thread(test))
+
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            e = task.exception()
+            if e:
+                raise e
+
+        self.server.stop()
+
+    async def test_phase_slope_limit(self):
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        self.server = DPLLServer(self.conn, "", platform_info)
+        tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                dpll = "1"
+                sess.set_item(
+                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/name", dpll
+                )
+                sess.set_item(
+                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/phase-slope-limit",
+                    7000,
+                )
+
+                sess.apply_changes()
+
+                self.assertEqual(
+                    self.set_logs,
+                    [
+                        ("phase-slope-limit", "7000"),
+                    ],
+                )
+
+        await asyncio.to_thread(test)
+
+        self.set_logs = []
+
+        def test():
+            with self.conn.start_session() as sess:
+                sess.switch_datastore("running")
+                dpll = "1"
+                sess.set_item(
+                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/phase-slope-limit",
+                    "unlimitted",
+                )
+
+                sess.apply_changes()
+
+                self.assertEqual(
+                    self.set_logs,
+                    [
+                        ("phase-slope-limit", "0"),
                     ],
                 )
 

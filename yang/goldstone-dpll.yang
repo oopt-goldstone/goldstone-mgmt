@@ -38,6 +38,19 @@ module goldstone-dpll {
         enum nco;
       }
     }
+    leaf phase-slope-limit {
+      type union {
+        type enumeration {
+          enum unlimitted;
+        }
+        type uint16; // unit ns/s
+      }
+    }
+    leaf loop-bandwidth {
+      type decimal64 {
+        fraction-digits 16;
+      }
+    }
   }
 
   grouping dpll-state {
