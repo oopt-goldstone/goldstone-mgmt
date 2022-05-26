@@ -871,7 +871,10 @@ class InterfaceServer(ServerBase):
                 meta = await obj.get_attribute_metadata(attr.attr_id)
                 if meta.short_name != "oper-status":
                     continue
-                notif = {"if-name": ifname, "oper-status": attr.value.upper()}
+                oper_status = attr.value
+                if oper_status == "unknown":
+                    continue
+                notif = {"if-name": ifname, "oper-status": oper_status.upper()}
                 self.send_notification(eventname, notif)
 
         async def notif_loop():
@@ -1057,16 +1060,12 @@ class InterfaceServer(ServerBase):
         )
 
         i["state"]["admin-status"] = "DOWN" if prov_mode == "none" else "UP"
-        i["state"]["oper-status"] = oper_status.upper()
+        if oper_status != "unknown":
+            i["state"]["oper-status"] = oper_status.upper()
         i["state"]["is-connected"] = connected != "oid:0x0"
         i["state"]["pin-mode"] = pin_mode.upper()
 
         if signal_rate == "otu4":
-            i["state"]["oper-status"] = (
-                "UP"
-                if connected != "oid:0x0" and i["state"]["admin-status"] == "UP"
-                else "DOWN"
-            )
             i["otn"] = {"state": {"mfi-type": mfi_type.upper()}}
             return i
 
