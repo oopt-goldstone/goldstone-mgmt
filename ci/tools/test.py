@@ -385,11 +385,13 @@ class TestSouthGearbox(TestBase):
         self.gscli("no gearbox 1")  # clear configuration
 
     def test_otn_interface(self):
+        self.gscli("interface Interface1/0/1; admin-status up")
         self.gscli("interface Interface1/0/1; interface-type otn otl")
         time.sleep(2)
         output = self.gscli("interface Interface1/0/1; show")
         self.assertTrue("otl" in output)
 
+        self.gscli("interface Interface1/1/1; admin-status up")
         self.gscli("interface Interface1/1/1; interface-type otn otl")
         time.sleep(2)
         output = self.gscli("interface Interface1/1/1; show")
