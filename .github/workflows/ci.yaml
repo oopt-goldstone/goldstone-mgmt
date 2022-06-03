@@ -1,88 +1,45 @@
 on:
-    pull_request:
-        branches:
-        - master
-env:
-    K: sudo k3s kubectl
+  pull_request:
+
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        steps:
-        - uses: crazy-max/ghaction-docker-buildx@v1
-        - uses: actions/checkout@v2
-          with:
-              submodules: true
-              fetch-depth: 0
-        - name: install k3s
-          run: curl -sfL https://get.k3s.io | sh -s - --docker
-        - name: build builder image if sm/ is updated
-          run: git diff --compact-summary HEAD origin/master | (grep 'sm/\|patches/\|builder.Dockerfile' && make builder np2) || true
-        - run: make docker
-        - run: make image
-        - run: make debug-image
-        - run: |
-            sudo k3s kubectl create -f ./k8s
-            while [ true ]
-            do
-                sleep 10
-                $K get pods || true
-                ($K logs ds/gs-mgmt-cli | grep "modules") && exit 0|| true
-            done
-        - run: |
-            $K exec ds/gs-mgmt-cli -- gscli -c "platform; show" | grep sys
-        - run: |
-            git clone https://github.com/microsonic/usonic.git
-            sudo k3s kubectl create -f usonic/k8s
-            SONIC_MGMT_ADDR=$($K get svc sonic-mgmt -o=jsonpath='{.spec.clusterIP}{"\n"}')
-            while [ true ]
-            do
-                sleep 10
-                (curl http://$SONIC_MGMT_ADDR/restconf/data/sonic-port:sonic-port | grep Ethernet1) && exit 0 || true
-            done
-            $K exec ds/gs-mgmt-cli -- gscli -c "sonic; port; show" | grep Ethernet1
-        - name: check netopeer2-server is working
-          run: |
-              NP2_POD=$($K get pod -l app=gs-mgmt-np2 -o=jsonpath='{.items[0].metadata.name}{"\n"}')
-              NP2_ADDR=$($K get svc netopeer2 -o=jsonpath='{.spec.clusterIP}{"\n"}')
-
-              ssh-keygen -f id_rsa -N ""
-
-              $K exec $NP2_POD -c netopeer2 -- mkdir -p /root/.ssh
-              $K cp id_rsa.pub $NP2_POD:/root/.ssh/authorized_keys -c netopeer2
-
-              cat <<EOF > config.xml
-              <modules xmlns="http://goldstone.net/yang/tai">
-                <module>
-                  <name>0</name>
-                  <config>
-                    <name>0</name>
-                    <admin-status>down</admin-status>
-                  </config>
-                </module>
-              </modules>
-              EOF
-
-              cat <<EOF > check_np2.sh
-              #!/bin/sh
-
-              netopeer2-cli <<EOF2
-              auth pref publickey 4
-              auth keys add /data/id_rsa.pub /data/id_rsa
-              auth hostkey-check disable
-              connect --host $NP2_ADDR
-              status
-              get-config --source running --filter-xpath "/goldstone-transponder:modules"
-              edit-config --target candidate --config=/data/config.xml
-              get-config --source candidate --filter-xpath "/goldstone-transponder:modules"
-              commit
-
-              EOF2
-              EOF
-
-              chmod +x check_np2.sh
-
-              docker run -e NP2_ADDR=$NP2_ADDR --net=host -v $(pwd):/data -w /data docker.io/microsonic/gs-mgmt-netopeer2:latest ./check_np2.sh
-
-        - if: ${{ failure() }}
-          run: |
-            journalctl -u k3s
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          install: true
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            ghcr.io/oopt-goldstone/mgmt/tester
+      -
+        name: Build Tester
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          load: true
+          file: "./docker/builder.Dockerfile"
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          target: tester
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      -
+        name: Lint
+        run: "docker run -t -v `pwd`:`pwd` -w `pwd` ${{ steps.meta.outputs.tags }} make lint"
+      -
+        name: Unittest
+        run: "docker run -t -v `pwd`:`pwd` -w `pwd` ${{ steps.meta.outputs.tags }} make unittest"
