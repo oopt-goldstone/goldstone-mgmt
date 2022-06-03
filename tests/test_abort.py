@@ -79,8 +79,12 @@ class TestAbort(unittest.IsolatedAsyncioTestCase):
         ifserver = MockInterfaceServer(self.conn)
         xpserver = MockTransponderServer(self.conn)
 
-        await ifserver.start()
-        await xpserver.start()
+        servers = [ifserver, xpserver]
+
+        tasks = list(
+            asyncio.create_task(c)
+            for c in itertools.chain.from_iterable([await s.start() for s in servers])
+        )
 
         self.assertFalse(xpserver.apply_called)
         self.assertFalse(xpserver.revert_called)
@@ -117,3 +121,5 @@ class TestAbort(unittest.IsolatedAsyncioTestCase):
 
         ifserver.stop()
         xpserver.stop()
+
+        await asyncio.gather(*tasks)

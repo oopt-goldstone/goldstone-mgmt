@@ -6,25 +6,25 @@ DOCKER_CMD ?= bash
 DOCKER_BUILD_OPTION ?= --platform linux/$(ARCH)
 DOCKER_IMAGE ?= $(BUILDER)
 
-GS_MGMT_IMAGE_PREFIX ?= ghcr.io/oopt-goldstone/goldstone-mgmt/
+GS_MGMT_IMAGE_PREFIX ?= ghcr.io/oopt-goldstone/mgmt/
 GS_MGMT_IMAGE_TAG ?= latest-$(ARCH)
 
-GS_MGMT_BUILDER_IMAGE ?= gs-mgmt-builder
-GS_MGMT_BASE_IMAGE    ?= gs-mgmt
-GS_MGMT_NP2_IMAGE     ?= gs-mgmt-netopeer2
-GS_MGMT_SONIC_IMAGE   ?= gs-mgmt-south-sonic
-GS_MGMT_TAI_IMAGE     ?= gs-mgmt-south-tai
-GS_MGMT_ONLP_IMAGE    ?= gs-mgmt-south-onlp
-GS_MGMT_SYSTEM_IMAGE  ?= gs-mgmt-south-system
-GS_MGMT_GEARBOX_IMAGE ?= gs-mgmt-south-gearbox
-GS_MGMT_DPLL_IMAGE    ?= gs-mgmt-south-dpll
-GS_MGMT_CLI_IMAGE     ?= gs-mgmt-north-cli
-GS_MGMT_SNMP_IMAGE    ?= gs-mgmt-north-snmp
-GS_MGMT_SNMPD_IMAGE   ?= gs-mgmt-snmpd
-GS_MGMT_OC_IMAGE      ?= gs-mgmt-xlate-openconfig
-GS_MGMT_NOTIF_IMAGE   ?= gs-mgmt-north-notif
-GS_MGMT_TEST_IMAGE    ?= gs-mgmt-test
-GS_MGMT_HOST_IMAGE    ?= gs-mgmt-host
+GS_MGMT_BUILDER_IMAGE ?= builder
+GS_MGMT_BASE_IMAGE    ?= base
+GS_MGMT_SONIC_IMAGE   ?= south-sonic
+GS_MGMT_TAI_IMAGE     ?= south-tai
+GS_MGMT_ONLP_IMAGE    ?= south-onlp
+GS_MGMT_SYSTEM_IMAGE  ?= south-system
+GS_MGMT_GEARBOX_IMAGE ?= south-gearbox
+GS_MGMT_DPLL_IMAGE    ?= south-dpll
+GS_MGMT_CLI_IMAGE     ?= north-cli
+GS_MGMT_SNMP_IMAGE    ?= north-snmp
+GS_MGMT_SNMPD_IMAGE   ?= snmpd
+GS_MGMT_NP2_IMAGE     ?= north-netconf
+GS_MGMT_NOTIF_IMAGE   ?= north-notif
+GS_MGMT_OC_IMAGE      ?= xlate-openconfig
+GS_MGMT_TEST_IMAGE    ?= tester
+GS_MGMT_HOST_IMAGE    ?= host
 
 define image_name
 $(GS_MGMT_IMAGE_PREFIX)$1:$(GS_MGMT_IMAGE_TAG)
@@ -44,16 +44,12 @@ TRANSPONDER_YANG ?= ./yang/goldstone-transponder.yang
 
 all: builder base-image images tester host-packages
 
-docker:
-	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make cli system' $(MAKE) cmd
-
-
 builder:
 	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/builder.Dockerfile -t $(BUILDER) .
 	$(call save,$(GS_MGMT_BUILDER_IMAGE))
 
 base-image:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \
+	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/base.Dockerfile \
 							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
 							      -t $(call image_name,$(GS_MGMT_BASE_IMAGE)) .
 	$(call save,$(GS_MGMT_BASE_IMAGE))
@@ -116,7 +112,7 @@ snmpd:
 	IMAGE_NAME=$(GS_MGMT_SNMPD_IMAGE) DOCKER_FILE=docker/snmpd.Dockerfile $(MAKE) image
 
 tester:
-	IMAGE_NAME=$(GS_MGMT_TEST_IMAGE) DOCKER_FILE=docker/tester.Dockerfile $(MAKE) image
+	IMAGE_NAME=$(GS_MGMT_TEST_IMAGE) DOCKER_FILE=docker/builder.Dockerfile DOCKER_BUILD_OPTION="$(DOCKER_BUILD_OPTION) --target tester" $(MAKE) image
 
 yang:
 	./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h $(TAI_META_CUSTOM_FILES) | pyang -f yang > $(TRANSPONDER_YANG)
@@ -129,12 +125,6 @@ tester-bash:
 
 cmd:
 	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_IMAGE) $(DOCKER_CMD)
-
-cli:
-	cd src/north/cli && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
-
-system:
-	cd src/south/system && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist
 
 lint:
 	which black && exit `black -q --diff --exclude src/north/snmp/src src | wc -l`

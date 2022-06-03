@@ -63,6 +63,7 @@ class MockSONiC(object):
 async def to_subprocess(func):
     loop = asyncio.get_running_loop()
     executor = ProcessPoolExecutor(max_workers=1)
+
     return await loop.run_in_executor(executor, func)
 
 
