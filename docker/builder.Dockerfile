@@ -9,7 +9,7 @@ SHELL ["/bin/bash", "-c"]
 RUN --mount=type=bind,source=sm/OpenNetworkLinux,target=/root/sm/OpenNetworkLinux,rw \
     --mount=type=bind,source=.git/modules/sm/OpenNetworkLinux,target=/root/.git/modules/sm/OpenNetworkLinux \
     cd /root/sm/OpenNetworkLinux && . ./setup.env && onlpm --rebuild-pkg-cache && mkdir -p /usr/share/onlp && \ 
-    onlpm --build onlp:arm64 onlp-dev:arm64 onlp-py3:arm64 onlp-arm64-wistron-wtp-01-c1-00-r0:arm64 && \
+    onlpm --build onlp:arm64 onlp-dev:arm64 onlp-py3:arm64 && \
     onlpm --build onlp:amd64 onlp-dev:amd64 onlp-py3:amd64 onlp-x86-64-kvm-x86-64-r0:amd64 && \
     cp -r REPO/buster/packages/binary-$TARGETARCH/* /usr/share/onlp && ls /usr/share/onlp
 
