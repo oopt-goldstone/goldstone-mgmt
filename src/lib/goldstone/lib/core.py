@@ -93,6 +93,7 @@ class ServerBase(object):
         self._current_handlers = None  # (req_id, handlers, user)
         self._stop_event = asyncio.Event()
         self.revert_timeout = revert_timeout
+        self.lock = asyncio.Lock()
 
     def get_sr_data(
         self,
@@ -185,79 +186,87 @@ class ServerBase(object):
 
     async def change_cb(self, event, req_id, changes, priv):
         logger.debug(f"id: {req_id}, event: {event}, changes: {changes}")
-        if event not in ["change", "done", "abort"]:
-            logger.warning(f"unsupported event: {event}")
-            return
 
-        if event in ["done", "abort"]:
-            if self._current_handlers == None:
-                logger.error(f"current_handlers is null")
-                self._stop_event.set()
-                raise sysrepo.SysrepoInternalError("fatal error happened")
+        async with self.lock:
 
-            id, handlers, user, revert_task = self._current_handlers
-            revert_task.cancel()
-            try:
-                await revert_task
-            except asyncio.CancelledError:
-                pass
+            if event not in ["change", "done", "abort"]:
+                logger.warning(f"unsupported event: {event}")
+                return
 
-            if id != req_id:
-                logger.error(f"{id=} != {req_id=}")
-                self._stop_event.set()
-                raise sysrepo.SysrepoInternalError("fatal error happened")
+            if event in ["done", "abort"]:
+                if self._current_handlers == None:
+                    logger.error(f"current_handlers is null")
+                    self._stop_event.set()
+                    raise sysrepo.SysrepoInternalError("fatal error happened")
 
-            if event == "abort":
+                id, handlers, user, revert_task = self._current_handlers
+                revert_task.cancel()
+                try:
+                    await revert_task
+                except asyncio.CancelledError:
+                    pass
+
+                if id != req_id:
+                    logger.error(f"{id=} != {req_id=}")
+                    self._stop_event.set()
+                    raise sysrepo.SysrepoInternalError("fatal error happened")
+
+                if event == "abort":
+                    for done in reversed(handlers):
+                        await call(done.revert, user)
+                self._current_handlers = None
+                return
+
+            if self._current_handlers != None:
+                id, handlers, user, revert_task = self._current_handlers
+                raise sysrepo.SysrepoInternalError(
+                    f"waiting 'done' or 'abort' event for id {id}. got '{event}' event for id {req_id}"
+                )
+
+            handlers = []
+
+            user = {"changes": changes}
+
+            await call(self.pre, user)
+
+            for change in changes:
+                cls = self.get_handler(change.xpath)
+                if not cls:
+                    if isinstance(change, sysrepo.ChangeDeleted):
+                        continue
+                    raise sysrepo.SysrepoUnsupportedError(
+                        f"{change.xpath} not supported"
+                    )
+
+                h = cls(self, change)
+
+                # to support async initialization
+                init = getattr(h, "_init", None)
+                if init:
+                    await call(init, user)
+
+                await call(h.validate, user)
+                handlers.append(h)
+
+            for i, handler in enumerate(handlers):
+                try:
+                    await call(handler.apply, user)
+                except Exception as e:
+                    for done in reversed(handlers[:i]):
+                        await call(done.revert, user)
+                    raise e
+
+            await call(self.post, user)
+
+            async def do_revert():
+                await asyncio.sleep(self.revert_timeout)
+                logging.warning("client timeout happens? reverting changes we made")
                 for done in reversed(handlers):
                     await call(done.revert, user)
-            self._current_handlers = None
-            return
+                self._current_handlers = None
 
-        if self._current_handlers != None:
-            raise sysrepo.SysrepoInternalError("waiting for 'done' or 'abort' events..")
-
-        handlers = []
-
-        user = {"changes": changes}
-
-        await call(self.pre, user)
-
-        for change in changes:
-            cls = self.get_handler(change.xpath)
-            if not cls:
-                if isinstance(change, sysrepo.ChangeDeleted):
-                    continue
-                raise sysrepo.SysrepoUnsupportedError(f"{change.xpath} not supported")
-
-            h = cls(self, change)
-
-            # to support async initialization
-            init = getattr(h, "_init", None)
-            if init:
-                await call(init, user)
-
-            await call(h.validate, user)
-            handlers.append(h)
-
-        for i, handler in enumerate(handlers):
-            try:
-                await call(handler.apply, user)
-            except Exception as e:
-                for done in reversed(handlers[:i]):
-                    await call(done.revert, user)
-                raise e
-
-        await call(self.post, user)
-
-        async def do_revert():
-            await asyncio.sleep(self.revert_timeout)
-            logging.warning("client timeout happens? reverting changes we made")
-            for done in reversed(handlers):
-                await call(done.revert, user)
-            self._current_handlers = None
-
-        revert_task = asyncio.create_task(do_revert())
-        self._current_handlers = (req_id, handlers, user, revert_task)
+            revert_task = asyncio.create_task(do_revert())
+            self._current_handlers = (req_id, handlers, user, revert_task)
 
     def pre(self, user):
         pass
