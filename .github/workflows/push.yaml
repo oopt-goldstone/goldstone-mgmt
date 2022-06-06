@@ -1,0 +1,50 @@
+name: push
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+      - 'releases/v*'
+    tags:
+      - 'v*'
+
+jobs:
+  builder:
+    uses: ./.github/workflows/build_image.yaml
+    with:
+      file: ./docker/builder.Dockerfile
+      target: builder
+  build-host-packages:
+    needs: builder
+    uses: ./.github/workflows/build_image.yaml
+    with:
+      file: ./docker/builder.Dockerfile
+      target: host-packages
+  build-snmpd:
+    uses: ./.github/workflows/build_image.yaml
+    with:
+      file: ./docker/snmpd.Dockerfile
+      target: snmpd
+  build-agents:
+    needs: builder
+    uses: ./.github/workflows/build_image.yaml
+    strategy:
+      fail-fast: true
+      matrix:
+        agent:
+          - north-cli
+          - north-snmp
+          - north-netconf
+          - north-notif
+          - south-sonic
+          - south-tai
+          - south-onlp
+          - south-system
+          - south-gearbox
+          - south-dpll
+          - xlate-oc
+    with:
+      file: ./docker/agent.Dockerfile
+      target: ${{ matrix.agent }}
+      build-args: GS_MGMT_BUILDER_IMAGE=${{ needs.builder.outputs.tags }}
