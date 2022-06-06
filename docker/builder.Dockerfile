@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:experimental
+# syntax=docker/dockerfile:1.4
 
 ARG GS_MGMT_BUILDER_BASE=python:3-buster
 
@@ -145,6 +145,8 @@ RUN --mount=type=bind,source=scripts,target=/src \
     cd /src && cp /src/gs-yang.py /usr/local/bin/
 
 #---
+# tester
+#---
 
 FROM $GS_MGMT_BUILDER_BASE AS tester
 
@@ -210,6 +212,28 @@ RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
     cd /root/sm/oopt-tai/tools/meta-generator && pip install .
+
+#---
+# host-packages
+#---
+
+FROM builder AS host-packages
+
+RUN --mount=type=bind,source=src/lib,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && rm -rf /usr/share/wheels/lib && mkdir -p /usr/share/wheels/lib && cp dist/*.whl /usr/share/wheels/lib
+
+RUN --mount=type=bind,source=src/north/cli,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && rm -rf /usr/share/wheels/cli && mkdir -p /usr/share/wheels/cli && cp dist/*.whl /usr/share/wheels/cli
+
+RUN --mount=type=bind,source=src/south/system,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && rm -rf /usr/share/wheels/system && mkdir -p /usr/share/wheels/system && cp dist/*.whl /usr/share/wheels/system
+
+#---
+# default image
+#---
 
 FROM builder AS final
 
