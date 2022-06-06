@@ -1,4 +1,4 @@
-.PHONY: builder bash init yang base-image images docker cli system
+.PHONY: builder images tester host-packages bash yang
 
 ARCH ?= amd64
 
@@ -9,26 +9,11 @@ DOCKER_IMAGE ?= $(BUILDER)
 GS_MGMT_IMAGE_PREFIX ?= ghcr.io/oopt-goldstone/goldstone-mgmt/
 GS_MGMT_IMAGE_TAG ?= latest-$(ARCH)
 
-GS_MGMT_BUILDER_IMAGE ?= gs-mgmt-builder
-GS_MGMT_BASE_IMAGE    ?= gs-mgmt
-GS_MGMT_NP2_IMAGE     ?= gs-mgmt-netopeer2
-GS_MGMT_SONIC_IMAGE   ?= gs-mgmt-south-sonic
-GS_MGMT_TAI_IMAGE     ?= gs-mgmt-south-tai
-GS_MGMT_ONLP_IMAGE    ?= gs-mgmt-south-onlp
-GS_MGMT_SYSTEM_IMAGE  ?= gs-mgmt-south-system
-GS_MGMT_GEARBOX_IMAGE ?= gs-mgmt-south-gearbox
-GS_MGMT_DPLL_IMAGE    ?= gs-mgmt-south-dpll
-GS_MGMT_CLI_IMAGE     ?= gs-mgmt-north-cli
-GS_MGMT_SNMP_IMAGE    ?= gs-mgmt-north-snmp
-GS_MGMT_SNMPD_IMAGE   ?= gs-mgmt-snmpd
-GS_MGMT_OC_IMAGE      ?= gs-mgmt-xlate-openconfig
-GS_MGMT_NOTIF_IMAGE   ?= gs-mgmt-north-notif
-GS_MGMT_TEST_IMAGE    ?= gs-mgmt-test
-GS_MGMT_HOST_IMAGE    ?= gs-mgmt-host
-
 define image_name
 $(GS_MGMT_IMAGE_PREFIX)$1:$(GS_MGMT_IMAGE_TAG)
 endef
+
+BUILDER ?= $(call image_name,builder)
 
 GS_SAVE_AFTER_BUILD ?= 0
 
@@ -36,87 +21,50 @@ define save
 if [ $(GS_SAVE_AFTER_BUILD) -eq 1 ]; then mkdir -p builds && docker save $(call image_name,$(1)) > builds/$(1)-$(ARCH).tar && gzip -f builds/$(1)-$(ARCH).tar; fi
 endef
 
-BUILDER ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
-BASE ?= $(call image_name,$(GS_MGMT_BUILDER_IMAGE))
-TAI_META_CUSTOM_FILES ?= $(abspath $(wildcard scripts/tai/*))
+define build_image
+DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/$(2) \
+				--build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
+				--target $(1) -t $(call image_name,$(1)) .
+$(call save,$(1))
+endef
 
+define build_agent_image
+$(call build_image,$(1),agent.Dockerfile)
+endef
+
+TAI_META_CUSTOM_FILES ?= $(abspath $(wildcard scripts/tai/*))
 TRANSPONDER_YANG ?= ./yang/goldstone-transponder.yang
 
-all: builder base-image images tester host-packages
-
-docker:
-	DOCKER_RUN_OPTION="-u `id -u`:`id -g` -e VERBOSE=$(VERBOSE)" DOCKER_CMD='make cli system' $(MAKE) cmd
-
-
-builder:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/builder.Dockerfile -t $(BUILDER) .
-	$(call save,$(GS_MGMT_BUILDER_IMAGE))
-
-base-image:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/run.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
-							      -t $(call image_name,$(GS_MGMT_BASE_IMAGE)) .
-	$(call save,$(GS_MGMT_BASE_IMAGE))
-
-host-packages:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f docker/host.Dockerfile \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
-							      -t $(call image_name,$(GS_MGMT_HOST_IMAGE)) .
-	$(call save,$(GS_MGMT_HOST_IMAGE))
+all: builder images tester host-packages
 
 images: south-images north-images xlate-images
 
-south-images: south-sonic south-tai south-onlp south-system south-gearbox south-dpll
+GS_SOUTH_AGENTS ?= south-sonic south-tai south-onlp south-system south-gearbox south-dpll
+GS_NORTH_AGENTS ?= north-cli north-snmp north-netconf north-notif
+GS_XLATE_AGENTS ?= xlate-oc
 
-north-images: north-cli north-snmp north-netconf north-notif
+south-images: $(GS_SOUTH_AGENTS)
 
-xlate-images: xlate-oc
+north-images: $(GS_NORTH_AGENTS)
 
-image:
-	DOCKER_BUILDKIT=1 docker build $(DOCKER_BUILD_OPTION) -f $(DOCKER_FILE) \
-							      --build-arg GS_MGMT_BUILDER_IMAGE=$(BUILDER) \
-							      --build-arg GS_MGMT_BASE=$(call image_name,$(GS_MGMT_BASE_IMAGE)) \
-							      -t $(call image_name,$(IMAGE_NAME)) .
-	$(call save,$(IMAGE_NAME))
+xlate-images: $(GS_XLATE_AGENTS)
 
-south-sonic:
-	IMAGE_NAME=$(GS_MGMT_SONIC_IMAGE) DOCKER_FILE=docker/south-sonic.Dockerfile $(MAKE) image
-
-south-tai:
-	IMAGE_NAME=$(GS_MGMT_TAI_IMAGE) DOCKER_FILE=docker/south-tai.Dockerfile $(MAKE) image
-
-south-gearbox:
-	IMAGE_NAME=$(GS_MGMT_GEARBOX_IMAGE) DOCKER_FILE=docker/south-gearbox.Dockerfile $(MAKE) image
-
-south-dpll:
-	IMAGE_NAME=$(GS_MGMT_DPLL_IMAGE) DOCKER_FILE=docker/south-dpll.Dockerfile $(MAKE) image
-
-south-onlp:
-	IMAGE_NAME=$(GS_MGMT_ONLP_IMAGE) DOCKER_FILE=docker/south-onlp.Dockerfile $(MAKE) image
-
-south-system:
-	IMAGE_NAME=$(GS_MGMT_SYSTEM_IMAGE) DOCKER_FILE=docker/south-system.Dockerfile $(MAKE) image
-
-north-cli:
-	IMAGE_NAME=$(GS_MGMT_CLI_IMAGE) DOCKER_FILE=docker/north-cli.Dockerfile $(MAKE) image
-
-north-notif:
-	IMAGE_NAME=$(GS_MGMT_NOTIF_IMAGE) DOCKER_FILE=docker/north-notif.Dockerfile $(MAKE) image
+$(GS_SOUTH_AGENTS) $(GS_NORTH_AGENTS) $(GS_XLATE_AGENTS):
+	$(call build_agent_image,$@)
 
 north-snmp: snmpd
-	IMAGE_NAME=$(GS_MGMT_SNMP_IMAGE) DOCKER_FILE=docker/north-snmp.Dockerfile $(MAKE) image
-
-north-netconf:
-	IMAGE_NAME=$(GS_MGMT_NP2_IMAGE) DOCKER_FILE=docker/netopeer2.Dockerfile $(MAKE) image
-
-xlate-oc:
-	IMAGE_NAME=$(GS_MGMT_OC_IMAGE) DOCKER_FILE=docker/xlate-openconfig.Dockerfile $(MAKE) image
 
 snmpd:
-	IMAGE_NAME=$(GS_MGMT_SNMPD_IMAGE) DOCKER_FILE=docker/snmpd.Dockerfile $(MAKE) image
+	$(call build_image,$@,snmpd.Dockerfile)
 
 tester:
-	IMAGE_NAME=$(GS_MGMT_TEST_IMAGE) DOCKER_FILE=docker/tester.Dockerfile $(MAKE) image
+	$(call build_image,$@,builder.Dockerfile)
+
+builder:
+	$(call build_image,$@,builder.Dockerfile)
+
+host-packages:
+	$(call build_image,$@,builder.Dockerfile)
 
 yang:
 	./tools/tai_yang_gen.py ./sm/oopt-tai/inc/tai.h $(TAI_META_CUSTOM_FILES) | pyang -f yang > $(TRANSPONDER_YANG)
@@ -185,6 +133,3 @@ unittest-sonic:
 	scripts/gs-yang.py --install south-sonic --search-dirs yang
 	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
 	cd src/south/sonic      && make clean
-
-release:
-	./tools/release.py
