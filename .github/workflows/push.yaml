@@ -14,37 +14,28 @@ jobs:
     uses: ./.github/workflows/build_image.yaml
     with:
       file: ./docker/builder.Dockerfile
-      target: builder
+      targets: >-
+        ["builder"]
   build-host-packages:
     needs: builder
     uses: ./.github/workflows/build_image.yaml
     with:
       file: ./docker/builder.Dockerfile
-      target: host-packages
+      targets: >-
+        ["host-packages"]
   build-snmpd:
     uses: ./.github/workflows/build_image.yaml
     with:
       file: ./docker/snmpd.Dockerfile
-      target: snmpd
+      targets: >-
+        ["snmpd"]
   build-agents:
     needs: builder
     uses: ./.github/workflows/build_image.yaml
-    strategy:
-      fail-fast: true
-      matrix:
-        agent:
-          - north-cli
-          - north-snmp
-          - north-netconf
-          - north-notif
-          - south-sonic
-          - south-tai
-          - south-onlp
-          - south-system
-          - south-gearbox
-          - south-dpll
-          - xlate-oc
+    # using matrix here is not supported yet
+    # https://github.community/t/reusable-workflow-with-strategy-matrix/205676/8
     with:
       file: ./docker/agent.Dockerfile
-      target: ${{ matrix.agent }}
       build-args: GS_MGMT_BUILDER_IMAGE=${{ needs.builder.outputs.tags }}
+      targets: >-
+        ["north-cli", "north-snmp", "north-netconf", "north-notif", "south-sonic", "south-tai", "south-onlp", "south-system", "south-gearbox", "south-dpll", "xlate-oc"]

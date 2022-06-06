@@ -8,7 +8,7 @@ on:
       file:
         required: true
         type: string
-      target:
+      targets:
         required: true
         type: string
       build-args:
@@ -16,16 +16,21 @@ on:
         type: string
     outputs:
       tags:
-        value: ${{ jobs.push.output.tags }}
+        value: ${{ jobs.push.outputs.tags }}
       labels:
-        value: ${{ jobs.push.output.labels }}
+        value: ${{ jobs.push.outputs.labels }}
 
 jobs:
   push:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: ${{fromJson(inputs.targets)}}
+
     outputs:
       tags: ${{ steps.meta.outputs.tags }}
       labels: ${{ steps.meta.outputs.labels }}
+
     steps:
       -
         name: Checkout
@@ -52,7 +57,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: "${{ inputs.repo }}/${{ inputs.target }}"
+          images: "${{ inputs.repo }}/${{ matrix.target }}"
       -
         name: Build agent
         uses: docker/build-push-action@v3
@@ -63,7 +68,7 @@ jobs:
           file: ${{ inputs.file }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          target: ${{ inputs.target }}
+          target: ${{ matrix.target }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: ${{ inputs.build-args }}
