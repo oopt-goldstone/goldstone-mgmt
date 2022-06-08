@@ -180,6 +180,9 @@ class TransponderServer(ServerBase):
         if type_ == "module":
             location = await obj.get("location")
             key = self.location2name(location)
+            if not key:
+                logger.warning(f"failed to get name from location: {location}")
+                return
             xpath = f"/goldstone-transponder:modules/module[name='{key}']/config/enable-{attr_meta.short_name}"
         else:
             type_ = type_ + "-interface"
@@ -195,6 +198,11 @@ class TransponderServer(ServerBase):
                 return
 
             key = self.location2name(module_location)
+            if not key:
+                logger.warning(
+                    f"failed to get module name from location: {module_location}"
+                )
+                return
             index = await obj.get("index")
             xpath = f"/goldstone-transponder:modules/module[name='{key}']/{type_}[name='{index}']/config/enable-{attr_meta.short_name}"
 
@@ -267,6 +275,9 @@ class TransponderServer(ServerBase):
     async def initialize_piu(self, config, location):
 
         name = self.location2name(location)
+        if not name:
+            logger.warning(f"failed to get module name from location: {location}")
+            return
 
         if location not in self.event_obj:
             # this happens if south-onlp is not running when south-tai starts
@@ -698,7 +709,10 @@ class TransponderServer(ServerBase):
             if module == None:
                 modules = await self.taish.list()
                 modules = (self.location2name(key) for key in modules.keys())
-                modules = [{"name": name, "config": {"name": name}} for name in modules]
+                # modules may include None. filter it with 'if name'
+                modules = [
+                    {"name": name, "config": {"name": name}} for name in modules if name
+                ]
                 return {"goldstone-transponder:modules": {"module": modules}}
             elif intf in ["network-interface", "host-interface"]:
                 intfs = (
@@ -738,6 +752,10 @@ class TransponderServer(ServerBase):
                 continue
 
             name = self.location2name(location)
+            if not name:
+                logger.warning(f"failed to get name from location: {location}")
+                continue
+
             data = {
                 "name": name,
                 "config": {"name": name},
