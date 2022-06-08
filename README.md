@@ -1,37 +1,85 @@
-Goldstone Management Framework
+Goldstone Management Layer Implementation
 ---
 
-### What this repo inclues
+`goldstone-mgmt` is the management layer implementation of Goldstone NOS.
+The components in this repo are pre-installed in Goldstone NOS.
 
-- Goldstone management south daemons
-    - ONLP, SONiC/SAI, TAI, System
-- Goldstone management north daemons
-    - CLI, netconf(Netopeer2), SNMP
+### What this repo includes
+
+- Goldstone management north daemons that provide control interfaces to network operators
+    - CLI, NETCONF, and SNMP
+- Goldstone management south daemons that control hardware components in a networking device
+    - e.g) Switch ASIC, Transponder, Gearbox, Peripheral devices(Thermal sensors, LED, fan etc..)
 - Goldstone YANG models
+    - The schemas that are used between north and south daemons
+
+### Getting Started
+
+You can try running `goldstone-mgmt` components without a real networking device.
+You need to set up a Kubernetes cluster for that. You can use [k3s](https://k3s.io/) to set it up quickly.
+
+After making sure you have access to a Kubernetes cluster, try following.
+
+```bash
+$ git clone https://github.com/oopt-goldstone/goldstone-mgmt.git
+$ cd goldstone-mgmt
+$ kubectl apply -f k8s
+$ kubectl get daemonset
+NAME                  DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+south-sonic           1         1         1       1            1           <none>          70m
+svclb-north-snmp      1         1         1       1            1           <none>          14m
+svclb-north-netconf   1         1         1       1            1           <none>          14m
+north-snmp            1         1         1       1            1           <none>          14m
+north-netconf         1         1         1       1            1           <none>          14m
+north-cli             1         1         1       1            1           <none>          14m
+xlate-oc              1         1         1       1            1           <none>          14m
+south-tai             1         1         1       1            1           <none>          14m
+north-notif           1         1         1       1            1           <none>          14m
+south-onlp            1         1         1       1            1           <none>          14m
+south-system          1         1         1       1            1           <none>          14m
+```
+
+You can start the Goldstone CLI (`gscli`) by the following command
+
+```bash
+$ kubectl exec -it ds/north-cli -- gscli
+> show version
+latest
+> show transponder summary
++-------------+-------------+--------------------+----------------------+--------------+-------------+
+| transponder | vendor-name | vendor-part-number | vendor-serial-number | admin-status | oper-status |
++-------------+-------------+--------------------+----------------------+--------------+-------------+
+| piu1        | BASIC       | N/A                | N/A                  |     down     | initialize  |
+| piu2        | BASIC       | N/A                | N/A                  |     down     | initialize  |
+| piu3        | N/A         | N/A                | N/A                  |     N/A      |     N/A     |
+| piu4        | N/A         | N/A                | N/A                  |     N/A      |     N/A     |
+| piu5        | N/A         | N/A                | N/A                  |     N/A      |     N/A     |
+| piu6        | N/A         | N/A                | N/A                  |     N/A      |     N/A     |
++-------------+-------------+--------------------+----------------------+--------------+-------------+
+> show chassis-hardware piu table
+name    status     PIU type    CFP2 presence
+------  ---------  ----------  ---------------
+piu1    present    ACO         present
+piu2    present    DCO         present
+piu3    present    QSFP28      unplugged
+piu4    unplugged  UNKNOWN     unplugged
+piu5    present    ACO         unplugged
+piu6    present    DCO         unplugged
+```
 
 ### Architecture
-
-`goldstone-mgmt` is the management layer implementation of OOPT Goldstone.
 
 The management layer of Goldstone needs to meet the following requirements.
 
 - provide CLI, NETCONF, SNMP and gNMI services to operator
-- support controlling various software that controls hardware components in the networking device
-    - e.g) how to retrieve the interface information may vary among platforms
+- support controlling various software that controls hardware components in a networking device
+    - e.g) how to retrieve network interface information may vary among platforms
 
-In order to meet these requirements, the management layer needs a modular
-
-
-framework uses [sysrepo](https://github.com/sysrepo/sysrepo) as a central configuration
-infrastructure. sysrepo is a YANG based configuration datastore. Since it uses POSIX shared memory for
-the temporal storage, it works without a daemon which needs to be running all the time.
-Exclusive control among processes is done by FUTEX and persistent data (e.g. startup config or YANG model)
-is just ordinal files. (access control is also enforced by UNIX file permissions)
-
+`goldstone-mgmt` uses [sysrepo](https://github.com/sysrepo/sysrepo) as a central configuration infrastructure.
 `goldstone-mgmt` has its own native YANG models which are placed under `yang/` directory.
-The intention to have native YANG models is to properly cover what the underneath hardware supports.
+The intention to have native YANG models is to fully cover what the underneath hardware supports.
 
-Using the standard YANG models (OpenConfig, IETF etc..) is also supported by using translater daemons which will be described below.
+Using the standard YANG models (OpenConfig, OpenROADM etc..) is also supported by using translater daemons.
 
 `goldstone-mgmt` framework has three kinds of daemon which interact with sysrepo datastore.
 
@@ -46,64 +94,16 @@ Using the standard YANG models (OpenConfig, IETF etc..) is also supported by usi
     - translater of the native YANG models and standard YANG models
     - source code under `src/xlate`
 
-#### South Daemon
+### How to build
 
-South daemon is an entity which acts as a gateway between sysrepo datastore 
-and hardware controller of the platform. We plan to have ONLP, SONiC and TAI south daemon for now.
-
-##### 1. ONLP south daemon
-
-[ONLP](http://opencomputeproject.github.io/OpenNetworkLinux/onlp/) south daemon is a south daemon which handles peripheral control of the platform.
-It controls the peripherals via the ONLP Python wrapper.
-
-##### 2. SONiC/SAI south daemon
-
-SONiC/SAI south daemon is a south daemon which handles Ethernet ASIC control of the platform.
-It controls the ASIC via [sonic-py-swsssdk](https://github.com/Azure/sonic-py-swsssdk) library.
-
-##### 3. TAI south daemon
-
-TAI south daemon is a south daemon which handles coherent optics control of the platform.
-It controls the optical modules via [taish gRPC API](https://github.com/Telecominfraproject/oopt-tai/tree/master/tools/taish).
-
-#### North Daemon
-
-North daemon is an entity which provides northband interface to the user.
-We plan to implement CLI, NETCONF and SNMP north daemon first.
-
-##### 1. CLI north daemon
-
-- supports basic set/get, completion and notification
-- python-prompt-toolkit based
-    - https://github.com/prompt-toolkit/python-prompt-toolkit
-    - many users, active development
-    - performance could be a problem when syntax tree get larger
-    - needs to develop Python wrapper for sysrepo(devel)?
-- TODO: consider automatic code generation based on YANG models
-
-##### 2. NETCONF north daemon
-
-- we use [Netopeer2](https://github.com/CESNET/Netopeer2) as is
-
-##### 3. SNMP north daemon
-
-- candidate libraries to use
-    - https://github.com/Azure/sonic-snmpagent
-    - https://github.com/etingof/pysnmp
-    - net-snmp
-        - https://github.com/opencomputeproject/OpenNetworkLinux/tree/master/packages/base/any/onlp-snmpd/builds/src/onlp_snmp
-
-### How to test
-
-#### prerequisite
+#### Prerequisite
 
 - Git
 - Docker ( version >= 18.09, enable [buildkit](https://docs.docker.com/develop/develop-images/build_enhancements/) )
 
 ```bash
-$ git clone git@github.com:oopt-goldstone/goldstone-mgmt.git
+$ git clone https://github.com/oopt-goldstone/goldstone-mgmt.git
 $ cd goldstone-mgmt
 $ git submodule --update --init
 $ make all
-$ kubectl apply -f k8s
 ```
