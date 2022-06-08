@@ -76,23 +76,23 @@ The management layer of Goldstone needs to meet the following requirements.
     - e.g) how to retrieve network interface information may vary among platforms
 
 `goldstone-mgmt` uses [sysrepo](https://github.com/sysrepo/sysrepo) as a central configuration infrastructure.
-`goldstone-mgmt` has its own native YANG models which are placed under `yang/` directory.
+`goldstone-mgmt` has its own native YANG models which are placed under [`yang/`](https://github.com/oopt-goldstone/goldstone-mgmt/tree/master/yang) directory.
 The intention to have native YANG models is to fully cover what the underneath hardware supports.
 
-Using the standard YANG models (OpenConfig, OpenROADM etc..) is also supported by using translater daemons.
+Using the standard YANG models ([OpenConfig](https://www.openconfig.net/), [OpenROADM](http://openroadm.org/) etc..) is also supported by using translater daemons.
 
 `goldstone-mgmt` framework has three kinds of daemon which interact with sysrepo datastore.
 
 - north daemon
     - provides northbound API (CLI, NETCONF, SNMP, RESTCONF, gNMI etc..)
-    - source code under `src/north`
+    - source code under [`src/north`](https://github.com/oopt-goldstone/goldstone-mgmt/tree/master/src/north)
 - south daemon
     - control/monitor hardware (ONLP, SONiC/SAI, TAI, System)
     - uses native YANG models to interact with sysrepo
-    - source code under `src/south`
+    - source code under [`src/south`](https://github.com/oopt-goldstone/goldstone-mgmt/tree/master/src/south)
 - translater daemon
     - translater of the native YANG models and standard YANG models
-    - source code under `src/xlate`
+    - source code under [`src/xlate`](https://github.com/oopt-goldstone/goldstone-mgmt/tree/master/src/xlate)
 
 ### How to build
 
@@ -106,4 +106,22 @@ $ git clone https://github.com/oopt-goldstone/goldstone-mgmt.git
 $ cd goldstone-mgmt
 $ git submodule --update --init
 $ make all
+```
+
+This will build all Goldstone management components as container images.
+
+```bash
+$ docker images | grep oopt-goldstone/mgmt
+ghcr.io/oopt-goldstone/mgmt/south-onlp      latest           3306a75b5445   3 hours ago     228MB
+ghcr.io/oopt-goldstone/mgmt/builder         latest           50b26971c311   3 hours ago     1.67GB
+ghcr.io/oopt-goldstone/mgmt/south-tai       latest           6cb422fe2d4c   3 hours ago     228MB
+ghcr.io/oopt-goldstone/mgmt/south-gearbox   latest           663bb2dc39aa   3 hours ago     227MB
+ghcr.io/oopt-goldstone/mgmt/north-notif     latest           6407dee38cc6   3 hours ago     210MB
+ghcr.io/oopt-goldstone/mgmt/north-snmp      latest           062ad6d39b28   3 hours ago     200MB
+ghcr.io/oopt-goldstone/mgmt/south-sonic     latest           c5156742195b   3 hours ago     281MB
+ghcr.io/oopt-goldstone/mgmt/north-netconf   latest           78ff4effe763   3 hours ago     476MB
+ghcr.io/oopt-goldstone/mgmt/south-system    latest           fa83287947bd   3 hours ago     252MB
+ghcr.io/oopt-goldstone/mgmt/north-cli       latest           fe8286bf95fb   3 hours ago     238MB
+ghcr.io/oopt-goldstone/mgmt/xlate-oc        latest           79e3e935785a   3 hours ago     211MB
+ghcr.io/oopt-goldstone/mgmt/snmpd           latest           eca87e95b7a4   3 hours ago     174MB
 ```
