@@ -9,6 +9,7 @@ from goldstone.lib.errors import NotFoundError, Error, LockedError, CallbackFail
 import sysrepo
 import libyang
 import logging
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,13 @@ class Session(BaseSession):
     def send_notification(self, name: str, notification: dict):
         logger.debug(f"sending notification {name}: {notification}")
         self.session.notification_send(name, notification)
+
+    def subscribe_notification(self, xpath, callback):
+        model = xpath.split("/")[1].split(":")[0]
+        asyncio_register = inspect.iscoroutinefunction(callback)
+        self.session.subscribe_notification(
+            model, xpath, callback, asyncio_register=asyncio_register
+        )
 
     def subscribe_notifications(self, callback):
         f = lambda xpath, notif_type, value, timestamp, priv: callback(
