@@ -50,7 +50,7 @@ spec:
               command: ['sh', '-c', "kubectl wait --for=condition=ready pods/$(kubectl get pods -l app=south-onlp -o jsonpath='{.items[0].metadata.name}')"]
             containers:
             - name: tai
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-south-tai:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/south-tai:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-tai']
               args: ['--taish-server', "127.0.0.1:50051", "--verbose", "$(PLATFORM_FILE)"]

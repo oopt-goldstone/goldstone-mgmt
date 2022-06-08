@@ -56,7 +56,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: onlp
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-south-onlp:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/south-onlp:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', 'ln -sf /lib/platform-config/x86-64-kvm-x86-64-r0/onl/lib/libonlp-x86-64-kvm-x86-64.so /lib/x86_64-linux-gnu/libonlp-platform.so.1 && gssouthd-onlp -v']
               env:

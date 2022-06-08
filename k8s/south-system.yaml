@@ -4,7 +4,7 @@ metadata:
   name: goldstone-version
 data:
   versions.json: |
-      {"PRODUCT_ID_VERSION": "0.3.11"}
+      {"PRODUCT_ID_VERSION": "latest"}
 
 ---
 
@@ -36,19 +36,20 @@ subjects:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-    name: gs-mgmt-system
+    name: south-system
     labels:
         app: gs-mgmt
+        gs-mgmt: south-system
 spec:
     selector:
         matchLabels:
-            app: gs-mgmt-system
+            app: south-system
     template:
         metadata:
             labels:
-                app: gs-mgmt-system
+                app: south-system
         spec:
-            serviceAccountName: gs-mgmt
+            serviceAccountName: south-system
             initContainers:
             - name: wait-prep
               image: docker.io/bitnami/kubectl:latest
@@ -56,7 +57,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: south-system
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-south-system:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/south-system:latest
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-system', '-v']
               volumeMounts:

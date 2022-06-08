@@ -76,14 +76,14 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: snmpd
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-snmpd:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/snmpd:latest
               imagePullPolicy: IfNotPresent
               command: ['snmpd', '-f', '-C', '-c', '/etc/snmp/snmpd.conf']
               volumeMounts:
               - name: snmpd-config
                 mountPath: /etc/snmp
             - name: agentx
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-north-snmp:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/north-snmp:latest
               imagePullPolicy: IfNotPresent
               command: ['gsnorthd-snmp', '-v']
               volumeMounts:

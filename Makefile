@@ -7,7 +7,7 @@ DOCKER_BUILD_OPTION ?= --platform linux/$(ARCH)
 DOCKER_IMAGE ?= $(BUILDER)
 
 GS_MGMT_IMAGE_PREFIX ?= ghcr.io/oopt-goldstone/mgmt/
-GS_MGMT_IMAGE_TAG ?= latest-$(ARCH)
+GS_MGMT_IMAGE_TAG ?= latest
 
 define image_name
 $(GS_MGMT_IMAGE_PREFIX)$1:$(GS_MGMT_IMAGE_TAG)
