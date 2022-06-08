@@ -63,7 +63,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: server
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-netopeer2:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/north-netconf:latest
               imagePullPolicy: IfNotPresent
               command: ['netopeer2-server']
               args: ['-d', '-v', '2', '-t', '60']

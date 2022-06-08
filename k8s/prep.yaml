@@ -17,18 +17,20 @@ data:
       {"interface": {"suffix": "10_1"}, "component": {"name": "port10"}},
       {"interface": {"suffix": "11_1"}, "component": {"name": "port11"}},
       {"interface": {"suffix": "12_1"}, "component": {"name": "port12"}},
-      {"interface": {"suffix": "13_1"}, "tai": {"module": {"name": "piu1", "location": "/dev/piu1"}, "hostif": {"name": "0", "index": 0}}},
-      {"interface": {"suffix": "14_1"}, "tai": {"module": {"name": "piu1", "location": "/dev/piu1"}, "hostif": {"name": "1", "index": 1}}},
-      {"interface": {"suffix": "15_1"}, "tai": {"module": {"name": "piu2", "location": "/dev/piu2"}, "hostif": {"name": "0", "index": 0}}},
-      {"interface": {"suffix": "16_1"}, "tai": {"module": {"name": "piu2", "location": "/dev/piu2"}, "hostif": {"name": "1", "index": 1}}},
-      {"interface": {"suffix": "17_1"}, "tai": {"module": {"name": "piu3", "location": "/dev/piu3"}, "hostif": {"name": "0", "index": 0}}},
-      {"interface": {"suffix": "18_1"}, "tai": {"module": {"name": "piu3", "location": "/dev/piu3"}, "hostif": {"name": "1", "index": 1}}},
-      {"interface": {"suffix": "19_1"}, "tai": {"module": {"name": "piu4", "location": "/dev/piu4"}, "hostif": {"name": "0", "index": 0}}},
-      {"interface": {"suffix": "20_1"}, "tai": {"module": {"name": "piu4", "location": "/dev/piu4"}, "hostif": {"name": "1", "index": 1}}},
-      {"component": {"name": "piu1"}, "tai": {"module": {"name": "piu1", "location": "/dev/piu1"}, "netif": {"name": "0", "index": 0}}},
-      {"component": {"name": "piu2"}, "tai": {"module": {"name": "piu2", "location": "/dev/piu2"}, "netif": {"name": "0", "index": 0}}},
-      {"component": {"name": "piu3"}, "tai": {"module": {"name": "piu3", "location": "/dev/piu3"}, "netif": {"name": "0", "index": 0}}},
-      {"component": {"name": "piu4"}, "tai": {"module": {"name": "piu4", "location": "/dev/piu4"}, "netif": {"name": "0", "index": 0}}}
+      {"interface": {"suffix": "13_1"}, "tai": {"module": {"name": "piu1", "location": "0"}, "hostif": {"name": "0", "index": 0}}},
+      {"interface": {"suffix": "14_1"}, "tai": {"module": {"name": "piu1", "location": "0"}, "hostif": {"name": "1", "index": 1}}},
+      {"interface": {"suffix": "15_1"}, "tai": {"module": {"name": "piu2", "location": "1"}, "hostif": {"name": "0", "index": 0}}},
+      {"interface": {"suffix": "16_1"}, "tai": {"module": {"name": "piu2", "location": "1"}, "hostif": {"name": "1", "index": 1}}},
+      {"interface": {"suffix": "17_1"}, "tai": {"module": {"name": "piu3", "location": "2"}, "hostif": {"name": "0", "index": 0}}},
+      {"interface": {"suffix": "18_1"}, "tai": {"module": {"name": "piu3", "location": "2"}, "hostif": {"name": "1", "index": 1}}},
+      {"interface": {"suffix": "19_1"}, "tai": {"module": {"name": "piu4", "location": "3"}, "hostif": {"name": "0", "index": 0}}},
+      {"interface": {"suffix": "20_1"}, "tai": {"module": {"name": "piu4", "location": "3"}, "hostif": {"name": "1", "index": 1}}},
+      {"component": {"name": "piu1"}, "tai": {"module": {"name": "piu1", "location": "0"}, "netif": {"name": "0", "index": 0}}},
+      {"component": {"name": "piu2"}, "tai": {"module": {"name": "piu2", "location": "1"}, "netif": {"name": "0", "index": 0}}},
+      {"component": {"name": "piu3"}, "tai": {"module": {"name": "piu3", "location": "2"}, "netif": {"name": "0", "index": 0}}},
+      {"component": {"name": "piu4"}, "tai": {"module": {"name": "piu4", "location": "3"}, "netif": {"name": "0", "index": 0}}},
+      {"component": {"name": "piu5"}, "tai": {"module": {"name": "piu5", "location": "4"}, "netif": {"name": "0", "index": 0}}},
+      {"component": {"name": "piu6"}, "tai": {"module": {"name": "piu6", "location": "5"}, "netif": {"name": "0", "index": 0}}}
     ]
 
 ---
@@ -43,16 +45,16 @@ spec:
             restartPolicy: Never
             initContainers: # run prep-sysrepo and prep-np sequentially
             - name: prep-sysrepo
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/north-cli:latest
               imagePullPolicy: IfNotPresent
-              command: ["gs-yang.py", "--install", "south-onlp", "south-sonic", "south-tai", "south-system", "xlate-oc", "xlate-or"]
+              command: ["gs-yang.py", "--install", "south-onlp", "south-sonic", "south-tai", "south-system", "xlate-oc"]
               volumeMounts:
               - name: shm
                 mountPath: /dev/shm
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
             - name: prep-np
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-netopeer2:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/north-netconf:latest
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', '$NP2/setup.sh && $NP2/merge_hostkey.sh && $NP2/merge_config.sh']
               env:
@@ -73,7 +75,7 @@ spec:
                 name: sysrepo
             containers:
             - name: job-done
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/north-cli:latest
               imagePullPolicy: IfNotPresent
               command: ["sysrepoctl", "-l"]
               volumeMounts:

@@ -47,7 +47,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: xlate-openconfig
-              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-xlate-openconfig:latest-amd64
+              image: ghcr.io/oopt-goldstone/mgmt/xlate-oc:latest
               imagePullPolicy: IfNotPresent
               command: ['gsxlated-openconfig', '-v']
               volumeMounts:
