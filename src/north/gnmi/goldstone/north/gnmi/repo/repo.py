@@ -8,8 +8,8 @@ class NotFoundError(Exception):
 
 
 class ApplyFailedError(Exception):
-    def __init__(self):
-        super().__init__("Apply changes to the repository failed")
+    def __init__(self, msg):
+        super().__init__("Apply changes to the repository failed: {}".format(msg))
 
 
 class Repository:
@@ -93,5 +93,23 @@ class Repository:
 
         Raises:
             ValueError: 'path' has an invalid value.
+        """
+        pass
+
+    def subscribe_notification(self, xpath, callback):
+        """Subscribe a notification.
+
+        Args:
+            xpath (str): Path to the notification.
+            callback (func): Callback function to notify.
+        """
+        pass
+
+    def exec_rpc(self, xpath, params):
+        """Execute an RPC.
+
+        Args:
+            xpath (str): Path to the RPC.
+            params (dict): RPC parameters.
         """
         pass

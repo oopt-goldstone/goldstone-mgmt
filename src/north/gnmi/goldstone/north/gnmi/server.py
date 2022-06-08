@@ -1,16 +1,20 @@
 """gNMI server."""
 
 
+import re
 import logging
 from concurrent import futures
 import json
 import time
 import grpc
+import random
+import libyang
 from .proto import gnmi_pb2_grpc, gnmi_pb2
 from .repo.repo import NotFoundError, ApplyFailedError
 
 
 logger = logging.getLogger(__name__)
+
 
 GRPC_STATUS_CODE_OK = grpc.StatusCode.OK.value[0]
 GRPC_STATUS_CODE_UNKNOWN = grpc.StatusCode.UNKNOWN.value[0]
@@ -18,6 +22,41 @@ GRPC_STATUS_CODE_INVALID_ARGUMENT = grpc.StatusCode.INVALID_ARGUMENT.value[0]
 GRPC_STATUS_CODE_NOT_FOUND = grpc.StatusCode.NOT_FOUND.value[0]
 GRPC_STATUS_CODE_ABORTED = grpc.StatusCode.ABORTED.value[0]
 GRPC_STATUS_CODE_UNIMPLEMENTED = grpc.StatusCode.UNIMPLEMENTED.value[0]
+REGEX_PTN_LIST_KEY = re.compile(r"\[.*.*\]")
+
+
+class InvalidArgumentError(Exception):
+    pass
+
+
+def _parse_gnmi_path(gnmi_path):
+    xpath = ""
+    for elem in gnmi_path.elem:
+        xpath += f"/{elem.name}"
+        if elem.key:
+            for key in sorted(elem.key):
+                value = elem.key.get(key)
+                xpath += f"[{key}='{value}']"
+    return xpath
+
+
+def _build_gnmi_path(xpath):
+    gnmi_path = gnmi_pb2.Path()
+    elements = list(libyang.xpath_split(xpath))
+    for elem in elements:
+        prefix = elem[0]
+        name = elem[1]
+        if prefix is not None:
+            name = f"{prefix}:{name}"
+        keys = {}
+        for kv_peer in elem[2]:
+            keys[kv_peer[0]] = kv_peer[1]
+        if len(keys) > 0:
+            path_elem = gnmi_pb2.PathElem(name=name, key=keys)
+        else:
+            path_elem = gnmi_pb2.PathElem(name=name)
+        gnmi_path.elem.append(path_elem)
+    return gnmi_path
 
 
 class Request:
@@ -40,22 +79,12 @@ class Request:
         self.repo = repo
         self.prefix = prefix
         self.gnmi_path = gnmi_path
-        self.xpath = self._parse_xpath(prefix) + self._parse_xpath(gnmi_path)
+        self.xpath = _parse_gnmi_path(prefix) + _parse_gnmi_path(gnmi_path)
         logger.debug("Requested xpath: %s", self.xpath)
         self.status = gnmi_pb2.Error(
             code=GRPC_STATUS_CODE_OK,
             message=None,
         )
-
-    def _parse_xpath(self, path):
-        xpath = ""
-        for elem in path.elem:
-            xpath += f"/{elem.name}"
-            if elem.key:
-                for key in sorted(elem.key):
-                    value = elem.key.get(key)
-                    xpath += f"[{key}='{value}']"
-        return xpath
 
     def exec(self):
         """Execute the request.
@@ -276,6 +305,169 @@ class UpdateRequest(SetRequest):
                     return
 
 
+class SubscribeRequest:
+    """Request for gNMI Subscribe service.
+
+    Attributes:
+        repo (Repository): Repository to access the datastore.
+        rid (int): Request ID.
+        subscribe (gnmi_pb2.SubscriptionList): gNMI subscribe request body.
+    """
+
+    PATH_SR = "/goldstone-telemetry:subscribe-requests/subscribe-request[id='{}']"
+    PATH_POLL = "/goldstone-telemetry:poll"
+
+    SUBSCRIBE_REQUEST_MODES = {
+        gnmi_pb2.SubscriptionList.Mode.STREAM: "STREAM",
+        gnmi_pb2.SubscriptionList.Mode.ONCE: "ONCE",
+        gnmi_pb2.SubscriptionList.Mode.POLL: "POLL",
+    }
+
+    SUBSCRIPTION_MODES = {
+        gnmi_pb2.SubscriptionMode.TARGET_DEFINED: "TARGET_DEFINED",
+        gnmi_pb2.SubscriptionMode.ON_CHANGE: "ON_CHANGE",
+        gnmi_pb2.SubscriptionMode.SAMPLE: "SAMPLE",
+    }
+
+    def __init__(self, repo, rid, subscribe):
+        self._repo = repo
+        self._rid = rid
+        self._config = self._parse_config(subscribe)
+        self._notifs = []
+
+    def _parse_subscription_config(self, sid, config):
+        if not config.HasField("path"):
+            msg = "path should be specified."
+            logger.error(msg)
+            raise InvalidArgumentError(msg)
+        try:
+            mode = self.SUBSCRIPTION_MODES[config.mode]
+        except KeyError as e:
+            msg = f"mode has an invalid value {config.mode}."
+            logger.error(msg)
+            raise InvalidArgumentError(msg) from e
+        return {
+            "id": sid,
+            "path": _parse_gnmi_path(config.path),
+            "mode": mode,
+            "sample-interval": config.sample_interval,
+            "suppress-redundant": config.suppress_redundant,
+            "heartbeat-interval": config.heartbeat_interval,
+        }
+
+    def _parse_config(self, config):
+        try:
+            mode = self.SUBSCRIBE_REQUEST_MODES[config.mode]
+        except KeyError as e:
+            raise InvalidArgumentError(
+                f"mode has an invalid value {config.mode}."
+            ) from e
+        subscriptions = []
+        for sid, subscription in enumerate(config.subscription):
+            subscriptions.append(self._parse_subscription_config(sid, subscription))
+        return {
+            "id": self._rid,
+            "mode": mode,
+            "updates-only": config.updates_only,
+            "subscriptions": subscriptions,
+        }
+
+    def exec(self):
+        prefix = self.PATH_SR.format(self._rid)
+        configs = {
+            prefix + "/config/id": self._rid,
+            prefix + "/config/mode": self._config["mode"],
+            prefix + "/config/updates-only": self._config["updates-only"],
+        }
+        for s in self._config["subscriptions"]:
+            sid = s["id"]
+            sprefix = prefix + f"/subscriptions/subscription[id='{sid}']"
+            configs[sprefix + "/config/id"] = sid
+            configs[sprefix + "/config/path"] = s["path"]
+            if self._config["mode"] == "STREAM":
+                configs[sprefix + "/config/mode"] = s["mode"]
+                if s["sample-interval"] > 0:
+                    configs[sprefix + "/config/sample-interval"] = s["sample-interval"]
+                configs[sprefix + "/config/suppress-redundant"] = s[
+                    "suppress-redundant"
+                ]
+                if s["heartbeat-interval"] > 0:
+                    configs[sprefix + "/config/heartbeat-interval"] = s[
+                        "heartbeat-interval"
+                    ]
+        with self._repo() as repo:
+            repo.start()
+            for path, value in configs.items():
+                try:
+                    repo.set(path, value)
+                except ValueError as e:
+                    msg = f"failed to set {path} to the path {value}."
+                    logger.error(msg)
+                    raise InvalidArgumentError(msg) from e
+            try:
+                repo.apply()
+            except ApplyFailedError as e:
+                msg = f"failed to apply subscription config {self._config}. {e}."
+                logger.error(msg)
+                raise InvalidArgumentError(msg) from e
+
+    def clear(self):
+        with self._repo() as repo:
+            repo.start()
+            try:
+                repo.delete(self.PATH_SR.format(self._rid))
+                repo.apply()
+            except NotFoundError:
+                logger.info("subscription config %s to delete is not found.", self._rid)
+                pass
+            except ApplyFailedError as e:
+                logger.error("failed to clear subscription config %s. %s", self._rid, e)
+                repo.discard()
+
+    def push_notif(self, notif):
+        timestamp = time.time_ns()
+        sr = None
+        if notif["type"] == "SYNC_RESPONSE":
+            sr = gnmi_pb2.SubscribeResponse(sync_response=True)
+        elif notif["type"] == "UPDATE":
+            sr = gnmi_pb2.SubscribeResponse(
+                update=gnmi_pb2.Notification(
+                    timestamp=timestamp,
+                    update=[
+                        gnmi_pb2.Update(
+                            path=_build_gnmi_path(notif["path"]),
+                            val=gnmi_pb2.TypedValue(
+                                json_val=notif["json-data"].encode()
+                            ),
+                        ),
+                    ],
+                )
+            )
+        elif notif["type"] == "DELETE":
+            sr = gnmi_pb2.SubscribeResponse(
+                update=gnmi_pb2.Notification(
+                    timestamp=timestamp,
+                    delete=[
+                        _build_gnmi_path(notif["path"]),
+                    ],
+                )
+            )
+        if sr is not None:
+            self._notifs.insert(0, sr)
+
+    def poll_notifs(self):
+        with self._repo() as repo:
+            repo.start()
+            repo.exec_rpc(self.PATH_POLL, {"id": self._rid})
+
+    def pull_notifs(self):
+        while True:
+            try:
+                yield self._notifs.pop()
+            except IndexError:
+                break
+
+
 class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
     """gNMIServicer provides an implementation of the methods of the gNMI service.
 
@@ -285,11 +477,18 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
     """
 
     SUPPORTED_ENCODINGS = [gnmi_pb2.Encoding.JSON]
+    NOTIFICATION_PULL_INTERVAL = 0.01
 
     def __init__(self, repo, supported_models):
         super().__init__()
         self.repo = repo
         self.supported_models = supported_models
+        self._subscribe_requests = {}
+        self._subscribe_repo = self.repo()
+        self._subscribe_repo.start()
+        self._subscribe_repo.subscribe_notification(
+            "/goldstone-telemetry:telemetry-notify-event", self._notification_cb
+        )
 
     def Capabilities(self, request, context):
         return gnmi_pb2.CapabilityResponse(
@@ -471,7 +670,104 @@ class gNMIServicer(gnmi_pb2_grpc.gNMIServicer):
             timestamp=timestamp,
         )
 
-    # TODO: Implement Subscribe().
+    def _notification_cb(self, xpath, notif_type, value, timestamp, priv):
+        rid = value["request-id"]
+        try:
+            sr = self._subscribe_requests[rid]
+        except KeyError:
+            logger.error(
+                "Subscribe request %s related to the notification is not found.", rid
+            )
+            return
+        sr.push_notif(value)
+
+    def _generate_subscribe_request_id(self):
+        while True:
+            rid = random.randint(0, 0xFFFFFFFF)
+            if rid not in self._subscribe_requests.keys():
+                return rid
+
+    def _notify_current_states(self, sr):
+        sync_response = False
+        while True:
+            for notification in sr.pull_notifs():
+                yield notification
+                if notification.sync_response:
+                    sync_response = True
+            if sync_response:
+                break
+            time.sleep(self.NOTIFICATION_PULL_INTERVAL)
+
+    def _notify_updated_states(self, sr, context):
+        while True:
+            if not context.is_active():
+                break
+            for notification in sr.pull_notifs():
+                yield notification
+            time.sleep(self.NOTIFICATION_PULL_INTERVAL)
+
+    def Subscribe(self, request_iterator, context):
+        def set_error(code, msg):
+            logger.error(msg)
+            context.set_code(code)
+            context.set_details(msg)
+            return gnmi_pb2.Error(code=code, message=msg)
+
+        # Create a subscription.
+        req = next(request_iterator)
+        mode = req.subscribe.mode
+        rid = self._generate_subscribe_request_id()
+        error = None
+        try:
+            sr = SubscribeRequest(self.repo, rid, req.subscribe)
+            self._subscribe_requests[rid] = sr
+            sr.exec()
+        except InvalidArgumentError as e:
+            error = set_error(
+                GRPC_STATUS_CODE_INVALID_ARGUMENT,
+                f"request has invalid argument(s). {e}",
+            )
+        except Exception as e:
+            error = set_error(
+                GRPC_STATUS_CODE_UNKNOWN, f"an unknown error has occurred. {e}"
+            )
+        if error is not None:
+            try:
+                self._subscribe_requests[rid].clear()
+                del self._subscribe_requests[rid]
+            except KeyError:
+                pass
+            return gnmi_pb2.SubscribeResponse(error=error)
+
+        # Generate notifications.
+        try:
+            for notification in self._notify_current_states(sr):
+                yield notification
+            if mode == gnmi_pb2.SubscriptionList.Mode.POLL:
+                for req in request_iterator:
+                    if not req.HasField("poll"):
+                        error = set_error(
+                            GRPC_STATUS_CODE_INVALID_ARGUMENT,
+                            "the request is not a 'poll' request.",
+                        )
+                        break
+                    sr.poll_notifs()
+                    for notification in self._notify_current_states(sr):
+                        yield notification
+            elif mode == gnmi_pb2.SubscriptionList.Mode.STREAM:
+                for notification in self._notify_updated_states(sr, context):
+                    yield notification
+        except Exception as e:
+            error = set_error(
+                GRPC_STATUS_CODE_UNKNOWN, f"an unknown error has occurred. {e}"
+            )
+        finally:
+            self._subscribe_requests[rid].clear()
+            del self._subscribe_requests[rid]
+        if error is None:
+            return gnmi_pb2.SubscribeResponse()
+        else:
+            return gnmi_pb2.SubscribeResponse(error=error)
 
 
 def serve(

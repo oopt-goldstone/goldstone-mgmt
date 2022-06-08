@@ -1,9 +1,12 @@
 """Tests of gNMI server."""
 
+# pylint: disable=W0212,C0103
+
 import unittest
 import time
 import json
 import grpc
+import sysrepo
 from tests.lib import MockRepository, gNMIServerTestCase
 from goldstone.north.gnmi.server import (
     Request,
@@ -3132,6 +3135,2212 @@ class TestSet(gNMIServerTestCase):
                 "loopback-mode": False,
             }
             self.assertEqual(act, expected)
+
+        await self.run_gnmi_server_test(test)
+
+
+class TestSubscribe(gNMIServerTestCase):
+    """Tests gNMI server Subscribe Service."""
+
+    MOCK_MODULES = ["goldstone-telemetry"]
+    NOTIF_SERVER = "goldstone-telemetry"
+    NOTIF_PATH = "goldstone-telemetry:telemetry-notify-event"
+    WAIT_CREATION = 0.1
+    WAIT_NOTIFICATION = 0.1
+
+    async def test_subscribe_stream_target_defined(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(
+                path=path, mode=gnmi_pb2.SubscriptionMode.TARGET_DEFINED
+            )
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "STREAM",
+                            "updates-only": False,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                        "mode": "TARGET_DEFINED",
+                                        "suppress-redundant": False,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked update events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "false",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive streaming updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = False
+            self.assertEqual(act, expected)
+
+            # No sync-responses.
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_stream_on_change(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(
+                path=path, mode=gnmi_pb2.SubscriptionMode.ON_CHANGE
+            )
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "STREAM",
+                            "updates-only": False,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                        "mode": "ON_CHANGE",
+                                        "suppress-redundant": False,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked update events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "false",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive streaming updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = False
+            self.assertEqual(act, expected)
+
+            # No sync-responses.
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_stream_on_change_heartbeat(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            hb_interval = 10 * 1000 * 1000 * 1000
+            s1 = gnmi_pb2.Subscription(
+                path=path,
+                mode=gnmi_pb2.SubscriptionMode.ON_CHANGE,
+                heartbeat_interval=hb_interval,
+            )
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "STREAM",
+                            "updates-only": False,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                        "mode": "ON_CHANGE",
+                                        "suppress-redundant": False,
+                                        "heartbeat-interval": hb_interval,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked heartbeat expired update events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive streaming updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # No sync-responses.
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_stream_sample(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s_interval = 5 * 1000 * 1000 * 1000
+            s1 = gnmi_pb2.Subscription(
+                path=path,
+                mode=gnmi_pb2.SubscriptionMode.SAMPLE,
+                sample_interval=s_interval,
+            )
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "STREAM",
+                            "updates-only": False,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                        "mode": "SAMPLE",
+                                        "sample-interval": s_interval,
+                                        "suppress-redundant": False,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked sampling update events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive streaming updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # No sync-responses.
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_stream_sample_suppress_redundant(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s_interval = 5 * 1000 * 1000 * 1000
+            s1 = gnmi_pb2.Subscription(
+                path=path,
+                mode=gnmi_pb2.SubscriptionMode.SAMPLE,
+                sample_interval=s_interval,
+                suppress_redundant=True,
+            )
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "STREAM",
+                            "updates-only": False,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                        "mode": "SAMPLE",
+                                        "sample-interval": s_interval,
+                                        "suppress-redundant": True,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # No sampling update events and streaming updates because of suppress-redundant.
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_stream_sample_suppress_redundant_heartbeat(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s_interval = 5 * 1000 * 1000 * 1000
+            hb_interval = 10 * 1000 * 1000 * 1000
+            s1 = gnmi_pb2.Subscription(
+                path=path,
+                mode=gnmi_pb2.SubscriptionMode.SAMPLE,
+                sample_interval=s_interval,
+                suppress_redundant=True,
+                heartbeat_interval=hb_interval,
+            )
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "STREAM",
+                            "updates-only": False,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                        "mode": "SAMPLE",
+                                        "sample-interval": s_interval,
+                                        "suppress-redundant": True,
+                                        "heartbeat-interval": hb_interval,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked heartbeat expired update events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive streaming updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # No sync-responses.
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_stream_updates_only(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(
+                path=path, mode=gnmi_pb2.SubscriptionMode.TARGET_DEFINED
+            )
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    updates_only=True,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "STREAM",
+                            "updates-only": True,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                        "mode": "TARGET_DEFINED",
+                                        "suppress-redundant": False,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # No initial updates.
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked update events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "false",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive streaming updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = False
+            self.assertEqual(act, expected)
+
+            # No sync-responses.
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_once(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(path=path)
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.ONCE,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "ONCE",
+                            "updates-only": False,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            _, code, _ = self.rpc.termination()
+            self.assertEqual(code, grpc.StatusCode.OK)
+
+            # Was the subscribe-request deleted?
+            self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    with self.assertRaises(sysrepo.SysrepoNotFoundError):
+                        sess.get_data(
+                            f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+                        )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_once_updates_only(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(path=path)
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.ONCE,
+                    updates_only=True,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "ONCE",
+                            "updates-only": True,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            notifs = [
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # No initial updates.
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            _, code, _ = self.rpc.termination()
+            self.assertEqual(code, grpc.StatusCode.OK)
+
+            # Was the subscribe-request deleted?
+            self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    with self.assertRaises(sysrepo.SysrepoNotFoundError):
+                        sess.get_data(
+                            f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+                        )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_poll(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(path=path)
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.POLL,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "POLL",
+                            "updates-only": False,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send a poll request.
+            expected_time_min = time.time_ns()
+            poll_request = gnmi_pb2.SubscribeRequest(poll=gnmi_pb2.Poll())
+            self.rpc.send_request(poll_request)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive polling updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the polling updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            _, code, _ = self.rpc.termination()
+            self.assertEqual(code, grpc.StatusCode.OK)
+
+            # Was the subscribe-request deleted?
+            self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    with self.assertRaises(sysrepo.SysrepoNotFoundError):
+                        sess.get_data(
+                            f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+                        )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_poll_updates_only(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path_str = "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled"
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(path=path)
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.POLL,
+                    updates_only=True,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Verify configuraion.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+                    expected = {
+                        "id": generated_id,
+                        "config": {
+                            "id": generated_id,
+                            "mode": "POLL",
+                            "updates-only": True,
+                        },
+                        "subscriptions": {
+                            "subscription": [
+                                {
+                                    "id": 0,
+                                    "config": {
+                                        "id": 0,
+                                        "path": path_str,
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                    self.assertEqual(sr, expected)
+
+            # Send mocked events.
+            notifs = [
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # No initial updates.
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send a poll request.
+            poll_request = gnmi_pb2.SubscribeRequest(poll=gnmi_pb2.Poll())
+            self.rpc.send_request(poll_request)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # No polling updates.
+
+            # Receive the sync-response of the polling updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            _, code, _ = self.rpc.termination()
+            self.assertEqual(code, grpc.StatusCode.OK)
+
+            # Was the subscribe-request deleted?
+            self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    with self.assertRaises(sysrepo.SysrepoNotFoundError):
+                        sess.get_data(
+                            f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+                        )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_a_leaf(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(path=path)
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.ONCE,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Get generated request-id.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            _, code, _ = self.rpc.termination()
+            self.assertEqual(code, grpc.StatusCode.OK)
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_a_leaf_list(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-terminal-device:terminal-device")
+            append_path_element(path, "logical-channels")
+            append_path_element(path, "channel", "index", "1")
+            append_path_element(path, "ingress")
+            append_path_element(path, "state")
+            append_path_element(path, "physical-channel")
+            s1 = gnmi_pb2.Subscription(path=path)
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.ONCE,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Get generated request-id.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": (
+                        "/openconfig-terminal-device:terminal-device/logical-channels/channel[index='1']"
+                        "/ingress/state/physical-channel"
+                    ),
+                    "json-data": "[1, 2, 3]",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = [1, 2, 3]
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            _, code, _ = self.rpc.termination()
+            self.assertEqual(code, grpc.StatusCode.OK)
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_a_container(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            s1 = gnmi_pb2.Subscription(path=path)
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.ONCE,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Get generated request-id.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/name",
+                    "json-data": '"Interface1/0/1"',
+                },
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/type",
+                    "json-data": '"iana-if-type:ethernetCsmacd"',
+                },
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/mtu",
+                    "json-data": "1500",
+                },
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            ## Verify name.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "name")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = "Interface1/0/1"
+            self.assertEqual(act, expected)
+            ## Verify type.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "type")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = "iana-if-type:ethernetCsmacd"
+            self.assertEqual(act, expected)
+            ## Verify mtu.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "mtu")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = 1500
+            self.assertEqual(act, expected)
+            ## Verify enabled.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            _, code, _ = self.rpc.termination()
+            self.assertEqual(code, grpc.StatusCode.OK)
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_a_container_list(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface")
+            s1 = gnmi_pb2.Subscription(path=path)
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.ONCE,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Get generated request-id.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/name",
+                    "json-data": '"Interface1/0/1"',
+                },
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/name",
+                    "json-data": '"Interface1/0/1"',
+                },
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/2']/name",
+                    "json-data": '"Interface1/0/2"',
+                },
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/2']/state/name",
+                    "json-data": '"Interface1/0/2"',
+                },
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/2']/state/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            ## Verify Interface1/0/1 name.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "name")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = "Interface1/0/1"
+            self.assertEqual(act, expected)
+            ## Verify Interface1/0/1 state/name.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "name")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = "Interface1/0/1"
+            self.assertEqual(act, expected)
+            ## Verify Interface1/0/1 state/enabled.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+            ## Verify Interface1/0/2 name.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/2")
+            append_path_element(path, "name")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = "Interface1/0/2"
+            self.assertEqual(act, expected)
+            ## Verify Interface1/0/2 state/name.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/2")
+            append_path_element(path, "state")
+            append_path_element(path, "name")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = "Interface1/0/2"
+            self.assertEqual(act, expected)
+            ## Verify Interface1/0/2 state/enabled.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/2")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            _, code, _ = self.rpc.termination()
+            self.assertEqual(code, grpc.StatusCode.OK)
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_trigger_created(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "config")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(path=path, mode="ON_CHANGE")
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Get generated request-id.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # No initial updates.
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked create events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/config/enabled",
+                    "json-data": "true",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_trigger_updated(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "config")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(path=path, mode="ON_CHANGE")
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Get generated request-id.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/config/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked update events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/config/enabled",
+                    "json-data": "false",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = False
+            self.assertEqual(act, expected)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_subscribe_trigger_deleted(self):
+        def test():
+            # Create a Subscribe RPC session.
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "config")
+            append_path_element(path, "enabled")
+            s1 = gnmi_pb2.Subscription(path=path, mode="ON_CHANGE")
+            subscriptions = [s1]
+            request = gnmi_pb2.SubscribeRequest(
+                subscribe=gnmi_pb2.SubscriptionList(
+                    mode=gnmi_pb2.SubscriptionList.Mode.STREAM,
+                    subscription=subscriptions,
+                ),
+            )
+            self.rpc = self.gnmi_subscribe(request)
+
+            time.sleep(self.WAIT_CREATION)
+
+            # Get generated request-id.
+            with sysrepo.SysrepoConnection() as conn:
+                with conn.start_session() as sess:
+                    sess.switch_datastore("running")
+                    subscribe_requests = sess.get_data(
+                        "/goldstone-telemetry:subscribe-requests/subscribe-request"
+                    )
+                    srs = list(
+                        subscribe_requests["subscribe-requests"]["subscribe-request"]
+                    )
+                    self.assertEqual(len(srs), 1)
+                    sr = srs[0]
+                    generated_id = sr["id"]
+
+            # Send mocked events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "UPDATE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/config/enabled",
+                    "json-data": "true",
+                },
+                {
+                    "type": "SYNC_RESPONSE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive initial updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.update[0].path, path)
+            act = json.loads(actual.update.update[0].val.json_val.decode("utf-8"))
+            expected = True
+            self.assertEqual(act, expected)
+
+            # Receive the sync-response of the initial updates.
+            actual = self.rpc.take_response()
+            self.assertEqual(actual.sync_response, True)
+
+            # Send mocked delete events.
+            expected_time_min = time.time_ns()
+            notifs = [
+                {
+                    "type": "DELETE",
+                    "request-id": generated_id,
+                    "subscription-id": 0,
+                    "path": "/openconfig-interfaces:interfaces/interface[name='Interface1/0/1']/config/enabled",
+                },
+            ]
+            self.set_mock_notifs_data(self.NOTIF_SERVER, self.NOTIF_PATH, notifs)
+            self.send_mock_notifs(self.NOTIF_SERVER)
+
+            time.sleep(self.WAIT_NOTIFICATION)
+
+            # Receive updates.
+            actual = self.rpc.take_response()
+            expected_time_max = time.time_ns()
+            self.assertGreater(actual.update.timestamp, expected_time_min)
+            self.assertLess(actual.update.timestamp, expected_time_max)
+            self.assertEqual(actual.update.delete[0], path)
+
+            # Close the RPC session.
+            self.rpc.requests_closed()
+            # NOTE: rpc.termination does not work for tests. We cannot close the RPC and confirm teardown procedure.
+            # _, code, _ = self.rpc.termination()
+            # self.assertEqual(code, grpc.StatusCode.OK)
+            #
+            # Was the subscribe-request deleted?
+            # self.assertEqual(len(self.servicer._subscribe_requests), 0)
+            # with sysrepo.SysrepoConnection() as conn:
+            #     with conn.start_session() as sess:
+            #         sess.switch_datastore("running")
+            #         with self.assertRaises(sysrepo.SysrepoNotFoundError):
+            #             sess.get_data(
+            #                 f"/goldstone-telemetry:subscribe-requests/subscribe-request[id='{generated_id}']"
+            #             )
 
         await self.run_gnmi_server_test(test)
 

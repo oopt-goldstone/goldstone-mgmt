@@ -11,6 +11,7 @@ The gNMI server supports following gNMI RPCs:
 - `Capabilities`
 - `Get`
 - `Set`
+- `Subscribe`
 
 The gNMI server supports limited `Set` transaction. It has following limitations:
 
@@ -19,12 +20,10 @@ The gNMI server supports limited `Set` transaction. It has following limitations
 
 Currently, the gNMI server does not yet support following features:
 
-- `Subscribe` RPC
 - `replace` operation for `Set` RPC
 - `type` specification for `Get` RPC
 - Wildcards in a `path` field
 - Value encodings other than JSON
-- RPC on TLS
 - RPC authentication and authorization
 
 ## Prerequisites

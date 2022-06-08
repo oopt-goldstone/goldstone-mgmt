@@ -138,8 +138,9 @@ class Sysrepo(Repository):
             self._connector.apply()
         except ConnectorError as e:
             # TODO: can split into detailed exceptions?
-            logger.error("apply failed. %s", e)
-            raise ApplyFailedError() from e
+            msg = f"apply failed. {e}"
+            logger.error(msg)
+            raise ApplyFailedError(msg) from e
 
     def discard(self):
         self._connector.discard_changes()
@@ -161,3 +162,9 @@ class Sysrepo(Repository):
         for key in node.keys():
             keys.append(key.name())
         return keys
+
+    def subscribe_notification(self, xpath, callback):
+        self._connector.operational_session.subscribe_notification(xpath, callback)
+
+    def exec_rpc(self, xpath, params):
+        self._connector.operational_session.rpc(xpath, params)

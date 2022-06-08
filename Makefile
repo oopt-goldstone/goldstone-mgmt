@@ -165,6 +165,6 @@ unittest-netlink:
 unittest-gnmi:
 	$(MAKE) clean-sysrepo
 	cd src/north/gnmi && make proto
-	scripts/gs-yang.py --install xlate-oc --search-dirs yang sm/openconfig
+	scripts/gs-yang.py --install xlate-oc system-telemetry --search-dirs yang sm/openconfig
 	cd src/north/gnmi && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 	cd src/north/gnmi && make clean
