@@ -13,7 +13,7 @@ from .base import BreakLoop
 
 from goldstone.lib.connector.sysrepo import Connector as SysrepoConnector
 from goldstone.lib.connector.netconf import Connector as NETCONFConnector
-from goldstone.lib.connector import Error
+from goldstone.lib.errors import Error
 
 from . import interface
 from . import platform

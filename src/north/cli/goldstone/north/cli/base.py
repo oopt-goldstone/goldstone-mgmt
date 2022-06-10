@@ -14,7 +14,7 @@ import sys
 import subprocess
 import logging
 import typing
-from goldstone.lib.connector import Error
+from goldstone.lib.errors import Error
 
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")

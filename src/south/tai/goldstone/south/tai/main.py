@@ -2,10 +2,12 @@ import logging
 import asyncio
 import argparse
 import signal
-from .transponder import TransponderServer
-import sysrepo
-from goldstone.lib.core import start_probe
 import json
+
+from goldstone.lib.util import start_probe
+from goldstone.lib.connector.sysrepo import Connector
+
+from .transponder import TransponderServer
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +19,11 @@ def main():
         loop.add_signal_handler(signal.SIGINT, stop_event.set)
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
-        conn = sysrepo.SysrepoConnection()
+        conn = Connector()
         server = TransponderServer(conn, taish_server, platform_info)
 
         try:
+            runner = None
             tasks = await server.start()
 
             runner = await start_probe("/healthz", "0.0.0.0", 8080)
@@ -34,9 +37,10 @@ def main():
                 if e:
                     raise e
         finally:
-            await runner.cleanup()
+            if runner:
+                await runner.cleanup()
             await server.stop()
-            conn.disconnect()
+            conn.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -54,7 +58,6 @@ def main():
         ]:
             l = logging.getLogger(noisy)
             l.setLevel(logging.INFO)
-    #        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 

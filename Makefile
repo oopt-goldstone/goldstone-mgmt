@@ -73,7 +73,7 @@ bash:
 	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd
 
 tester-bash:
-	DOCKER_RUN_OPTION='-it' DOCKER_IMAGE=$(call image_name,$(GS_MGMT_TEST_IMAGE)) $(MAKE) cmd
+	DOCKER_RUN_OPTION='-it' DOCKER_IMAGE=$(call image_name,tester) $(MAKE) cmd
 
 cmd:
 	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_IMAGE) $(DOCKER_CMD)

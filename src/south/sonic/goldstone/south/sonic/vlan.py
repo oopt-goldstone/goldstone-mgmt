@@ -1,4 +1,10 @@
 from goldstone.lib.core import *
+from goldstone.lib.errors import (
+    InvalArgError,
+    LockedError,
+    NotFoundError,
+    CallbackFailedError,
+)
 
 
 class VLANChangeHandler(ChangeHandler):
@@ -22,10 +28,10 @@ class VLANIDHandler(VLANChangeHandler):
             return
 
         if len(self.server.sonic.get_vlan_members(self.vid)) > 0:
-            raise sysrepo.SysrepoInvalArgError(f"vlan {self.vid} has dependencies")
+            raise InvalArgError(f"vlan {self.vid} has dependencies")
         config = self.server.sonic.hgetall("CONFIG_DB", f"VLAN|Vlan{self.vid}")
         if not config:
-            raise sysrepo.SysrepoInvalArgError(f"vlan {self.vid} not found")
+            raise InvalArgError(f"vlan {self.vid} not found")
 
     def apply(self, user):
         if self.type in ["created", "modified"]:
@@ -53,12 +59,12 @@ class VLANServer(ServerBase):
 
     def pre(self, user):
         if self.sonic.is_rebooting:
-            raise sysrepo.SysrepoLockedError("uSONiC is rebooting")
+            raise LockedError("uSONiC is rebooting")
 
     def oper_cb(self, xpath, priv):
         logger.debug(f"xpath: {xpath}")
         if self.sonic.is_rebooting:
-            raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
+            raise CallbackFailedError("uSONiC is rebooting")
 
         vlans = [
             {"vlan-id": vid, "config": {"vlan-id": vid}, "state": {"vlan-id": vid}}

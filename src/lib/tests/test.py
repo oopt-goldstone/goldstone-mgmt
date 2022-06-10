@@ -1,12 +1,37 @@
 import unittest
+from unittest import mock
+
 import logging
 from goldstone.lib.connector.netconf import Connector as NCConnector
-from goldstone.lib.connector.sysrepo import Connector as SRConnector
+from goldstone.lib.connector.sysrepo import Connector as SRConnector, wrap_sysrepo_error
+
+from goldstone.lib.errors import *
+import sysrepo
+
 
 console = logging.StreamHandler()
 logger = logging.getLogger("goldstone")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(console)
+
+
+class TestSysrepoConnector(unittest.TestCase):
+    def test_wrap_sysrepo_error(self):
+        def f(*args, **kwargs):
+            e = sysrepo.SysrepoInvalArgError("")
+            e.details = [(None, "test")]
+            raise e
+
+        with self.assertRaisesRegex(InvalArgError, "test"):
+            wrap_sysrepo_error(f)(mock.MagicMock())
+
+        def f(*args, **kwargs):
+            e = sysrepo.SysrepoValidationFailedError("")
+            e.details = [(None, "validation fail")]
+            raise e
+
+        with self.assertRaisesRegex(ValidationFailedError, "validation fail"):
+            wrap_sysrepo_error(f)(mock.MagicMock())
 
 
 class TestCLI(unittest.TestCase):

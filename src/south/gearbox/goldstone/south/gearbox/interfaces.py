@@ -1,12 +1,19 @@
-from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
 import libyang
 import taish
 import asyncio
-import sysrepo
 import logging
 import json
 import base64
 import struct
+
+from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
+from goldstone.lib.errors import (
+    InvalArgError,
+    LockedError,
+    NotFoundError,
+    CallbackFailedError,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +32,7 @@ class IfChangeHandler(ChangeHandler):
 
         self.obj = await self.server.ifname2taiobj(ifname)
         if self.obj == None:
-            raise sysrepo.SysrepoInvalArgError("Invalid Interface name")
+            raise InvalArgError("Invalid Interface name")
 
         self.ifname = ifname
         self.tai_attr_name = None
@@ -50,9 +57,7 @@ class IfChangeHandler(ChangeHandler):
             elif isinstance(self.obj, taish.HostIf):
                 t = "hostif"
             else:
-                raise sysrepo.SysrepoInvalArgError(
-                    f"unsupported object type: {type(self.obj)}"
-                )
+                raise InvalArgError(f"unsupported object type: {type(self.obj)}")
 
             cap = user["cap-cache"].get(f"{t}:{name}")
             if cap == None:
@@ -60,7 +65,7 @@ class IfChangeHandler(ChangeHandler):
                     cap = await self.obj.get_attribute_capability(name)
                 except taish.TAIException as e:
                     logger.error(f"failed to get capability: {name}")
-                    raise sysrepo.SysrepoInvalArgError(e.msg)
+                    raise InvalArgError(e.msg)
                 logger.info(f"cap {name}: {cap}")
                 user["cap-cache"][f"{t}:{name}"] = cap
             else:
@@ -72,7 +77,7 @@ class IfChangeHandler(ChangeHandler):
                 if d != None:
                     self.value.append(self.to_tai_value(d, name))
                 elif cap.default_value == "":  # and is_deleted
-                    raise sysrepo.SysrepoInvalArgError(
+                    raise InvalArgError(
                         f"no default value. cannot remove the configuration"
                     )
                 else:
@@ -80,20 +85,14 @@ class IfChangeHandler(ChangeHandler):
             else:
                 v = self.to_tai_value(self.change.value, name)
                 if cap.min != "" and float(cap.min) > float(v):
-                    raise sysrepo.SysrepoInvalArgError(
-                        f"minimum {k} value is {cap.min}. given {v}"
-                    )
+                    raise InvalArgError(f"minimum {k} value is {cap.min}. given {v}")
 
                 if cap.max != "" and float(cap.max) < float(v):
-                    raise sysrepo.SysrepoInvalArgError(
-                        f"maximum {k} value is {cap.max}. given {v}"
-                    )
+                    raise InvalArgError(f"maximum {k} value is {cap.max}. given {v}")
 
                 valids = cap.supportedvalues
                 if len(valids) > 0 and v not in valids:
-                    raise sysrepo.SysrepoInvalArgError(
-                        f"supported values are {valids}. given {v}"
-                    )
+                    raise InvalArgError(f"supported values are {valids}. given {v}")
 
                 self.value.append(v)
 
@@ -143,7 +142,7 @@ class AdminStatusHandler(IfChangeHandler):
             elif t == "IF_OTN":
                 return "serdes-only"
             else:
-                raise sysrepo.SysrepoInvalArgError(f"unsupported interface-type: {t}")
+                raise InvalArgError(f"unsupported interface-type: {t}")
         else:
             return "none"
 
@@ -188,7 +187,7 @@ class InterfaceTypeHandler(IfChangeHandler):
             elif v == "IF_OTN":
                 return "serdes-only"
             else:
-                raise sysrepo.SysrepoInvalArgError(f"unsupported interface-type: {v}")
+                raise InvalArgError(f"unsupported interface-type: {v}")
 
         elif attr_name == "signal-rate":
             if v == "IF_ETHERNET":
@@ -210,16 +209,12 @@ class PinModeHandler(IfChangeHandler):
 
         info = self.server.get_interface_info(self.ifname)
         if not info:
-            raise sysrepo.SysrepoInvalArgError(
-                f"pin-mode setting not supported. no interface info"
-            )
+            raise InvalArgError(f"pin-mode setting not supported. no interface info")
 
         valids = [i["interface"]["pin-mode"] for i in info]
 
         if self.value[0] not in valids:
-            raise sysrepo.SysrepoInvalArgError(
-                f"supported values are {valids}. given {self.value[0]}"
-            )
+            raise InvalArgError(f"supported values are {valids}. given {self.value[0]}")
 
         cache = self.setup_cache(self.user)
 
@@ -228,9 +223,7 @@ class PinModeHandler(IfChangeHandler):
             xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
             a = libyang.xpath_get(cache, xpath)
             if a:
-                raise sysrepo.SysrepoInvalArgError(
-                    f"conflicting configuration exists for {ifname}"
-                )
+                raise InvalArgError(f"conflicting configuration exists for {ifname}")
 
     # remove conflicting TAI objects for a given pin-mode
     async def remove(self, ifnames=None):
@@ -345,7 +338,7 @@ class AutoNegoHandler(IfChangeHandler):
             if self.type == "deleted":
                 return
             if self.change.value:
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     "line side interface doesn't support auto negotiation"
                 )
             return
@@ -606,7 +599,6 @@ class InterfaceServer(ServerBase):
 
         self._interface_info = ifinfo
         self.synce_ref_clock_info = clkinfo
-        self.conn = conn
         self.taish = taish.AsyncClient(*taish_server.split(":"))
         self.notif_q = asyncio.Queue()
         self.notif_task_q = asyncio.Queue()
@@ -673,7 +665,6 @@ class InterfaceServer(ServerBase):
 
             return None
 
-        ctx = self.sess.get_ly_ctx()
         keys = [
             ["interfaces", "interface", "config", key],
             ["interfaces", "interface", "ethernet", "config", key],
@@ -690,13 +681,13 @@ class InterfaceServer(ServerBase):
 
         for k in keys:
             xpath = "".join(f"/goldstone-interfaces:{v}" for v in k)
-            try:
-                for node in ctx.find_path(xpath):
-                    if node.type().name() == "boolean":
-                        return node.default() == "true"
-                    return node.default()
-            except libyang.util.LibyangError:
-                pass
+            node = self.conn.find_node(xpath)
+            if not node:
+                continue
+
+            if node.type() == "boolean":
+                return node.default() == "true"
+            return node.default()
 
         return None
 
@@ -895,7 +886,7 @@ class InterfaceServer(ServerBase):
 
     def pre(self, user):
         if self.is_initializing:
-            raise sysrepo.SysrepoLockedError("initializing")
+            raise LockedError("initializing")
 
     async def list_modules(self):
         modules = await self.taish.list()

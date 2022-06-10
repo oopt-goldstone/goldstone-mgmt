@@ -2,9 +2,12 @@ import logging
 import asyncio
 import argparse
 import signal
+
+from goldstone.lib.util import start_probe
+from goldstone.lib.connector.sysrepo import Connector
+
 from .platform import PlatformServer
-import sysrepo
-from goldstone.lib.core import start_probe
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +19,7 @@ def main():
         loop.add_signal_handler(signal.SIGINT, stop_event.set)
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
-        conn = sysrepo.SysrepoConnection()
+        conn = Connector()
         server = PlatformServer(conn)
 
         try:
@@ -35,7 +38,7 @@ def main():
         finally:
             await runner.cleanup()
             server.stop()
-            conn.disconnect()
+            conn.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -51,7 +54,6 @@ def main():
         ]:
             l = logging.getLogger(noisy)
             l.setLevel(logging.INFO)
-    #        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 

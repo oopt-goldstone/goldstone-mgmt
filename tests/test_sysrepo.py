@@ -1,8 +1,6 @@
 import unittest
 from unittest import mock
 import sysrepo
-from goldstone.south.sonic.interfaces import InterfaceServer
-from goldstone.south.tai.transponder import TransponderServer
 import itertools
 import logging
 import asyncio
@@ -10,6 +8,14 @@ from concurrent.futures import ProcessPoolExecutor
 import os
 import json
 import sys
+
+
+from goldstone.south.sonic.interfaces import InterfaceServer
+from goldstone.south.tai.transponder import TransponderServer
+
+from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
+from goldstone.lib.connector.sysrepo import Connector
+from goldstone.lib.errors import *
 
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
@@ -67,58 +73,45 @@ async def to_subprocess(func):
 
 
 def update_if():
-    conn = sysrepo.SysrepoConnection()
+    conn = Connector()
     for _ in range(100):
-        with conn.start_session() as sess:
-            sess.switch_datastore("running")
+        conn.delete_all("goldstone-interfaces")
+        conn.apply()
 
-            sess.replace_config({}, "goldstone-interfaces")
-            sess.apply_changes()
-
-        with conn.start_session() as sess:
-            sess.switch_datastore("running")
-            name = "Ethernet1_1"
-            sess.set_item(
-                f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/name",
-                name,
-            )
-            sess.set_item(
-                f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
-                "UP",
-            )
-            sess.apply_changes()
+        name = "Ethernet1_1"
+        conn.set(
+            f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/name",
+            name,
+        )
+        conn.set(
+            f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
+            "UP",
+        )
+        conn.apply()
 
 
 def update_xp():
-    conn = sysrepo.SysrepoConnection()
+    conn = Connector()
     for _ in range(100):
-        with conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-transponder")
-            sess.apply_changes()
+        conn.delete_all("goldstone-transponder")
+        conn.apply()
 
-        with conn.start_session() as sess:
-            name = "piu1"
-            sess.set_item(
-                f"/goldstone-transponder:modules/module[name='{name}']/config/name",
-                name,
-            )
-            sess.set_item(
-                f"/goldstone-transponder:modules/module[name='{name}']/config/admin-status",
-                "up",
-            )
-            sess.apply_changes()
+        name = "piu1"
+        conn.set(
+            f"/goldstone-transponder:modules/module[name='{name}']/config/name",
+            name,
+        )
+        conn.set(
+            f"/goldstone-transponder:modules/module[name='{name}']/config/admin-status",
+            "up",
+        )
+        conn.apply()
 
 
 class TestConcurrentAccess(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.conn = sysrepo.SysrepoConnection()
-
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-interfaces")
-            sess.apply_changes()
+        self.conn = Connector()
 
     async def test_concurrent_update(self):
 

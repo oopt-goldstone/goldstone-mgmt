@@ -1,10 +1,11 @@
-from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
 import libyang
 import taish
 import asyncio
-import sysrepo
 import logging
 import json
+
+from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
+from goldstone.lib.errors import *
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class DPLLChangeHandler(ChangeHandler):
 
         l = await self.server.taish.list()
         if self.module_name not in l.keys():
-            raise sysrepo.SysrepoInvalArgError(f"Invalid DPLL name: {self.module_name}")
+            raise InvalArgError(f"Invalid DPLL name: {self.module_name}")
 
         self.obj = await self.server.taish.get_module(self.module_name)
         self.tai_attr_name = None
@@ -47,7 +48,7 @@ class DPLLChangeHandler(ChangeHandler):
                     cap = await self.obj.get_attribute_capability(name)
                 except taish.TAIException as e:
                     logger.error(f"failed to get capability: {name}")
-                    raise sysrepo.SysrepoInvalArgError(e.msg)
+                    raise InvalArgError(e.msg)
                 logger.info(f"cap {name}: {cap}")
                 user["cap-cache"][name] = cap
             else:
@@ -59,7 +60,7 @@ class DPLLChangeHandler(ChangeHandler):
                 if d != None:
                     self.value.append(self.to_tai_value(d, name))
                 elif cap.default_value == "":  # and is_deleted
-                    raise sysrepo.SysrepoInvalArgError(
+                    raise InvalArgError(
                         f"no default value. cannot remove the configuration"
                     )
                 else:
@@ -67,20 +68,14 @@ class DPLLChangeHandler(ChangeHandler):
             else:
                 v = self.to_tai_value(self.change.value, name)
                 if cap.min != "" and float(cap.min) > float(v):
-                    raise sysrepo.SysrepoInvalArgError(
-                        f"minimum {k} value is {cap.min}. given {v}"
-                    )
+                    raise InvalArgError(f"minimum {k} value is {cap.min}. given {v}")
 
                 if cap.max != "" and float(cap.max) < float(v):
-                    raise sysrepo.SysrepoInvalArgError(
-                        f"maximum {k} value is {cap.max}. given {v}"
-                    )
+                    raise InvalArgError(f"maximum {k} value is {cap.max}. given {v}")
 
                 valids = cap.supportedvalues
                 if len(valids) > 0 and v not in valids:
-                    raise sysrepo.SysrepoInvalArgError(
-                        f"supported values are {valids}. given {v}"
-                    )
+                    raise InvalArgError(f"supported values are {valids}. given {v}")
 
                 self.value.append(v)
 

@@ -3,9 +3,12 @@ import asyncio
 import argparse
 import signal
 import itertools
-import sysrepo
 import json
-from goldstone.lib.core import start_probe, call
+
+from goldstone.lib.util import start_probe, call
+from goldstone.lib.connector.sysrepo import Connector
+
+
 from .interfaces import InterfaceServer
 from .gearbox import GearboxServer
 
@@ -19,7 +22,7 @@ def main():
         loop.add_signal_handler(signal.SIGINT, stop_event.set)
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
-        conn = sysrepo.SysrepoConnection()
+        conn = Connector()
 
         ifserver = InterfaceServer(conn, taish_server, platform_info)
         gb = GearboxServer(conn, ifserver)
@@ -46,7 +49,7 @@ def main():
                 await runner.cleanup()
             for s in servers:
                 await call(s.stop)
-            conn.disconnect()
+            conn.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -61,7 +64,6 @@ def main():
         # hpack debug log is too verbose. change it INFO level
         hpack = logging.getLogger("hpack")
         hpack.setLevel(logging.INFO)
-    #        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO)
 

@@ -1,16 +1,18 @@
 import unittest
 from unittest import mock
-from goldstone.south.dpll.dpll import DPLLServer
-import sysrepo
 import libyang
 import asyncio
 import logging
 import os
 import json
-import time
-import itertools
-from goldstone.lib.core import ServerBase
-from concurrent.futures import ProcessPoolExecutor
+
+from goldstone.lib.connector.sysrepo import Connector
+from goldstone.lib.server_connector import create_server_connector
+from goldstone.lib.errors import *
+from goldstone.lib.util import call
+
+
+from goldstone.south.dpll.dpll import DPLLServer
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -18,19 +20,9 @@ logging.basicConfig(level=logging.DEBUG, format=fmt)
 logger = logging.getLogger(__name__)
 
 
-class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        logging.basicConfig(level=logging.DEBUG)
-        self.conn = sysrepo.SysrepoConnection()
-
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-dpll")
-            sess.apply_changes()
-
+class TestBase(unittest.IsolatedAsyncioTestCase):
+    def patch_taish(self):
         taish = mock.AsyncMock()
-
-        self.set_logs = []
 
         self.attrs = {
             "input-reference-priority": "0,1,2,3,4,5,6,7",
@@ -86,260 +78,200 @@ class TestDPLLServer(unittest.IsolatedAsyncioTestCase):
 
         [p.start() for p in self.patchers]
 
-    async def test_basic(self):
 
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
+class TestDPLLServer(TestBase):
+    async def asyncSetUp(self):
+        logging.basicConfig(level=logging.DEBUG)
+        self.conn = Connector()
 
-        self.server = DPLLServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await self.server.start())
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("operational")
-                v = sess.get_data("/goldstone-dpll:dplls/dpll/name")
-                v = libyang.xpath_get(v, "dplls/dpll/name")
-                self.assertEqual(v, ["1"])
-
-                v = sess.get_data("/goldstone-dpll:dplls/dpll")
-
-                self.assertEqual(
-                    v,
-                    {
-                        "dplls": {
-                            "dpll": [
-                                {
-                                    "name": "1",
-                                    "input-references": {
-                                        "input-reference": [
-                                            {
-                                                "name": "0",
-                                                "config": {"name": "0"},
-                                                "state": {
-                                                    "priority": 0,
-                                                    "alarm": ["scm", "gst"],
-                                                },
-                                            },
-                                            {
-                                                "name": "1",
-                                                "config": {"name": "1"},
-                                                "state": {
-                                                    "priority": 1,
-                                                    "alarm": ["scm", "gst"],
-                                                },
-                                            },
-                                            {
-                                                "name": "2",
-                                                "config": {"name": "2"},
-                                                "state": {
-                                                    "priority": 2,
-                                                    "alarm": ["scm", "gst"],
-                                                },
-                                            },
-                                            {
-                                                "name": "3",
-                                                "config": {"name": "3"},
-                                                "state": {
-                                                    "priority": 3,
-                                                    "alarm": ["scm", "gst"],
-                                                },
-                                            },
-                                            {
-                                                "name": "4",
-                                                "config": {"name": "4"},
-                                                "state": {
-                                                    "priority": 4,
-                                                    "alarm": ["scm", "gst"],
-                                                },
-                                            },
-                                            {
-                                                "name": "5",
-                                                "config": {"name": "5"},
-                                                "state": {
-                                                    "priority": 5,
-                                                    "alarm": ["scm", "gst"],
-                                                },
-                                            },
-                                            {
-                                                "name": "6",
-                                                "config": {"name": "6"},
-                                                "state": {
-                                                    "priority": 6,
-                                                    "alarm": ["scm", "gst"],
-                                                },
-                                            },
-                                            {
-                                                "name": "7",
-                                                "config": {"name": "7"},
-                                                "state": {
-                                                    "priority": 7,
-                                                    "alarm": ["scm", "gst"],
-                                                },
-                                            },
-                                        ]
-                                    },
-                                    "config": {"name": "1"},
-                                    "state": {
-                                        "mode": "freerun",
-                                        "phase-slope-limit": 7500,
-                                        "loop-bandwidth": 1.0,
-                                        "state": "freerun",
-                                        "selected-reference": "5",
-                                    },
-                                }
-                            ]
-                        }
-                    },
-                )
-
-        tasks.append(asyncio.to_thread(test))
-
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
-
-        self.server.stop()
-
-    async def test_mode(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        self.server = DPLLServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await self.server.start())
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                dpll = "1"
-                sess.set_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/name", dpll
-                )
-                sess.set_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/mode",
-                    "automatic",
-                )
-
-                sess.apply_changes()
-
-        tasks.append(asyncio.to_thread(test))
-
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
-
-        self.server.stop()
-
-    async def test_priority(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        self.server = DPLLServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await self.server.start())
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                dpll = "1"
-                ref = "0"
-                sess.set_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/name", dpll
-                )
-                sess.set_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/input-references/input-reference[name='{ref}']/config/name",
-                    ref,
-                )
-                sess.set_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/input-references/input-reference[name='{ref}']/config/priority",
-                    10,
-                )
-                sess.apply_changes()
-
-                sess.delete_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/input-references/input-reference[name='{ref}']/config/priority",
-                )
-                sess.apply_changes()
-
-                self.assertEqual(
-                    self.set_logs,
-                    [
-                        ("input-reference-priority", "10,1,2,3,4,5,6,7"),
-                        ("input-reference-priority", "0,1,2,3,4,5,6,7"),
-                    ],
-                )
-
-        tasks.append(asyncio.to_thread(test))
-
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
-
-        self.server.stop()
-
-    async def test_phase_slope_limit(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        self.server = DPLLServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await self.server.start())
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                dpll = "1"
-                sess.set_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/name", dpll
-                )
-                sess.set_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/phase-slope-limit",
-                    7000,
-                )
-
-                sess.apply_changes()
-
-                self.assertEqual(
-                    self.set_logs,
-                    [
-                        ("phase-slope-limit", "7000"),
-                    ],
-                )
-
-        await asyncio.to_thread(test)
+        self.conn.delete_all("goldstone-dpll")
+        self.conn.apply()
 
         self.set_logs = []
 
+        self.patch_taish()
+
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        self.server = DPLLServer(self.conn, "", platform_info)
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+    async def test_basic(self):
         def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                dpll = "1"
-                sess.set_item(
-                    f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/phase-slope-limit",
-                    "unlimitted",
-                )
+            conn = Connector()
+            v = conn.get_operational("/goldstone-dpll:dplls/dpll/name")
+            self.assertEqual(v, ["1"])
 
-                sess.apply_changes()
+            v = conn.get_operational("/goldstone-dpll:dplls/dpll", one=True)
 
-                self.assertEqual(
-                    self.set_logs,
-                    [
-                        ("phase-slope-limit", "0"),
-                    ],
-                )
+            self.assertEqual(
+                v,
+                {
+                    "name": "1",
+                    "input-references": {
+                        "input-reference": [
+                            {
+                                "name": "0",
+                                "config": {"name": "0"},
+                                "state": {
+                                    "priority": 0,
+                                    "alarm": ["scm", "gst"],
+                                },
+                            },
+                            {
+                                "name": "1",
+                                "config": {"name": "1"},
+                                "state": {
+                                    "priority": 1,
+                                    "alarm": ["scm", "gst"],
+                                },
+                            },
+                            {
+                                "name": "2",
+                                "config": {"name": "2"},
+                                "state": {
+                                    "priority": 2,
+                                    "alarm": ["scm", "gst"],
+                                },
+                            },
+                            {
+                                "name": "3",
+                                "config": {"name": "3"},
+                                "state": {
+                                    "priority": 3,
+                                    "alarm": ["scm", "gst"],
+                                },
+                            },
+                            {
+                                "name": "4",
+                                "config": {"name": "4"},
+                                "state": {
+                                    "priority": 4,
+                                    "alarm": ["scm", "gst"],
+                                },
+                            },
+                            {
+                                "name": "5",
+                                "config": {"name": "5"},
+                                "state": {
+                                    "priority": 5,
+                                    "alarm": ["scm", "gst"],
+                                },
+                            },
+                            {
+                                "name": "6",
+                                "config": {"name": "6"},
+                                "state": {
+                                    "priority": 6,
+                                    "alarm": ["scm", "gst"],
+                                },
+                            },
+                            {
+                                "name": "7",
+                                "config": {"name": "7"},
+                                "state": {
+                                    "priority": 7,
+                                    "alarm": ["scm", "gst"],
+                                },
+                            },
+                        ]
+                    },
+                    "config": {"name": "1"},
+                    "state": {
+                        "mode": "freerun",
+                        "phase-slope-limit": 7500,
+                        "loop-bandwidth": 1.0,
+                        "state": "freerun",
+                        "selected-reference": "5",
+                    },
+                },
+            )
 
-        tasks.append(asyncio.to_thread(test))
+        await asyncio.create_task(asyncio.to_thread(test))
 
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
+    async def test_mode(self):
+        def test():
+            conn = Connector()
+            dpll = "1"
+            conn.set(f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/name", dpll)
+            conn.set(
+                f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/mode",
+                "automatic",
+            )
+            conn.apply()
 
-        self.server.stop()
+        await asyncio.to_thread(test)
+
+    async def test_priority(self):
+        def test():
+            conn = Connector()
+            dpll = "1"
+            ref = "0"
+            conn.set(f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/name", dpll)
+            conn.set(
+                f"/goldstone-dpll:dplls/dpll[name='{dpll}']/input-references/input-reference[name='{ref}']/config/name",
+                ref,
+            )
+            conn.set(
+                f"/goldstone-dpll:dplls/dpll[name='{dpll}']/input-references/input-reference[name='{ref}']/config/priority",
+                10,
+            )
+            conn.apply()
+
+            conn.delete(
+                f"/goldstone-dpll:dplls/dpll[name='{dpll}']/input-references/input-reference[name='{ref}']/config/priority",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("input-reference-priority", "10,1,2,3,4,5,6,7"),
+                    ("input-reference-priority", "0,1,2,3,4,5,6,7"),
+                ],
+            )
+
+        await asyncio.to_thread(test)
+
+    async def test_phase_slope_limit(self):
+        def test():
+            conn = Connector()
+            dpll = "1"
+            conn.set(f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/name", dpll)
+            conn.set(
+                f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/phase-slope-limit",
+                7000,
+            )
+
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("phase-slope-limit", "7000"),
+                ],
+            )
+
+            self.set_logs = []
+
+            conn.set(
+                f"/goldstone-dpll:dplls/dpll[name='{dpll}']/config/phase-slope-limit",
+                "unlimitted",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("phase-slope-limit", "0"),
+                ],
+            )
+
+        await asyncio.to_thread(test)
+
+    async def asyncTearDown(self):
+        [p.stop() for p in self.patchers]
+        await call(self.server.stop)
+        [t.cancel() for t in self.tasks]
+        self.conn.stop()

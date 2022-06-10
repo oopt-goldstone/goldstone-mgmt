@@ -94,8 +94,6 @@ class PlatformServer(ServerBase):
     # monitor_piu() monitor PIU status periodically and change the operational data store
     # accordingly.
     async def monitor_piu(self):
-        self.sess.switch_datastore("operational")
-
         eventname = "goldstone-platform:piu-notify-event"
 
         for oid in self.onlp_oids_dict[onlp.onlp.ONLP_OID_TYPE.MODULE]:
@@ -505,8 +503,7 @@ class PlatformServer(ServerBase):
     def get_onie_fields_from_schema(self):
         xpath = ["components", "component", "sys", "state", "onie-info"]
         xpath = "".join(f"/goldstone-platform:{v}" for v in xpath)
-        ctx = self.sess.get_ly_ctx()
-        o = list(ctx.find_path(xpath)).pop()
+        o = self.conn.find_node(xpath)
         return [child.name() for child in o.children()]
 
     async def get_sys_info(self):

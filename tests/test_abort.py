@@ -1,7 +1,5 @@
 import unittest
 from unittest import mock
-import sysrepo
-from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
 import itertools
 import logging
 import asyncio
@@ -9,6 +7,10 @@ from concurrent.futures import ProcessPoolExecutor
 import os
 import json
 import sys
+
+from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
+from goldstone.lib.connector.sysrepo import Connector
+from goldstone.lib.errors import *
 
 
 logger = logging.getLogger(__name__)
@@ -66,13 +68,11 @@ class MockTransponderServer(ServerBase):
 class TestAbort(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.conn = sysrepo.SysrepoConnection()
+        self.conn = Connector()
 
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-interfaces")
-            sess.replace_config({}, "goldstone-transponder")
-            sess.apply_changes()
+        self.conn.delete_all("goldstone-interfaces")
+        self.conn.delete_all("goldstone-transponder")
+        self.conn.apply()
 
     async def test_abort(self):
 
@@ -86,29 +86,28 @@ class TestAbort(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(xpserver.revert_called)
 
         def test():
+            conn = Connector()
+            name = "piu1"
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/config/name",
+                name,
+            )
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/config/admin-status",
+                "up",
+            )
 
-            with self.conn.start_session() as sess:
-                name = "piu1"
-                sess.set_item(
-                    f"/goldstone-transponder:modules/module[name='{name}']/config/name",
-                    name,
-                )
-                sess.set_item(
-                    f"/goldstone-transponder:modules/module[name='{name}']/config/admin-status",
-                    "up",
-                )
-
-                name = "Ethernet1/1/1"
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/name",
-                    name,
-                )
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
-                    "UP",
-                )
-                with self.assertRaises(sysrepo.SysrepoCallbackFailedError):
-                    sess.apply_changes()
+            name = "Ethernet1/1/1"
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/name",
+                name,
+            )
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
+                "UP",
+            )
+            with self.assertRaises(CallbackFailedError):
+                conn.apply()
 
         await asyncio.create_task(asyncio.to_thread(test))
 

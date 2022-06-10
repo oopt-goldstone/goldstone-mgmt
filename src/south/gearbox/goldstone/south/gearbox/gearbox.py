@@ -1,10 +1,11 @@
-from goldstone.lib.core import ServerBase, NoOp
 import libyang
 import asyncio
-import sysrepo
 import logging
 import json
 from .interfaces import IfChangeHandler
+
+from goldstone.lib.core import ServerBase, NoOp
+from goldstone.lib.errors import *
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,7 @@ class GearboxChangeHandler(IfChangeHandler):
 
         l = await self.server.ifserver.list_modules()
         if self.module_name not in l.keys():
-            raise sysrepo.SysrepoInvalArgError(
-                f"Invalid Gearbox name: {self.module_name}"
-            )
+            raise InvalArgError(f"Invalid Gearbox name: {self.module_name}")
 
         self.obj = await self.server.taish.get_module(self.module_name)
         self.tai_attr_name = None
@@ -55,7 +54,7 @@ class ReferenceClockNameHandler(GearboxChangeHandler):
         assert self.xpath[3][2][0][0] == "name"
         name = int(self.xpath[3][2][0][1])
         if not (name < n):
-            raise sysrepo.SysrepoInvalArgError(f"Invalid reference clock name: {name}")
+            raise InvalArgError(f"Invalid reference clock name: {name}")
 
 
 class ReferenceInterfaceHandler(GearboxChangeHandler):
@@ -115,18 +114,17 @@ class GearboxServer(ServerBase):
         }
 
     def get_default(self, key, _):
-        ctx = self.sess.get_ly_ctx()
         keys = [["gearboxes", "gearbox", "config", key]]
 
         for k in keys:
             xpath = "".join(f"/goldstone-gearbox:{v}" for v in k)
-            try:
-                for node in ctx.find_path(xpath):
-                    if node.type().name() == "boolean":
-                        return node.default() == "true"
-                    return node.default()
-            except libyang.util.LibyangError:
-                pass
+            node = self.conn.find_node(xpath)
+            if not node:
+                continue
+
+            if node.type() == "boolean":
+                return node.default() == "true"
+            return node.default()
 
         return None
 
