@@ -1,69 +1,28 @@
-import sysrepo
 import libyang
 import logging
-from aiohttp import web
-import inspect
-import json
 import asyncio
 import os
 import time
+
+from .server_connector import create_server_connector
+from .errors import InvalArgError, InternalError, UnsupportedError
+from .util import call
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_REVERT_TIMEOUT = int(os.getenv("GOLDSTONE_DEFAULT_REVERT_TIMEOUT", 6))
 
 
-async def start_probe(route, host, port):
-    routes = web.RouteTableDef()
-
-    @routes.get(route)
-    async def probe(request):
-        return web.Response()
-
-    app = web.Application()
-    app.add_routes(routes)
-
-    runner = web.AppRunner(app)
-
-    await runner.setup()
-    site = web.TCPSite(runner, host, port)
-    await site.start()
-
-    return runner
-
-
-async def call(f, *args, **kwargs):
-    if inspect.iscoroutinefunction(f):
-        return await f(*args, **kwargs)
-    else:
-        return f(*args, **kwargs)
-
-
 class ChangeHandler(object):
     def __init__(self, server, change):
         self.server = server
         self.change = change
-        if isinstance(change, sysrepo.ChangeCreated):
-            self.type = "created"
-        elif isinstance(change, sysrepo.ChangeModified):
-            self.type = "modified"
-        elif isinstance(change, sysrepo.ChangeDeleted):
-            self.type = "deleted"
-        else:
-            raise sysrepo.SysrepoInvalArgError(
-                f"unsupported change type: {type(change)}"
-            )
+        self.type = self.change.type
 
     def setup_cache(self, user):
         cache = user.get("cache")
-        if not cache:
-            cache = self.server.get_running_data(
-                self.server.top,
-                default={},
-                strip=False,
-                include_implicit_defaults=True,
-            )
-            sysrepo.update_config_cache(cache, user["changes"])
+        if not user.get("cache"):
+            cache = self.server.conn.get_config_cache(user["changes"])
             user["cache"] = cache
         return cache
 
@@ -82,51 +41,25 @@ NoOp = ChangeHandler
 
 class ServerBase(object):
     def __init__(self, conn, module, revert_timeout=DEFAULT_REVERT_TIMEOUT):
-        self.sess = conn.start_session()
-        ctx = self.sess.get_ly_ctx()
-        m = ctx.get_module(module)
-        v = [n.name() for n in m if n.keyword() == "container"]
-        assert len(v) == 1
-        self.module = module
-        self.top = f"/{self.module}:{v[0]}"
+        self.conn = create_server_connector(conn, module)
         self.handlers = {}
         self._current_handlers = None  # (req_id, handlers, user)
         self._stop_event = asyncio.Event()
         self.revert_timeout = revert_timeout
         self.lock = asyncio.Lock()
 
-    def get_sr_data(
-        self,
-        xpath,
-        datastore,
-        default=None,
-        strip=True,
-        include_implicit_defaults=False,
-    ):
-        self.sess.switch_datastore(datastore)
-        try:
-            v = self.sess.get_data(
-                xpath, include_implicit_defaults=include_implicit_defaults
-            )
-        except sysrepo.errors.SysrepoNotFoundError:
-            logger.debug(
-                f"xpath: {xpath}, ds: {datastore}, not found. returning {default}"
-            )
-            return default
-        if strip:
-            v = libyang.xpath_get(v, xpath, default, filter=datastore == "operational")
-        logger.debug(f"xpath: {xpath}, ds: {datastore}, value: {v}")
-        return v
-
     def get_running_data(
         self, xpath, default=None, strip=True, include_implicit_defaults=False
     ):
-        return self.get_sr_data(
-            xpath, "running", default, strip, include_implicit_defaults
+        return self.conn.get(
+            xpath,
+            default=default,
+            strip=strip,
+            include_implicit_defaults=include_implicit_defaults,
         )
 
     def get_operational_data(self, xpath, default=None, strip=True):
-        return self.get_sr_data(xpath, "operational", default, strip)
+        return self.conn.get(xpath, default=default, strip=strip, ds="operational")
 
     def get_handler(self, xpath):
         xpath = libyang.xpath_split(xpath)
@@ -141,20 +74,14 @@ class ServerBase(object):
         return NoOp
 
     async def start(self):
-        self.sess.switch_datastore("running")
-        asyncio_register = inspect.iscoroutinefunction(self.change_cb)
-        self.sess.subscribe_module_change(
-            self.module, None, self.change_cb, asyncio_register=asyncio_register
-        )
-        self.sess.subscribe_oper_data_request(
-            self.module, self.top, self._oper_cb, oper_merge=True, asyncio_register=True
-        )
+        self.conn.subscribe_module_change(self.change_cb)
+        self.conn.subscribe_oper_data_request(self._oper_cb)
 
         return [self._stop_event.wait()]
 
     def stop(self):
         self._stop_event.set()
-        self.sess.stop()
+        self.conn.stop()
 
     async def reconcile(self):
         logger.debug("reconcile")
@@ -197,7 +124,7 @@ class ServerBase(object):
                 if self._current_handlers == None:
                     logger.error(f"current_handlers is null")
                     self._stop_event.set()
-                    raise sysrepo.SysrepoInternalError("fatal error happened")
+                    raise InternalError("fatal error happened")
 
                 id, handlers, user, revert_task = self._current_handlers
                 revert_task.cancel()
@@ -209,7 +136,7 @@ class ServerBase(object):
                 if id != req_id:
                     logger.error(f"{id=} != {req_id=}")
                     self._stop_event.set()
-                    raise sysrepo.SysrepoInternalError("fatal error happened")
+                    raise InternalError("fatal error happened")
 
                 if event == "abort":
                     for done in reversed(handlers):
@@ -219,7 +146,7 @@ class ServerBase(object):
 
             if self._current_handlers != None:
                 id, handlers, user, revert_task = self._current_handlers
-                raise sysrepo.SysrepoInternalError(
+                raise InternalError(
                     f"waiting 'done' or 'abort' event for id {id}. got '{event}' event for id {req_id}"
                 )
 
@@ -232,11 +159,9 @@ class ServerBase(object):
             for change in changes:
                 cls = self.get_handler(change.xpath)
                 if not cls:
-                    if isinstance(change, sysrepo.ChangeDeleted):
+                    if change.type == "deleted":
                         continue
-                    raise sysrepo.SysrepoUnsupportedError(
-                        f"{change.xpath} not supported"
-                    )
+                    raise UnsupportedError(f"{change.xpath} not supported")
 
                 h = cls(self, change)
 
@@ -287,8 +212,4 @@ class ServerBase(object):
         pass
 
     def send_notification(self, name, notification):
-        ly_ctx = self.sess.get_ly_ctx()
-        n = json.dumps({name: notification})
-        dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-        logger.debug(dnode.print_dict())
-        return self.sess.notification_send_ly(dnode)
+        return self.conn.send_notification(name, notification)

@@ -1,18 +1,24 @@
 from .base import (
     Connector as BaseConnector,
     Session as BaseSession,
-    NotFound,
-    Error,
-    DatastoreLocked,
 )
+
+import goldstone.lib.errors
+from goldstone.lib.errors import NotFoundError, Error, LockedError, CallbackFailedError
 
 import sysrepo
 import libyang
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_MS = 60_000
+
+# create a map which maps sysrepo.errors and goldstone.lib.errors
+_errors = [(v, getattr(goldstone.lib.errors, v)) for v in dir(goldstone.lib.errors)]
+_errors = [(n, t) for n, t in _errors if type(t) == type]
+_error_map = {getattr(sysrepo, f"Sysrepo{n}"): t for n, t in _errors}
 
 
 def wrap_sysrepo_error(func):
@@ -25,13 +31,13 @@ def wrap_sysrepo_error(func):
             target = "datastore"
             if len(args) >= 2:
                 target = args[1]
-            raise DatastoreLocked(f"{target} is locked", error) from error
-        except sysrepo.SysrepoNotFoundError as error:
-            sess.discard_changes()
-            raise NotFound(error.details[0][1]) from error
+            raise LockedError(f"{target} is locked", error) from error
         except sysrepo.SysrepoError as error:
             sess.discard_changes()
-            raise Error(error.details[0][1]) from error
+            gs_e = _error_map.get(type(error))
+            if gs_e:
+                raise gs_e(error.details[0][1]) from None
+            raise Error(error.details[0][1]) from None
         except libyang.LibyangError as error:
             sess.discard_changes()
             raise Error(str(error)) from error
@@ -76,7 +82,7 @@ class Session(BaseSession):
             )
             if data and one:
                 if len(data) == 1:
-                    data = data[0]
+                    data = list(data)[0]
                 elif len(data) > 1:
                     raise Error(f"{xpath} matches more than one item")
         logger.debug(f"xpath: {xpath}, ds: {self.ds}, value: {data}")
@@ -105,6 +111,13 @@ class Session(BaseSession):
     @wrap_sysrepo_error
     def discard_changes(self):
         return self.session.discard_changes()
+
+    @wrap_sysrepo_error
+    def send_notification(self, name: str, notification: dict):
+        n = json.dumps({name: notification})
+        dnode = self.conn.ctx.parse_data_mem(n, fmt="json", notification=True)
+        logger.debug(dnode.print_dict())
+        return self.session.notification_send_ly(dnode)
 
     def subscribe_notifications(self, callback):
         ctx = self.conn.ctx
@@ -187,7 +200,11 @@ class Connector(BaseConnector):
             sess = self.startup_session
         else:
             raise Error(f"unsupported ds: {ds}")
-        return sess.get(xpath, default, include_implicit_defaults, strip, one)
+
+        try:
+            return sess.get(xpath, default, include_implicit_defaults, strip, one)
+        except sysrepo.SysrepoNotFoundError as e:
+            raise NotFoundError(e.msg) from e
 
     def get_operational(
         self,
@@ -203,6 +220,9 @@ class Connector(BaseConnector):
 
     def get_startup(self, xpath):
         return self.get(xpath, ds="startup")
+
+    def send_notification(self, name: str, notification: dict):
+        return self.running_session.send_notification(name, notification)
 
     def stop(self):
         self.running_session.stop()

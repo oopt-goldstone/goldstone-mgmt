@@ -1,5 +1,5 @@
-from goldstone.lib.connector.sysrepo import Connector as SysrepoConnector
-from goldstone.lib.connector import Error
+from goldstone.lib.connector.sysrepo import Connector
+from goldstone.lib.errors import Error
 
 from enum import unique, Enum
 from bisect import bisect_right
@@ -17,7 +17,7 @@ from ax_interface.mib import (
 
 from ax_interface.encodings import ObjectIdentifier
 
-sysrepo_conn = SysrepoConnector()
+g_conn = Connector()
 
 
 @unique
@@ -55,7 +55,7 @@ class SystemUpdater(MIBUpdater):
 
         xpath = "/goldstone-system:system/state/software-version"
         try:
-            version = sysrepo_conn.get_operational(xpath, "unknown")
+            version = g_conn.get_operational(xpath, "unknown")
         except Error as e:
             mibs.logger.warning(f"sysDesc Exception: {e}")
 
@@ -141,12 +141,10 @@ class InterfacesUpdater(MIBUpdater):
         xpath = "/goldstone-interfaces:interfaces/interface"
         self.interfaces = []
         try:
-            names = sysrepo_conn.get_operational(xpath + "/name")
+            names = g_conn.get_operational(xpath + "/name")
             ifs = []
             for name in names:
-                ifs.append(
-                    sysrepo_conn.get_operational(xpath + f"[name='{name}']", one=True)
-                )
+                ifs.append(g_conn.get_operational(xpath + f"[name='{name}']", one=True))
             self.interfaces = natsorted(ifs, key=lambda v: v["name"])
         except Error as e:
             mibs.logger.warning(f"reinit_data Exception: {e}")

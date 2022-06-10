@@ -1,6 +1,11 @@
 from goldstone.lib.core import *
 from .sonic import *
 
+from goldstone.lib.errors import (
+    InvalArgError,
+    CallbackFailedError,
+)
+
 
 class PortChannelChangeHandler(ChangeHandler):
     def __init__(self, server, change):
@@ -59,7 +64,7 @@ class InterfaceHandler(PortChannelChangeHandler):
     def validate(self, user):
         if self.type == "created":
             if self.server.is_portchannel_intf(self.change.value):
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     f"{self.change.value}:Interface is already part of LAG"
                 )
 
@@ -111,12 +116,12 @@ class PortChannelServer(ServerBase):
 
     def pre(self, user):
         if self.sonic.is_rebooting:
-            raise sysrepo.SysrepoLockedError("uSONiC is rebooting")
+            raise LockedError("uSONiC is rebooting")
 
     def oper_cb(self, xpath, priv):
         logger.debug(f"xpath: {xpath}")
         if self.sonic.is_rebooting:
-            raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
+            raise CallbackFailedError("uSONiC is rebooting")
 
         keys = self.sonic.get_keys("LAG_TABLE:PortChannel*", "APPL_DB")
 
@@ -136,18 +141,23 @@ class PortChannelServer(ServerBase):
         return {"goldstone-portchannel:portchannel": {"portchannel-group": r}}
 
     def get_default(self, key):
-        ctx = self.sess.get_ly_ctx()
-        keys = ["interfaces", "interface", "config", key]
-        xpath = "".join(f"/goldstone-interfaces:{v}" for v in keys)
+        keys = [
+            ["interfaces", "interface", "config", key],
+            ["interfaces", "interface", "ethernet", "config", key],
+            ["interfaces", "interface", "ethernet", "auto-negotiate", "config", key],
+        ]
 
-        try:
-            for node in ctx.find_path(xpath):
-                return node.default()
-        except libyang.util.LibyangError:
-            keys = ["interfaces", "interface", "ethernet", "config", key]
-            xpath = "".join(f"/goldstone-interfaces:{v}" for v in keys)
-            for node in ctx.find_path(xpath):
-                return node.default()
+        for k in keys:
+            xpath = "".join(f"/goldstone-interfaces:{v}" for v in k)
+            node = self.conn.find_node(xpath)
+            if not node:
+                continue
+
+            if node.type() == "boolean":
+                return node.default() == "true"
+            return node.default()
+
+        raise Exception(f"default value not found for {key}")
 
     async def reconcile(self):
         pc_list = self.get_running_data(

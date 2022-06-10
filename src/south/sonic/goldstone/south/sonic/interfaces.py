@@ -1,8 +1,16 @@
-from goldstone.lib.core import *
-from .sonic import *
 import queue
 import os
 import aioredis
+
+from .sonic import *
+
+from goldstone.lib.core import *
+from goldstone.lib.errors import (
+    InvalArgError,
+    LockedError,
+    NotFoundError,
+    CallbackFailedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +36,7 @@ class IfChangeHandler(ChangeHandler):
         ifname = xpath[1][2][0][1]
 
         if ifname not in server.sonic.get_ifnames():
-            raise sysrepo.SysrepoInvalArgError("Invalid Interface name")
+            raise InvalArgError("Invalid Interface name")
 
         self.ifname = ifname
 
@@ -79,27 +87,21 @@ class IfTypeHandler(IfChangeHandler):
     def validate(self, user):
         if self.type in ["created", "modified"]:
             if self.change.value != "IF_ETHERNET":
-                raise sysrepo.SysrepoInvalArgError(
-                    f"Unsupported interface type {self.change.value}"
-                )
+                raise InvalArgError(f"Unsupported interface type {self.change.value}")
 
 
 class LoopbackModeHandler(IfChangeHandler):
     def validate(self, user):
         if self.type in ["created", "modified"]:
             if self.change.value != "NONE":
-                raise sysrepo.SysrepoInvalArgError(
-                    f"Unsupported loopback mode {self.change.value}"
-                )
+                raise InvalArgError(f"Unsupported loopback mode {self.change.value}")
 
 
 class PRBSModeHandler(IfChangeHandler):
     def validate(self, user):
         if self.type in ["created", "modified"]:
             if self.change.value != "NONE":
-                raise sysrepo.SysrepoInvalArgError(
-                    f"Unsupported PRBS mode {self.change.value}"
-                )
+                raise InvalArgError(f"Unsupported PRBS mode {self.change.value}")
 
 
 class EthernetIfTypeHandler(IfChangeHandler):
@@ -122,7 +124,7 @@ class SpeedHandler(IfChangeHandler):
             valids = self.valid_speeds()
             if value not in valids:
                 valids = [speed_redis_to_yang(v) for v in valids]
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     f"Invalid speed: {self.change.value}, candidates: {','.join(valids)}"
                 )
 
@@ -145,11 +147,11 @@ class VLANIfModeHandler(IfChangeHandler):
         if self.type in ["created", "modified"]:
             config = cache["switched-vlan"]["config"]
             if config["interface-mode"] == "TRUNK" and "access-vlan" in config:
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     "invalid VLAN configuration. can't set TRUNK mode and access-vlan at the same time"
                 )
             elif config["interface-mode"] == "ACCESS" and "trunk-vlans" in config:
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     "invalid VLAN configuration. can't set ACCESS mode and trunk-vlans at the same time"
                 )
         else:
@@ -162,7 +164,7 @@ class VLANIfModeHandler(IfChangeHandler):
             if cache == None:
                 return
             if "access-vlan" in cache or "trunk-vlans" in cache:
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     "invalid VLAN configuration. must remove interface-mode, access-vlan, trunk-vlans leaves at once"
                 )
 
@@ -214,7 +216,7 @@ class AutoNegotiateAdvertisedSpeedsHandler(IfChangeHandler):
             valids = self.valid_speeds()
             if value not in valids:
                 valids = [speed_redis_to_yang(v) for v in valids]
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     f"Invalid speed: {change.value}, candidates: {','.join(valids)}"
                 )
 
@@ -232,12 +234,10 @@ class BreakoutHandler(IfChangeHandler):
         if self.type in ["created", "modified"]:
 
             if "_1" not in self.ifname:
-                raise sysrepo.SysrepoInvalArgError(
-                    "breakout cannot be configured on a sub-interface"
-                )
+                raise InvalArgError("breakout cannot be configured on a sub-interface")
 
             if self.server.is_ufd_port(self.ifname):
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     "Breakout cannot be configured on the interface that is part of UFD"
                 )
 
@@ -245,7 +245,7 @@ class BreakoutHandler(IfChangeHandler):
             cache = libyang.xpath_get(cache, xpath, None)
             config = cache["ethernet"]["breakout"]["config"]
             if "num-channels" not in config or "channel-speed" not in config:
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     "both num-channels and channel-speed must be set at once"
                 )
 
@@ -268,7 +268,6 @@ class InterfaceServer(ServerBase):
                 ifname = f"Ethernet{i['interface']['suffix']}"
                 info[ifname] = i
         self.platform_info = info
-        self.conn = conn
         self.task_queue = queue.Queue()
         self.sonic = sonic
         self.servers = servers
@@ -336,7 +335,7 @@ class InterfaceServer(ServerBase):
 
     def pre(self, user):
         if self.sonic.is_rebooting:
-            raise sysrepo.SysrepoLockedError("uSONiC is rebooting")
+            raise LockedError("uSONiC is rebooting")
 
     async def post(self, user):
         logger.info(f"post: {user}")
@@ -358,7 +357,7 @@ class InterfaceServer(ServerBase):
     async def reconcile(self):
         self.sonic.is_rebooting = True
 
-        config = self.get_running_data(self.top, default={}, strip=False)
+        config = self.get_running_data(self.conn.top, default={}, strip=False)
         is_updated = self.breakout_update_usonic(config)
         if is_updated:
             await self.sonic.wait()
@@ -427,7 +426,6 @@ class InterfaceServer(ServerBase):
         self.sonic.is_rebooting = False
 
     def get_default(self, key):
-        ctx = self.sess.get_ly_ctx()
         keys = [
             ["interfaces", "interface", "config", key],
             ["interfaces", "interface", "ethernet", "config", key],
@@ -436,13 +434,13 @@ class InterfaceServer(ServerBase):
 
         for k in keys:
             xpath = "".join(f"/goldstone-interfaces:{v}" for v in k)
-            try:
-                for node in ctx.find_path(xpath):
-                    if node.type().name() == "boolean":
-                        return node.default() == "true"
-                    return node.default()
-            except libyang.util.LibyangError:
-                pass
+            node = self.conn.find_node(xpath)
+            if not node:
+                continue
+
+            if node.type() == "boolean":
+                return node.default() == "true"
+            return node.default()
 
         raise Exception(f"default value not found for {key}")
 
@@ -496,7 +494,7 @@ class InterfaceServer(ServerBase):
         tasks.append(self.handle_tasks())
         tasks.append(self.event_handler())
 
-        self.sess.subscribe_rpc_call(
+        self.conn.subscribe_rpc_call(
             "/goldstone-interfaces:clear-counters",
             self.clear_counters,
         )
@@ -524,7 +522,7 @@ class InterfaceServer(ServerBase):
 
     def validate_interface_type(self, ifname, iftype):
         xpath = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-        err = sysrepo.SysrepoInvalArgError("Unsupported interface type")
+        err = InvalArgError("Unsupported interface type")
 
         try:
             self.get_running_data(xpath)
@@ -533,7 +531,7 @@ class InterfaceServer(ServerBase):
                 raise KeyError
 
             numch = int(detail["num-channels"])
-        except (KeyError, sysrepo.SysrepoNotFoundError):
+        except (KeyError, NotFoundError):
             numch = 1
 
         if numch == 4:
@@ -591,7 +589,7 @@ class InterfaceServer(ServerBase):
     async def oper_cb(self, xpath, priv):
         logger.debug(f"xpath: {xpath}")
         if self.sonic.is_rebooting:
-            raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
+            raise CallbackFailedError("uSONiC is rebooting")
 
         counter_only = "counters" in xpath
 

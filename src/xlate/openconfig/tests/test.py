@@ -1,13 +1,19 @@
 import unittest
-from goldstone.xlate.openconfig.interfaces import InterfaceServer
-from goldstone.lib.core import *
-import sysrepo
 import libyang
 import asyncio
 import logging
 import time
 import itertools
 from multiprocessing import Process, Queue
+
+from goldstone.lib.connector.sysrepo import Connector
+from goldstone.lib.server_connector import create_server_connector
+from goldstone.lib.errors import *
+from goldstone.lib.util import call
+from goldstone.lib.core import *
+
+
+from goldstone.xlate.openconfig.interfaces import InterfaceServer
 
 
 class MockGSInterfaceServer(ServerBase):
@@ -46,7 +52,7 @@ class MockGSInterfaceServer(ServerBase):
 
 
 def run_mock_gs_server(q):
-    conn = sysrepo.SysrepoConnection()
+    conn = Connector()
     server = MockGSInterfaceServer(conn)
 
     async def _main():
@@ -74,171 +80,125 @@ def run_mock_gs_server(q):
                 raise e
 
     asyncio.run(_main())
+    conn.stop()
 
 
 class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.conn = sysrepo.SysrepoConnection()
+        self.conn = Connector()
 
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-interfaces")
-            sess.replace_config({}, "openconfig-interfaces")
-            sess.apply_changes()
+        self.conn.delete_all("goldstone-interfaces")
+        self.conn.delete_all("openconfig-interfaces")
+        self.conn.apply()
 
-        self.server = InterfaceServer(self.conn, reconciliation_interval=1)
         self.q = Queue()
         self.process = Process(target=run_mock_gs_server, args=(self.q,))
         self.process.start()
 
-        servers = [self.server]
-
-        self.tasks = list(
-            itertools.chain.from_iterable([await s.start() for s in servers])
-        )
+        self.server = InterfaceServer(self.conn, reconciliation_interval=1)
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
 
     async def test_get_ifname(self):
         def test():
             time.sleep(2)  # wait for the mock server
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("operational")
-                data = sess.get_data("/openconfig-interfaces:interfaces")
-                data = libyang.xpath_get(
-                    data, "/openconfig-interfaces:interfaces/interface/name"
-                )
-                self.assertEqual(data, ["Ethernet1_1", "Ethernet2_1"])
+            conn = Connector()
+            data = conn.get_operational(
+                "/openconfig-interfaces:interfaces/interface/name"
+            )
+            self.assertEqual(data, ["Ethernet1_1", "Ethernet2_1"])
 
-        self.tasks.append(asyncio.to_thread(test))
-        tasks = [
-            t if isinstance(t, asyncio.Task) else asyncio.create_task(t)
-            for t in self.tasks
-        ]
-
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
+        await asyncio.create_task(asyncio.to_thread(test))
 
     async def test_set_admin_status(self):
         def test():
             time.sleep(2)  # wait for the mock server
 
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                name = "Ethernet1_1"
-                sess.set_item(
-                    f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/name",
-                    name,
-                )
-                sess.set_item(
-                    f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/type",
-                    "iana-if-type:ethernetCsmacd",
-                )
-                sess.set_item(
-                    f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/enabled",
-                    "true",
-                )
-                sess.apply_changes()
+            conn = Connector()
+            name = "Ethernet1_1"
+            conn.set(
+                f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/name",
+                name,
+            )
+            conn.set(
+                f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/type",
+                "iana-if-type:ethernetCsmacd",
+            )
+            conn.set(
+                f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/enabled",
+                "true",
+            )
+            conn.apply()
 
-                xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status"
-                data = sess.get_data(xpath)
-                data = libyang.xpath_get(data, xpath)
-                self.assertEqual(data, "UP")
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status"
+            data = conn.get_operational(xpath, one=True)
+            self.assertEqual(data, "UP")
 
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                name = "Ethernet1_1"
-                sess.set_item(
-                    f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/enabled",
-                    "false",
-                )
-                sess.apply_changes()
+            name = "Ethernet1_1"
+            conn.set(
+                f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/enabled",
+                "false",
+            )
+            conn.apply()
 
-                xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status"
-                data = sess.get_data(xpath)
-                data = libyang.xpath_get(data, xpath)
-                self.assertEqual(data, "DOWN")
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status"
+            data = conn.get_operational(xpath, one=True)
+            data = libyang.xpath_get(data, xpath)
+            self.assertEqual(data, "DOWN")
 
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                name = "Ethernet1_1"
-                sess.delete_item(
-                    f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/enabled",
-                )
-                sess.apply_changes()
+            name = "Ethernet1_1"
+            conn.delete(
+                f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/enabled",
+            )
+            conn.apply()
 
-                xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status"
-                data = sess.get_data(xpath)
-                data = libyang.xpath_get(data, xpath)
-                self.assertEqual(data, "UP")  # the default value of 'enabled' is "true"
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status"
+            data = conn.get_operational(xpath, one=True)
+            self.assertEqual(data, "UP")  # the default value of 'enabled' is "true"
 
-        self.tasks.append(asyncio.to_thread(test))
-        tasks = [
-            t if isinstance(t, asyncio.Task) else asyncio.create_task(t)
-            for t in self.tasks
-        ]
-
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
+        await asyncio.create_task(asyncio.to_thread(test))
 
     async def test_reconcile(self):
         def test():
             time.sleep(2)  # wait for the mock server
 
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                name = "Ethernet1_1"
-                sess.set_item(
-                    f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/name",
-                    name,
-                )
-                sess.set_item(
-                    f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/type",
-                    "iana-if-type:ethernetCsmacd",
-                )
-                sess.set_item(
-                    f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/enabled",
-                    "true",
-                )
-                sess.apply_changes()
+            conn = Connector()
 
-                xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status"
-                data = sess.get_data(xpath)
-                data = libyang.xpath_get(data, xpath)
-                self.assertEqual(data, "UP")
+            name = "Ethernet1_1"
+            conn.set(
+                f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/name",
+                name,
+            )
+            conn.set(
+                f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/type",
+                "iana-if-type:ethernetCsmacd",
+            )
+            conn.set(
+                f"/openconfig-interfaces:interfaces/interface[name='{name}']/config/enabled",
+                "true",
+            )
+            conn.apply()
 
-                sess.set_item(xpath, "DOWN")  # make the configuration inconsistent
-                sess.apply_changes()
+            xpath = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status"
+            data = conn.get_operational(xpath, one=True)
+            self.assertEqual(data, "UP")
 
-                time.sleep(2)
+            conn.set(xpath, "DOWN")  # make the configuration inconsistent
+            conn.apply()
 
-                data = sess.get_data(xpath)
-                data = libyang.xpath_get(data, xpath)
-                self.assertEqual(
-                    data, "UP"
-                )  # the primitive model configuration must become consistent again
+            time.sleep(2)
 
-        self.tasks.append(asyncio.to_thread(test))
-        tasks = [
-            t if isinstance(t, asyncio.Task) else asyncio.create_task(t)
-            for t in self.tasks
-        ]
+            data = conn.get_operational(xpath, one=True)
+            self.assertEqual(
+                data, "UP"
+            )  # the primitive model configuration must become consistent again
 
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
+        await asyncio.create_task(asyncio.to_thread(test))
 
     async def asyncTearDown(self):
-        await self.server.stop()
-        self.tasks = []
-        self.conn.disconnect()
+        await call(self.server.stop)
+        [t.cancel() for t in self.tasks]
+        self.conn.stop()
         self.q.put(True)
         self.process.join()
 

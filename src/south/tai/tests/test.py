@@ -1,7 +1,6 @@
 import unittest
 from unittest import mock
 from goldstone.south.tai.transponder import TransponderServer
-import sysrepo
 import asyncio
 import logging
 import json
@@ -9,6 +8,7 @@ import time
 import itertools
 import libyang
 from goldstone.lib.core import ServerBase
+from goldstone.lib.connector.sysrepo import Connector
 import os
 import json
 from taish import TAIException
@@ -45,12 +45,10 @@ class MockPlatformServer(ServerBase):
 class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.conn = sysrepo.SysrepoConnection()
+        self.conn = Connector()
 
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-transponder")
-            sess.apply_changes()
+        self.conn.delete_all("goldstone-transponder")
+        self.conn.apply()
 
         taish = mock.AsyncMock()
         taish.list.return_value = {"1": None}
@@ -107,135 +105,136 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_tai_init(self):
 
-        self.alive = True
+        # this needs to run in another thread because TransponderServer queries
+        # /goldstone-platform in the main event loop
+        # * sysrepo-python doesn't support getting items asynchronously
+        alive = True
 
         def p_server():
-            conn = sysrepo.SysrepoConnection()
-            pserver = MockPlatformServer(conn)
+            conn = Connector()
+            s = MockPlatformServer(conn)
 
             async def f():
-                await pserver.start()
-                while self.alive:
+                t = await s.start()
+                while alive:
                     await asyncio.sleep(1)
+                s.stop()
+                await asyncio.gather(*t)
 
             asyncio.run(f())
             conn.close()
 
-        asyncio.create_task(asyncio.to_thread(p_server))
+        tasks = [asyncio.create_task(asyncio.to_thread(p_server))]
 
-        for _ in range(10):
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("operational")
-                try:
-                    logger.debug(
-                        sess.get_data("/goldstone-platform:components/component")
-                    )
-                except sysrepo.SysrepoError as e:
-                    logger.error(e)
-                else:
+        def test():
+            conn = Connector()
+
+            for _ in range(10):
+                v = conn.get_operational("/goldstone-platform:components/component")
+                if v:
                     break
-                await asyncio.sleep(1)
+                time.sleep(1)
+            else:
+                self.assertTrue(False, f"component doesn't show up in oper ds")
+
+        await asyncio.to_thread(test)
 
         with open(os.path.dirname(__file__) + "/platform.json") as f:
             platform_info = json.loads(f.read())
 
-        self.server = TransponderServer(self.conn, "", platform_info)
+        server = TransponderServer(self.conn, "", platform_info)
+        tasks += list(asyncio.create_task(c) for c in await server.start())
 
-        tasks = list(asyncio.create_task(c) for c in await self.server.start())
-
-        def test():
+        def test2():
+            conn = Connector()
             for _ in range(10):
-                with self.conn.start_session() as sess:
-                    sess.switch_datastore("operational")
-                    v = sess.get_data("/goldstone-transponder:modules/module/name")
-                    logger.info(v)
-                    if list(v["modules"]["module"])[0]["name"] == "piu1":
-                        break
+                v = conn.get_operational(
+                    "/goldstone-transponder:modules/module/name", one=True
+                )
+                if v == "piu1":
+                    break
+                time.sleep(1)
             else:
                 self.assertTrue(False, f"piu1 didn't show up in oper ds")
 
-        await asyncio.to_thread(test)
+            self.assertEqual(len(server.event_obj), 1)
 
-        async def test2():
-            # one PIU must be initialized in the server
-            self.assertEqual(len(self.server.event_obj), 1)
+        tasks.append(asyncio.create_task(asyncio.to_thread(test2)))
 
-        tasks.append(asyncio.create_task(test2()))
-
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
             e = task.exception()
             if e:
                 raise e
 
-        await self.server.stop()
+        alive = False
 
-        self.alive = False
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        await server.stop()
 
     async def test_tai_hotplug(self):
         with open(os.path.dirname(__file__) + "/platform.json") as f:
             platform_info = json.loads(f.read())
 
-        self.server = TransponderServer(self.conn, "", platform_info)
-
-        servers = [self.server]
-
-        tasks = list(
-            asyncio.create_task(c)
-            for c in itertools.chain.from_iterable([await s.start() for s in servers])
-        )
+        server = TransponderServer(self.conn, "", platform_info)
+        tasks = list(asyncio.create_task(c) for c in await server.start())
 
         def test():
+            conn = Connector()
 
-            with self.conn.start_session() as sess:
-                name = "piu1"
-                sess.set_item(
-                    f"/goldstone-transponder:modules/module[name='{name}']/config/name",
-                    name,
-                )
-                sess.set_item(
-                    f"/goldstone-transponder:modules/module[name='{name}']/config/admin-status",
-                    "up",
-                )
-                sess.apply_changes()
+            name = "piu1"
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/config/name",
+                name,
+            )
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/config/admin-status",
+                "up",
+            )
+            conn.apply()
 
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("operational")
+            name = "goldstone-platform:piu-notify-event"
+            notification = {
+                "name": "piu1",
+                "status": ["PRESENT"],
+                "cfp2-presence": "PRESENT",
+            }
+            conn.send_notification(name, notification)
 
-                ly_ctx = sess.get_ly_ctx()
-                name = "goldstone-platform:piu-notify-event"
-                notification = {
-                    "name": "piu1",
-                    "status": ["PRESENT"],
-                    "cfp2-presence": "PRESENT",
-                }
+            time.sleep(2)
 
-                n = json.dumps({name: notification})
-                dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-                sess.notification_send_ly(dnode)
+            logger.info(
+                conn.get_operational("/goldstone-transponder:modules/module/name")
+            )
 
-                time.sleep(2)
-
-                logger.info(sess.get_data("/goldstone-transponder:modules/module/name"))
-
-                notification = {
-                    "name": "piu1",
-                }
-                n = json.dumps({name: notification})
-                dnode = ly_ctx.parse_data_mem(n, fmt="json", notification=True)
-                sess.notification_send_ly(dnode)
-
-                time.sleep(2)
+            notification = {
+                "name": "piu1",
+            }
+            conn.send_notification(name, notification)
+            time.sleep(2)
 
         tasks.append(asyncio.create_task(asyncio.to_thread(test)))
 
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
             e = task.exception()
             if e:
                 raise e
 
-        await self.server.stop()
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        await server.stop()
 
     async def test_component_connection(self):
 
@@ -247,30 +246,33 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
         tasks = list(asyncio.create_task(c) for c in await server.start())
 
         def test():
-
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("operational")
-                name = "piu1"
-                data = sess.get_data("/goldstone-transponder:modules/module")
-                data = libyang.xpath_get(
-                    data, "modules/module/component-connection/platform/component"
-                )
-                self.assertEqual(data, ["piu1"])
+            conn = Connector()
+            name = "piu1"
+            data = conn.get_operational("/goldstone-transponder:modules/module")
+            data = libyang.xpath_get(data, "component-connection/platform/component")
+            self.assertEqual(data, ["piu1"])
 
         tasks.append(asyncio.create_task(asyncio.to_thread(test)))
 
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
             e = task.exception()
             if e:
                 raise e
+
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
         await server.stop()
 
     async def asyncTearDown(self):
         self.alive = False
         [p.stop() for p in self.patchers]
-        self.conn.disconnect()
+        self.conn.stop()
 
 
 if __name__ == "__main__":

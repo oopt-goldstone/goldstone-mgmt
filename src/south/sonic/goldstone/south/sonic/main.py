@@ -9,8 +9,10 @@ from .vlan import VLANServer
 from .portchannel import PortChannelServer
 from .ufd import UFDServer
 from .sonic import SONiC
-import sysrepo
-from goldstone.lib.core import start_probe
+
+from goldstone.lib.util import start_probe
+from goldstone.lib.connector.sysrepo import Connector
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +24,7 @@ def main():
         loop.add_signal_handler(signal.SIGINT, stop_event.set)
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
-        conn = sysrepo.SysrepoConnection()
+        conn = Connector()
         sonic = SONiC()
 
         await sonic.init()
@@ -52,7 +54,7 @@ def main():
             await runner.cleanup()
             for s in servers:
                 s.stop()
-            conn.disconnect()
+            conn.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -69,7 +71,6 @@ def main():
         ]:
             l = logging.getLogger(noisy)
             l.setLevel(logging.INFO)
-    #        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 

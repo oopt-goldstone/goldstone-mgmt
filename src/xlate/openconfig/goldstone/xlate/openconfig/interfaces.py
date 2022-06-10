@@ -1,5 +1,4 @@
 import logging
-import sysrepo
 import libyang
 import asyncio
 from goldstone.lib.core import *
@@ -27,16 +26,16 @@ class AdminStatusHandler(IfChangeHandler):
         name = self.ifname
         logger.info(f"value: {self.change.value}")
         if self.type in ["created", "modified"]:
-            sess.set_item(
+            sess.set(
                 f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/name",
                 name,
             )
-            sess.set_item(
+            sess.set(
                 f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
                 "UP" if self.change.value else "DOWN",
             )
         else:
-            sess.delete_item(
+            sess.delete(
                 f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
             )
 
@@ -44,8 +43,6 @@ class AdminStatusHandler(IfChangeHandler):
 class InterfaceServer(ServerBase):
     def __init__(self, conn, reconciliation_interval=10):
         super().__init__(conn, "openconfig-interfaces")
-        self.conn = conn
-        self.sess = self.conn.start_session()
         self.reconciliation_interval = reconciliation_interval
         self.reconcile_task = None
         self.handlers = {
@@ -77,7 +74,7 @@ class InterfaceServer(ServerBase):
             data = self.get_running_data(
                 "/openconfig-interfaces:interfaces/interface", []
             )
-            self.sess.switch_datastore("running")
+            sess = self.conn.conn.new_session()
             for config in data:
                 name = config["name"]
 
@@ -85,43 +82,37 @@ class InterfaceServer(ServerBase):
                 if c == None:
                     continue
 
-                self.sess.set_item(
+                sess.set(
                     f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/name",
                     name,
                 )
 
                 enabled = c.get("enabled")
                 if enabled != None:
-                    self.sess.set_item(
+                    sess.set(
                         f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
                         "UP" if enabled else "DOWN",
                     )
-            self.sess.apply_changes()
+            sess.apply()
+            sess.stop()
 
     async def start(self):
         tasks = await super().start()
         if self.reconciliation_interval > 0:
-            self.reconcile_task = asyncio.create_task(self.reconcile_loop())
+            self.reconcile_task = self.reconcile_loop()
             tasks.append(self.reconcile_task)
 
         return tasks
 
-    async def stop(self):
-        if self.reconcile_task:
-            self.reconcile_task.cancel()
-            while True:
-                if self.reconcile_task.done():
-                    break
-                await asyncio.sleep(0.1)
-        self.sess.stop()
+    def stop(self):
+        self.conn.stop()
 
     def pre(self, user):
-        sess = self.conn.start_session()
-        sess.switch_datastore("running")
+        sess = self.conn.conn.new_session()
         user["sess"] = sess
 
     async def post(self, user):
-        user["sess"].apply_changes()
+        user["sess"].apply()
         user["sess"].stop()
 
     def oper_cb(self, xpath, priv):

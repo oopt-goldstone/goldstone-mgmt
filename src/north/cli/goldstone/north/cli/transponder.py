@@ -1,6 +1,6 @@
 from .base import InvalidInput
 
-from goldstone.lib.connector import Error
+from goldstone.lib.errors import Error
 
 from .cli import (
     Command,

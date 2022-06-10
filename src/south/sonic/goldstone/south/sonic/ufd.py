@@ -1,4 +1,5 @@
 from goldstone.lib.core import *
+from goldstone.lib.errors import InvalArgError
 
 logger = logging.getLogger(__name__)
 
@@ -21,15 +22,15 @@ class UFDUplinkHandler(UFDChangeHandler):
     def validate(self, user):
         ifname = self.xpath[-1][2][0][1]
         if ifname not in self.server.sonic.get_ifnames():
-            raise sysrepo.SysrepoInvalArgError("Invalid Interface name")
+            raise InvalArgError("Invalid Interface name")
 
         cache = self.setup_cache(user)
         xpath = f"/goldstone-uplink-failure-detection:ufd-groups/ufd-group[ufd-id='{self.uid}']/config"
         cache = libyang.xpath_get(cache, xpath, {})
         if len(cache.get("uplink", [])) > 1:
-            raise sysrepo.SysrepoInvalArgError("Only one uplink can be configured")
+            raise InvalArgError("Only one uplink can be configured")
         if ifname in cache.get("downlink", []):
-            raise sysrepo.SysrepoInvalArgError(f"{ifname} configured as a downlink")
+            raise InvalArgError(f"{ifname} configured as a downlink")
 
         self.ifname = ifname
 
@@ -53,13 +54,13 @@ class UFDDownlinkHandler(UFDChangeHandler):
         cache = self.setup_cache(user)
         ifname = self.xpath[-1][2][0][1]
         if ifname not in self.server.sonic.get_ifnames():
-            raise sysrepo.SysrepoInvalArgError("Invalid Interface name")
+            raise InvalArgError("Invalid Interface name")
 
         cache = self.setup_cache(user)
         xpath = f"/goldstone-uplink-failure-detection:ufd-groups/ufd-group[ufd-id='{self.uid}']/config"
         cache = libyang.xpath_get(cache, xpath, {})
         if ifname in cache.get("uplink", []):
-            raise sysrepo.SysrepoInvalArgError(f"{ifname} configured as an uplink")
+            raise InvalArgError(f"{ifname} configured as an uplink")
 
         self.ifname = ifname
 
@@ -96,9 +97,9 @@ class UFDServer(ServerBase):
 
     def pre(self, user):
         if self.sonic.is_rebooting:
-            raise sysrepo.SysrepoLockedError("uSONiC is rebooting")
+            raise LockedError("uSONiC is rebooting")
 
     def oper_cb(self, xpath, priv):
         logger.debug(f"xpath: {xpath}")
         if self.sonic.is_rebooting:
-            raise sysrepo.SysrepoCallbackFailedError("uSONiC is rebooting")
+            raise CallbackFailedError("uSONiC is rebooting")
