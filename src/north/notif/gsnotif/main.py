@@ -1,4 +1,3 @@
-import sysrepo
 import libyang
 import logging
 import asyncio
@@ -10,6 +9,8 @@ import base64
 import os
 from aiohttp import web
 from libyang import SNode
+
+from goldstone.lib.util import start_probe
 from goldstone.lib.connector.sysrepo import Connector
 
 logger = logging.getLogger(__name__)
@@ -23,18 +24,8 @@ class Server(object):
 
         routes = web.RouteTableDef()
 
-        @routes.get("/healthz")
-        async def probe(request):
-            return web.Response()
-
-        app = web.Application()
-        app.add_routes(routes)
-
-        self.runner = web.AppRunner(app)
-
     async def stop(self):
         logger.info(f"stop server")
-        await self.runner.cleanup()
         self.sess.stop()
 
     async def monitor_notif(self):
@@ -50,10 +41,6 @@ class Server(object):
 
         self.sess.subscribe_notifications(self.notification_cb)
 
-        await self.runner.setup()
-        site = web.TCPSite(self.runner, "0.0.0.0", 8080)
-        await site.start()
-
         return [self.monitor_notif()]
 
 
@@ -67,7 +54,9 @@ def main():
         server = Server()
 
         try:
+            runner = None
             tasks = await server.start()
+            runner = await start_probe("/healthz", "0.0.0.0", 8080)
             tasks.append(stop_event.wait())
             done, pending = await asyncio.wait(
                 tasks, return_when=asyncio.FIRST_COMPLETED
@@ -78,7 +67,10 @@ def main():
                 if e:
                     raise e
         finally:
+            if runner:
+                await runner.cleanup()
             await server.stop()
+            conn.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -89,7 +81,6 @@ def main():
         logging.basicConfig(level=logging.DEBUG, format=fmt)
         hpack = logging.getLogger("hpack")
         hpack.setLevel(logging.INFO)
-        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO)
 

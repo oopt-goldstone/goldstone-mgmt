@@ -1,9 +1,10 @@
-import sysrepo
 import logging
 import asyncio
 import argparse
 import signal
 import itertools
+
+from goldstone.lib.connector.sysrepo import Connector
 
 from .interfaces import InterfaceServer
 
@@ -17,7 +18,7 @@ def main():
         loop.add_signal_handler(signal.SIGINT, stop_event.set)
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
-        conn = sysrepo.SysrepoConnection()
+        conn = Connector()
         servers = [InterfaceServer(conn)]
 
         try:
@@ -45,7 +46,6 @@ def main():
     fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, format=fmt)
-    #        sysrepo.configure_logging(py_logging=True)
     else:
         logging.basicConfig(level=logging.INFO, format=fmt)
 

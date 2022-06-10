@@ -1,20 +1,23 @@
 import unittest
 from unittest import mock
-from goldstone.south.gearbox.interfaces import InterfaceServer
-from goldstone.south.gearbox.gearbox import GearboxServer
-import sysrepo
-import libyang
 import asyncio
 import logging
 import os
 import json
 import time
-import itertools
-from goldstone.lib.core import ServerBase
-from concurrent.futures import ProcessPoolExecutor
-from taish import NetIf, HostIf, Module
 import base64
 import struct
+
+from taish import NetIf, HostIf, Module
+
+from goldstone.lib.core import ServerBase
+from goldstone.lib.connector.sysrepo import Connector
+from goldstone.lib.server_connector import create_server_connector
+from goldstone.lib.errors import *
+from goldstone.lib.util import call
+
+from goldstone.south.gearbox.interfaces import InterfaceServer
+from goldstone.south.gearbox.gearbox import GearboxServer
 
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
@@ -25,40 +28,22 @@ logger = logging.getLogger(__name__)
 DEFAULT_MTU = 10000
 
 
-async def to_subprocess(func):
-    loop = asyncio.get_running_loop()
-    executor = ProcessPoolExecutor(max_workers=1)
-    return await loop.run_in_executor(executor, func)
-
-
-def test_monitor():
-    def cb(xpath, notif_type, value, timestamp, priv):
-        logger.info(f"{xpath=}, {notif_type=}, {value=}, {timestamp=}, {priv=}")
-
-    conn = sysrepo.SysrepoConnection()
-    with conn.start_session() as sess:
-        sess.subscribe_notification(
-            "goldstone-interfaces",
-            "/goldstone-interfaces:*",
-            cb,
-        )
-
-        time.sleep(5)
-
-
-class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
+class TestInterfaceServerMethods(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
         logging.basicConfig(level=logging.DEBUG)
-        self.conn = sysrepo.SysrepoConnection()
+        self.conn = Connector()
+        self.server = InterfaceServer(self.conn, "", platform_info)
 
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-gearbox")
-            sess.replace_config({}, "goldstone-interfaces")
-            sess.apply_changes()
+    def test_get_default(self):
+        v = self.server.get_default("admin-status", "")
+        self.assertEqual(v, "DOWN")
 
-        self.set_logs = []
 
+class TestBase(unittest.IsolatedAsyncioTestCase):
+    def patch_taish(self):
         async def set_(*args):
             self.set_logs.append(args)
 
@@ -169,7 +154,8 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         async def get_attribute_metadata(*args, **kwargs):
             m = mock.MagicMock()
-            m.short_name = "pcs-status"
+            #            m.short_name = "pcs-status"
+            m.short_name = "oper-status"
             return m
 
         async def get_attribute_capability(*args, **kwargs):
@@ -253,68 +239,593 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
         [p.start() for p in self.patchers]
 
-    async def test_basic(self):
+    async def asyncTearDown(self):
+        [p.stop() for p in self.patchers]
+        await call(self.server.stop)
+        [t.cancel() for t in self.tasks]
+        self.conn.stop()
+
+
+class TestInterfaceServer(TestBase):
+    async def asyncSetUp(self):
+        logging.basicConfig(level=logging.DEBUG)
+        self.conn = Connector()
+
+        self.conn.delete_all("goldstone-gearbox")
+        self.conn.delete_all("goldstone-interfaces")
+        self.conn.apply()
+
+        self.set_logs = []
+
+        self.patch_taish()
 
         with open(os.path.dirname(__file__) + "/platform.json") as f:
             platform_info = json.loads(f.read())
 
         self.server = InterfaceServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await self.server.start())
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+    async def test_basic(self):
+        def test():
+            conn = Connector()
+            v = conn.get_operational("/goldstone-interfaces:interfaces/interface/name")
+            self.assertEqual(v, ["Interface1/0/1", "Interface1/1/1"])
+            v = conn.get_operational("/goldstone-interfaces:interfaces/interface")
+            self.assertEqual(
+                v["Interface1/0/1"]["state"]["associated-gearbox"],
+                "1",
+            )
+            self.assertEqual(
+                v["Interface1/0/1"]["component-connection"]["platform"]["component"],
+                "port1",
+            )
+            self.assertEqual(
+                v["Interface1/1/1"]["component-connection"]["transponder"]["module"],
+                "piu1",
+            )
+            self.assertEqual(
+                v["Interface1/1/1"]["component-connection"]["transponder"][
+                    "host-interface"
+                ],
+                "0",
+            )
+
+        await asyncio.create_task(asyncio.to_thread(test))
+
+    async def test_fec(self):
+        def test():
+            conn = Connector()
+            ifname = "Interface1/0/1"
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
+                ifname,
+            )
+            conn.apply()
+
+        await asyncio.to_thread(test)
 
         def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("operational")
-                v = sess.get_data("/goldstone-interfaces:interfaces/interface/name")
-                v = libyang.xpath_get(v, "interfaces/interface/name")
-                self.assertEqual(v, ["Interface1/0/1", "Interface1/1/1"])
-                v = sess.get_data("/goldstone-interfaces:interfaces/interface")
-                self.assertEqual(
-                    v["interfaces"]["interface"]["Interface1/0/1"]["state"][
-                        "associated-gearbox"
-                    ],
-                    "1",
-                )
-                self.assertEqual(
-                    v["interfaces"]["interface"]["Interface1/0/1"][
-                        "component-connection"
-                    ]["platform"]["component"],
-                    "port1",
-                )
-                self.assertEqual(
-                    v["interfaces"]["interface"]["Interface1/1/1"][
-                        "component-connection"
-                    ]["transponder"]["module"],
-                    "piu1",
-                )
-                self.assertEqual(
-                    v["interfaces"]["interface"]["Interface1/1/1"][
-                        "component-connection"
-                    ]["transponder"]["host-interface"],
-                    "0",
-                )
+            conn = Connector()
+            ifname = "Interface1/0/1"
+            conn.delete(f"/goldstone-interfaces:interfaces/interface[name='{ifname}']")
+            conn.apply()
 
-        tasks.append(asyncio.to_thread(test))
+        await asyncio.to_thread(test)
 
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
+        def test():
+            conn = Connector()
+            ifname = "Interface1/0/1"
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
+                ifname,
+            )
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/config/fec",
+                "RS",
+            )
+            conn.apply()
 
-        await self.server.stop()
+        await asyncio.to_thread(test)
 
-    async def test_reconcile(self):
+        def test():
+            conn = Connector()
+            ifname = "Interface1/0/1"
+            conn.delete(f"/goldstone-interfaces:interfaces/interface[name='{ifname}']")
+            conn.apply()
+
+        await asyncio.to_thread(test)
+
+    async def test_mtu(self):
+        def test():
+            conn = Connector()
+            ifname = "Interface1/0/1"
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
+                ifname,
+            )
+            conn.apply()
+
+            data = conn.get(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']",
+                include_implicit_defaults=True,
+            )
+            self.assertEqual(data["ethernet"]["config"]["mtu"], DEFAULT_MTU)
+
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/config/mtu",
+                9000,
+            )
+            conn.apply()
+
+            data = conn.get(
+                f"/goldstone-interfaces:interfaces/interface[name='{ifname}']",
+                include_implicit_defaults=True,
+            )
+            self.assertEqual(data["ethernet"]["config"]["mtu"], 9000)
+
+        await asyncio.to_thread(test)
+
+    async def test_monitor(self):
+        def test():
+            def cb(xpath, notif_type, value, timestamp, priv):
+                priv.append((xpath, notif_type, value, timestamp))
+
+            conn = Connector()
+            sconn = create_server_connector(conn, "goldstone-interfaces")
+            priv = []
+            sconn.subscribe_notification(
+                "goldstone-interfaces", "/goldstone-interfaces:*", cb, priv
+            )
+
+            time.sleep(5)
+            self.assertEqual(len(priv), 4)
+            sconn.stop()
+            conn.stop()
+
+        await asyncio.create_task(asyncio.to_thread(test))
+
+    async def test_interface_otn(self):
+        def test():
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                "Interface1/0/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/interface-type",
+                "IF_OTN",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("provision-mode", "none"),
+                    ("signal-rate", "otu4"),
+                    ("provision-mode", "none"),
+                    ("loopback-type", "none"),
+                    ("prbs-type", "none"),
+                    ("fec-type", "rs"),
+                    ("auto-negotiation", "false"),
+                    ("tx-timing-mode", "auto"),
+                ],
+            )
+
+        await asyncio.to_thread(test)
+
+    async def test_interface_macsec(self):
+        def test():
+            key = base64.b64encode(bytearray(list(range(16)))).decode()
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                "Interface1/1/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/ethernet/goldstone-static-macsec:static-macsec/config/key",
+                key,
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("provision-mode", "none"),
+                    ("provision-mode", "none"),
+                    ("loopback-type", "none"),
+                    ("prbs-type", "none"),
+                    ("fec-type", "rs"),
+                    ("tx-timing-mode", "auto"),
+                ],
+            )
+
+            xpath = "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']"
+            v = conn.get_operational(xpath, one=True)
+            self.assertTrue("static-macsec" in v["ethernet"])
+            self.assertEqual(v["ethernet"]["static-macsec"]["state"]["key"], key)
+
+        await asyncio.to_thread(test)
+
+    async def test_interface_auto_nego(self):
+        def test():
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                "Interface1/0/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/ethernet/auto-negotiate/config/enabled",
+                "true",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("provision-mode", "none"),
+                    ("provision-mode", "none"),
+                    ("loopback-type", "none"),
+                    ("prbs-type", "none"),
+                    ("tx-timing-mode", "auto"),
+                ],
+            )
+
+            xpath = "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']"
+            v = conn.get_operational(xpath, one=True)
+            self.assertEqual(
+                v["ethernet"]["auto-negotiate"]["state"]["status"],
+                ["resolved", "completed"],
+            )
+
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                "Interface1/1/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/ethernet/auto-negotiate/config/enabled",
+                "true",
+            )
+
+            # enabling auto nego is not supported for line side interface
+            with self.assertRaises(CallbackFailedError):
+                conn.apply()
+
+        await asyncio.to_thread(test)
+
+    async def test_interface_tx_timing_mode(self):
+        def test():
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                "Interface1/0/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/ethernet/goldstone-synce:synce/config/tx-timing-mode",
+                "synce-ref-clk",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("provision-mode", "none"),
+                    ("provision-mode", "none"),
+                    ("loopback-type", "none"),
+                    ("prbs-type", "none"),
+                    ("fec-type", "rs"),
+                    ("auto-negotiation", "false"),
+                ],
+            )
+
+            xpath = "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']"
+            v = conn.get_operational(xpath, one=True)
+            self.assertEqual(
+                v["ethernet"]["synce"]["state"],
+                {
+                    "tx-timing-mode": "synce-ref-clk",
+                    "current-tx-timing-mode": "synce-ref-clk",
+                },
+            )
+
+        await asyncio.to_thread(test)
+
+    async def test_pin_mode(self):
+        def test():
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                "Interface1/1/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/pin-mode",
+                "PAM4",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("provision-mode", "none"),
+                    ("provision-mode", "none"),
+                    ("loopback-type", "none"),
+                    ("prbs-type", "none"),
+                    ("fec-type", "rs"),
+                    ("tx-timing-mode", "auto"),
+                ],
+            )
+
+        await asyncio.to_thread(test)
+
+    async def test_loopback_mode(self):
+        def test():
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                "Interface1/1/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
+                "SHALLOW",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("loopback-type", "shallow"),
+                    ("provision-mode", "none"),
+                    ("provision-mode", "none"),
+                    ("prbs-type", "none"),
+                    ("fec-type", "rs"),
+                    ("tx-timing-mode", "auto"),
+                ],
+            )
+            self.set_logs = []  # clear set_logs
+
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
+                "DEEP",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("loopback-type", "deep"),
+                ],
+            )
+            self.set_logs = []  # clear set_logs
+
+            conn.delete(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("loopback-type", "none"),
+                ],
+            )
+
+        await asyncio.to_thread(test)
+
+    async def test_prbs_mode(self):
+        def test():
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                "Interface1/1/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
+                "PRBS7",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("prbs-type", "prbs7"),
+                    ("provision-mode", "none"),
+                    ("provision-mode", "none"),
+                    ("loopback-type", "none"),
+                    ("fec-type", "rs"),
+                    ("tx-timing-mode", "auto"),
+                ],
+            )
+            self.set_logs = []  # clear set_logs
+
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
+                "PRBS31",
+            )
+            conn.apply()
+
+            v = conn.get_operational(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/state/current-prbs-ber",
+                one=True,
+            )
+            v = struct.unpack(">f", base64.b64decode(v))[0]
+            self.assertAlmostEqual(v, 1.20e-03)
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("prbs-type", "prbs31"),
+                ],
+            )
+            self.set_logs = []  # clear set_logs
+
+            conn.delete(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
+            )
+            conn.apply()
+
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("prbs-type", "none"),
+                ],
+            )
+
+        await asyncio.to_thread(test)
+
+
+class TestGearboxServer(TestBase):
+    async def asyncSetUp(self):
+        logging.basicConfig(level=logging.DEBUG)
+        self.conn = Connector()
+
+        self.conn.delete_all("goldstone-gearbox")
+        self.conn.delete_all("goldstone-interfaces")
+        self.conn.apply()
+
+        self.set_logs = []
+
+        self.patch_taish()
 
         with open(os.path.dirname(__file__) + "/platform.json") as f:
             platform_info = json.loads(f.read())
 
         ifserver = InterfaceServer(self.conn, "", platform_info)
-        gbserver = GearboxServer(self.conn, ifserver)
+        self.server = GearboxServer(self.conn, ifserver)
 
+    async def test_synce_reference_clocks(self):
+
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
         self.set_logs = []
 
-        tasks = await gbserver.start()
+        def test():
+            conn = Connector()
+            conn.set("/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1")
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/synce-reference-clocks/synce-reference-clock[name='0']/config/name",
+                "0",
+            )
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/synce-reference-clocks/synce-reference-clock[name='0']/config/reference-interface",
+                "Interface1/1/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                "Interface1/1/1",
+            )
+            conn.apply()
 
+            self.assertEqual(
+                self.set_logs,
+                [
+                    ("pgmrclk-assignment", "oid:0x3000000010000,oid:0x3000000010000"),
+                    (
+                        "tributary-mapping",
+                        '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                    ),
+                ],
+            )
+
+        await asyncio.to_thread(test)
+
+    async def test_gearbox_create_connection(self):
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+        def test():
+            conn = Connector()
+            conn.set("/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1")
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
+                True,
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                "Interface1/0/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                "Interface1/1/1",
+            )
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Interface1/0/1'][line-interface='Interface1/1/1']/config/client-interface",
+                "Interface1/0/1",
+            )
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Interface1/0/1'][line-interface='Interface1/1/1']/config/line-interface",
+                "Interface1/1/1",
+            )
+            conn.apply()
+
+        await asyncio.to_thread(test)
+
+    async def test_gearbox_enable_flexible_connection(self):
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+        def test():
+            conn = Connector()
+            conn.set("/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1")
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
+                True,
+            )
+            conn.apply()
+
+            self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
+            self.set_logs = []  # clear set_logs
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
+                False,
+            )
+            conn.apply()
+            self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
+
+        await asyncio.to_thread(test)
+
+    async def test_invalid_creation(self):
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+        def test():
+            conn = Connector()
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='10']/config/name", "10"
+            )
+            with self.assertRaises(CallbackFailedError):
+                conn.apply()
+
+        await asyncio.to_thread(test)
+
+    async def test_oper_cb(self):
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+        def test_oper_cb():
+            conn = Connector()
+
+            data = conn.get_operational("/goldstone-gearbox:gearboxes/gearbox")
+            self.assertEqual(len(data), 1)
+            data = list(data)[0]
+            self.assertEqual(data["state"]["admin-status"], "UP")
+            self.assertEqual(data["state"]["oper-status"], "UP")
+            self.assertEqual(data["state"]["enable-flexible-connection"], False)
+            connection = list(data["connections"]["connection"])
+            self.assertEqual(len(connection), 1)
+            self.assertEqual(connection[0]["client-interface"], "Interface1/0/1")
+            self.assertEqual(connection[0]["line-interface"], "Interface1/1/1")
+
+            clock = list(data["synce-reference-clocks"]["synce-reference-clock"])
+            self.assertEqual(len(clock), 2)
+            self.assertEqual(clock[0]["state"]["reference-interface"], "Interface1/0/1")
+            self.assertEqual(
+                clock[0]["state"]["component-connection"],
+                {"input-reference": "0", "dpll": "1"},
+            )
+            self.assertEqual(clock[1]["state"]["reference-interface"], "Interface1/1/1")
+            self.assertEqual(
+                clock[1]["state"]["component-connection"],
+                {"input-reference": "1", "dpll": "1"},
+            )
+
+        await asyncio.to_thread(test_oper_cb)
+
+    async def test_reconcile(self):
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
         self.assertEqual(
             self.set_logs,
             [
@@ -340,28 +851,19 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-        gbserver.stop()
-        await asyncio.gather(*tasks)
-        gbserver = GearboxServer(self.conn, ifserver)
-
-        self.set_logs = []
-
+    async def test_reconcile_with_admin_status_down(self):
         def setup():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
-                )
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/admin-status",
-                    "DOWN",
-                )
-                sess.apply_changes()
+            conn = Connector()
+            conn.set("/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1")
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/admin-status",
+                "DOWN",
+            )
+            conn.apply()
 
         await asyncio.to_thread(setup)
 
-        tasks = await gbserver.start()
-
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
         self.assertEqual(
             self.set_logs,
             [
@@ -386,28 +888,20 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("admin-status", "down"),
             ],
         )
-        gbserver.stop()
-        asyncio.gather(*tasks)
-        gbserver = GearboxServer(self.conn, ifserver)
 
-        self.set_logs = []
-
+    async def test_reconcile_with_admin_status_up(self):
         def setup():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
-                )
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/admin-status",
-                    "UP",
-                )
-                sess.apply_changes()
+            conn = Connector()
+            conn.set("/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1")
+            conn.set(
+                "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/admin-status",
+                "UP",
+            )
+            conn.apply()
 
         await asyncio.to_thread(setup)
 
-        tasks = await gbserver.start()
-
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
         self.assertEqual(
             self.set_logs,
             [
@@ -433,28 +927,22 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-        gbserver.stop()
-        await asyncio.gather(*tasks)
-        gbserver = GearboxServer(self.conn, ifserver)
-
-        self.set_logs = []
-
+    async def test_reconcile_with_intf_admin_status_up(self):
         def setup():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
-                    "Interface1/0/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/admin-status",
-                    "UP",
-                )
-                sess.apply_changes()
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
+                "Interface1/0/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/admin-status",
+                "UP",
+            )
+            conn.apply()
 
         await asyncio.to_thread(setup)
 
-        tasks = await gbserver.start()
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
 
         self.assertEqual(
             self.set_logs,
@@ -480,739 +968,3 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
                 ("admin-status", "up"),
             ],
         )
-
-        gbserver.stop()
-        await asyncio.gather(*tasks)
-
-    async def test_fec(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                ifname = "Interface1/0/1"
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
-                    ifname,
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                ifname = "Interface1/0/1"
-                sess.delete_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                ifname = "Interface1/0/1"
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
-                    ifname,
-                )
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/config/fec",
-                    "RS",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                ifname = "Interface1/0/1"
-                sess.delete_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        [task.cancel() for task in tasks]
-
-        await ifserver.stop()
-
-    async def test_mtu(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                ifname = "Interface1/0/1"
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
-                    ifname,
-                )
-                sess.apply_changes()
-
-            with self.conn.start_session("running") as sess:
-                data = sess.get_data(
-                    "/goldstone-interfaces:interfaces", include_implicit_defaults=True
-                )
-                self.assertEqual(len(data["interfaces"]["interface"]), 1)
-                data = list(data["interfaces"]["interface"])[0]
-                self.assertEqual(data["ethernet"]["config"]["mtu"], DEFAULT_MTU)
-
-        await asyncio.to_thread(test)
-
-        def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                ifname = "Interface1/0/1"
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/config/name",
-                    ifname,
-                )
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{ifname}']/ethernet/config/mtu",
-                    9000,
-                )
-
-                sess.apply_changes()
-
-            with self.conn.start_session("running") as sess:
-                data = sess.get_data(
-                    "/goldstone-interfaces:interfaces", include_implicit_defaults=True
-                )
-                self.assertEqual(len(data["interfaces"]["interface"]), 1)
-                data = list(data["interfaces"]["interface"])[0]
-                self.assertEqual(data["ethernet"]["config"]["mtu"], 9000)
-
-        await asyncio.to_thread(test)
-
-        [task.cancel() for task in tasks]
-
-        await ifserver.stop()
-
-    async def test_monitor(self):
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        tasks.append(asyncio.create_task(to_subprocess(test_monitor)))
-
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
-
-    async def test_gearbox_oper_cb(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-        gbserver = GearboxServer(self.conn, ifserver)
-
-        tasks = await gbserver.start()
-
-        self.set_logs = []  # clear set_logs
-
-        def test_oper_cb():
-            with self.conn.start_session("operational") as sess:
-                data = sess.get_data("/goldstone-gearbox:gearboxes/gearbox")
-                self.assertEqual(len(data["gearboxes"]["gearbox"]), 1)
-                data = list(data["gearboxes"]["gearbox"])[0]
-                self.assertEqual(data["state"]["admin-status"], "UP")
-                self.assertEqual(data["state"]["oper-status"], "UP")
-                self.assertEqual(data["state"]["enable-flexible-connection"], False)
-                connection = list(data["connections"]["connection"])
-                self.assertEqual(len(connection), 1)
-                self.assertEqual(connection[0]["client-interface"], "Interface1/0/1")
-                self.assertEqual(connection[0]["line-interface"], "Interface1/1/1")
-
-                clock = list(data["synce-reference-clocks"]["synce-reference-clock"])
-                self.assertEqual(len(clock), 2)
-                self.assertEqual(
-                    clock[0]["state"]["reference-interface"], "Interface1/0/1"
-                )
-                self.assertEqual(
-                    clock[0]["state"]["component-connection"],
-                    {"input-reference": "0", "dpll": "1"},
-                )
-                self.assertEqual(
-                    clock[1]["state"]["reference-interface"], "Interface1/1/1"
-                )
-                self.assertEqual(
-                    clock[1]["state"]["component-connection"],
-                    {"input-reference": "1", "dpll": "1"},
-                )
-
-        await asyncio.to_thread(test_oper_cb)
-        gbserver.stop()
-        await asyncio.gather(*tasks)
-
-    async def test_gearbox_invalid_creation(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-        gbserver = GearboxServer(self.conn, ifserver)
-
-        tasks = await gbserver.start()
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='10']/config/name", "10"
-                )
-                with self.assertRaises(sysrepo.SysrepoCallbackFailedError):
-                    sess.apply_changes()
-
-        await asyncio.to_thread(test)
-        gbserver.stop()
-        await asyncio.gather(*tasks)
-
-    async def test_gearbox_enable_flexible_connection(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-        gbserver = GearboxServer(self.conn, ifserver)
-
-        tasks = await gbserver.start()
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
-                )
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
-                    True,
-                )
-                sess.apply_changes()
-                self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
-                self.set_logs = []  # clear set_logs
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
-                    False,
-                )
-                sess.apply_changes()
-                self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
-
-        await asyncio.to_thread(test)
-        gbserver.stop()
-        await asyncio.gather(*tasks)
-
-    async def test_gearbox_create_connection(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-        gbserver = GearboxServer(self.conn, ifserver)
-
-        tasks = await gbserver.start()
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
-                )
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
-                    True,
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
-                    "Interface1/0/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
-                    "Interface1/1/1",
-                )
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Interface1/0/1'][line-interface='Interface1/1/1']/config/client-interface",
-                    "Interface1/0/1",
-                )
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/connections/connection[client-interface='Interface1/0/1'][line-interface='Interface1/1/1']/config/line-interface",
-                    "Interface1/1/1",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-        gbserver.stop()
-        await asyncio.gather(*tasks)
-
-    async def test_interface_otn(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
-                    "Interface1/0/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/interface-type",
-                    "IF_OTN",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "none"),
-                ("signal-rate", "otu4"),
-                ("provision-mode", "none"),
-                ("loopback-type", "none"),
-                ("prbs-type", "none"),
-                ("fec-type", "rs"),
-                ("auto-negotiation", "false"),
-                ("tx-timing-mode", "auto"),
-            ],
-        )
-
-    async def test_interface_macsec(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        self.set_logs = []  # clear set_logs
-        key = base64.b64encode(bytearray(list(range(16)))).decode()
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
-                    "Interface1/1/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/ethernet/goldstone-static-macsec:static-macsec/config/key",
-                    key,
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "none"),
-                ("provision-mode", "none"),
-                ("loopback-type", "none"),
-                ("prbs-type", "none"),
-                ("fec-type", "rs"),
-                ("tx-timing-mode", "auto"),
-            ],
-        )
-
-        def test():
-            with self.conn.start_session("operational") as sess:
-                xpath = (
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']"
-                )
-                v = sess.get_data(xpath)
-                v = libyang.xpath_get(v, xpath)
-                self.assertTrue("static-macsec" in v["ethernet"])
-                self.assertEqual(v["ethernet"]["static-macsec"]["state"]["key"], key)
-
-        await asyncio.to_thread(test)
-
-    async def test_interface_auto_nego(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
-                    "Interface1/0/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/ethernet/auto-negotiate/config/enabled",
-                    "true",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "none"),
-                ("provision-mode", "none"),
-                ("loopback-type", "none"),
-                ("prbs-type", "none"),
-                ("tx-timing-mode", "auto"),
-            ],
-        )
-
-        def test():
-            with self.conn.start_session("operational") as sess:
-                xpath = (
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']"
-                )
-                v = sess.get_data(xpath)
-                v = libyang.xpath_get(v, xpath)
-                self.assertEqual(
-                    v["ethernet"]["auto-negotiate"]["state"]["status"],
-                    ["resolved", "completed"],
-                )
-
-        await asyncio.to_thread(test)
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
-                    "Interface1/1/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/ethernet/auto-negotiate/config/enabled",
-                    "true",
-                )
-
-                # enabling auto nego is not supported for line side interface
-                with self.assertRaises(sysrepo.SysrepoCallbackFailedError):
-                    sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-    async def test_interface_tx_timing_mode(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/config/name",
-                    "Interface1/0/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']/ethernet/goldstone-synce:synce/config/tx-timing-mode",
-                    "synce-ref-clk",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "none"),
-                ("provision-mode", "none"),
-                ("loopback-type", "none"),
-                ("prbs-type", "none"),
-                ("fec-type", "rs"),
-                ("auto-negotiation", "false"),
-            ],
-        )
-
-        def test():
-            with self.conn.start_session("operational") as sess:
-                xpath = (
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']"
-                )
-                v = sess.get_data(xpath)
-                v = libyang.xpath_get(v, xpath)
-                self.assertEqual(
-                    v["ethernet"]["synce"]["state"],
-                    {
-                        "tx-timing-mode": "synce-ref-clk",
-                        "current-tx-timing-mode": "synce-ref-clk",
-                    },
-                )
-
-        await asyncio.to_thread(test)
-
-    async def test_pin_mode(self):
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
-                    "Interface1/1/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/pin-mode",
-                    "PAM4",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "none"),
-                ("provision-mode", "none"),
-                ("loopback-type", "none"),
-                ("prbs-type", "none"),
-                ("fec-type", "rs"),
-                ("tx-timing-mode", "auto"),
-            ],
-        )
-
-    async def test_loopback_mode(self):
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
-                    "Interface1/1/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
-                    "SHALLOW",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("loopback-type", "shallow"),
-                ("provision-mode", "none"),
-                ("provision-mode", "none"),
-                ("prbs-type", "none"),
-                ("fec-type", "rs"),
-                ("tx-timing-mode", "auto"),
-            ],
-        )
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
-                    "DEEP",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("loopback-type", "deep"),
-            ],
-        )
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.delete_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("loopback-type", "none"),
-            ],
-        )
-        self.set_logs = []  # clear set_logs
-
-    async def test_prbs_mode(self):
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-
-        tasks = list(asyncio.create_task(c) for c in await ifserver.start())
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
-                    "Interface1/1/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
-                    "PRBS7",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("prbs-type", "prbs7"),
-                ("provision-mode", "none"),
-                ("provision-mode", "none"),
-                ("loopback-type", "none"),
-                ("fec-type", "rs"),
-                ("tx-timing-mode", "auto"),
-            ],
-        )
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
-                    "PRBS31",
-                )
-                sess.apply_changes()
-
-                sess.switch_datastore("operational")
-                v = sess.get_data(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/state/current-prbs-ber",
-                )
-                v = libyang.xpath_get(
-                    v,
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/state/current-prbs-ber",
-                )
-                v = struct.unpack(">f", base64.b64decode(v))[0]
-                self.assertAlmostEqual(v, 1.20e-03)
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("prbs-type", "prbs31"),
-            ],
-        )
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.delete_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("prbs-type", "none"),
-            ],
-        )
-        self.set_logs = []  # clear set_logs
-
-    async def test_synce_reference_clocks(self):
-
-        with open(os.path.dirname(__file__) + "/platform.json") as f:
-            platform_info = json.loads(f.read())
-
-        ifserver = InterfaceServer(self.conn, "", platform_info)
-        gbserver = GearboxServer(self.conn, ifserver)
-
-        tasks = await gbserver.start()
-
-        self.set_logs = []  # clear set_logs
-
-        def test():
-            with self.conn.start_session("running") as sess:
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/name", "1"
-                )
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/synce-reference-clocks/synce-reference-clock[name='0']/config/name",
-                    "0",
-                )
-                sess.set_item(
-                    "/goldstone-gearbox:gearboxes/gearbox[name='1']/synce-reference-clocks/synce-reference-clock[name='0']/config/reference-interface",
-                    "Interface1/1/1",
-                )
-                sess.set_item(
-                    "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
-                    "Interface1/1/1",
-                )
-                sess.apply_changes()
-
-        await asyncio.to_thread(test)
-        gbserver.stop()
-        await asyncio.gather(*tasks)
-
-        self.assertEqual(
-            self.set_logs,
-            [
-                ("pgmrclk-assignment", "oid:0x3000000010000,oid:0x3000000010000"),
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-            ],
-        )
-
-    async def asyncTearDown(self):
-        [p.stop() for p in self.patchers]
-        self.conn.disconnect()

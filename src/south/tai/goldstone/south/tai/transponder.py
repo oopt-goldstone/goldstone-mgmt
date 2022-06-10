@@ -1,4 +1,3 @@
-import sysrepo
 import logging
 import taish
 import asyncio
@@ -7,6 +6,7 @@ import struct
 import base64
 import libyang
 from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
+from goldstone.lib.errors import InvalArgError, LockedError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class TAIHandler(ChangeHandler):
         xpath, module = await self.server.get_module_from_xpath(self.change.xpath)
 
         if module == None:
-            raise sysrepo.SysrepoInvalArgError("Invalid Transponder name")
+            raise InvalArgError("Invalid Transponder name")
 
         self.module = module
         self.xpath = xpath
@@ -34,13 +34,13 @@ class TAIHandler(ChangeHandler):
         try:
             cap = await self.obj.get_attribute_capability(self.attr_name)
         except taish.TAIException as e:
-            raise sysrepo.SysrepoInvalArgError(e.msg)
+            raise InvalArgError(e.msg)
 
         logger.info(f"cap: {cap}")
 
         if self.type == "deleted":
             if cap.default_value == "":  # and is_deleted
-                raise sysrepo.SysrepoInvalArgError(
+                raise InvalArgError(
                     f"no default value. cannot remove the configuration"
                 )
             if self.attr_name == "admin-status":
@@ -50,20 +50,14 @@ class TAIHandler(ChangeHandler):
         else:
             v = self.change.value
             if cap.min != "" and float(cap.min) > float(v):
-                raise sysrepo.SysrepoInvalArgError(
-                    f"minimum {k} value is {cap.min}. given {v}"
-                )
+                raise InvalArgError(f"minimum {k} value is {cap.min}. given {v}")
 
             if cap.max != "" and float(cap.max) < float(v):
-                raise sysrepo.SysrepoInvalArgError(
-                    f"maximum {k} value is {cap.max}. given {v}"
-                )
+                raise InvalArgError(f"maximum {k} value is {cap.max}. given {v}")
 
             valids = cap.supportedvalues
             if len(valids) > 0 and v not in valids:
-                raise sysrepo.SysrepoInvalArgError(
-                    f"supported values are {valids}. given {v}"
-                )
+                raise InvalArgError(f"supported values are {valids}. given {v}")
 
             meta = await self.obj.get_attribute_metadata(self.attr_name)
             if meta.usage == "<bool>":
@@ -124,7 +118,7 @@ def attr_tai2yang(attr, meta, schema):
 
     # we need special handling for float value since YANG doesn't
     # have float..
-    base = schema.type().basename()
+    base = schema.type()
     if base == "decimal64":
         return json.loads(attr)
     elif base == "binary":
@@ -308,7 +302,7 @@ class TransponderServer(ServerBase):
             except:
                 module = await self.taish.create_module(location, attrs=attrs)
             else:
-                # reconcile with the sysrepo configuration
+                # reconcile with the running configuration
                 logger.debug(
                     f"module({location}) already exists. updating attributes.."
                 )
@@ -332,7 +326,7 @@ class TransponderServer(ServerBase):
                 except:
                     netif = await module.create_netif(index, attrs=attrs)
                 else:
-                    # reconcile with the sysrepo configuration
+                    # reconcile with the running configuration
                     logger.debug(
                         f"module({location})/netif({index}) already exists. updating attributes.."
                     )
@@ -354,7 +348,7 @@ class TransponderServer(ServerBase):
                 except:
                     hostif = await module.create_hostif(index, attrs=attrs)
                 else:
-                    # reconcile with the sysrepo configuration
+                    # reconcile with the running configuration
                     logger.debug(
                         f"module({location})/hostif({index}) already exists. updating attributes.."
                     )
@@ -449,7 +443,7 @@ class TransponderServer(ServerBase):
 
     def pre(self, user):
         if self.is_initializing:
-            raise sysrepo.SysrepoLockedError("initializing")
+            raise LockedError("initializing")
 
     async def start(self):
         # get hardware configuration from platform datastore ( ONLP south must be running )
@@ -487,11 +481,10 @@ class TransponderServer(ServerBase):
             except Exception as e:
                 logger.error(f"failed to initialize PIU: {e}")
 
-        self.sess.subscribe_notification(
+        self.conn.subscribe_notification(
             "goldstone-platform",
             f"/goldstone-platform:piu-notify-event",
             self.notification_cb,
-            asyncio_register=True,
         )
 
         async def ping():
@@ -510,12 +503,9 @@ class TransponderServer(ServerBase):
             obj = notification["obj"]
             msg = notification["msg"]
 
-            self.sess.switch_datastore("running")
-            ly_ctx = self.sess.get_ly_ctx()
-
             try:
-                data = self.sess.get_data(xpath, include_implicit_defaults=True)
-            except sysrepo.errors.SysrepoNotFoundError as e:
+                data = self.get_running_data(xpath, include_implicit_defaults=True)
+            except NotFoundError as e:
                 return
 
             notify = libyang.xpath_get(data, xpath)
@@ -528,7 +518,7 @@ class TransponderServer(ServerBase):
                 meta = await obj.get_attribute_metadata(attr.attr_id)
                 try:
                     xpath = f"/{eventname}/goldstone-transponder:{meta.short_name}"
-                    schema = list(ly_ctx.find_path(xpath))[0]
+                    schema = self.conn.find_node(xpath)
                     data = attr_tai2yang(attr.value, meta, schema)
                     keys.append(meta.short_name)
                     if type(data) == list and len(data) == 0:
@@ -537,7 +527,7 @@ class TransponderServer(ServerBase):
                         )
                         continue
                     v[meta.short_name] = data
-                except libyang.util.LibyangError as e:
+                except Error as e:
                     logger.warning(f"{xpath}: {e}")
                     continue
 
@@ -615,7 +605,7 @@ class TransponderServer(ServerBase):
 
         :raises InvalidXPath:
             If xpath can't be handled
-        :raises EmptryReturn:
+        :raises EmptyReturn:
             If operational datastore pull request callback doesn't need to return
             anything
         """
@@ -633,10 +623,9 @@ class TransponderServer(ServerBase):
         if len(xpath) == 0:
             return module, None, None
 
-        ly_ctx = self.sess.get_ly_ctx()
-        get_path = lambda l: list(
-            ly_ctx.find_path("".join("/goldstone-transponder:" + v for v in l))
-        )[0]
+        get_path = lambda l: self.conn.find_node(
+            "".join("/goldstone-transponder:" + v for v in l)
+        )
 
         if xpath[0][1] in ["network-interface", "host-interface"]:
 
@@ -660,7 +649,7 @@ class TransponderServer(ServerBase):
                 return module, obj, None
 
             if xpath[1][1] == "config":
-                raise EmptryReturn()
+                raise EmptyReturn()
             elif xpath[1][1] == "state":
                 if len(xpath) == 2 or xpath[2][1] == "*":
                     return module, obj, None
@@ -668,7 +657,7 @@ class TransponderServer(ServerBase):
                 return module, obj, attr
 
         elif xpath[0][1] == "config":
-            raise EmptryReturn()
+            raise EmptyReturn()
         elif xpath[0][1] == "state":
             if len(xpath) == 1 or xpath[1][1] == "*":
                 return module, None, None
@@ -698,7 +687,7 @@ class TransponderServer(ServerBase):
         except InvalidXPath:
             logger.error(f"invalid xpath: {xpath}")
             return {}
-        except EmptryReturn:
+        except EmptyReturn:
             return {}
 
         logger.debug(
@@ -727,10 +716,9 @@ class TransponderServer(ServerBase):
                     }
                 }
 
-        ly_ctx = self.sess.get_ly_ctx()
-        get_path = lambda l: list(
-            ly_ctx.find_path("".join("/goldstone-transponder:" + v for v in l))
-        )[0]
+        get_path = lambda l: self.conn.find_node(
+            "".join("/goldstone-transponder:" + v for v in l)
+        )
 
         module_schema = get_path(["modules", "module", "state"])
         netif_schema = get_path(["modules", "module", "network-interface", "state"])

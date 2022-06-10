@@ -2,7 +2,8 @@ from .k8s_api import incluster_apis
 import swsssdk
 import logging
 import asyncio
-import sysrepo
+
+from goldstone.lib.errors import InvalArgError, InternalError, UnsupportedError
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def speed_yang_to_redis(yang_val):
     elif "M" in yang_val:
         return int(yang_val.split("M")[0])
     else:
-        raise sysrepo.SysrepoInvalArgError(f"unsupported speed: {yang_val}")
+        raise InvalArgError(f"unsupported speed: {yang_val}")
 
 
 def speed_redis_to_yang(speed):
@@ -69,7 +70,7 @@ def speed_redis_to_yang(speed):
         return "SPEED_1000M"
     elif speed == "100":
         return "SPEED_100M"
-    raise sysrepo.SysrepoInvalArgError(f"unsupported speed: {speed}")
+    raise InvalArgError(f"unsupported speed: {speed}")
 
 
 def speed_bcm_to_yang(speed):
@@ -176,7 +177,7 @@ class SONiC(object):
 
     def remove_vlan(self, vid):
         if len(self.get_vlan_members(vid)) > 0:
-            raise sysrepo.SysrepoInvalArgError(f"vlan {vid} has dependencies")
+            raise InvalArgError(f"vlan {vid} has dependencies")
         db = self.sonic_db.CONFIG_DB
         self.sonic_db.delete(db, f"VLAN|Vlan{vid}")
 
@@ -184,7 +185,7 @@ class SONiC(object):
         config = self.hgetall("CONFIG_DB", f"VLAN|Vlan{vid}")
 
         if not config:
-            raise sysrepo.SysrepoInvalArgError(f"vlan {vid} not found")
+            raise InvalArgError(f"vlan {vid} not found")
 
         if "members@" in config:
             ifs = set(config["members@"].split(","))

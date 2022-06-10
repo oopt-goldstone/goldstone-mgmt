@@ -53,7 +53,7 @@ EXPECTED_RUN_CONF = """interface Interface0
 !
 interface Interface1
   auto-negotiate enable
-  auto-negotiate advatise 100G
+  auto-negotiate advertise 100G
   switchport mode trunk vlan 100
   switchport mode trunk vlan 200
   ufd 1 downlink

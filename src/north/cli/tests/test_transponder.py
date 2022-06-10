@@ -10,7 +10,7 @@ libpath = os.path.join(os.path.dirname(__file__), "../../../lib")
 sys.path.insert(0, libpath)
 
 from goldstone.lib.connector.sysrepo import Connector
-from goldstone.lib.connector import Error
+from goldstone.lib.errors import Error
 
 from goldstone.north.cli.root import Root
 from goldstone.north.cli import transponder

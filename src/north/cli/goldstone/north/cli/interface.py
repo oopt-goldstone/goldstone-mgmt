@@ -378,6 +378,7 @@ def set_interface_type(session, ifnames, value):
         else:
             session.delete(f"{xpath}/ethernet/config/interface-type")
             session.delete(f"{xpath}/config/interface-type")
+
     session.apply()
 
 
@@ -824,7 +825,7 @@ class AutoNegoCommand(ConfigCommand):
         v = config.get("advertised-speeds")
         if v:
             v = ",".join(speed_yang_to_human(s) for s in v)
-            lines.append(f"auto-negotiate advatise {v}")
+            lines.append(f"auto-negotiate advertise {v}")
 
         return lines
 

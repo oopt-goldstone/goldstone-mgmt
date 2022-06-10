@@ -1,8 +1,9 @@
 from .base import (
     Connector as BaseConnector,
     Session as BaseSession,
-    Error,
 )
+
+from goldstone.lib.errors import Error
 
 import libyang
 import logging

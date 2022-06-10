@@ -1,11 +1,12 @@
 import unittest
-from goldstone.south.sonic.interfaces import InterfaceServer
-import sysrepo
 import libyang
 import asyncio
 import logging
 import os
 import json
+
+from goldstone.south.sonic.interfaces import InterfaceServer
+from goldstone.lib.connector.sysrepo import Connector
 
 
 class MockK8S(object):
@@ -55,12 +56,10 @@ class MockSONiC(object):
 class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.conn = sysrepo.SysrepoConnection()
+        self.conn = Connector()
 
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            sess.replace_config({}, "goldstone-interfaces")
-            sess.apply_changes()
+        self.conn.delete_all("goldstone-interfaces")
+        self.conn.apply()
 
         with open(os.path.dirname(__file__) + "/platform.json") as f:
             platform_info = json.loads(f.read())
@@ -77,12 +76,11 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_ifname(self):
         def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("operational")
-                data = sess.get_data("/goldstone-interfaces:interfaces/interface/name")
-                self.assertEqual(
-                    len(data["interfaces"]["interface"]), len(self.sonic.get_ifnames())
-                )
+            conn = Connector()
+            data = conn.get_operational(
+                "/goldstone-interfaces:interfaces/interface/name"
+            )
+            self.assertEqual(len(data), len(self.sonic.get_ifnames()))
 
         self.tasks.append(asyncio.create_task(asyncio.to_thread(test)))
 
@@ -94,22 +92,23 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_set_admin_up(self):
         def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
-                name = "Ethernet1_1"
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/name",
-                    name,
-                )
-                sess.set_item(
-                    f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
-                    "UP",
-                )
-                sess.apply_changes()
+            conn = Connector()
+            name = "Ethernet1_1"
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/name",
+                name,
+            )
+            conn.set(
+                f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
+                "UP",
+            )
+            conn.apply()
 
         self.tasks.append(asyncio.create_task(asyncio.to_thread(test)))
 
-        done, _ = await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(
+            self.tasks, return_when=asyncio.FIRST_COMPLETED
+        )
         for task in done:
             e = task.exception()
             if e:
@@ -124,28 +123,25 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_clear_ds(self):
         def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("running")
+            conn = Connector()
 
-                name = "Ethernet1_1"
-                prefix = (
-                    f"/goldstone-interfaces:interfaces/interface[name='{name}']/config"
-                )
+            name = "Ethernet1_1"
+            prefix = f"/goldstone-interfaces:interfaces/interface[name='{name}']/config"
 
-                sess.set_item(f"{prefix}/name", name)
-                sess.set_item(f"{prefix}/admin-status", "UP")
-                sess.apply_changes()
+            conn.set(f"{prefix}/name", name)
+            conn.set(f"{prefix}/admin-status", "UP")
+            conn.apply()
 
-                self.sonic.logs = []
+            self.sonic.logs = []
 
-                async def post(*args):
-                    user = args[0]
-                    self.assertFalse(user.get("update-sonic"))
+            async def post(*args):
+                user = args[0]
+                self.assertFalse(user.get("update-sonic"))
 
-                self.server.post = post
+            self.server.post = post
 
-                sess.replace_config({}, "goldstone-interfaces")
-                sess.apply_changes()
+            conn.delete_all("goldstone-interfaces")
+            conn.apply()
 
         self.tasks.append(asyncio.create_task(asyncio.to_thread(test)))
 
@@ -160,20 +156,25 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_component_connection(self):
         def test():
-            with self.conn.start_session() as sess:
-                sess.switch_datastore("operational")
-                data = sess.get_data("/goldstone-interfaces:interfaces/interface")
-                v = libyang.xpath_get(data, "interfaces/interface[name='Ethernet1_1']")
-                self.assertEqual(
-                    v["component-connection"]["platform"]["component"], "port1"
-                )
-                v = libyang.xpath_get(data, "interfaces/interface[name='Ethernet13_1']")
-                self.assertEqual(
-                    v["component-connection"]["transponder"]["module"], "piu1"
-                )
-                self.assertEqual(
-                    v["component-connection"]["transponder"]["host-interface"], "0"
-                )
+            conn = Connector()
+            data = conn.get_operational(
+                "/goldstone-interfaces:interfaces/interface[name='Ethernet1_1']",
+                one=True,
+            )
+            self.assertEqual(
+                data["component-connection"]["platform"]["component"], "port1"
+            )
+
+            data = conn.get_operational(
+                "/goldstone-interfaces:interfaces/interface[name='Ethernet13_1']",
+                one=True,
+            )
+            self.assertEqual(
+                data["component-connection"]["transponder"]["module"], "piu1"
+            )
+            self.assertEqual(
+                data["component-connection"]["transponder"]["host-interface"], "0"
+            )
 
         self.tasks.append(asyncio.create_task(asyncio.to_thread(test)))
 
@@ -187,7 +188,7 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.server.stop()
         self.tasks = []
         self.sonic.logs = []
-        self.conn.disconnect()
+        self.conn.stop()
 
 
 if __name__ == "__main__":

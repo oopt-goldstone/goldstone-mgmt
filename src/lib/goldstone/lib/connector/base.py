@@ -1,22 +1,7 @@
 import sys
+import libyang
 
-
-class Error(Exception):
-    pass
-
-
-class NotSupported(Error):
-    pass
-
-
-class DatastoreLocked(Error):
-    def __init__(self, msg, what):
-        self.msg = msg
-        super().__init__(what)
-
-
-class NotFound(Error):
-    pass
+from goldstone.lib.errors import UnsupportedError
 
 
 class Node(object):
@@ -38,12 +23,19 @@ class Node(object):
     def range(self):
         return self.node.type().range()
 
+    def default(self):
+        return self.node.default()
+
     def keys(self):
         keys = getattr(self.node, "keys", None)
         if keys is not None:
             return keys()
         else:
             return []
+
+    def __iter__(self):
+        for v in self.node.children():
+            yield Node(v)
 
 
 class Session(object):
@@ -53,53 +45,58 @@ class Session(object):
 class Connector(object):
     @property
     def type(self):
-        raise "base"
+        return "base"
 
     def new_session(self, ds):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     @property
     def models(self):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def find_node(self, xpath):
         ctx = getattr(self, "ctx", None)
         if ctx == None:
             fname = sys._getframe().f_code.co_name
-            raise NotSupported(f"{fname}() not supported by {self.type} connector")
-        node = [n for n in ctx.find_path(xpath)]
+            raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
+        try:
+            node = [n for n in ctx.find_path(xpath)]
+        except libyang.util.LibyangError:
+            return None
+        if len(node) == 0:
+            return None
         assert len(node) == 1
         return Node(node[0])
 
     def save(self, model):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def rpc(self, xpath, args):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def set(self, xpath, value):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def delete(self, xpath):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def delete_all(self, model):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def apply(self):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def discard_changes(self):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def get(
         self,
@@ -112,7 +109,7 @@ class Connector(object):
     ):
 
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def get_operational(
         self,
@@ -123,8 +120,8 @@ class Connector(object):
         one=False,
     ):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 
     def get_startup(self, xpath):
         fname = sys._getframe().f_code.co_name
-        raise NotSupported(f"{fname}() not supported by {self.type} connector")
+        raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
