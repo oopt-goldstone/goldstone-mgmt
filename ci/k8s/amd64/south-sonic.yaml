@@ -73,7 +73,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: sonic
-              image: docker.io/gs-test/gs-mgmt-south-sonic:latest-amd64
+              image: docker.io/gs-test/south-sonic:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-sonic']
               args: ['--verbose', "$(PLATFORM_FILE)"]

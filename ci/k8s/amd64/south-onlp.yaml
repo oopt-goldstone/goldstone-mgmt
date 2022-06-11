@@ -47,7 +47,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: onlp
-              image: docker.io/gs-test/gs-mgmt-south-onlp:latest-amd64
+              image: docker.io/gs-test/south-onlp:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-onlp']
               args: ['--verbose']

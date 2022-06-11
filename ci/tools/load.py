@@ -58,21 +58,20 @@ def main(host, username, password, arch, image_prefix, image_tag):
             sys.exit(1)
 
         images = [
-            "gs-mgmt",
-            "gs-mgmt-netopeer2",
-            "gs-mgmt-snmpd",
-            "gs-mgmt-south-onlp",
-            "gs-mgmt-south-tai",
-            "gs-mgmt-north-notif",
-            "gs-mgmt-north-snmp",
-            "gs-mgmt-xlate-openconfig",
+            "north-netconf",
+            "snmpd",
+            "south-onlp",
+            "south-tai",
+            "north-notif",
+            "north-snmp",
+            "xlate-oc",
         ]
 
         if arch == "amd64":
-            images.append("gs-mgmt-south-sonic")
+            images.append("south-sonic")
         elif arch == "arm64":
-            images.append("gs-mgmt-south-gearbox")
-            images.append("gs-mgmt-south-dpll")
+            images.append("south-gearbox")
+            images.append("south-dpll")
 
         images = " ".join(f"{image_prefix}{name}:{image_tag}" for name in images)
 
@@ -110,7 +109,7 @@ def main(host, username, password, arch, image_prefix, image_tag):
         else:
             raise Exception("prep-gs-mgmt didn't get deployed")
 
-        host_image = f"{image_prefix}gs-mgmt-host:{image_tag}"
+        host_image = f"{image_prefix}host-packages:{image_tag}"
         d = f"builds/{arch}/deb"
         run(f"rm -rf {d} && mkdir -p {d}")
         run(
@@ -182,9 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--username", default="root")
     parser.add_argument("--password", default="x1")
     parser.add_argument("--arch", default="amd64", choices=["amd64", "arm64"])
-    parser.add_argument(
-        "--image-prefix", default="ghcr.io/oopt-goldstone/goldstone-mgmt"
-    )
+    parser.add_argument("--image-prefix", default="ghcr.io/oopt-goldstone/mgmt")
     parser.add_argument("--image-tag", default="")
 
     args = parser.parse_args()

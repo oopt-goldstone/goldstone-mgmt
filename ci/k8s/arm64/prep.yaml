@@ -8,7 +8,7 @@ spec:
             restartPolicy: Never
             initContainers: # run prep-sysrepo and prep-np sequentially
             - name: prep-sysrepo
-              image: docker.io/gs-test/gs-mgmt:latest-arm64
+              image: docker.io/gs-test/south-onlp:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ["gs-yang.py", "--install", "south-onlp", "south-gearbox", "south-dpll", "south-tai", "south-system", "xlate-oc"]
               volumeMounts:
@@ -17,7 +17,7 @@ spec:
               - name: sysrepo
                 mountPath: /var/lib/sysrepo
             - name: prep-np
-              image: docker.io/gs-test/gs-mgmt-netopeer2:latest-arm64
+              image: docker.io/gs-test/north-netconf:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ['sh', '-c', '$NP2/setup.sh && $NP2/merge_hostkey.sh && $NP2/merge_config.sh']
               env:
@@ -38,7 +38,7 @@ spec:
                 name: sysrepo
             containers:
             - name: job-done
-              image: docker.io/gs-test/gs-mgmt:latest-arm64
+              image: docker.io/gs-test/south-onlp:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ["sysrepoctl", "-l"]
               volumeMounts:

@@ -47,7 +47,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: dpll
-              image: docker.io/gs-test/gs-mgmt-south-dpll:latest-arm64
+              image: docker.io/gs-test/south-dpll:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-dpll']
               args: ['--taish-server', "$(TAI_DPLL_SERVICE_HOST):$(TAI_DPLL_SERVICE_PORT)", "--verbose", "$(PLATFORM_FILE)"]

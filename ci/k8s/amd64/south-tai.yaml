@@ -50,7 +50,7 @@ spec:
               command: ['sh', '-c', "kubectl wait --for=condition=ready pods/$(kubectl get pods -l app=south-onlp -o jsonpath='{.items[0].metadata.name}')"]
             containers:
             - name: tai
-              image: docker.io/gs-test/gs-mgmt-south-tai:latest-amd64
+              image: docker.io/gs-test/south-tai:latest-amd64
               imagePullPolicy: IfNotPresent
               command: ['gssouthd-tai']
               args: ['--taish-server', "$(TAISH_SERVER_SERVICE_HOST):$(TAISH_SERVER_SERVICE_PORT)", "--verbose", "$(PLATFORM_FILE)"]

@@ -63,7 +63,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: notif
-              image: docker.io/gs-test/gs-mgmt-netopeer2:latest-arm64
+              image: docker.io/gs-test/north-netconf:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ['netopeer2-server']
               args: ['-d', '-v', '2', '-t', '60']

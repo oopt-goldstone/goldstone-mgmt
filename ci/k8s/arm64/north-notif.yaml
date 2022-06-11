@@ -47,7 +47,7 @@ spec:
               command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
             containers:
             - name: notif
-              image: docker.io/gs-test/gs-mgmt-north-notif:latest-arm64
+              image: docker.io/gs-test/north-notif:latest-arm64
               imagePullPolicy: IfNotPresent
               command: ['gsnorthd-notif']
               args: ['--verbose']
