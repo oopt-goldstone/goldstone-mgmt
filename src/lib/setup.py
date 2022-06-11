@@ -8,8 +8,8 @@ setuptools.setup(
     version="0.1.0",
     install_requires=install_requires,
     description="Goldstone Python Library",
-    url="https://github.com/microsonic/goldstone-mgmt",
+    url="https://github.com/oopt-goldstone/goldstone-mgmt",
     python_requires=">=3.7",
-    packages=["goldstone.lib", "goldstone.lib.connector"],
+    packages=setuptools.find_namespace_packages(include=["goldstone.*"]),
     zip_safe=False,
 )
