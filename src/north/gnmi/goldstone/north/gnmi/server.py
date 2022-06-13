@@ -175,6 +175,8 @@ class SetRequest(Request):
         elif self._is_container_list(val):
             for container in val:
                 next_path = self._xpath_with_keys(container, path)
+                # Add container instance.
+                self.leaves[next_path] = None
                 self._get_leaves(container, next_path)
         else:
             self.leaves[path] = val

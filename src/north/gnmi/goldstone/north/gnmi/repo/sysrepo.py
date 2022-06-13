@@ -2,16 +2,34 @@
 
 
 import logging
-import re
+import libyang
 from goldstone.lib.connector.sysrepo import (
     Connector,
-    NotFound as ConnectorNotFound,
+    NotFoundError as ConnectorNotFound,
     Error as ConnectorError,
 )
 from .repo import Repository, NotFoundError, ApplyFailedError
 
 
 logger = logging.getLogger(__name__)
+
+
+def parse_xpath(xpath):
+    """Parse xpath into a list of nodes.
+
+    Args:
+        xpath (str): Xpath to be parsed.
+
+    Returns:
+        (list of tupples): Parsed xpath as node tupples.
+            node tupple: (prefix, name, list of keys)
+                prefix: Namespace of the name. Typically it is a module name.
+                name: Name of the node.
+                list of key tupples: (key, value)
+                    key: Name of the key node.
+                    value: Value of the key.
+    """
+    return list(libyang.xpath_split(xpath))
 
 
 class Sysrepo(Repository):
@@ -24,8 +42,6 @@ class Sysrepo(Repository):
             # something to do
         # repo.stop() will be called automatically
     """
-
-    FIND_KEYS_PATTERN = re.compile(r"\[(.*)\]")
 
     def __init__(self):
         self._connector = None
@@ -50,41 +66,32 @@ class Sysrepo(Repository):
             if c.name() == target_name:
                 return c
 
-    def _find_keys(self, target):
-        statements = self.FIND_KEYS_PATTERN.findall(target)
-        keys = set()
-        for s in statements:
-            key = s.split("=")[0].split(":")[-1]
-            keys.add(key)
-        return keys
-
     def _expect_single_result_when_path_includes_list_node(self, path):
         # If all keys defined by the data schema are specified in the provided path, return True.
         key_defined = False
-        elements = path.split("/")[1:]
+        elements = parse_xpath(path)
         node = None
         for i, elem in enumerate(elements):
-            name = elem.split("[")[0]
+            prefix = elem[0]
+            name = elem[1]
             if node is None:
                 # Find first node.
-                node = self._find_node(f"/{name}")
+                node = self._find_node(f"/{prefix}:{name}")
             else:
-                name = name.split(":")[-1]
                 node = self._next_node(node, name)
             if node is None:
                 msg = f"node '{elem}' not found."
                 raise ValueError(msg)
-            elem_keys = self._find_keys(elem)
-            if len(elem_keys) > 0:
-                key_defined = True
+            elem_keys = set()
+            for key in elem[2]:
+                elem_keys.add(key[0])
             node_keys = set()
             for key in node.keys():
                 node_keys.add(key.name())
+            if len(elem_keys) > 0:
+                key_defined = True
             if elem_keys != node_keys:
-                if key_defined and i == len(elements) - 1 and len(elem_keys) == 0:
-                    return True
-                else:
-                    return False
+                return key_defined and i == len(elements) - 1 and len(elem_keys) == 0
         return key_defined
 
     def get(self, xpath, strip=True):
@@ -138,14 +145,14 @@ class Sysrepo(Repository):
         self._connector.discard_changes()
 
     def get_list_keys(self, path):
-        elements = path.split("/")[1:]
+        elements = parse_xpath(path)
         node = None
         for elem in elements:
-            name = elem.split("[")[0]
+            prefix = elem[0]
+            name = elem[1]
             if node is None:
-                node = self._find_node(f"/{name}")
+                node = self._find_node(f"/{prefix}:{name}")
             else:
-                name = name.split(":")[-1]
                 node = self._next_node(node, name)
                 if node is None:
                     msg = f"node '{elem}' not found."

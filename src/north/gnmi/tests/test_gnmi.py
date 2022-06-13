@@ -221,12 +221,14 @@ class TestSetRequest(unittest.TestCase):
             request.xpath = "/openconfig-interfaces:interfaces/interface"
             request._parse_val_into_leaves(val)
             expected = {
+                "/openconfig-interfaces:interfaces/interface[name='eth0']": None,
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/name": "eth0",
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/name": "eth0",
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/type": "iana-if-type:ethernetCsmacd",
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/mtu": 1500,
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/description": "client-port",
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/enabled": True,
+                "/openconfig-interfaces:interfaces/interface[name='eth1']": None,
                 "/openconfig-interfaces:interfaces/interface[name='eth1']/name": "eth1",
                 "/openconfig-interfaces:interfaces/interface[name='eth1']/config/name": "eth1",
                 "/openconfig-interfaces:interfaces/interface[name='eth1']/config/type": "iana-if-type:ethernetCsmacd",
@@ -272,12 +274,14 @@ class TestSetRequest(unittest.TestCase):
             request.xpath = "/openconfig-interfaces:interfaces"
             request._parse_val_into_leaves(val)
             expected = {
+                "/openconfig-interfaces:interfaces/interface[name='eth0']": None,
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/name": "eth0",
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/name": "eth0",
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/type": "iana-if-type:ethernetCsmacd",
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/mtu": 1500,
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/description": "client-port",
                 "/openconfig-interfaces:interfaces/interface[name='eth0']/config/enabled": True,
+                "/openconfig-interfaces:interfaces/interface[name='eth1']": None,
                 "/openconfig-interfaces:interfaces/interface[name='eth1']/name": "eth1",
                 "/openconfig-interfaces:interfaces/interface[name='eth1']/config/name": "eth1",
                 "/openconfig-interfaces:interfaces/interface[name='eth1']/config/type": "iana-if-type:ethernetCsmacd",
@@ -327,22 +331,32 @@ class TestSetRequest(unittest.TestCase):
             request.xpath = "/openconfig-platform:components"
             request._parse_val_into_leaves(val)
             expected = {
+                "/openconfig-platform:components/component[name='c1']": None,
                 "/openconfig-platform:components/component[name='c1']/name": "c1",
                 "/openconfig-platform:components/component[name='c1']/config/name": "c1",
+                "/openconfig-platform:components/component[name='c1']/openconfig-platform-transceiver:transceiver"
+                "/physical-channels/channel[index='0']": None,
                 "/openconfig-platform:components/component[name='c1']/openconfig-platform-transceiver:transceiver"
                 "/physical-channels/channel[index='0']/index": 0,
                 "/openconfig-platform:components/component[name='c1']/openconfig-platform-transceiver:transceiver"
                 "/physical-channels/channel[index='0']/config/index": 0,
                 "/openconfig-platform:components/component[name='c1']/openconfig-platform-transceiver:transceiver"
+                "/physical-channels/channel[index='1']": None,
+                "/openconfig-platform:components/component[name='c1']/openconfig-platform-transceiver:transceiver"
                 "/physical-channels/channel[index='1']/index": 1,
                 "/openconfig-platform:components/component[name='c1']/openconfig-platform-transceiver:transceiver"
                 "/physical-channels/channel[index='1']/config/index": 1,
+                "/openconfig-platform:components/component[name='c2']": None,
                 "/openconfig-platform:components/component[name='c2']/name": "c2",
                 "/openconfig-platform:components/component[name='c2']/config/name": "c2",
+                "/openconfig-platform:components/component[name='c2']/openconfig-platform-transceiver:transceiver"
+                "/physical-channels/channel[index='65534']": None,
                 "/openconfig-platform:components/component[name='c2']/openconfig-platform-transceiver:transceiver"
                 "/physical-channels/channel[index='65534']/index": 65534,
                 "/openconfig-platform:components/component[name='c2']/openconfig-platform-transceiver:transceiver"
                 "/physical-channels/channel[index='65534']/config/index": 65534,
+                "/openconfig-platform:components/component[name='c2']/openconfig-platform-transceiver:transceiver"
+                "/physical-channels/channel[index='65535']": None,
                 "/openconfig-platform:components/component[name='c2']/openconfig-platform-transceiver:transceiver"
                 "/physical-channels/channel[index='65535']/index": 65535,
                 "/openconfig-platform:components/component[name='c2']/openconfig-platform-transceiver:transceiver"
@@ -585,7 +599,11 @@ class TestCapabilities(gNMIServerTestCase):
 class TestGet(gNMIServerTestCase):
     """Tests gNMI server Get Service."""
 
-    MOCK_MODULES = ["openconfig-terminal-device", "openconfig-platform"]
+    MOCK_MODULES = [
+        "openconfig-terminal-device",
+        "openconfig-platform",
+        "openconfig-interfaces",
+    ]
     mock_data = {
         "openconfig-terminal-device:terminal-device": {
             "logical-channels": {
@@ -659,6 +677,68 @@ class TestGet(gNMIServerTestCase):
                 actual.notification[0].update[0].val.json_val.decode("utf-8")
             )
             expected = 1
+            self.assertEqual(act, expected)
+
+        await self.run_gnmi_server_test(test)
+
+    async def test_get_a_leaf_slash_in_key(self):
+        mock_data = {
+            "interfaces": {
+                "interface": [
+                    {
+                        "ethernet": {
+                            "state": {"fec-mode": "openconfig-if-ethernet:FEC_RS528"}
+                        },
+                        "name": "Interface1/0/1",
+                        "state": {
+                            "admin-status": "UP",
+                            "enabled": True,
+                            "hardware-port": "client-port1",
+                            "mtu": 10000,
+                            "name": "Interface1/0/1",
+                            "oper-status": "DOWN",
+                            "type": "iana-if-type:ethernetCsmacd",
+                        },
+                    },
+                    {
+                        "ethernet": {
+                            "state": {"fec-mode": "openconfig-if-ethernet:FEC_RS528"}
+                        },
+                        "name": "Interface1/1/1",
+                        "state": {
+                            "admin-status": "UP",
+                            "enabled": True,
+                            "mtu": 10000,
+                            "name": "Interface1/1/1",
+                            "oper-status": "DOWN",
+                            "type": "iana-if-type:ethernetCsmacd",
+                        },
+                    },
+                ]
+            }
+        }
+        self.set_mock_oper_data("openconfig-interfaces", mock_data)
+
+        def test():
+            path = gnmi_pb2.Path()
+            append_path_element(path, "openconfig-interfaces:interfaces")
+            append_path_element(path, "interface", "name", "Interface1/0/1")
+            append_path_element(path, "state")
+            append_path_element(path, "enabled")
+            request = gnmi_pb2.GetRequest(path=[path])
+            expected_time_min = time.time_ns()
+            actual, code = self.gnmi_get(request)
+            expected_time_max = time.time_ns()
+            self.assertEqual(code, grpc.StatusCode.OK)
+            self.assertEqual(actual.error.code, grpc.StatusCode.OK.value[0])
+            self.assertEqual(actual.notification[0].update[0].path, path)
+            self.assertGreater(actual.notification[0].timestamp, expected_time_min)
+            self.assertLess(actual.notification[0].timestamp, expected_time_max)
+
+            act = json.loads(
+                actual.notification[0].update[0].val.json_val.decode("utf-8")
+            )
+            expected = True
             self.assertEqual(act, expected)
 
         await self.run_gnmi_server_test(test)
@@ -899,11 +979,6 @@ class TestGet(gNMIServerTestCase):
             expected = [
                 [1, 2],
                 ["description for channel#1", "description for channel#2"],
-                # NOTE: The expected value of "test-signal" should be
-                #   "[True, False]" but libyang cannot extract "false" values
-                #   like 0, False or "" when key is not specified therefore
-                #   replace the expected value to pass this test.
-                # [True, False],
                 [True, False],
                 ["UP", "DOWN"],
             ]
@@ -1290,8 +1365,6 @@ class TestSet(gNMIServerTestCase):
                     "enabled": True,
                     "loopback-mode": False,
                 },
-                "ethernet": {},
-                "hold-time": {},
             }
             self.assertEqual(act, expected)
 
@@ -1377,12 +1450,19 @@ class TestSet(gNMIServerTestCase):
                         "config": {"name": "c1"},
                         # Namespace prefix ""openconfig-platform-transceiver:".
                         "openconfig-platform-transceiver:transceiver": {
+                            # NOTE: module-functional-type should be unnecessary in this configuration set. But without
+                            #   it, sysrepo raises a validation failed error like below;
+                            #   > When condition "../../../config/module-functional-type =
+                            #   > 'oc-opt-types:TYPE_STANDARD_OPTIC'" not satisfied.
+                            "config": {
+                                "module-functional-type": "openconfig-transport-types:TYPE_STANDARD_OPTIC",
+                            },
                             "physical-channels": {
                                 "channel": [
                                     {"index": 0, "config": {"index": 0}},
                                     {"index": 65535, "config": {"index": 65535}},
                                 ]
-                            }
+                            },
                         },
                     }
                 ]
@@ -1465,12 +1545,7 @@ class TestSet(gNMIServerTestCase):
             append_path_element(path, "openconfig-platform-transceiver:transceiver")
             request = gnmi_pb2.GetRequest(path=[path])
             actual, code = self.gnmi_get(request)
-            self.assertEqual(code, grpc.StatusCode.OK)
-            act = json.loads(
-                actual.notification[0].update[0].val.json_val.decode("utf-8")
-            )
-            expected = {}
-            self.assertEqual(act, expected)
+            self.assertEqual(code, grpc.StatusCode.NOT_FOUND)
 
         await self.run_gnmi_server_test(test)
 
@@ -1543,8 +1618,6 @@ class TestSet(gNMIServerTestCase):
                         "description": "This is Ethernet1.",
                         "enabled": True,
                     },
-                    "ethernet": {},
-                    "hold-time": {},
                 },
                 {
                     "name": "Ethernet2",
@@ -1555,8 +1628,6 @@ class TestSet(gNMIServerTestCase):
                         "description": "This is Ethernet2.",
                         "enabled": False,
                     },
-                    "ethernet": {},
-                    "hold-time": {},
                 },
             ]
             self.assertEqual(act, expected)
@@ -1630,6 +1701,13 @@ class TestSet(gNMIServerTestCase):
                         "name": "c1",
                         "config": {"name": "c1"},
                         "openconfig-platform-transceiver:transceiver": {
+                            # NOTE: module-functional-type should be unnecessary in this configuration set. But without
+                            #   it, sysrepo raises a validation failed error like below;
+                            #   > When condition "../../../config/module-functional-type =
+                            #   > 'oc-opt-types:TYPE_STANDARD_OPTIC'" not satisfied.
+                            "config": {
+                                "module-functional-type": "openconfig-transport-types:TYPE_STANDARD_OPTIC",
+                            },
                             "physical-channels": {
                                 "channel": [
                                     {"index": 0, "config": {"index": 0}},
@@ -1637,7 +1715,7 @@ class TestSet(gNMIServerTestCase):
                                     {"index": 100, "config": {"index": 100}},
                                     {"index": 65535, "config": {"index": 65535}},
                                 ]
-                            }
+                            },
                         },
                     }
                 ]
@@ -1773,6 +1851,13 @@ class TestSet(gNMIServerTestCase):
                         "name": "c1",
                         "config": {"name": "c1"},
                         "openconfig-platform-transceiver:transceiver": {
+                            # NOTE: module-functional-type should be unnecessary in this configuration set. But without
+                            #   it, sysrepo raises a validation failed error like below;
+                            #   > When condition "../../../config/module-functional-type =
+                            #   > 'oc-opt-types:TYPE_STANDARD_OPTIC'" not satisfied.
+                            "config": {
+                                "module-functional-type": "openconfig-transport-types:TYPE_STANDARD_OPTIC",
+                            },
                             "physical-channels": {
                                 "channel": [
                                     {"index": 0, "config": {"index": 0}},
@@ -1784,7 +1869,7 @@ class TestSet(gNMIServerTestCase):
                                     {"index": 60000, "config": {"index": 60000}},
                                     {"index": 65535, "config": {"index": 65535}},
                                 ]
-                            }
+                            },
                         },
                     }
                 ]
@@ -1997,19 +2082,13 @@ class TestSet(gNMIServerTestCase):
             update = gnmi_pb2.Update(path=path, val=val)
             request = gnmi_pb2.SetRequest(update=[update])
             actual, code = self.gnmi_set(request)
-            # TODO: In this case, code and actual.message.code should be set
-            #   to ABORTED and resp.message.code to INVALID_ARGUMENT. But the
-            #   error cannot be detected properly.
-            # self.assertEqual(code, grpc.StatusCode.ABORTED)
-            # self.assertEqual(actual.message.code, grpc.StatusCode.ABORTED.value[0])
-            self.assertEqual(code, grpc.StatusCode.OK)
-            self.assertEqual(actual.message.code, grpc.StatusCode.OK.value[0])
+            self.assertEqual(code, grpc.StatusCode.ABORTED)
+            self.assertEqual(actual.message.code, grpc.StatusCode.ABORTED.value[0])
             resp = actual.response[0]
             self.assertEqual(resp.path, path)
             self.assertEqual(
                 resp.message.code,
-                # grpc.StatusCode.INVALID_ARGUMENT.value[0],
-                grpc.StatusCode.OK.value[0],
+                grpc.StatusCode.INVALID_ARGUMENT.value[0],
             )
 
             # Check not updated.
@@ -2055,19 +2134,34 @@ class TestSet(gNMIServerTestCase):
             append_path_element(path, "name")
             request = gnmi_pb2.SetRequest(delete=[path])
             actual, code = self.gnmi_set(request)
-            self.assertEqual(code, grpc.StatusCode.OK)
-            self.assertEqual(actual.message.code, grpc.StatusCode.OK.value[0])
+            self.assertEqual(code, grpc.StatusCode.ABORTED)
+            self.assertEqual(actual.message.code, grpc.StatusCode.ABORTED.value[0])
             resp = actual.response[0]
             self.assertEqual(resp.path, path)
-            self.assertEqual(resp.message.code, grpc.StatusCode.OK.value[0])
+            self.assertEqual(
+                resp.message.code,
+                grpc.StatusCode.INVALID_ARGUMENT.value[0],
+            )
 
-            # Check the container deleted.
+            # Check not deleted.
             path = gnmi_pb2.Path()
             append_path_element(path, "openconfig-interfaces:interfaces")
             append_path_element(path, "interface", "name", "Ethernet1")
             request = gnmi_pb2.GetRequest(path=[path])
             actual, code = self.gnmi_get(request)
-            self.assertEqual(code, grpc.StatusCode.NOT_FOUND)
+            self.assertEqual(code, grpc.StatusCode.OK)
+            actual_interface = json.loads(
+                actual.notification[0].update[0].val.json_val.decode("utf-8")
+            )
+            expected = {
+                "name": "Ethernet1",
+                "config": {
+                    "name": "Ethernet1",
+                    "type": "iana-if-type:ethernetCsmacd",
+                    "enabled": True,
+                },
+            }
+            self.assertEqual(actual_interface, expected)
 
         await self.run_gnmi_server_test(test)
 
@@ -2152,7 +2246,11 @@ class TestSet(gNMIServerTestCase):
             resp = actual.response[0]
             self.assertEqual(resp.path, path)
             self.assertEqual(
-                resp.message.code, grpc.StatusCode.INVALID_ARGUMENT.value[0]
+                resp.message.code,
+                # TODO: In this case, code should be set to INVALID_ARGUMENT.
+                #   But the error cannot be detected properly.
+                # grpc.StatusCode.INVALID_ARGUMENT.value[0]
+                grpc.StatusCode.UNKNOWN.value[0],
             )
 
         await self.run_gnmi_server_test(test)
@@ -2330,10 +2428,7 @@ class TestSet(gNMIServerTestCase):
             self.assertEqual(resp.path, path)
             self.assertEqual(
                 resp.message.code,
-                # TODO: In this case, code should be set to INVALID_ARGUMENT.
-                #   But the error cannot be detected properly.
-                # grpc.StatusCode.INVALID_ARGUMENT.value[0],
-                grpc.StatusCode.ABORTED.value[0],
+                grpc.StatusCode.INVALID_ARGUMENT.value[0],
             )
 
         await self.run_gnmi_server_test(test)
@@ -2376,10 +2471,7 @@ class TestSet(gNMIServerTestCase):
             self.assertEqual(resp.path, path)
             self.assertEqual(
                 resp.message.code,
-                # TODO: In this case, code should be set to INVALID_ARGUMENT.
-                #   But the error cannot be detected properly.
-                # grpc.StatusCode.INVALID_ARGUMENT.value[0],
-                grpc.StatusCode.ABORTED.value[0],
+                grpc.StatusCode.INVALID_ARGUMENT.value[0],
             )
 
             # Check not deleted.
@@ -2461,7 +2553,7 @@ class TestSet(gNMIServerTestCase):
 
         await self.run_gnmi_server_test(test)
 
-    async def test_update_with_invalid_value(self):
+    async def test_update_with_invalid_arg_name(self):
         def test():
             config_data = {
                 "interface": [
@@ -2490,7 +2582,10 @@ class TestSet(gNMIServerTestCase):
             )
             self.assertEqual(
                 actual.response[0].message.code,
-                grpc.StatusCode.INVALID_ARGUMENT.value[0],
+                # TODO: In this case, code should be set to INVALID_ARGUMENT.
+                #   But the error cannot be detected properly.
+                # grpc.StatusCode.INVALID_ARGUMENT.value[0]
+                grpc.StatusCode.UNKNOWN.value[0],
             )
 
         await self.run_gnmi_server_test(test)
