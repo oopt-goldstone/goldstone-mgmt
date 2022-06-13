@@ -7,9 +7,9 @@ import json
 from multiprocessing import Process, Queue
 import asyncio
 import grpc_testing
-import sysrepo
 import libyang
 from goldstone.lib.core import ServerBase
+from goldstone.lib.connector.sysrepo import Connector
 from goldstone.north.gnmi.server import gNMIServicer
 from goldstone.north.gnmi.repo.repo import Repository
 from goldstone.north.gnmi.repo.sysrepo import Sysrepo
@@ -52,7 +52,7 @@ class MockOCPlatformServer(ServerBase):
         self.oper_data = {}
         self.handlers = {}
 
-    def change_cb(self, event, req_id, changes, priv):
+    async def change_cb(self, event, req_id, changes, priv):
         pass
 
     def oper_cb(self, xpath, priv):
@@ -71,7 +71,7 @@ class MockOCInterfacesServer(ServerBase):
         self.oper_data = {}
         self.handlers = {}
 
-    def change_cb(self, event, req_id, changes, priv):
+    async def change_cb(self, event, req_id, changes, priv):
         pass
 
     def oper_cb(self, xpath, priv):
@@ -90,7 +90,7 @@ class MockOCTerminalDeviceServer(ServerBase):
         self.oper_data = {}
         self.handlers = {}
 
-    def change_cb(self, event, req_id, changes, priv):
+    async def change_cb(self, event, req_id, changes, priv):
         pass
 
     def oper_cb(self, xpath, priv):
@@ -105,7 +105,7 @@ MOCK_SERVERS = {
 
 
 def run_mock_server(q, mock_modules):
-    conn = sysrepo.SysrepoConnection()
+    conn = Connector()
     servers = {}
     for mock_module in mock_modules:
         servers[mock_module] = MOCK_SERVERS[mock_module](conn, mock_module)
@@ -161,13 +161,11 @@ class gNMIServerTestCase(unittest.IsolatedAsyncioTestCase):
             descriptors_to_services, self._real_time
         )
 
-        self.conn = sysrepo.SysrepoConnection()
+        self.conn = Connector()
 
-        with self.conn.start_session() as sess:
-            sess.switch_datastore("running")
-            for module in self.MOCK_MODULES:
-                sess.replace_config({}, module)
-            sess.apply_changes()
+        for module in self.MOCK_MODULES:
+            self.conn.delete_all(module)
+        self.conn.apply()
 
         self.q = Queue()
         self.process = Process(target=run_mock_server, args=(self.q, self.MOCK_MODULES))
@@ -205,7 +203,7 @@ class gNMIServerTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.tasks = []
-        self.conn.disconnect()
+        self.conn.stop()
         self.q.put({"type": "stop"})
         self.process.join()
 
