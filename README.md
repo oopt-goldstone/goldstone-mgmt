@@ -6,12 +6,16 @@ The components in this repo are pre-installed in Goldstone NOS.
 
 ### What this repo includes
 
-- Goldstone management north daemons that provide control interfaces to network operators
+- Goldstone management north daemons that provide control interfaces to network operators (Blue boxes in the following diagram)
     - CLI, NETCONF, and SNMP
-- Goldstone management south daemons that control hardware components in a networking device
+- Goldstone management south daemons that control hardware components in a networking device (Yellow boxes in the following diagram)
     - e.g) Switch ASIC, Transponder, Gearbox, Peripheral devices(Thermal sensors, LED, fan etc..)
+- Goldstone management translation daemons that translate standarized YANG models and Goldstone YANG models (Red boxes in the following diagram)
+    - OpenConfig Translator
 - Goldstone YANG models
     - The schemas that are used between north and south daemons
+
+![Goldstone Management Components](https://user-images.githubusercontent.com/5915117/173267760-44f93599-b6b0-4fd2-95e1-71cf8c07aed7.png)
 
 ### Getting Started
 
@@ -90,8 +94,8 @@ Using the standard YANG models ([OpenConfig](https://www.openconfig.net/), [Open
     - control/monitor hardware (ONLP, SONiC/SAI, TAI, System)
     - uses native YANG models to interact with sysrepo
     - source code under [`src/south`](https://github.com/oopt-goldstone/goldstone-mgmt/tree/master/src/south)
-- translater daemon
-    - translater of the native YANG models and standard YANG models
+- translation daemon
+    - translator of the standarized YANG models and Goldstone YANG models
     - source code under [`src/xlate`](https://github.com/oopt-goldstone/goldstone-mgmt/tree/master/src/xlate)
 
 ### How to build
