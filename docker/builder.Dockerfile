@@ -16,32 +16,33 @@ RUN --mount=type=bind,source=sm/OpenNetworkLinux,target=/root/sm/OpenNetworkLinu
 FROM $GS_MGMT_BUILDER_BASE AS base
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config curl libclang1-6.0 doxygen libi2c-dev git cmake libpcre3-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus libffi-dev build-essential
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config curl doxygen libi2c-dev git cmake libpcre2-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus libffi-dev build-essential
 
 RUN pip install --upgrade pip
 
 FROM base AS sysrepo
 
+RUN pip install apkg
+
 RUN --mount=type=bind,source=sm/libyang,target=/root/sm/libyang,rw \
-    --mount=type=bind,source=patches/libyang,target=/root/patches \
-    --mount=type=tmpfs,target=/root/.pc,rw \
-    cd /root && quilt upgrade && quilt push -a && \
-    mkdir -p /root/sm/libyang/build && cd /root/sm/libyang/build && \
-    cmake .. && make build-deb && mkdir -p /usr/share/debs/libyang && cp debs/* /usr/share/debs/libyang/
+    --mount=type=bind,source=.git/modules/sm/libyang,target=/root/.git/modules/sm/libyang,rw \
+    cd /root/sm/libyang && apkg build -b && \
+    mkdir -p /usr/share/debs/libyang && cp $(find ./pkg/build/pkgs | grep -e '\.deb$' ) /usr/share/debs/libyang/
 
 RUN dpkg -i /usr/share/debs/libyang/*.deb
 
 RUN --mount=type=bind,source=sm/sysrepo,target=/root/sm/sysrepo,rw \
+    --mount=type=bind,source=.git/modules/sm/sysrepo,target=/root/.git/modules/sm/sysrepo,rw \
     --mount=type=bind,source=patches/sysrepo,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
-    cd /root && quilt upgrade && quilt push -a && mkdir -p /root/sm/sysrepo/build && cd /root/sm/sysrepo/build && \
-    cmake -DREPO_PATH=/var/lib/sysrepo/ .. && make build-deb && mkdir -p /usr/share/debs/sysrepo && cp debs/* /usr/share/debs/sysrepo/ && \
-    mkdir -p /usr/local/include/utils && cp /root/sm/sysrepo/src/utils/xpath.h /usr/local/include/utils/
+    cd /root && quilt upgrade && quilt push -a && \
+    cd /root/sm/sysrepo && git commit -a -m "tmp" && apkg build -b && \
+    mkdir -p /usr/share/debs/sysrepo && cp $(find ./pkg/build/pkgs | grep -e '\.deb$' ) /usr/share/debs/sysrepo/
 
 RUN dpkg -i /usr/share/debs/sysrepo/*.deb
 
 RUN pip install pyang clang jinja2 prompt_toolkit wheel
-
+#
 RUN mkdir -p /usr/share/wheels
 
 RUN --mount=type=bind,source=sm/libyang-python,target=/root/sm/libyang-python,rw \
@@ -131,12 +132,6 @@ COPY --from=tai /usr/share/wheels/tai /usr/share/wheels/tai
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
     cd /root/sm/oopt-tai/tools/meta-generator && pip install .
 
-COPY --from=sysrepo /usr/share/debs/libyang /usr/share/debs/libyang
-COPY --from=sysrepo /usr/share/wheels/libyang /usr/share/wheels/libyang
-
-COPY --from=sysrepo /usr/share/debs/sysrepo /usr/share/debs/sysrepo
-COPY --from=sysrepo /usr/share/wheels/sysrepo /usr/share/wheels/sysrepo
-
 COPY --from=cli /usr/share/wheels/cli /usr/share/wheels/cli
 COPY --from=sonic /usr/share/wheels/sonic /usr/share/wheels/sonic
 COPY --from=system /usr/share/wheels/system /usr/share/wheels/system
@@ -151,7 +146,7 @@ RUN --mount=type=bind,source=scripts,target=/src \
 FROM $GS_MGMT_BUILDER_BASE AS tester
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp software-properties-common make pkg-config curl git cmake libssh-4 libssh-dev libpcre3-dev quilt libclang1-6.0
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp software-properties-common make pkg-config curl git cmake libssh-4 libssh-dev libpcre2-dev quilt
 
 RUN apt-add-repository non-free
 
@@ -172,9 +167,10 @@ RUN --mount=type=bind,source=sm/libnetconf2,target=/root/sm/libnetconf2,rw cd /r
             cmake /root/sm/libnetconf2 && make && make install
 
 RUN --mount=type=bind,source=sm/netopeer2,target=/root/sm/netopeer2,rw \
-    --mount=type=bind,source=patches/np2,target=/root/patches \
+    --mount=type=bind,source=patches/netopeer2,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
-    cd /root && quilt upgrade && quilt push -a && mkdir -p /build/netopeer2 && cd /build/netopeer2 && \
+    cd /root && quilt upgrade && quilt push -a && \
+    mkdir -p /build/netopeer2 && cd /build/netopeer2 && \
     cmake /root/sm/netopeer2 && make && make install && mkdir -p /usr/local/share/netopeer2 && cp -r /root/sm/netopeer2/scripts /usr/local/share/netopeer2
 
 RUN ldconfig

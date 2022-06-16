@@ -31,7 +31,7 @@ module goldstone-sonic {
     deviate replace {
       type uint16 {
         range "1312..9216" {
-          error-message "Invalid MTU value";
+          error-message "Invalid MTU value. valid range is 1312..9216";
           error-app-tag mtu-invalid;
         }
       }

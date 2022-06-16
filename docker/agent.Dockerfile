@@ -11,7 +11,7 @@ ARG https_proxy
 FROM $GS_MGMT_BASE as base
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
-            apt update && apt install -qy --no-install-recommends libatomic1
+            apt update && apt install -qy --no-install-recommends libatomic1 libpcre2-8-0
 
 RUN pip install --upgrade pip
 
@@ -60,7 +60,7 @@ RUN --mount=type=bind,source=src/north/notif,target=/src,rw pip install /src
 FROM debian:10 AS north-netconf
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy make pkg-config curl git cmake libssh-4 libssh-dev libpcre3-dev quilt
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy make pkg-config curl git cmake libssh-4 libssh-dev libpcre2-dev quilt
 
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i
 
@@ -70,7 +70,7 @@ RUN --mount=type=bind,source=sm/libnetconf2,target=/root/sm/libnetconf2,rw cd /r
             cmake /root/sm/libnetconf2 && make && make install
 
 RUN --mount=type=bind,source=sm/netopeer2,target=/root/sm/netopeer2,rw \
-    --mount=type=bind,source=patches/np2,target=/root/patches \
+    --mount=type=bind,source=patches/netopeer2,target=/root/patches \
     --mount=type=tmpfs,target=/root/.pc,rw \
     cd /root && quilt upgrade && quilt push -a && mkdir -p /build/netopeer2 && cd /build/netopeer2 && \
     cmake /root/sm/netopeer2 && make && make install && mkdir -p /usr/local/share/netopeer2 && cp -r /root/sm/netopeer2/scripts /usr/local/share/netopeer2

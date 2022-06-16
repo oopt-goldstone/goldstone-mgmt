@@ -166,7 +166,7 @@ class SetCommand(ConfigCommand):
         node = self.options["node"]
         if node.type() == "boolean":
             return ["true", "false"]
-        return [v[0] for v in node.enums() if v[0] != "unknown"]
+        return [v for v in node.enums() if v != "unknown"]
 
     def usage(self):
         enum_values = self.arguments()

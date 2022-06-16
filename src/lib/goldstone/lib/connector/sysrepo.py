@@ -9,7 +9,6 @@ from goldstone.lib.errors import NotFoundError, Error, LockedError, CallbackFail
 import sysrepo
 import libyang
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +30,14 @@ def wrap_sysrepo_error(func):
             target = "datastore"
             if len(args) >= 2:
                 target = args[1]
-            raise LockedError(f"{target} is locked", error) from error
+            raise LockedError(f"{target} is locked") from None
         except sysrepo.SysrepoError as error:
             sess.discard_changes()
             gs_e = _error_map.get(type(error))
             if gs_e:
-                raise gs_e(error.details[0][1]) from None
-            raise Error(error.details[0][1]) from None
+                msg = error.err_info[0] if error.err_info else error.msg
+                raise gs_e(msg) from None
+            raise Error(error.msg) from None
         except libyang.LibyangError as error:
             sess.discard_changes()
             raise Error(str(error)) from error
@@ -63,7 +63,6 @@ class Session(BaseSession):
         try:
             data = self.session.get_data(
                 xpath,
-                0,
                 timeout_ms=DEFAULT_TIMEOUT_MS,
                 include_implicit_defaults=include_implicit_defaults,
             )
@@ -90,7 +89,18 @@ class Session(BaseSession):
 
     @wrap_sysrepo_error
     def set(self, xpath, value):
-        return self.session.set_item(xpath, value)
+        x = self.conn.find_node(xpath)
+        # if the node is leaf-list and the value is list, replace the whole list with the given value
+        # setting to the same leaf-list multiple time is currently not supported
+        if x.node.keyword() == "leaf-list" and type(value) == list:
+            v = set(self.get(xpath, []))
+            for remove in v - set(value):
+                x = f"{xpath}[.='{remove}']"
+                self.delete(x)
+            for add in set(value) - v:
+                self.session.set_item(xpath, add)
+        else:
+            return self.session.set_item(xpath, value)
 
     @wrap_sysrepo_error
     def copy_config(self, datastore, model):
@@ -114,19 +124,16 @@ class Session(BaseSession):
 
     @wrap_sysrepo_error
     def send_notification(self, name: str, notification: dict):
-        n = json.dumps({name: notification})
-        dnode = self.conn.ctx.parse_data_mem(n, fmt="json", notification=True)
-        logger.debug(dnode.print_dict())
-        return self.session.notification_send_ly(dnode)
+        logger.debug(f"sending notification {name}: {notification}")
+        self.session.notification_send(name, notification)
 
     def subscribe_notifications(self, callback):
-        ctx = self.conn.ctx
         f = lambda xpath, notif_type, value, timestamp, priv: callback(
             {xpath: value, "eventTime": timestamp}
         )
 
         for model in self.conn.models:
-            module = ctx.get_module(model)
+            module = self.conn.get_module(model)
             notif = list(module.children(types=(libyang.SNode.NOTIF,)))
             if len(notif) == 0:
                 continue
@@ -146,7 +153,7 @@ class Connector(BaseConnector):
         self.running_session = self.new_session()
         self.operational_session = self.new_session("operational")
         self.startup_session = self.new_session("startup")
-        self.ctx = self.conn.get_ly_ctx()
+        self.ctx = self.conn.acquire_context()
 
     @property
     def type(self):
@@ -157,7 +164,12 @@ class Connector(BaseConnector):
 
     @property
     def models(self):
-        return [m.name() for m in self.ctx]
+        with self.conn.get_ly_ctx() as ctx:
+            return [m.name() for m in ctx]
+
+    def get_module(self, name):
+        with self.conn.get_ly_ctx() as ctx:
+            return ctx.get_module(name)
 
     def save(self, model):
         try:
@@ -228,4 +240,5 @@ class Connector(BaseConnector):
         self.running_session.stop()
         self.operational_session.stop()
         self.startup_session.stop()
+        self.conn.release_context()
         self.conn.disconnect()

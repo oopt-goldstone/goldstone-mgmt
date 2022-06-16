@@ -47,8 +47,7 @@ class ServerConnector(BaseServerConnector):
         self.conn = conn
         self.session = conn.new_session("running")
 
-        self.ctx = self.session.session.get_ly_ctx()
-        m = self.ctx.get_module(module)
+        m = self.conn.get_module(module)
         v = [n.name() for n in m if n.keyword() == "container"]
         assert len(v) == 1
         self.module = module
@@ -59,16 +58,11 @@ class ServerConnector(BaseServerConnector):
     def type(self):
         return self.conn.type
 
-    def get(
-        self,
-        xpath,
-        default=None,
-        include_implicit_defaults=False,
-        strip=True,
-        one=False,
-        ds="running",
-    ):
-        return self.conn.get(xpath, default, include_implicit_defaults, strip, one, ds)
+    def get(self, *args, **kwargs):
+        return self.conn.get(*args, **kwargs)
+
+    def get_operational(self, *args, **kwargs):
+        return self.conn.get_operational(*args, **kwargs)
 
     def send_notification(self, name: str, notification: dict):
         return self.session.send_notification(name, notification)

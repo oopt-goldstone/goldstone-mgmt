@@ -1,5 +1,5 @@
 from goldstone.lib.core import *
-from goldstone.lib.errors import InvalArgError
+from goldstone.lib.errors import InvalArgError, CallbackFailedError
 
 logger = logging.getLogger(__name__)
 

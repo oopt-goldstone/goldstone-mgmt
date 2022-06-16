@@ -1,11 +1,1 @@
-get_searchdirs.patch
-notification.patch
-notif2.patch
-dup.patch
-add_get()_method_to_keyed_list.patch
-add_sgrouping.patch
-xpath:_support_getting_leaves_and_non-key_conditions.patch
-xpath:_support_passing_keyedlist_with_filter_option.patch
-remove_debug_log.patch
-fix_for_notification.patch
-fix_xpath_find.patch
+support_getting_leaves_and_non-key_conditions.patch

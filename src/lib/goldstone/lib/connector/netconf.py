@@ -345,13 +345,12 @@ class Connector(BaseConnector):
     # Otherwise, use libyang to do the parsing
     def _get(self, xpath, nss, ds, xform=None):
         logger.debug(f"{xpath=}, {ds=}, {nss=}")
-        options = {}
+        options = {"parse_only": True}
         if ds == "operational":
             v = self.conn.get(filter=("xpath", (nss, xpath)))
-            options["get"] = True
         elif ds == "running":
             v = self.conn.get_config(source=ds, filter=("xpath", (nss, xpath)))
-            options["getconfig"] = True
+            options["no_state"] = True
         else:
             raise Error(f"not supported ds: {ds}")
 
@@ -382,7 +381,12 @@ class Connector(BaseConnector):
             data = self._get(xpath, nss, ds)
         else:
             return super().get(
-                xpath, default, include_implicit_defaults, strip, one, ds
+                xpath,
+                default,
+                include_implicit_defaults,
+                strip,
+                one,
+                ds,
             )
 
         if data == None:

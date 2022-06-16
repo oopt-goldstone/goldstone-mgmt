@@ -1,38 +1,173 @@
-Index: goldstone-mgmt/sm/libyang-python/libyang/xpath.py
+Index: v2/sm/libyang-python/libyang/xpath.py
 ===================================================================
---- goldstone-mgmt.orig/sm/libyang-python/libyang/xpath.py
-+++ goldstone-mgmt/sm/libyang-python/libyang/xpath.py
-@@ -188,7 +188,7 @@ def _xpath_find(
-                     create_if_missing,
-                     recursive_call=True,
-                 )
--                if v:
+--- v2.orig/sm/libyang-python/libyang/xpath.py
++++ v2/sm/libyang-python/libyang/xpath.py
+@@ -147,7 +147,13 @@ def _list_find_key_index(keys: List[Tupl
+ 
+ 
+ # -------------------------------------------------------------------------------------
+-def _xpath_find(data: Dict, xparts: List, create_if_missing: bool = False) -> Any:
++def _xpath_find(
++    data: Dict,
++    xparts: List,
++    create_if_missing: bool = False,
++    filter: bool = False,
++    recursive_call: bool = False,
++) -> Any:
+     """
+     Descend into a data dictionary.
+ 
+@@ -165,48 +171,99 @@ def _xpath_find(data: Dict, xparts: List
+     :raises TypeError:
+         If `data` does not match the expected structure conveyed by `xparts`.
+     """
+-    for _, name, keys in xparts:
+-        if not isinstance(data, dict):
+-            raise TypeError("expected a dict")
+-        if keys:
+-            if name not in data and create_if_missing:
+-                data[name] = KeyedList(key_name=_xpath_keys_to_key_name(keys))
+-            lst = data[name]  # may raise KeyError
+-            if isinstance(lst, KeyedList):
+-                try:
+-                    data = lst[_xpath_keys_to_key_val(keys)]
+-                except KeyError:
+-                    if not create_if_missing:
+-                        raise
+-                    data = dict(keys)
+-                    lst.append(data)
+-
+-            elif isinstance(lst, list):
+-                # regular python list, need to iterate over it
+-                try:
+-                    i = _list_find_key_index(keys, lst)
+-                    data = lst[i]
+-                except ValueError:
+-                    # not found
+-                    if not create_if_missing:
+-                        raise KeyError(keys) from None
+-                    data = dict(keys)
+-                    lst.append(data)
+-
+-            else:
+-                raise TypeError("expected a list")
+-
+-        elif create_if_missing:
+-            data = data.setdefault(name, {})
+-
++    xparts = list(xparts)
++    for i, (_, name, keys) in enumerate(xparts):
++        if isinstance(data, list):
++            if create_if_missing:
++                raise TypeError("expected a dict")
++            d = []
++            for l in data:
++                if not all(
++                    k in l[name] and py_to_yang(l[name][k]) == v for k, v in keys
++                ):
++                    continue
++                v = _xpath_find(
++                    l[name],
++                    xparts[i + 1 :],
++                    create_if_missing,
++                    recursive_call=True,
++                )
 +                if v is not None:
-                     if keys and not filter:
-                         return v
-                     d.append(v)
-@@ -220,7 +220,7 @@ def _xpath_find(
-                                 v = l
-                                 for k in key.split("/"):
-                                     v = v[k]
--                                if v != value:
++                    if keys and not filter:
++                        return v
++                    d.append(v)
++            return d
++        elif keys:
++            if isinstance(data, dict):
++                if name not in data and create_if_missing:
++                    data[name] = KeyedList(key_name=_xpath_keys_to_key_name(keys))
++                lst = data[name]  # may raise KeyError
++
++                if filter and isinstance(lst, KeyedList):
++                    lst = list(lst)
++
++                if isinstance(lst, KeyedList):
++                    try:
++                        data = lst[_xpath_keys_to_key_val(keys)]
++                    except KeyError:
++                        if recursive_call:
++                            return None
++                        if not create_if_missing:
++                            raise
++                        data = dict(keys)
++                elif isinstance(lst, list):
++                    # regular python list, need to iterate over it
++                    try:
++                        d = []
++                        for l in lst:
++                            for key, value in keys:
++                                v = l
++                                for k in key.split("/"):
++                                    v = v[k]
 +                                if str(v) != str(value):
-                                     break
-                             else:
-                                 v = _xpath_find(
-@@ -229,7 +229,7 @@ def _xpath_find(
-                                     create_if_missing,
-                                     recursive_call=True,
-                                 )
--                                if v:
++                                    break
++                            else:
++                                v = _xpath_find(
++                                    l,
++                                    xparts[i + 1 :],
++                                    create_if_missing,
++                                    recursive_call=True,
++                                )
 +                                if v is not None:
-                                     if not filter:
-                                         return v
-                                     d.append(v)
-Index: goldstone-mgmt/sm/libyang-python/tests/test_xpath.py
++                                    if not filter:
++                                        return v
++                                    d.append(v)
++                        return d
++                    except ValueError:
++                        # not found
++                        if recursive_call:
++                            return None
++                        if not create_if_missing:
++                            raise KeyError(keys) from None
++                        data = dict(keys)
++                elif isinstance(lst, dict):
++                    if all(k in lst and py_to_yang(lst[k]) == v for k, v in keys):
++                        return lst
++                    elif recursive_call:
++                        return None
++                else:
++                    raise TypeError("expected a dict or list")
++            elif recursive_call:
++                return data
+         else:
+-            data = data[name]  # may raise KeyError
++            if isinstance(data, dict):
++                if create_if_missing:
++                    data = data.setdefault(name, {})
++                else:
++                    data = data[name]  # may raise KeyError
++            elif recursive_call:
++                return data
+ 
+     return data
+ 
+ 
+ # -------------------------------------------------------------------------------------
+-def xpath_get(data: Dict, xpath: str, default: Any = None) -> Any:
++def xpath_get(data: Dict, xpath: str, default: Any = None, filter: bool = False) -> Any:
+     """
+     Get an element from a data structure (dict) that matches the given xpath.
+ 
+@@ -220,7 +277,9 @@ def xpath_get(data: Dict, xpath: str, de
+     {}
+     """
+     try:
+-        return _xpath_find(data, xpath_split(xpath), create_if_missing=False)
++        return _xpath_find(
++            data, xpath_split(xpath), create_if_missing=False, filter=filter
++        )
+     except KeyError:
+         return default
+ 
+Index: v2/sm/libyang-python/tests/test_xpath.py
 ===================================================================
---- goldstone-mgmt.orig/sm/libyang-python/tests/test_xpath.py
-+++ goldstone-mgmt/sm/libyang-python/tests/test_xpath.py
+--- v2.orig/sm/libyang-python/tests/test_xpath.py
++++ v2/sm/libyang-python/tests/test_xpath.py
 @@ -27,6 +27,16 @@ class XPathTest(unittest.TestCase):
                  self.assertNotEqual(res, value)
                  self.assertEqual(res, defval)
@@ -182,10 +317,23 @@ Index: goldstone-mgmt/sm/libyang-python/tests/test_xpath.py
  }
  
  XPATH_GET_EXPECTED_RESULTS = [
-@@ -338,6 +459,75 @@ XPATH_GET_EXPECTED_RESULTS = [
-         None,
-         True,
-     ),
+@@ -325,8 +446,91 @@ XPATH_GET_EXPECTED_RESULTS = [
+     ("cont2/leaf2", "coucou2", None, True),
+     ("cont1/leaf2", "not found", "fallback", False),
+     ("cont1/leaf2", "not found", None, False),
++    ("iface/name", ["eth0", "eth1"], None, True),
++    (
++        "iface/ipv4/address/ip",
++        [["10.0.0.1", "10.0.0.153"], ["10.0.0.2", "10.0.0.6"]],
++        None,
++        True,
++    ),
++    (
++        "iface/ipv4/address[ip='10.0.0.1']",
++        [{"ip": "10.0.0.1"}],
++        None,
++        True,
++    ),
 +    (
 +        "iface[name='eth0']/ipv4/address/ip",
 +        ["10.0.0.1", "10.0.0.153"],
@@ -257,4 +405,7 @@ Index: goldstone-mgmt/sm/libyang-python/tests/test_xpath.py
 +    ("falsy-values/list[key='1']/empty-tuple", [()], None, True),
  ]
  
++
  XPATH_GETALL_EXPECTED_RESULTS = [
+     ("/val", [42]),
+     ("val", [42]),

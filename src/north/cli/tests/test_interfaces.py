@@ -9,14 +9,14 @@ logger = logging.getLogger(__name__)
 libpath = os.path.join(os.path.dirname(__file__), "../../../lib")
 sys.path.insert(0, libpath)
 
-from goldstone.lib.connector.sysrepo import Connector
-
 from goldstone.north.cli.base import InvalidInput
 from goldstone.north.cli.root import Root
 from goldstone.north.cli import interface
 from goldstone.north.cli import vlan
 from goldstone.north.cli import ufd
 from goldstone.north.cli import portchannel
+
+from .test_util import MockConnector
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -63,28 +63,6 @@ interface Interface1
 
 def ifxpath(ifname):
     return f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-
-
-class MockConnector(Connector):
-    def get(
-        self,
-        xpath,
-        default=None,
-        include_implicit_defaults=False,
-        strip=True,
-        one=False,
-        ds="running",
-    ):
-        if ds != "operational":
-            return super().get(
-                xpath, default, include_implicit_defaults, strip, one, ds
-            )
-
-        oper_data = getattr(self, "oper_data", {})
-        logger.info(
-            f"{xpath=}, {default=}, {include_implicit_defaults=}, {strip=}, {one=}, {ds=}"
-        )
-        return oper_data.get(xpath, default)
 
 
 class Test(unittest.IsolatedAsyncioTestCase):

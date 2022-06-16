@@ -401,8 +401,8 @@ class TestInterfaceServer(TestBase):
                 self.set_logs,
                 [
                     ("provision-mode", "none"),
-                    ("signal-rate", "otu4"),
                     ("provision-mode", "none"),
+                    ("signal-rate", "otu4"),
                     ("loopback-type", "none"),
                     ("prbs-type", "none"),
                     ("fec-type", "rs"),
@@ -572,9 +572,9 @@ class TestInterfaceServer(TestBase):
             self.assertEqual(
                 self.set_logs,
                 [
+                    ("provision-mode", "none"),
+                    ("provision-mode", "none"),
                     ("loopback-type", "shallow"),
-                    ("provision-mode", "none"),
-                    ("provision-mode", "none"),
                     ("prbs-type", "none"),
                     ("fec-type", "rs"),
                     ("tx-timing-mode", "auto"),
@@ -626,10 +626,10 @@ class TestInterfaceServer(TestBase):
             self.assertEqual(
                 self.set_logs,
                 [
-                    ("prbs-type", "prbs7"),
                     ("provision-mode", "none"),
                     ("provision-mode", "none"),
                     ("loopback-type", "none"),
+                    ("prbs-type", "prbs7"),
                     ("fec-type", "rs"),
                     ("tx-timing-mode", "auto"),
                 ],

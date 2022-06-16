@@ -1,0 +1,276 @@
+Index: v2/sm/sysrepo-python/cffi/cdefs.h
+===================================================================
+--- v2.orig/sm/sysrepo-python/cffi/cdefs.h
++++ v2/sm/sysrepo-python/cffi/cdefs.h
+@@ -89,6 +89,8 @@ int sr_disable_module_feature(sr_conn_ct
+ int sr_session_start(sr_conn_ctx_t *, const sr_datastore_t, sr_session_ctx_t **);
+ int sr_session_stop(sr_session_ctx_t *);
+ int sr_session_switch_ds(sr_session_ctx_t *, sr_datastore_t);
++int sr_lock(sr_session_ctx_t *, const char *, uint32_t);
++int sr_unlock(sr_session_ctx_t *, const char *);
+ sr_datastore_t sr_session_get_ds(sr_session_ctx_t *);
+ sr_conn_ctx_t *sr_session_get_connection(sr_session_ctx_t *);
+ int sr_session_get_error(sr_session_ctx_t *, const sr_error_info_t **);
+@@ -188,6 +190,7 @@ int sr_set_item_str(sr_session_ctx_t *,
+ int sr_delete_item(sr_session_ctx_t *, const char *, const sr_edit_options_t);
+ int sr_edit_batch(sr_session_ctx_t *, const struct lyd_node *, const char *);
+ int sr_replace_config(sr_session_ctx_t *, const char *, struct lyd_node *, uint32_t);
++int sr_copy_config(sr_session_ctx_t *, const char *, sr_datastore_t, uint32_t);
+ int sr_validate(sr_session_ctx_t *, const char *, uint32_t);
+ int sr_apply_changes(sr_session_ctx_t *, uint32_t);
+ int sr_discard_changes(sr_session_ctx_t *);
+Index: v2/sm/sysrepo-python/sysrepo/errors.py
+===================================================================
+--- v2.orig/sm/sysrepo-python/sysrepo/errors.py
++++ v2/sm/sysrepo-python/sysrepo/errors.py
+@@ -11,11 +11,12 @@ from .util import c2str
+ class SysrepoError(Exception):
+ 
+     rc = None
+-    __slots__ = ("msg",)
++    __slots__ = ("msg", "err_info")
+ 
+-    def __init__(self, msg: str):
++    def __init__(self, msg: str, err_info: [str] = None):
+         super().__init__()
+         self.msg = msg
++        self.err_info = err_info
+ 
+     def __str__(self):
+         return "%s: %s" % (self.msg, c2str(lib.sr_strerror(self.rc)))
+@@ -31,9 +32,9 @@ class SysrepoError(Exception):
+         return subclass
+ 
+     @staticmethod
+-    def new(msg: str, rc: int) -> "SysrepoError":
++    def new(msg: str, rc: int, err_info: [str] = None) -> "SysrepoError":
+         err_class = SysrepoError.RC_CLASSES[rc]
+-        return err_class(msg)
++        return err_class(msg, err_info)
+ 
+ 
+ # ------------------------------------------------------------------------------
+@@ -113,7 +114,7 @@ class SysrepoCallbackShelveError(Sysrepo
+ 
+ 
+ # ------------------------------------------------------------------------------
+-def _get_error_msg(session) -> Optional[str]:
++def _get_error_msg(session) -> (Optional[str], [str]):
+     """
+     Get the error message information from the given session C pointer.
+ 
+@@ -122,19 +123,19 @@ def _get_error_msg(session) -> Optional[
+     """
+     msg = None
+     err_info_p = ffi.new("sr_error_info_t **")
++    error_strings = []
+     if lib.sr_session_get_error(session, err_info_p) == lib.SR_ERR_OK:
+         err_info = err_info_p[0]
+-        error_strings = []
+         if err_info != ffi.NULL:
+             for i in range(err_info.err_count):
+                 err = err_info.err[i]
+-                strings = []
++                msg = None
+                 if err.message:
+-                    strings.append(c2str(err.message))
+-                if strings:
+-                    error_strings.append(": ".join(strings))
++                    msg = c2str(err.message)
++                if msg:
++                    error_strings.append(msg)
+         msg = ", ".join(error_strings)
+-    return msg
++    return msg, error_strings
+ 
+ 
+ # ------------------------------------------------------------------------------
+@@ -165,13 +166,14 @@ def check_call(
+     ret = func(*args)
+     if ret not in valid_codes:
+         msg = None
++        err_info = None
+         if (
+             args
+             and isinstance(args[0], ffi.CData)
+             and ffi.typeof(args[0]) == ffi.typeof("sr_session_ctx_t *")
+         ):
+-            msg = _get_error_msg(args[0])
++            msg, err_info = _get_error_msg(args[0])
+         if not msg:
+             msg = "%s failed" % func.__name__
+-        raise SysrepoError.new(msg, ret)
++        raise SysrepoError.new(msg, ret, err_info)
+     return ret
+Index: v2/sm/sysrepo-python/sysrepo/session.py
+===================================================================
+--- v2.orig/sm/sysrepo-python/sysrepo/session.py
++++ v2/sm/sysrepo-python/sysrepo/session.py
+@@ -405,6 +405,7 @@ class SysrepoSession:
+         asyncio_register: bool = False,
+         strict: bool = False,
+         extra_info: bool = False,
++        oper_merge: bool = False,
+     ) -> None:
+         """
+         Register for providing operational data at the given xpath.
+@@ -432,6 +433,10 @@ class SysrepoSession:
+             When True, the given callback is called with extra keyword arguments
+             containing extra information of the sysrepo session that gave origin to the
+             event (see OperDataCallbackType for more details)
++        :arg oper_merge:
++            Instead of removing any previous existing matching data before getting them from an operational
++            subscription callback, keep them. Then the returned data are merged into the existing data. Accepted
++            only for operational subscriptions.
+         """
+         if self.is_implicit:
+             raise SysrepoUnsupportedError("cannot subscribe with implicit sessions")
+@@ -448,7 +453,10 @@ class SysrepoSession:
+ 
+         if asyncio_register:
+             no_thread = True  # we manage our own event loop
+-        flags = _subscribe_flags(no_thread=no_thread)
++        flags = _subscribe_flags(
++            no_thread=no_thread,
++            oper_merge=oper_merge,
++        )
+ 
+         check_call(
+             lib.sr_oper_get_subscribe,
+@@ -1092,6 +1100,23 @@ class SysrepoSession:
+         finally:
+             dnode.free()
+ 
++    def copy_config(
++        self,
++        datastore: str,
++        module_name: Optional[str] = None,
++        timeout_ms: int = 0,
++    ) -> None:
++
++        ds = datastore_value(datastore)
++
++        check_call(
++            lib.sr_copy_config,
++            self.cdata,
++            str2c(module_name),
++            ds,
++            timeout_ms,
++        )
++
+     def replace_config_ly(
+         self,
+         config: Optional[libyang.DNode],
+@@ -1342,6 +1367,31 @@ class SysrepoSession:
+         finally:
+             dnode.free()
+ 
++    def lock(self, module_name: str, timeout_ms: int = 0) -> "Lock":
++        return Lock(self, module_name, timeout_ms)
++
++
++class Lock:
++    def __init__(self, sess, module_name, timeout_ms):
++        self.sess = sess
++        self.module_name = module_name
++        self.timeout_ms = timeout_ms
++
++    def __enter__(self):
++        check_call(
++            lib.sr_lock,
++            self.sess.cdata,
++            str2c(self.module_name),
++            self.timeout_ms,
++        )
++
++    def __exit__(self, type, value, traceback):
++        check_call(
++            lib.sr_unlock,
++            self.sess.cdata,
++            str2c(self.module_name),
++        )
++
+ 
+ # -------------------------------------------------------------------------------------
+ DATASTORE_VALUES = {
+@@ -1380,7 +1430,9 @@ def _get_oper_flags(no_state=False, no_c
+ 
+ 
+ # -------------------------------------------------------------------------------------
+-def _subscribe_flags(no_thread=False, passive=False, done_only=False, enabled=False):
++def _subscribe_flags(
++    no_thread=False, passive=False, done_only=False, enabled=False, oper_merge=False
++):
+     flags = 0
+     if no_thread:
+         flags |= lib.SR_SUBSCR_NO_THREAD
+@@ -1390,6 +1442,8 @@ def _subscribe_flags(no_thread=False, pa
+         flags |= lib.SR_SUBSCR_DONE_ONLY
+     if enabled:
+         flags |= lib.SR_SUBSCR_ENABLED
++    if oper_merge:
++        flags |= lib.SR_SUBSCR_OPER_MERGE
+     return flags
+ 
+ 
+Index: v2/sm/sysrepo-python/sysrepo/subscription.py
+===================================================================
+--- v2.orig/sm/sysrepo-python/sysrepo/subscription.py
++++ v2/sm/sysrepo-python/sysrepo/subscription.py
+@@ -281,7 +281,6 @@ def module_change_callback(session, sub_
+             event in (lib.SR_EV_UPDATE, lib.SR_EV_CHANGE)
+             and e.msg
+             and isinstance(session, SysrepoSession)
+-            and isinstance(xpath, str)
+         ):
+             session.set_error(e.msg)
+         return e.rc
+@@ -291,10 +290,8 @@ def module_change_callback(session, sub_
+         # including KeyboardInterrupt, CancelledError, etc.
+         # We are in a C callback, we cannot let any error pass
+         LOG.exception("%r callback failed", locals().get("callback", priv))
+-        if (
+-            event in (lib.SR_EV_UPDATE, lib.SR_EV_CHANGE)
+-            and isinstance(session, SysrepoSession)
+-            and isinstance(xpath, str)
++        if event in (lib.SR_EV_UPDATE, lib.SR_EV_CHANGE) and isinstance(
++            session, SysrepoSession
+         ):
+             session.set_error(str(e))
+         return lib.SR_ERR_CALLBACK_FAILED
+@@ -399,7 +396,7 @@ def oper_data_callback(session, sub_id,
+         return lib.SR_ERR_OK
+ 
+     except SysrepoError as e:
+-        if e.msg and isinstance(session, SysrepoSession) and isinstance(xpath, str):
++        if e.msg and isinstance(session, SysrepoSession):
+             session.set_error(e.msg)
+         return e.rc
+ 
+@@ -408,7 +405,7 @@ def oper_data_callback(session, sub_id,
+         # including KeyboardInterrupt, CancelledError, etc.
+         # We are in a C callback, we cannot let any error pass
+         LOG.exception("%r callback failed", locals().get("callback", priv))
+-        if isinstance(session, SysrepoSession) and isinstance(xpath, str):
++        if isinstance(session, SysrepoSession):
+             session.set_error(str(e))
+         return lib.SR_ERR_CALLBACK_FAILED
+ 
+@@ -526,7 +523,7 @@ def rpc_callback(session, sub_id, xpath,
+         return lib.SR_ERR_OK
+ 
+     except SysrepoError as e:
+-        if e.msg and isinstance(session, SysrepoSession) and isinstance(xpath, str):
++        if e.msg and isinstance(session, SysrepoSession):
+             session.set_error(e.msg)
+         return e.rc
+ 
+@@ -535,7 +532,7 @@ def rpc_callback(session, sub_id, xpath,
+         # including KeyboardInterrupt, CancelledError, etc.
+         # We are in a C callback, we cannot let any error pass
+         LOG.exception("%r callback failed", locals().get("callback", priv))
+-        if isinstance(session, SysrepoSession) and isinstance(xpath, str):
++        if isinstance(session, SysrepoSession):
+             session.set_error(str(e))
+         return lib.SR_ERR_CALLBACK_FAILED
+ 
