@@ -354,16 +354,16 @@ def set_auto_nego(session, ifnames, value):
 def set_auto_nego_adv_speed(session, ifnames, speeds):
     for ifname in ifnames:
         xpath = ifxpath(ifname)
-        session.delete(
-            f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
-        )
         if speeds:
             session.set(f"{xpath}/config/name", ifname)
-            for speed in speeds.split(","):
-                session.set(
-                    f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
-                    speed_human_to_yang(speed),
-                )
+            xpath = f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds"
+            speeds = [speed_human_to_yang(s) for s in speeds.split(",")]
+            session.set(xpath, speeds)  # replace whole list
+        else:
+            session.delete(
+                f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds",
+            )
+
     session.apply()
 
 
@@ -413,7 +413,7 @@ def valid_speeds(session):
     xpath += "/goldstone-interfaces:speed"
     node = session.find_node(xpath)
     # SPEED_10G => 10G
-    v = [e[0].replace("SPEED_", "") for e in node.enums()]
+    v = [e.replace("SPEED_", "") for e in node.enums()]
     return v[1:]  # remove SPEED_UNKNOWN
 
 
@@ -423,7 +423,7 @@ def valid_eth_if_type(session):
     xpath += "/goldstone-interfaces:ethernet"
     xpath += "/goldstone-interfaces:config"
     xpath += "/goldstone-interfaces:interface-type"
-    return (e[0] for e in session.find_node(xpath).enums())
+    return session.find_node(xpath).enums()
 
 
 def valid_tx_timing_mode(session):
@@ -433,7 +433,7 @@ def valid_tx_timing_mode(session):
     xpath += "/goldstone-synce:synce"
     xpath += "/goldstone-synce:config"
     xpath += "/goldstone-synce:tx-timing-mode"
-    return (e[0] for e in session.find_node(xpath).enums())
+    return session.find_node(xpath).enums()
 
 
 def set_breakout(session, ifnames, numch, speed):
@@ -616,7 +616,7 @@ class IfConfigCommand(ConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             node = self.conn.find_node(self.XPATH)
-            return [v[0].lower() for v in node.enums()]
+            return [v.lower() for v in node.enums()]
 
     def exec(self, line):
         if self.root.name == "no":

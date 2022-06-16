@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 libpath = os.path.join(os.path.dirname(__file__), "../../../lib")
 sys.path.insert(0, libpath)
 
-from goldstone.lib.connector.sysrepo import Connector
-
 from goldstone.north.cli.root import Root
+
+from .test_util import MockConnector
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -35,28 +35,6 @@ INTF_OPER_DATA = [
         "state": {"admin-status": "UP"},
     },
 ]
-
-
-class MockConnector(Connector):
-    def get(
-        self,
-        xpath,
-        default=None,
-        include_implicit_defaults=False,
-        strip=True,
-        one=False,
-        ds="running",
-    ):
-        if ds != "operational":
-            return super().get(
-                xpath, default, include_implicit_defaults, strip, one, ds
-            )
-
-        oper_data = getattr(self, "oper_data", {})
-        logger.info(
-            f"{xpath=}, {default=}, {include_implicit_defaults=}, {strip=}, {one=}, {ds=}"
-        )
-        return oper_data.get(xpath, default)
 
 
 class Test(unittest.IsolatedAsyncioTestCase):

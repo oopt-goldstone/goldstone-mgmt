@@ -25,7 +25,7 @@ class TestLibYANG(unittest.TestCase):
         v = t.type().enums()
         self.assertEqual(len(list(v)), 4)
         for i, e in enumerate(t.type().enums()):
-            self.assertEqual(e[0], (chr(ord("A") + i)))
+            self.assertEqual(e.name(), (chr(ord("A") + i)))
 
 
 if __name__ == "__main__":

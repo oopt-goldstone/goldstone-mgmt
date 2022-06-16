@@ -18,7 +18,7 @@ class Node(object):
         return str(self.node.type())
 
     def enums(self):
-        return self.node.type().all_enums()
+        return [e.name() for e in self.node.type().all_enums()]
 
     def range(self):
         return self.node.type().range()

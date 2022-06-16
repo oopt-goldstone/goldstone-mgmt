@@ -196,7 +196,7 @@ module goldstone-gearbox {
     deviate replace {
       type uint16 {
         range "0..10000" {
-          error-message "Invalid MTU value";
+          error-message "Invalid MTU value. valid range is 0..10000";
           error-app-tag mtu-invalid;
         }
       }

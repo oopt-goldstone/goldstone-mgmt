@@ -58,8 +58,15 @@ class ServerBase(object):
             include_implicit_defaults=include_implicit_defaults,
         )
 
-    def get_operational_data(self, xpath, default=None, strip=True):
-        return self.conn.get(xpath, default=default, strip=strip, ds="operational")
+    def get_operational_data(
+        self, xpath, default=None, strip=True, include_implicit_defaults=False
+    ):
+        return self.conn.get_operational(
+            xpath,
+            default=default,
+            strip=strip,
+            include_implicit_defaults=include_implicit_defaults,
+        )
 
     def get_handler(self, xpath):
         xpath = libyang.xpath_split(xpath)

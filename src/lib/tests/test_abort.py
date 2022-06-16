@@ -1,11 +1,8 @@
 import unittest
-from unittest import mock
-import itertools
 import logging
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import os
-import json
 import sys
 
 from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
@@ -18,17 +15,12 @@ logger = logging.getLogger(__name__)
 
 class InterfaceAdminStatusHandler(ChangeHandler):
     def apply(self, user):
-        raise Exception("error")
-
-
-class ModuleAdminStatusHandler(ChangeHandler):
-    def apply(self, user):
         self.server.apply_called = True
-        logger.info("module admin-status apply")
+        logger.info("interface admin-status apply")
 
     def revert(self, user):
         self.server.revert_called = True
-        logger.info("module admin-status revert")
+        logger.info("interface admin-status revert")
 
 
 class MockInterfaceServer(ServerBase):
@@ -41,6 +33,8 @@ class MockInterfaceServer(ServerBase):
                     "config": {
                         "name": NoOp,
                         "admin-status": InterfaceAdminStatusHandler,
+                        "loopback-mode": NoOp,
+                        "prbs-mode": NoOp,
                     },
                     "ethernet": NoOp,
                     "switched-vlan": NoOp,
@@ -48,6 +42,13 @@ class MockInterfaceServer(ServerBase):
                 },
             }
         }
+        self.apply_called = False
+        self.revert_called = False
+
+
+class ModuleAdminStatusHandler(ChangeHandler):
+    def apply(self, user):
+        raise InvalArgError("testtesttest")
 
 
 class MockTransponderServer(ServerBase):
@@ -57,12 +58,13 @@ class MockTransponderServer(ServerBase):
             "modules": {
                 "module": {
                     "name": NoOp,
-                    "config": {"name": NoOp, "admin-status": ModuleAdminStatusHandler},
+                    "config": {
+                        "name": NoOp,
+                        "admin-status": ModuleAdminStatusHandler,
+                    },
                 },
             }
         }
-        self.apply_called = False
-        self.revert_called = False
 
 
 class TestAbort(unittest.IsolatedAsyncioTestCase):
@@ -79,15 +81,11 @@ class TestAbort(unittest.IsolatedAsyncioTestCase):
         ifserver = MockInterfaceServer(self.conn)
         xpserver = MockTransponderServer(self.conn)
 
-        servers = [ifserver, xpserver]
+        tasks = await ifserver.start()
+        tasks += await xpserver.start()
 
-        tasks = list(
-            asyncio.create_task(c)
-            for c in itertools.chain.from_iterable([await s.start() for s in servers])
-        )
-
-        self.assertFalse(xpserver.apply_called)
-        self.assertFalse(xpserver.revert_called)
+        self.assertFalse(ifserver.apply_called)
+        self.assertFalse(ifserver.revert_called)
 
         def test():
             conn = Connector()
@@ -110,15 +108,22 @@ class TestAbort(unittest.IsolatedAsyncioTestCase):
                 f"/goldstone-interfaces:interfaces/interface[name='{name}']/config/admin-status",
                 "UP",
             )
-            with self.assertRaises(CallbackFailedError):
+
+            # in sysrepo v2, the changes to the interface model get handled first, then the changes
+            # to the transponder model get handled next. The order was opposite in sysrepo v1
+
+            with self.assertRaisesRegex(CallbackFailedError, "testtesttest"):
                 conn.apply()
 
         await asyncio.create_task(asyncio.to_thread(test))
 
-        self.assertTrue(xpserver.apply_called)
-        self.assertTrue(xpserver.revert_called)
+        self.assertTrue(ifserver.apply_called)
+        self.assertTrue(ifserver.revert_called)
 
         ifserver.stop()
         xpserver.stop()
 
         await asyncio.gather(*tasks)
+
+    async def asyncTearDown(self):
+        self.conn.stop()

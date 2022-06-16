@@ -95,13 +95,13 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
         self.q = Queue()
         self.process = Process(target=run_mock_gs_server, args=(self.q,))
         self.process.start()
+        await asyncio.sleep(2)  # wait for the mock server
 
         self.server = InterfaceServer(self.conn, reconciliation_interval=1)
         self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
 
     async def test_get_ifname(self):
         def test():
-            time.sleep(2)  # wait for the mock server
             conn = Connector()
             data = conn.get_operational(
                 "/openconfig-interfaces:interfaces/interface/name"
@@ -112,8 +112,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_set_admin_status(self):
         def test():
-            time.sleep(2)  # wait for the mock server
-
             conn = Connector()
             name = "Ethernet1_1"
             conn.set(
@@ -160,8 +158,6 @@ class TestInterfaceServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_reconcile(self):
         def test():
-            time.sleep(2)  # wait for the mock server
-
             conn = Connector()
 
             name = "Ethernet1_1"

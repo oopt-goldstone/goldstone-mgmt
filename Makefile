@@ -86,17 +86,18 @@ lint:
 	grep -rnI 'print(' src || exit 0 && exit 1
 
 unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-sonic
-	cd src/south/sonic && make proto
-	scripts/gs-yang.py --install south-sonic south-tai --search-dirs yang
-	PYTHONPATH=src/lib:src/south/sonic:src/south/tai python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
-	cd src/south/sonic      && make clean
+
+clean-sysrepo:
+	rm -rf /dev/shm/sr* /var/lib/sysrepo
 
 unittest-lib:
+	$(MAKE) clean-sysrepo
 	sysrepoctl --search-dirs yang --install yang/goldstone-interfaces.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-transponder.yang
-	cd src/lib && python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	cd src/lib && python -m unittest -v -f $(TEST_CASE)
 
 unittest-cli:
+	$(MAKE) clean-sysrepo
 	sysrepoctl --search-dirs yang --install yang/goldstone-interfaces.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-synce.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-static-macsec.yang
@@ -104,26 +105,31 @@ unittest-cli:
 	sysrepoctl --search-dirs yang --install yang/goldstone-uplink-failure-detection.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-portchannel.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-transponder.yang
-	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-gearbox:
+	$(MAKE) clean-sysrepo
 	scripts/gs-yang.py --install south-gearbox --search-dirs yang
-	cd src/south/gearbox    && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	cd src/south/gearbox    && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-dpll:
+	$(MAKE) clean-sysrepo
 	scripts/gs-yang.py --install south-dpll --search-dirs yang
-	cd src/south/dpll && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	cd src/south/dpll && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-openconfig:
+	$(MAKE) clean-sysrepo
 	scripts/gs-yang.py --install xlate-oc south-sonic --search-dirs yang sm/openconfig
-	cd src/xlate/openconfig && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	cd src/xlate/openconfig && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-tai:
+	$(MAKE) clean-sysrepo
 	scripts/gs-yang.py --install south-tai --search-dirs yang
-	cd src/south/tai        && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	cd src/south/tai        && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-sonic:
+	$(MAKE) clean-sysrepo
 	cd src/south/sonic && make proto
 	scripts/gs-yang.py --install south-sonic --search-dirs yang
-	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f && rm -rf /dev/shm/sr* /var/lib/sysrepo
+	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 	cd src/south/sonic      && make clean

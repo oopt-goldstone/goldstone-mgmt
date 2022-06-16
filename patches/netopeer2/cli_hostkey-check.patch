@@ -1,33 +1,33 @@
-Index: goldstone-mgmt/sm/netopeer2/cli/commands.c
+Index: m/sm/netopeer2/cli/commands.c
 ===================================================================
---- goldstone-mgmt.orig/sm/netopeer2/cli/commands.c
-+++ goldstone-mgmt/sm/netopeer2/cli/commands.c
-@@ -1156,7 +1156,7 @@ cmd_timed_help(void)
- void
+--- m.orig/sm/netopeer2/cli/commands.c
++++ m/sm/netopeer2/cli/commands.c
+@@ -1294,7 +1294,7 @@ cmd_timed_help(void)
+ static void
  cmd_auth_help(void)
  {
 -    printf("auth (--help | pref [(publickey | interactive | password) <preference>] | keys [add <public_key_path> <private_key_path>] [remove <key_index>])\n");
 +    printf("auth (--help | pref [(publickey | interactive | password) <preference>] | keys [add <public_key_path> <private_key_path>] [remove <key_index>]) | hostkey-check [enable|disable] \n");
  }
  
- void
-@@ -1186,6 +1186,12 @@ cmd_crl_help(void)
+ static void
+@@ -1324,6 +1324,12 @@ cmd_crl_help(void)
  #ifdef NC_ENABLED_SSH
  
- int
+ static int
 +_hostkey_check(const char *UNUSED(hostname), ssh_session UNUSED(session), void *UNUSED(priv))
 +{
 +    return 0;
 +}
 +
-+int
++static int
  cmd_auth(const char *arg, char **UNUSED(tmp_config_file))
  {
      int i;
-@@ -1304,6 +1310,27 @@ cmd_auth(const char *arg, char **UNUSED(
+@@ -1441,7 +1447,26 @@ cmd_auth(const char *arg, char **UNUSED(
+             ERROR("auth keys", "Unknown argument %s", cmd);
              return EXIT_FAILURE;
          }
- 
 +    } else if (strcmp(cmd, "hostkey-check") == 0) {
 +        cmd = strtok_r(NULL, " ", &ptr);
 +        if (cmd == NULL) {
@@ -39,7 +39,7 @@ Index: goldstone-mgmt/sm/netopeer2/cli/commands.c
 +            } else {
 +                printf("\tdisabled\n");
 +            }
-+
+ 
 +        } else if(strcmp(cmd, "enable") == 0) {
 +            nc_client_ssh_set_auth_hostkey_check_clb(NULL, NULL);
 +        } else if(strcmp(cmd, "disable") == 0) {
@@ -48,7 +48,6 @@ Index: goldstone-mgmt/sm/netopeer2/cli/commands.c
 +            ERROR("auth hostkey-check", "Unknown hostkey-check method (%s)", cmd);
 +            return EXIT_FAILURE;
 +        }
-+
      } else {
          ERROR("auth", "Unknown argument %s", cmd);
          return EXIT_FAILURE;
