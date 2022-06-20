@@ -32,7 +32,12 @@ class TAIHandler(ChangeHandler):
         if not self.attr_name:
             return
         try:
-            cap = await self.obj.get_attribute_capability(self.attr_name)
+            meta = await self.obj.get_attribute_metadata(self.attr_name)
+        except taish.TAIException as e:
+            raise InvalArgError(f"unsupported attribute: {self.attr_name}")
+
+        try:
+            cap = await self.obj.get_attribute_capability(meta.attr_id)
         except taish.TAIException as e:
             raise InvalArgError(e.msg)
 

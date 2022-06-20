@@ -1,17 +1,18 @@
 import unittest
 from unittest import mock
-from goldstone.south.tai.transponder import TransponderServer
 import asyncio
 import logging
 import json
 import time
-import itertools
 import libyang
+import os
+from taish import TAIException
+
 from goldstone.lib.core import ServerBase
 from goldstone.lib.connector.sysrepo import Connector
-import os
-import json
-from taish import TAIException
+from goldstone.lib.errors import *
+
+from goldstone.south.tai.transponder import TransponderServer
 
 fmt = "%(levelname)s %(module)s %(funcName)s l.%(lineno)d | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=fmt)
@@ -80,12 +81,18 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
                 return ret, mock.MagicMock()
             return ret
 
+        async def get_attribute_metadata(*args, **kwargs):
+            if args[0] == "losi":
+                raise TAIException(-1, "fail")
+            return mock.MagicMock()
+
         module.monitor = monitor
         module.get = get
 
         obj = mock.AsyncMock()
         obj.monitor = monitor
         obj.get = get
+        obj.get_attribute_metadata = get_attribute_metadata
 
         def f(*args):
             return obj
@@ -268,6 +275,53 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
                 pass
 
         await server.stop()
+
+    async def test_set_losi(self):
+        with open(os.path.dirname(__file__) + "/platform.json") as f:
+            platform_info = json.loads(f.read())
+
+        server = TransponderServer(self.conn, "", platform_info)
+        tasks = list(asyncio.create_task(c) for c in await server.start())
+
+        def test():
+            conn = Connector()
+
+            name = "piu1"
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/config/name",
+                name,
+            )
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/network-interface[name='0']/config/name",
+                "0",
+            )
+
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/network-interface[name='0']/config/losi",
+                "true",
+            )
+
+            with self.assertRaisesRegex(
+                CallbackFailedError, "unsupported attribute: losi"
+            ):
+                conn.apply()
+
+        await asyncio.to_thread(test)
+
+        await server.stop()
+
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            e = task.exception()
+            if e:
+                raise e
+
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     async def asyncTearDown(self):
         self.alive = False
