@@ -77,6 +77,8 @@ class TAIHandler(ChangeHandler):
         await self.obj.set(self.attr_name, self.value)
 
     async def revert(self, user):
+        if not self.attr_name:
+            return
         logger.warning(
             f"reverting: {self.attr_name} {self.value} => {self.original_value}"
         )
