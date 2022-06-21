@@ -310,7 +310,7 @@ class Context(object):
             self.close()
             if self.parent:
                 return self.parent
-            raise BreakLoop()
+            raise BreakLoop("")
 
         @self.command()
         def exit(line):
