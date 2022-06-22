@@ -13,6 +13,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_ADMIN_STATUS = "down"
 IGNORE_LEAVES = ["name", "enable-notify", "enable-alarm-notification"]
 
+TAI_STATUS_NOT_SUPPORTED = -0x00000002
+TAI_STATUS_ATTR_NOT_SUPPORTED_0 = -0x00050000
+TAI_STATUS_ATTR_NOT_SUPPORTED_MAX = -0x0005FFFF
+
+
+def is_not_supported(code):
+    return code == TAI_STATUS_NOT_SUPPORTED or (
+        code <= TAI_STATUS_ATTR_NOT_SUPPORTED_0
+        and code >= TAI_STATUS_ATTR_NOT_SUPPORTED_MAX
+    )
+
 
 class TAIHandler(ChangeHandler):
     async def _init(self, user):
@@ -39,6 +50,8 @@ class TAIHandler(ChangeHandler):
         try:
             cap = await self.obj.get_attribute_capability(meta.attr_id)
         except taish.TAIException as e:
+            if is_not_supported(e.code):
+                raise InvalArgError(f"unsupported attribute: {self.attr_name}")
             raise InvalArgError(e.msg)
 
         logger.info(f"cap: {cap}")
@@ -64,7 +77,6 @@ class TAIHandler(ChangeHandler):
             if len(valids) > 0 and v not in valids:
                 raise InvalArgError(f"supported values are {valids}. given {v}")
 
-            meta = await self.obj.get_attribute_metadata(self.attr_name)
             if meta.usage == "<bool>":
                 v = "true" if v else "false"
 
@@ -74,7 +86,12 @@ class TAIHandler(ChangeHandler):
         if not self.attr_name:
             return
         self.original_value = await self.obj.get(self.attr_name)
-        await self.obj.set(self.attr_name, self.value)
+        try:
+            await self.obj.set(self.attr_name, self.value)
+        except taish.TAIException as e:
+            if is_not_supported(e.code):
+                raise InvalArgError(f"unsupported attribute: {self.attr_name}")
+            raise InvalArgError(e.msg)
 
     async def revert(self, user):
         if not self.attr_name:
@@ -82,7 +99,12 @@ class TAIHandler(ChangeHandler):
         logger.warning(
             f"reverting: {self.attr_name} {self.value} => {self.original_value}"
         )
-        await self.obj.set(self.attr_name, self.original_value)
+        try:
+            await self.obj.set(self.attr_name, self.original_value)
+        except taish.TAIException as e:
+            if is_not_supported(e.code):
+                raise InvalArgError(f"unsupported attribute: {self.attr_name}")
+            raise InvalArgError(e.msg)
 
 
 class ModuleHandler(TAIHandler):
