@@ -33,7 +33,9 @@ class MockPlatformServer(ServerBase):
                     "name": name,
                     "config": {"name": name},
                     "state": {"type": "PIU"},
-                    "piu": {"state": {"status": ["PRESENT"]}},
+                    "piu": {
+                        "state": {"status": ["PRESENT"], "cfp2-presence": "PRESENT"}
+                    },
                 }
             )
 
@@ -43,7 +45,7 @@ class MockPlatformServer(ServerBase):
         return await super().start()
 
 
-class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
+class TestBase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         logging.basicConfig(level=logging.DEBUG)
         self.conn = Connector()
@@ -54,10 +56,18 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
         taish = mock.AsyncMock()
         taish.list.return_value = {"1": None}
 
-        def noop():
-            pass
+        self.objects = {}
 
-        taish.close = noop
+        async def remove(*args, **kwargs):
+            oid = args[0]
+            if oid == "module(1)":
+                return
+            if oid not in self.objects:
+                raise TAIException(-1, f"{oid} not found")
+            self.objects.pop(oid)
+
+        taish.remove = remove
+
         module = taish.get_module.return_value
 
         async def monitor(*args, **kwargs):
@@ -73,7 +83,9 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
             elif args[0] == "num-network-interfaces":
                 ret = "1"
             elif args[0] == "num-host-interfaces":
-                ret = "2"
+                ret = "4"
+            elif args[0] == "line-rate":
+                ret = "400g"
             else:
                 raise TAIException(0, "mock")
 
@@ -89,20 +101,61 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
         module.monitor = monitor
         module.get = get
 
-        obj = mock.AsyncMock()
-        obj.monitor = monitor
-        obj.get = get
-        obj.get_attribute_metadata = get_attribute_metadata
+        async def get_attribute_capability(*args, **kwargs):
+            m = mock.MagicMock()
+            m.min = ""
+            m.max = ""
+            return m
 
-        def f(*args):
+        def create_obj(oid):
+            obj = mock.AsyncMock()
+            obj.monitor = monitor
+            obj.get = get
+            obj.get_attribute_metadata = get_attribute_metadata
+            obj.get_attribute_capability = get_attribute_capability
+            obj.oid = oid
+            self.objects[oid] = obj
             return obj
 
-        module.get_netif = f
-        module.get_hostif = f
+        def get_netif(*args):
+            index = args[0]
+            oid = f"netif({index})"
+            obj = self.objects.get(oid)
+            if obj:
+                return obj
+            raise TAIException(-1, f"{oid} not found")
 
-        cap = module.get_attribute_capability.return_value
-        cap.min = ""
-        cap.max = ""
+        def get_hostif(*args):
+            index = args[0]
+            oid = f"hostif({index})"
+            obj = self.objects.get(oid)
+            if obj:
+                return obj
+            raise TAIException(-1, f"{oid} not found")
+
+        async def create_netif(*args, **kwargs):
+            index = args[0]
+            oid = f"netif({index})"
+            obj = self.objects.get(oid)
+            if obj:
+                raise TAIException(-1, f"{oid} already exists")
+            return create_obj(oid)
+
+        async def create_hostif(*args, **kwargs):
+            index = args[0]
+            oid = f"hostif({index})"
+            obj = self.objects.get(oid)
+            if obj:
+                raise TAIException(-1, f"{oid} already exists")
+            return create_obj(oid)
+
+        module.get_netif = get_netif
+        module.get_hostif = get_hostif
+        module.create_netif = create_netif
+        module.create_hostif = create_hostif
+        module.get_attribute_capability = get_attribute_capability
+        module.location = "1"
+        module.oid = "module(1)"
 
         self.patchers = [
             mock.patch("taish.AsyncClient", return_value=taish),
@@ -110,6 +163,13 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
 
         [p.start() for p in self.patchers]
 
+    async def asyncTearDown(self):
+        self.alive = False
+        [p.stop() for p in self.patchers]
+        self.conn.stop()
+
+
+class TestTransponderServer(TestBase):
     async def test_tai_init(self):
 
         # this needs to run in another thread because TransponderServer queries
@@ -164,26 +224,18 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
             else:
                 self.assertTrue(False, f"piu1 didn't show up in oper ds")
 
-            self.assertEqual(len(server.event_obj), 1)
+            self.assertEqual(len(server.modules), 1)
 
-        tasks.append(asyncio.create_task(asyncio.to_thread(test2)))
-
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
-
+        await asyncio.to_thread(test2)
         alive = False
+        await server.stop()
 
-        for task in pending:
-            task.cancel()
+        for t in tasks:
+            t.cancel()
             try:
-                await task
+                await t
             except asyncio.CancelledError:
                 pass
-
-        await server.stop()
 
     async def test_tai_hotplug(self):
         with open(os.path.dirname(__file__) + "/platform.json") as f:
@@ -276,15 +328,42 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
 
         await server.stop()
 
-    async def test_set_losi(self):
+
+class TestTransponderServerAttributeHandling(TestBase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+
         with open(os.path.dirname(__file__) + "/platform.json") as f:
             platform_info = json.loads(f.read())
 
-        server = TransponderServer(self.conn, "", platform_info)
-        tasks = list(asyncio.create_task(c) for c in await server.start())
+        self.server = TransponderServer(self.conn, "", platform_info)
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
 
+    async def asyncTearDown(self):
+        await self.server.stop()
+        for t in self.tasks:
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+
+        await super().asyncTearDown()
+
+    def init(self, conn):
+        name = "goldstone-platform:piu-notify-event"
+        notification = {
+            "name": "piu1",
+            "status": ["PRESENT"],
+            "cfp2-presence": "PRESENT",
+        }
+        conn.send_notification(name, notification)
+        time.sleep(1)
+
+    async def test_set_losi(self):
         def test():
             conn = Connector()
+            self.init(conn)
 
             name = "piu1"
             conn.set(
@@ -308,25 +387,85 @@ class TestTransponderServer(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.to_thread(test)
 
-        await server.stop()
+    async def test_set_line_rate(self):
+        def test():
+            conn = Connector()
+            self.init(conn)
 
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            e = task.exception()
-            if e:
-                raise e
+            v = list(sorted(self.objects.keys()))
+            self.assertEqual(
+                v, ["hostif(0)", "hostif(1)", "hostif(2)", "hostif(3)", "netif(0)"]
+            )
 
-        for task in pending:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+            name = "piu1"
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/config/name",
+                name,
+            )
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/network-interface[name='0']/config/name",
+                "0",
+            )
 
-    async def asyncTearDown(self):
-        self.alive = False
-        [p.stop() for p in self.patchers]
-        self.conn.stop()
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/network-interface[name='0']/config/line-rate",
+                "100g",
+            )
+
+            conn.apply()
+            v = list(sorted(self.objects.keys()))
+            self.assertEqual(v, ["hostif(0)", "netif(0)"])
+
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/network-interface[name='0']/config/line-rate",
+                "200g",
+            )
+
+            conn.apply()
+            v = list(sorted(self.objects.keys()))
+            self.assertEqual(v, ["hostif(0)", "hostif(1)", "netif(0)"])
+
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/network-interface[name='0']/config/line-rate",
+                "300g",
+            )
+
+            conn.apply()
+            v = list(sorted(self.objects.keys()))
+            self.assertEqual(v, ["hostif(0)", "hostif(1)", "hostif(2)", "netif(0)"])
+
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/network-interface[name='0']/config/line-rate",
+                "400g",
+            )
+
+            conn.apply()
+            v = list(sorted(self.objects.keys()))
+            self.assertEqual(
+                v, ["hostif(0)", "hostif(1)", "hostif(2)", "hostif(3)", "netif(0)"]
+            )
+
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/host-interface[name='1']/config/name",
+                "1",
+            )
+
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/host-interface[name='1']/config/signal-rate",
+                "100-gbe",
+            )
+
+            conn.set(
+                f"/goldstone-transponder:modules/module[name='{name}']/network-interface[name='0']/config/line-rate",
+                "100g",
+            )
+            with self.assertRaisesRegex(
+                CallbackFailedError,
+                "host-interface\(1\) has configuration that conflicts with line-rate: 100g",
+            ):
+                conn.apply()
+
+        await asyncio.to_thread(test)
 
 
 if __name__ == "__main__":
