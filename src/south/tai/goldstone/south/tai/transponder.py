@@ -25,6 +25,14 @@ def is_not_supported(code):
     )
 
 
+async def cancel_notification_task(task):
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 class TAIHandler(ChangeHandler):
     async def _init(self, user):
         xpath, module = await self.server.get_module_from_xpath(self.change.xpath)
@@ -136,6 +144,74 @@ class InterfaceHandler(TAIHandler):
         else:
             self.attr_name = self.xpath[2][1]
 
+    async def validate(self, user):
+        await super().validate(user)
+        if self.attr_name != "line-rate":
+            return
+
+        v = self.server.rate_info.get(self.value)
+        if v == None:
+            raise InvalArgError(f"no platform info for line-rate: {self.value}")
+
+        self.hostifs = v
+        self.num_hostifs = int(await self.module.get("num-host-interfaces"))
+        module_name = self.server.location2name(self.module.location)
+        prefix = f"/goldstone-transponder:modules/module[name='{module_name}']"
+
+        cache = self.setup_cache(user)
+        for index in range(self.num_hostifs):
+            must_exists = index in self.hostifs
+            if not must_exists:
+                xpath = prefix + f"/host-interface[name='{index}']"
+                config = libyang.xpath_get(cache, xpath, None)
+                if config:
+                    raise InvalArgError(
+                        f"host-interface({index}) has configuration that conflicts with line-rate: {self.value}"
+                    )
+
+    async def apply(self, user):
+        if self.attr_name == "line-rate":
+            self.created = []
+            self.removed = []
+            num_hostifs = int(await self.module.get("num-host-interfaces"))
+            modules = self.server.modules[self.module.location]
+            async with modules["lock"]:
+                for index in range(self.num_hostifs):
+                    must_exists = index in self.hostifs
+                    try:
+                        hostif = self.module.get_hostif(index)
+                        if not must_exists:
+                            task = modules["hostifs"][index]
+                            await cancel_notification_task(task)
+                            logger.debug(f"removing hostif({index})")
+                            await self.server.taish.remove(hostif.oid)
+                            self.removed.append(index)
+                    except taish.TAIException:
+                        if must_exists:
+                            logger.debug(f"creating hostif({index})")
+                            hostif = await self.module.create_hostif(index)
+                            self.created.append(hostif)
+                            task = await self.server.create_tai_notif_task(hostif)
+                            modules["hostifs"][index] = task
+
+        await super().apply(user)
+
+    async def revert(self, user):
+        await super().revert(user)
+
+        if self.attr_name == "line-rate":
+
+            modules = self.server.modules[self.module.location]
+            async with modules["lock"]:
+                for obj in self.created:
+                    task = modules["hostifs"][obj.index]
+                    await cancel_notification_task(task)
+                    await self.server.taish.remove(obj.oid)
+                for index in self.removed:
+                    hostif = await self.module.create_hostif(index)
+                    task = await self.server.create_tai_notif_task(hostif)
+                    modules["hostifs"][index] = task
+
 
 class InvalidXPath(Exception):
     pass
@@ -162,14 +238,33 @@ class TransponderServer(ServerBase):
     def __init__(self, conn, taish_server, platform_info):
         super().__init__(conn, "goldstone-transponder")
         info = {}
+        rate_info = {}
         for i in platform_info:
             if "component" in i and "tai" in i:
                 name = i["tai"]["module"]["name"]
+                if name in info:
+                    raise Exception(f"duplicated platform info: module name: {name}")
                 info[name] = i
+            elif "transponder" in i:
+                # TODO currently south-tai doesn't support per-module configuration for the netif rate and hostif mapping
+                # also it doesn't support modules with multiple netif
+                netif = i["transponder"]["netif"]
+                assert netif["index"] == 0
+                rate = netif["line-rate"]
+                if rate in rate_info:
+                    raise Exception(f"duplicated rate info: rate: {rate}")
+                hostifs = i["transponder"]["hostifs"]
+                rate_info[rate] = [v["index"] for v in hostifs]
         self.platform_info = info
+        self.rate_info = rate_info
         self.taish = taish.AsyncClient(*taish_server.split(":"))
         self.notif_q = asyncio.Queue()
-        self.event_obj = {}
+
+        # modules holds asyncio tasks that subscribes to TAI notification
+        # the asyncio task is created by self.create_tai_notif_task(object)
+        # key: location, value: {"lock": lock for mutating TAI objects, "notif_task": notif-task for module, "netifs": {"0": <notif-task>}, "hostifs": {"0": <notif-task>, "1": <notif-task>, "2": <notif-task>..}}
+        self.modules = {}
+
         self.is_initializing = True
         self.handlers = {
             "modules": {
@@ -239,61 +334,30 @@ class TransponderServer(ServerBase):
             {"xpath": xpath, "eventname": eventname, "v": v, "obj": obj, "msg": msg}
         )
 
-    async def get_tai_notification_tasks(self, location):
-        tasks = []
-        finalizers = []
-
-        async def finalizer(obj, attr):
-            while True:
-                await asyncio.sleep(0.1)
-                v = await obj.get(attr)
-                logger.debug(v)
-                if "(nil)" in v:
-                    return
-
-        def add(obj, attr):
-            tasks.append(obj.monitor(attr, self.tai_cb, json=True))
-            finalizers.append(finalizer(obj, attr))
-
-        try:
-            module = await self.taish.get_module(location)
-        except Exception as e:
-            logger.warning(f"failed to get module location: {location}. err: {e}")
-            return
-
-        for attr in ["notify"]:
+    async def create_tai_notif_task(self, obj):
+        async def monitor(obj, attr):
             try:
-                await module.get(attr)
+                logger.info(f"monitor: {obj.oid}, attr: {attr}")
+                await obj.monitor(attr, self.tai_cb)
+            except asyncio.exceptions.CancelledError as e:
+                while True:
+                    await asyncio.sleep(0.1)
+                    v = await obj.get(attr)
+                    logger.debug(f"canceling monitoring {attr}, value: {v}")
+                    if "(nil)" in v:
+                        return
+                raise e from None
+
+        tasks = []
+        for attr in ["notify", "alarm-notification"]:
+            try:
+                await obj.get(attr)
             except taish.TAIException:
-                logger.warning(
-                    f"monitoring {attr} is not supported for module({location})"
-                )
+                pass
             else:
-                add(module, attr)
+                tasks.append(asyncio.create_task(monitor(obj, attr)))
 
-        for i in range(int(await module.get("num-network-interfaces"))):
-            n = module.get_netif(i)
-            for attr in ["notify", "alarm-notification"]:
-                try:
-                    await n.get(attr)
-                except taish.TAIException:
-                    logger.warning(f"monitoring {attr} is not supported for netif({i})")
-                else:
-                    add(n, attr)
-
-        for i in range(int(await module.get("num-host-interfaces"))):
-            h = module.get_hostif(i)
-            for attr in ["notify", "alarm-notification"]:
-                try:
-                    await h.get(attr)
-                except taish.TAIException:
-                    logger.warning(
-                        f"monitoring {attr} is not supported for hostif({i})"
-                    )
-                else:
-                    add(h, attr)
-
-        return tasks, finalizers
+        return asyncio.gather(*tasks)
 
     async def initialize_piu(self, config, location):
 
@@ -302,15 +366,11 @@ class TransponderServer(ServerBase):
             logger.warning(f"failed to get module name from location: {location}")
             return
 
-        if location not in self.event_obj:
-            # this happens if south-onlp is not running when south-tai starts
-            # allow this situtation for now. might need reconsideration
-            logger.warning(
-                f"registering module({name}). somehow failed to do this during initialization"
-            )
-            self.event_obj[location] = {"lock": asyncio.Lock()}
+        assert location not in self.modules
 
-        async with self.event_obj[location]["lock"]:
+        self.modules[location] = {"lock": asyncio.Lock()}
+
+        async with self.modules[location]["lock"]:
 
             logger.info(f"initializing module({name})")
 
@@ -338,10 +398,15 @@ class TransponderServer(ServerBase):
                 for k, v in attrs:
                     await module.set(k, v)
 
+            self.modules[location]["notif_task"] = await self.create_tai_notif_task(
+                module
+            )
+
             nconfig = {
                 n["name"]: n.get("config", {})
                 for n in config.get("network-interface", [])
             }
+            netifs = {}
             for index in range(int(await module.get("num-network-interfaces"))):
                 attrs = [
                     (k, v if type(v) != bool else "true" if v else "false")
@@ -362,53 +427,94 @@ class TransponderServer(ServerBase):
                     for k, v in attrs:
                         await netif.set(k, v)
 
+                notif_task = await self.create_tai_notif_task(netif)
+                netifs[index] = notif_task
+
+            self.modules[location]["netifs"] = netifs
+
+            num_hostifs = int(await module.get("num-host-interfaces"))
+
+            try:
+                rate = await netif.get("line-rate")
+                hostifs = self.rate_info[rate]
+            except taish.TAIException as e:
+                logger.debug(
+                    "failed to get netif line-rate. allowing all hostifs to be created"
+                )
+                hostifs = list(range(num_hostifs))
+
             hconfig = {
                 n["name"]: n.get("config", {}) for n in config.get("host-interface", [])
             }
-            for index in range(int(await module.get("num-host-interfaces"))):
+            hostif_moduless = {}
+
+            for index in range(num_hostifs):
                 attrs = [
                     (k, v if type(v) != bool else "true" if v else "false")
                     for k, v in hconfig.get(str(index), {}).items()
                     if k not in IGNORE_LEAVES
                 ]
-                logger.debug(f"module({location})/hostif({index}) attrs: {attrs}")
-                try:
-                    hostif = module.get_hostif(index)
-                except:
-                    hostif = await module.create_hostif(index, attrs=attrs)
-                else:
-                    # reconcile with the running configuration
-                    logger.debug(
-                        f"module({location})/hostif({index}) already exists. updating attributes.."
-                    )
-                    for k, v in attrs:
-                        await hostif.set(k, v)
+                must_exists = index in hostifs
+                logger.debug(
+                    f"module({location})/hostif({index}) must_exists: {must_exists}, attrs: {attrs}"
+                )
+                if must_exists:
+                    try:
+                        hostif = module.get_hostif(index)
+                        logger.debug(
+                            f"module({location})/hostif({index}) already exists. updating attributes.."
+                        )
+                        for k, v in attrs:
+                            await hostif.set(k, v)
+                    except taish.TAIException:
+                        hostif = await module.create_hostif(index, attrs=attrs)
 
-            tasks, finalizers = await self.get_tai_notification_tasks(location)
-            event = asyncio.Event()
-            tasks.append(event.wait())
-            task = asyncio.create_task(self.notif_handler(tasks, finalizers))
-            self.event_obj[location]["event"] = event
-            self.event_obj[location]["task"] = task
+                    notif_task = await self.create_tai_notif_task(hostif)
+                    hostif_moduless[index] = notif_task
+                else:
+                    try:
+                        hostif = module.get_hostif(index)
+                        logger.debug(
+                            f"removing hostif({index}) due to the rate restriction"
+                        )
+                        await self.taish.remove(hostif.oid)
+                    except taish.TAIException:
+                        pass
+
+            self.modules[location]["hostifs"] = hostif_moduless
 
     async def cleanup_piu(self, location):
-        async with self.event_obj[location]["lock"]:
-            self.event_obj[location]["event"].set()
-            await self.event_obj[location]["task"]
+        m = self.modules[location]
+        async with m["lock"]:
 
-            m = await self.taish.get_module(location)
-            for v in m.obj.hostifs:
+            try:
+                module = await self.taish.get_module(location)
+            except taish.TAIException:
+                return
+
+            for task in m["netifs"].values():
+                await cancel_notification_task(task)
+
+            for task in m["hostifs"].values():
+                await cancel_notification_task(task)
+
+            task = m["notif_task"]
+            await cancel_notification_task(task)
+
+            for v in module.hostifs:
                 logger.debug("removing hostif oid")
                 await self.taish.remove(v.oid)
-            for v in m.obj.netifs:
+            for v in module.netifs:
                 logger.debug("removing netif oid")
                 await self.taish.remove(v.oid)
             logger.debug("removing module oid")
-            await self.taish.remove(m.oid)
+            await self.taish.remove(module.oid)
 
             logger.info(f"cleanup done for {location}")
 
-    async def notification_cb(self, xpath, notif_type, data, timestamp, priv):
+        self.modules.pop(location)
+
+    async def piu_notify_event_cb(self, xpath, notif_type, data, timestamp, priv):
         logger.info(f"{xpath=}, {notif_type=}, {data=}, {timestamp=}, {priv=}")
         assert "piu-notify-event" in xpath
 
@@ -427,6 +533,8 @@ class TransponderServer(ServerBase):
                 await self.initialize_piu(config, location)
             except Exception as e:
                 logger.error(f"failed to initialize PIU: {e}")
+                if location in self.modules:
+                    self.modules.pop(location)
         else:
             try:
                 await self.cleanup_piu(location)
@@ -452,24 +560,6 @@ class TransponderServer(ServerBase):
         logger.warning(f"taish doesn't know module({v}). wrong info in platform_info?")
         return None
 
-    async def notif_handler(self, tasks, finalizers):
-        tasks = [asyncio.create_task(t) for t in tasks]
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        logger.debug(f"done: {done}, pending: {pending}")
-        for task in pending:
-            task.cancel()
-        logger.debug("waiting for finalizer tasks")
-        finalizers = [asyncio.create_task(f) for f in finalizers]
-        done, pending = await asyncio.wait(
-            finalizers, return_when=asyncio.ALL_COMPLETED, timeout=5
-        )
-        if len(pending) > 0:
-            logger.warning(
-                f"finalizer not all tasks finished: done: {done}, pending: {pending}"
-            )
-        else:
-            logger.debug("finalizer done")
-
     def pre(self, user):
         if self.is_initializing:
             raise LockedError("initializing")
@@ -479,7 +569,7 @@ class TransponderServer(ServerBase):
         xpath = "/goldstone-platform:components/component[state/type='PIU']"
         components = self.get_operational_data(xpath, [])
 
-        assert len(self.event_obj) == 0  # this must be empty
+        assert len(self.modules) == 0  # this must be empty
 
         ms = await self.taish.list()
         modules = []
@@ -488,7 +578,6 @@ class TransponderServer(ServerBase):
             if location == None:
                 logger.warning(f"no location found for {c['name']}")
                 continue
-            self.event_obj[location] = {"lock": asyncio.Lock()}
             try:
                 if (
                     "PRESENT" in c["piu"]["state"]["status"]
@@ -513,7 +602,7 @@ class TransponderServer(ServerBase):
         self.conn.subscribe_notification(
             "goldstone-platform",
             f"/goldstone-platform:piu-notify-event",
-            self.notification_cb,
+            self.piu_notify_event_cb,
         )
 
         async def ping():
@@ -580,12 +669,7 @@ class TransponderServer(ServerBase):
 
     async def stop(self):
         logger.info(f"stop server")
-        for v in self.event_obj.values():
-            if "event" in v:
-                v["event"].set()
-                await v["task"]
-
-        self.taish.close()
+        await self.taish.close()
         super().stop()
 
     async def get_module_from_xpath(self, xpath):

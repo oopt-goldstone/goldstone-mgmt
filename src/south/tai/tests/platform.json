@@ -34,5 +34,9 @@
   {"component": {"name": "piu1"}, "tai": {"module": {"name": "piu1", "location": "1"}, "netif": {"name": "0", "index": 0}}},
   {"component": {"name": "piu2"}, "tai": {"module": {"name": "piu2", "location": "2"}, "netif": {"name": "0", "index": 0}}},
   {"component": {"name": "piu3"}, "tai": {"module": {"name": "piu3", "location": "3"}, "netif": {"name": "0", "index": 0}}},
-  {"component": {"name": "piu4"}, "tai": {"module": {"name": "piu4", "location": "4"}, "netif": {"name": "0", "index": 0}}}
+  {"component": {"name": "piu4"}, "tai": {"module": {"name": "piu4", "location": "4"}, "netif": {"name": "0", "index": 0}}},
+  {"transponder": {"netif": {"index": 0, "line-rate": "400g"}, "hostifs": [{"index": 0}, {"index": 1}, {"index": 2}, {"index": 3}]}},
+  {"transponder": {"netif": {"index": 0, "line-rate": "300g"}, "hostifs": [{"index": 0}, {"index": 1}, {"index": 2}]}},
+  {"transponder": {"netif": {"index": 0, "line-rate": "200g"}, "hostifs": [{"index": 0}, {"index": 1}]}},
+  {"transponder": {"netif": {"index": 0, "line-rate": "100g"}, "hostifs": [{"index": 0}]}}
 ]

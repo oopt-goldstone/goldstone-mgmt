@@ -29,7 +29,8 @@ def main():
             runner = await start_probe("/healthz", "0.0.0.0", 8080)
             tasks.append(stop_event.wait())
             done, pending = await asyncio.wait(
-                tasks, return_when=asyncio.FIRST_COMPLETED
+                [asyncio.create_task(t) for t in tasks],
+                return_when=asyncio.FIRST_COMPLETED,
             )
             logger.debug(f"done: {done}, pending: {pending}")
             for task in done:
