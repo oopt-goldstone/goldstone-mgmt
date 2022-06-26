@@ -26,6 +26,38 @@ EXPECTED_RUN_CONF = """transponder piu1
     quit
   quit"""
 
+EXPECTED_RUN_CONF2 = """transponder piu1
+  hostif 0
+    fec-type rs
+    quit
+!
+  hostif 1
+    fec-type rs
+    quit
+!
+  hostif 2
+    fec-type rs
+    quit
+!
+  hostif 3
+    fec-type rs
+    quit
+  quit"""
+
+EXPECTED_RUN_CONF3 = """transponder piu1
+  hostif 0
+    fec-type rs
+    quit
+!
+  hostif 1
+    fec-type rs
+    quit
+!
+  hostif 2
+    fec-type rs
+    quit
+  quit"""
+
 
 class Test(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -72,3 +104,40 @@ class Test(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(run_conf, EXPECTED_RUN_CONF)
+
+    async def test_hostif(self):
+        root = Root(self.conn)
+        self.conn.oper_data = {
+            "/goldstone-transponder:modules/module/name": ["piu1"],
+            "/goldstone-transponder:modules/module[name='piu1']/host-interface/name": [
+                "0",
+                "1",
+                "2",
+                "3",
+            ],
+        }
+
+        ctx = root.exec("transponder piu1", no_fail=False)
+
+        hostif = ctx.exec(f"hostif .", no_fail=False)  # select all host interfaces
+        hostif.exec("fec-type rs", no_fail=False)
+
+        logger = logging.getLogger("stdout")
+
+        with self.assertLogs(logger=logger) as l:
+            root.exec("show running-config transponder", no_fail=False)
+            run_conf = "\n".join(
+                itertools.chain.from_iterable(r.msg.split("\n") for r in l.records)
+            )
+
+        self.assertEqual(run_conf, EXPECTED_RUN_CONF2)
+
+        ctx.exec(f"no hostif 3", no_fail=False)
+
+        with self.assertLogs(logger=logger) as l:
+            root.exec("show running-config transponder", no_fail=False)
+            run_conf = "\n".join(
+                itertools.chain.from_iterable(r.msg.split("\n") for r in l.records)
+            )
+
+        self.assertEqual(run_conf, EXPECTED_RUN_CONF3)

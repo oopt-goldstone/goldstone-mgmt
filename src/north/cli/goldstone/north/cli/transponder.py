@@ -334,7 +334,7 @@ class InterfaceContext(TransponderBaseContext):
         self.objs = objs
 
 
-class HostIf(InterfaceContext):
+class HostInterfaceContext(InterfaceContext):
     OBJECT_TYPE = "host-interface"
     OBJECT_NAME = "hostif"
     CONFIG_XPATH = "".join(
@@ -343,7 +343,7 @@ class HostIf(InterfaceContext):
     )
 
 
-class NetIf(InterfaceContext):
+class NetworkInterfaceContext(InterfaceContext):
     OBJECT_TYPE = "network-interface"
     OBJECT_NAME = "netif"
     CONFIG_XPATH = "".join(
@@ -366,6 +366,35 @@ class NetIf(InterfaceContext):
     ]
 
 
+class InterfaceCommand(Command):
+    def arguments(self):
+        return self.context.components(self.OBJECT_TYPE)
+
+    def exec(self, line):
+        if len(line) != 1:
+            raise InvalidInput(f"usage: {self.name_all()} <name>")
+        if self.root.name == "no":
+            names = self.context.components(self.OBJECT_TYPE, line[0])
+            for name in names:
+                xpath = (
+                    f"{self.context.module_xpath()}/{self.OBJECT_TYPE}[name='{name}']"
+                )
+                self.conn.delete(xpath)
+            self.conn.apply()
+        else:
+            return self.OBJECT_CONTEXT(self.context, line[0])
+
+
+class HostInterfaceCommand(InterfaceCommand):
+    OBJECT_TYPE = "host-interface"
+    OBJECT_CONTEXT = HostInterfaceContext
+
+
+class NetworkInterfaceCommand(InterfaceCommand):
+    OBJECT_TYPE = "network-interface"
+    OBJECT_CONTEXT = NetworkInterfaceContext
+
+
 class TransponderContext(TransponderBaseContext):
     OBJECT_TYPE = "module"
     OBJECT_NAME = "transponder"
@@ -373,7 +402,7 @@ class TransponderContext(TransponderBaseContext):
     CONFIG_XPATH = "".join(
         f"/goldstone-transponder:{v}" for v in ["modules", "module", "config"]
     )
-    SUB_CONTEXTS = [NetIf, HostIf]
+    SUB_CONTEXTS = [NetworkInterfaceContext, HostInterfaceContext]
 
     def module_xpath(self):
         return f"{self.XPATH}[name='{self.name}']"
@@ -394,23 +423,12 @@ class TransponderContext(TransponderBaseContext):
 
         self.objs = [name]
 
-        @self.command(WordCompleter(self.netifs))
-        def netif(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: netif <name>")
-            return NetIf(self, args[0])
-
-        @self.command(WordCompleter(self.hostifs))
-        def hostif(args):
-            if len(args) != 1:
-                raise InvalidInput("usage: hostif <name>")
-            return HostIf(self, args[0])
-
-    def netifs(self):
-        return self.components("network-interface")
-
-    def hostifs(self):
-        return self.components("host-interface")
+        self.add_command(
+            "netif", NetworkInterfaceCommand, add_no=True, no_completion_on_exec=True
+        )
+        self.add_command(
+            "hostif", HostInterfaceCommand, add_no=True, no_completion_on_exec=True
+        )
 
 
 class Show(Command):
