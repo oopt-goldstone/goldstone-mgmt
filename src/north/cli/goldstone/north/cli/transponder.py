@@ -134,6 +134,10 @@ def show_transponder_summary(session):
             data.append(v)
         rows.append(data)
 
+    if len(rows) == 0:
+        stderr.info(f"no operational info found for transponders")
+        return
+
     # insert "transponder" for the header use
     attrs.insert(0, "transponder")
 
