@@ -672,8 +672,8 @@ class InterfaceServer(ServerBase):
                         intf["ethernet"]["state"][key] = speed_redis_to_yang(value)
                     elif key == "admin_status":
                         intf["state"]["admin-status"] = value.upper()
-                    elif key in ["fec", "mtu"]:
-                        intf["ethernet"]["state"][key] = value.upper()
+                    elif key == "mtu":
+                        intf["ethernet"]["state"]["mtu"] = value.upper()
 
                 info = bcminfo.get(ifname, {})
                 logger.debug(f"bcminfo: {info}")
@@ -681,6 +681,10 @@ class InterfaceServer(ServerBase):
                 iftype = info.get("iftype")
                 if iftype:
                     intf["ethernet"]["state"]["interface-type"] = iftype
+
+                fec = info.get("fec")
+                if fec:
+                    intf["ethernet"]["state"]["fec"] = fec
 
                 auto_nego = info.get("auto-nego")
                 if auto_nego:

@@ -95,7 +95,7 @@ class incluster_apis(object):
         return reply.response
 
     async def bcm_ports_info(self, ports):
-        def parse(output):
+        def parse_port(output):
             info = {}
             m = re.search("IF\((?P<iftype>.*?)\)", output)
             if m:
@@ -132,7 +132,59 @@ class incluster_apis(object):
             m = re.search(f"\s+\*?(?P<name>\w+)\s+", line)
             if m:
                 name = m.group("name")
-                v[name] = parse(line)
+                v[name] = parse_port(line)
+
+        output = await self.run_bcmcmd_port(
+            ports, cmd="phy", subcmd="SC_X4_FEC_STS_gen2r"
+        )
+        it = iter(output.split("\n"))
+        try:
+            for line in it:
+                while True:
+                    m = re.search(f"Port (?P<name>\w+):", line)
+                    if m:
+                        break
+                    line = next(it)
+
+                name = m.group("name")
+
+                assert name in v
+
+                line = next(it)
+                if "No matching symbols" in line:
+                    continue
+
+                line = next(it)
+                m = re.search(f"\s+R_FEC_ENABLE<0>=0x(?P<value>\d)", line)
+                r_fec = int(m.group("value"))
+
+                line = next(it)
+                m = re.search(f"\s+T_FEC_ENABLE<1>=0x(?P<value>\d)", line)
+                t_fec = int(m.group("value"))
+
+                line = next(it)
+                m = re.search(f"\s+R_CL91_FEC_MODE<4:2>=0x(?P<value>\d)", line)
+                r_cl91_fec = int(m.group("value"))
+
+                line = next(it)
+                m = re.search(f"\s+T_CL91_FEC_MODE<7:5>=0x(?P<value>\d)", line)
+                t_cl91_fec = int(m.group("value"))
+
+                v[name]["r_fc_fec"] = r_fec > 0
+                v[name]["t_fc_fec"] = t_fec > 0
+                v[name]["r_rs_fec"] = r_cl91_fec > 0
+                v[name]["t_rs_fec"] = t_cl91_fec > 0
+
+                fec = "NONE"
+                if r_fec > 0 and t_fec > 0:
+                    fec = "FC"
+                elif r_cl91_fec > 0 and t_cl91_fec > 0:
+                    fec = "RS"
+
+                v[name]["fec"] = fec
+
+        except StopIteration:
+            pass
 
         w = {}
         for port in ports:
@@ -142,12 +194,9 @@ class incluster_apis(object):
 
         return w
 
-    async def run_bcmcmd_port(self, ports, cmd=""):
+    async def run_bcmcmd_port(self, ports, subcmd="", cmd="port"):
 
         ports_no = []
-
-        with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
-            interface_config = json.loads(f.read())
 
         if type(ports) == str:
             ports = [ports]
@@ -158,7 +207,7 @@ class incluster_apis(object):
 
         ports_no = ",".join(ports_no)
 
-        return await self.run_bcmcmd(f"port {ports_no} {cmd}")
+        return await self.run_bcmcmd(f"{cmd} {ports_no} {subcmd}")
 
     def create_usonic_config_bcm(self, interface_map):
         with open(USONIC_TEMPLATE_DIR + "/interfaces.json") as f:
