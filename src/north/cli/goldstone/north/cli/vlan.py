@@ -89,7 +89,7 @@ def delete(session, vids: int | list[int]):
     session.apply()
 
 
-def show(session, vid):
+def show_vlan(session, vid):
     xpath = vlan_xpath(vid)
     v = session.get_operational(xpath, one=True)
     rows = [("vid", v.get("vlan-id", "-"))]
@@ -111,22 +111,22 @@ def run_conf(session):
 
 
 def parse_vlan_range(r: str) -> list[int]:
-    vids = []
+    vids = set()
     for vlans in r.split(","):
         vlan_limits = vlans.split("-")
         if vlans.isdigit():
-            vids.append(int(vlans))
+            vids.add(int(vlans))
         elif (
             len(vlan_limits) == 2
             and vlan_limits[0].isdigit()
             and vlan_limits[1].isdigit()
-            and vlan_limits[0] < vlan_limits[1]
+            and int(vlan_limits[0]) < int(vlan_limits[1])
         ):
             for vid in range(int(vlan_limits[0]), int(vlan_limits[1]) + 1):
-                vids.append(vid)
+                vids.add(vid)
         else:
             raise InvalidInput("invalid vlan range")
-    return vids
+    return list(vids)
 
 
 class VLANContext(Context):
@@ -136,13 +136,22 @@ class VLANContext(Context):
         super().__init__(parent)
         create(self.conn, vids)
 
+        if len(vids) > 1:
+            stdout.info(f"Selected VLANs: {vids}")
+
+            @self.command()
+            def selected(args):
+                if len(args) != 0:
+                    raise InvalidInput("usage: selected")
+                stdout.info(", ".join(str(v) for v in vids))
+
         @self.command(parent.get_completer("show"))
         def show(args):
             if len(args) != 0:
                 parent.exec(f"show {' '.join(args)}")
             else:
                 for vid in vids:
-                    show(self.conn, vid)
+                    show_vlan(self.conn, vid)
 
         @self.command()
         def name(args):

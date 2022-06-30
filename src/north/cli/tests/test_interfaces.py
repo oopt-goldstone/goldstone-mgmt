@@ -68,9 +68,9 @@ def ifxpath(ifname):
 class Test(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.conn = MockConnector()
-        self.conn.delete_all("goldstone-interfaces")
-        self.conn.apply()
+        conn = MockConnector()
+        root = Root(conn)
+        root.exec("clear datastore all", no_fail=False)
 
     async def test_show_interface_brief(self):
 
@@ -130,6 +130,29 @@ class Test(unittest.IsolatedAsyncioTestCase):
 
             # global show and show in the interface ctx must have the same output
             self.assertEqual(l.records[0].msg, l.records[1].msg)
+
+    async def test_vlan_range(self):
+        conn = MockConnector()
+        root = Root(conn)
+
+        logger = logging.getLogger("stdout")
+
+        def test(cmd, answer):
+            v = root.exec(f"vlan range {cmd}", no_fail=False)
+            with self.assertLogs(logger=logger) as l:
+                v.exec("selected", no_fail=False)
+                selected = "\n".join(
+                    itertools.chain.from_iterable(r.msg.split("\n") for r in l.records)
+                )
+                vids = [int(vid.strip()) for vid in selected.split(",")]
+                self.assertEqual(vids, answer)
+
+        test("2-7", [2, 3, 4, 5, 6, 7])
+        test("3-7", [3, 4, 5, 6, 7])
+        test("1,2,3-7", [1, 2, 3, 4, 5, 6, 7])
+        test("1-4,3-7", [1, 2, 3, 4, 5, 6, 7])
+        test("1-3,5-7", [1, 2, 3, 5, 6, 7])
+        test("5-7,1-3", [1, 2, 3, 5, 6, 7])
 
     async def test_show_run(self):
         conn = MockConnector()
