@@ -37,6 +37,8 @@ RUN pip install setuptools
 
 RUN --mount=type=bind,source=src/lib,target=/src,rw pip install /src
 
+RUN groupadd gsmgmt
+
 #---
 # north-cli
 #---

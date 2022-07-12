@@ -49,6 +49,29 @@ DEFAULT_YANG_DIR = "/var/lib/goldstone/yang"
 DEFAULT_PLATFORM_YANG_DIR = "/var/lib/goldstone/device/current/yang"
 
 
+def run(cmd):
+    print(f'run: "{cmd}"')
+    proc = subprocess.run(
+        cmd,
+        shell=True,
+        env=os.environ,
+        capture_output=True,
+    )
+    output = []
+    err = []
+    for line in proc.stdout.decode().split("\n"):
+        output.append(line)
+        print(f"stdout: {line}")
+    for line in proc.stderr.decode().split("\n"):
+        err.append(line)
+        print(f"stderr: {line}")
+    ret = proc.returncode
+    if ret != 0:
+        raise Exception(f"{cmd} failed: ret: {ret}", ret, "".join(output), "".join(err))
+
+    return "".join(output)
+
+
 def install_model(model_name: str, search_dirs: list[str] = []) -> None:
     with open("/run/gs-yang-lock", "wt") as f:
         try:
@@ -70,13 +93,9 @@ def install_model(model_name: str, search_dirs: list[str] = []) -> None:
 
             print(model, search_dirs)
 
-            command = f"sysrepoctl {s} --install {model}"
-            print(f"run: {command}")
-            subprocess.run(command.split(" "), stderr=subprocess.STDOUT)
+            run(f"sysrepoctl {s} --install {model}")
             name, _ = os.path.splitext(os.path.basename(model))
-            command = f"sysrepoctl -c {name} -g gsmgmt -p 664"
-            print(f"run: {command}")
-            subprocess.run(command.split(" "), stderr=subprocess.STDOUT)
+            run(f"sysrepoctl -c {name} -g gsmgmt -p 664")
 
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
@@ -118,9 +137,7 @@ def lint(daemons, search_dirs: list[str] = []):
         models.append(str(model[0]))
 
     path = "--path=" + ":".join(search_dirs)
-    command = f"pyang {path} {' '.join(models)}"
-    print(f"run: {command}")
-    subprocess.run(command.split(" "), stderr=subprocess.STDOUT)
+    run(f"pyang {path} {' '.join(models)}")
 
 
 def main():
@@ -129,6 +146,7 @@ def main():
     parser.add_argument("--install-platform", action="store_true")
     parser.add_argument("--search-dirs", nargs="+")
     parser.add_argument("--lint", nargs="+")
+    parser.add_argument("--fix-perm", action="store_true")
 
     args = parser.parse_args()
 
@@ -158,6 +176,11 @@ def main():
             sys.exit(1)
 
         lint(daemons, args.search_dirs)
+
+    if args.fix_perm:
+        run("sysrepoctl -c ':ALL' -g gsmgmt -p 664")
+        run("chmod g+w /dev/shm/sr_main")
+        run("chgrp gsmgmt /dev/shm/sr_main")
 
 
 if __name__ == "__main__":
