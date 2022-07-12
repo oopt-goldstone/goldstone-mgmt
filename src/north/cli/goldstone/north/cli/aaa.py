@@ -15,27 +15,26 @@ logger = logging.getLogger(__name__)
 stdout = logging.getLogger("stdout")
 stderr = logging.getLogger("stderr")
 
+TACACS_NAME = "TACACS+"
+
 
 class TACACS(object):
-    def xpath(self, group, address):
-        return "/goldstone-aaa:aaa/server-groups/server-group[name='{}']/servers/server[address='{}']".format(
-            group, address
-        )
-
     def xpath_server_group(self, group):
-        return "/goldstone-aaa:aaa/server-groups/server-group[name='{}']".format(group)
+        return f"/goldstone-aaa:aaa/server-groups/server-group[name='{group}']"
+
+    def xpath(self, group, address):
+        return f"{self.xpath_server_group(group)}/servers/server[address='{address}']"
 
     def __init__(self, conn):
         self.conn = conn
-        self.name = "TACACS+"
+        self.name = TACACS_NAME
 
     def set_tacacs_server(self, ipAddress, key, port, timeout):
 
         xpath = self.xpath(self.name, ipAddress)
-        self.sr_op.set_data(
+        self.conn.set(
             f"{self.xpath_server_group(self.name)}/config/name",
             self.name,
-            no_apply=True,
         )
         self.conn.set(f"{xpath}/config/address", ipAddress)
         self.conn.set(f"{xpath}/tacacs/config/secret-key", key)
@@ -44,28 +43,17 @@ class TACACS(object):
         self.conn.apply()
 
     def set_no_tacacs(self, address):
-        xpath = self.xpath("TACACS+", address)
-        create_group(self.sr_op, "TACACS+")
+        xpath = self.xpath(TACACS_NAME, address)
         self.conn.delete(xpath)
         self.conn.apply()
 
     def show(self):
-        xpath = self.xpath_server_group("TACACS+")
-        tacacs_data = self.conn.get(xpath)
-        if tacacs_data == None:
-            return
+        xpath = self.xpath_server_group(TACACS_NAME)
+        servers = self.conn.get(xpath + "/servers/server", [])
 
-        try:
-            tacacs_list = list(
-                tacacs_data["aaa"]["server-groups"]["server-group"]["TACACS+"][
-                    "servers"
-                ]["server"]
-            )
-        except KeyError:
-            return
         rows = []
         headers = ["server", "timeout", "port", "secret-key"]
-        for data in tacacs_list:
+        for data in servers:
             rows.append(
                 [
                     data["address"],
@@ -102,7 +90,7 @@ class AAA(object):
     def show(self):
         aaa_data = self.conn.get(self.xpath)
         if aaa_data:
-            stdout.info(tabuldate([aaa_data], ["authentication method"]))
+            stdout.info(tabulate([aaa_data], ["authentication method"]))
 
 
 class System(object):
@@ -118,64 +106,57 @@ class System(object):
 
         output = []
 
-        try:
-            tacacs_list = self.conn.get(
-                "/goldstone-aaa:aaa/server-groups/server-group['TACACS+']/servers/server",
-                [],
-            )
-            server_address = []
-            for item in tacacs_list:
-                addr = item["address"]
-                server_data = item.get("config")
-                tacacs_data = item["tacacs"].get("config")
-                dict_1 = {}
-                dict_2 = {}
-                for attr in server_run_conf:
-                    dict_1 = {
-                        attr: server_data.get(attr, None) for attr in server_run_conf
-                    }
-                for attr in tacacs_run_conf:
-                    tacacs_dict = {
-                        attr: tacacs_data.get(attr, None) for attr in tacacs_run_conf
-                    }
-                tacacs_dict.update(dict_1)
-                for key in tacacs_dict:
-                    if key == "address":
-                        if tacacs_dict[key] is None:
-                            pass
-                        elif (tacacs_dict["port"] is None) and (
-                            tacacs_dict["timeout"] is None
-                        ):
-                            output.append(
-                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']}"
-                            )
-                        elif tacacs_dict["port"] is None:
-                            output.append(
-                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} timeout {tacacs_dict['timeout']}"
-                            )
-                        elif tacacs_dict["timeout"] is None:
-                            output.append(
-                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']}"
-                            )
-                        else:
-                            output.append(
-                                f"  tacacs-server host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']} timeout {tacacs_dict['timeout']}"
-                            )
-        except Exception as e:
-            pass
+        tacacs_list = self.conn.get(
+            f"/goldstone-aaa:aaa/server-groups/server-group[name='{TACACS_NAME}']/servers/server",
+            [],
+        )
 
-        try:
-            aaa_data = self.conn.get("/goldstone-aaa:aaa/authentication/config")
-            auth_method_list = aaa_data.get("authentication-method")
-            auth_method = auth_method_list[0]
-            if auth_method is None:
-                pass
-            elif auth_method == "local":
+        server_address = []
+        for item in tacacs_list:
+            addr = item["address"]
+            server_data = item.get("config")
+            tacacs_data = item["tacacs"].get("config")
+            dict_1 = {}
+            dict_2 = {}
+            for attr in server_run_conf:
+                dict_1 = {attr: server_data.get(attr, None) for attr in server_run_conf}
+            for attr in tacacs_run_conf:
+                tacacs_dict = {
+                    attr: tacacs_data.get(attr, None) for attr in tacacs_run_conf
+                }
+            tacacs_dict.update(dict_1)
+            for key in tacacs_dict:
+                if key == "address":
+                    if tacacs_dict[key] is None:
+                        pass
+                    elif (tacacs_dict["port"] is None) and (
+                        tacacs_dict["timeout"] is None
+                    ):
+                        output.append(
+                            f"  tacacs host {tacacs_dict['address']} key {tacacs_dict['secret-key']}"
+                        )
+                    elif tacacs_dict["port"] is None:
+                        output.append(
+                            f"  tacacs host {tacacs_dict['address']} key {tacacs_dict['secret-key']} timeout {tacacs_dict['timeout']}"
+                        )
+                    elif tacacs_dict["timeout"] is None:
+                        output.append(
+                            f"  tacacs host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']}"
+                        )
+                    else:
+                        output.append(
+                            f"  tacacs host {tacacs_dict['address']} key {tacacs_dict['secret-key']} port {tacacs_dict['port']} timeout {tacacs_dict['timeout']}"
+                        )
+
+        method = self.conn.get(
+            "/goldstone-aaa:aaa/authentication/config/authentication-method"
+        )
+        if method:
+            method = method[0]
+            if method == "local":
                 output.append(f"  aaa authentication login default local ")
             else:
                 output.append(f"  aaa authentication login default group tacacs ")
-        except Exception as e:
-            pass
 
         if output:
             stdout.info("system")
@@ -193,18 +174,28 @@ class System(object):
         self.tacacs.show()
 
 
-def create_group(session, group):
-    xpath = f"/goldstone-aaa:aaa/server-groups/server-group[name='{group}']"
-    session.set(f"{xpath}/config/name", group)
-    session.apply()
+class LoginDefaultGroupCommand(Command):
+    COMMAND_DICT = {"tacacs": Command}
+
+
+class LoginDefaultCommand(Command):
+    COMMAND_DICT = {"group": LoginDefaultGroupCommand, "local": Command}
+
+
+class LoginCommand(Command):
+    def __init__(self, context, parent, name, **options):
+        super().__init__(context, parent, name, **options)
+        if self.root.name == "no":
+            return
+        self.add_command("default", LoginDefaultCommand)
+
+
+class AuthenticationCommand(Command):
+    COMMAND_DICT = {"login": LoginCommand}
 
 
 class AAACommand(Command):
-    def __init__(self, context: Context = None, parent: Command = None, name=None):
-        if name == None:
-            name = "aaa"
-        super().__init__(context, parent, name)
-        self.aaa = AAA(context.root().conn)
+    COMMAND_DICT = {"authentication": AuthenticationCommand}
 
     def usage(self):
         if self.root.name == "no":
@@ -214,11 +205,12 @@ class AAACommand(Command):
 
     def exec(self, line):
         usage = f"usage: {self.name_all()} {self.usage()}"
+        aaa = AAA(self.conn)
 
         if self.root.name == "no":
             if len(line) != 2:
                 raise InvalidInput(usage)
-            self.aaa.set_no_aaa()
+            aaa.set_no_aaa()
         else:
             if len(line) not in [4, 5]:
                 raise InvalidInput(usage)
@@ -234,7 +226,7 @@ class AAACommand(Command):
                 value = line[4]
             else:
                 raise InvalidInput(usage)
-            self.aaa.set_aaa(value)
+            aaa.set_aaa(value)
 
 
 class Show(Command):
@@ -245,7 +237,7 @@ class Show(Command):
             stderr.info(self.usage())
 
     def usage(self):
-        return "usage: {self.name_all()}"
+        return f"usage: {self.name_all()}"
 
 
 GlobalShowCommand.register_command("aaa", Show, when=ModelExists("goldstone-aaa"))
@@ -277,11 +269,7 @@ TechSupportCommand.register_command(
 
 
 class TACACSCommand(Command):
-    def __init__(self, context: Context = None, parent: Command = None, name=None):
-        if name == None:
-            name = "tacacs-server"
-        super().__init__(context, parent, name)
-        self.tacacs = TACACS(self.conn)
+    COMMAND_DICT = {"host": Command}
 
     def usage(self):
         if self.parent and self.parent.name == "no":
@@ -291,10 +279,11 @@ class TACACSCommand(Command):
 
     def exec(self, line):
         usage = f"usage: {self.name_all()} {self.usage()}"
+        tacacs = TACACS(self.conn)
         if self.root.name == "no":
             if len(line) != 2:
                 raise InvalidInput(usage)
-            self.tacacs.set_no_tacacs(line[1])
+            tacacs.set_no_tacacs(line[1])
         else:
             if len(line) != 4 and len(line) != 6 and len(line) != 8:
                 raise InvalidInput(usage)
@@ -323,7 +312,7 @@ class TACACSCommand(Command):
                 port = line[5]
                 timeout = line[7]
 
-            self.tacacs.set_tacacs_server(ipAddress, key, port, timeout)
+            tacacs.set_tacacs_server(ipAddress, key, port, timeout)
 
 
 class Show(Command):

@@ -105,6 +105,8 @@ unittest-cli:
 	sysrepoctl --search-dirs yang --install yang/goldstone-uplink-failure-detection.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-portchannel.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-transponder.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-system.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-aaa.yang
 	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-gearbox:

@@ -91,11 +91,8 @@ class SystemContext(Context):
         def shutdown(line):
             stdout.info(self.conn.rpc("/goldstone-system:shutdown", {}))
 
-        c = TACACSCommand(self)
-        self.add_command(c.name, c, add_no=True)
-
-        c = AAACommand(self)
-        self.add_command(c.name, c, add_no=True)
+        self.add_command("tacacs", TACACSCommand, add_no=True)
+        self.add_command("aaa", AAACommand, add_no=True)
 
     def __str__(self):
         return "system"
