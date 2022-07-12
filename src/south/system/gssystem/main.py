@@ -1,9 +1,10 @@
-import sysrepo
 import logging
 import asyncio
 import argparse
 import signal
 import itertools
+
+from goldstone.lib.connector.sysrepo import Connector
 
 from .system import SystemServer
 from .aaa import AAAServer
@@ -20,12 +21,12 @@ def main():
         loop.add_signal_handler(signal.SIGINT, stop_event.set)
         loop.add_signal_handler(signal.SIGTERM, stop_event.set)
 
-        conn = sysrepo.SysrepoConnection()
+        conn = Connector()
         servers = [
-            SystemServer(conn),
+            SystemServer(conn.conn),
             AAAServer(conn),
-            ManagementInterfaceServer(conn),
-            KubernetesServer(conn),
+            ManagementInterfaceServer(conn.conn),
+            KubernetesServer(conn.conn),
         ]
 
         try:
@@ -44,7 +45,7 @@ def main():
         finally:
             for s in servers:
                 s.stop()
-            conn.disconnect()
+            conn.stop()
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
