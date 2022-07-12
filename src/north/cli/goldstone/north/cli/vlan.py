@@ -247,6 +247,10 @@ Root.register_command(
 
 
 class SwitchportModeVLANCommand(Command):
+    def __init__(self, context, parent, name, **options):
+        options["no_completion_on_exec"] = True
+        super().__init__(context, parent, name, **options)
+
     def arguments(self):
         return get_vids(self.conn)
 
@@ -270,25 +274,29 @@ class SwitchportModeCommand(Command):
             raise InvalidInput(f"usage : {self.name_all()} [trunk|access] vlan <vid>")
 
         mode = line[0]
-        vid = line[2]
+        vids = parse_vlan_range(line[2])
 
-        for ifname in self.context.ifnames:
-            prefix = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
-            xpath = prefix + "/config"
-            self.conn.set(f"{xpath}/name", ifname)
-            xpath = prefix + "/goldstone-vlan:switched-vlan/config"
+        if mode == "access" and len(vids) > 1:
+            raise InvalidInput("only one VLAN can be assigned when the mode is access")
 
-            if self.root.name != "no":
-                self.conn.set(f"{xpath}/interface-mode", mode.upper())
-                if mode == "access":
-                    self.conn.set(f"{xpath}/access-vlan", vid)
+        for vid in vids:
+            for ifname in self.context.ifnames:
+                prefix = f"/goldstone-interfaces:interfaces/interface[name='{ifname}']"
+                xpath = prefix + "/config"
+                self.conn.set(f"{xpath}/name", ifname)
+                xpath = prefix + "/goldstone-vlan:switched-vlan/config"
+
+                if self.root.name != "no":
+                    self.conn.set(f"{xpath}/interface-mode", mode.upper())
+                    if mode == "access":
+                        self.conn.set(f"{xpath}/access-vlan", vid)
+                    else:
+                        self.conn.set(f"{xpath}/trunk-vlans", vid)
                 else:
-                    self.conn.set(f"{xpath}/trunk-vlans", vid)
-            else:
-                if mode == "access":
-                    self.conn.delete(f"{xpath}/access-vlan")
-                else:
-                    self.conn.delete(f"{xpath}/trunk-vlans[.='{vid}']")
+                    if mode == "access":
+                        self.conn.delete(f"{xpath}/access-vlan")
+                    else:
+                        self.conn.delete(f"{xpath}/trunk-vlans[.='{vid}']")
 
         self.conn.apply()
 

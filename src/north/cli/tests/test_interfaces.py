@@ -221,3 +221,37 @@ class Test(unittest.IsolatedAsyncioTestCase):
         root.exec("clear datastore all", no_fail=False)
         admin_status = conn.get(xpath)
         self.assertEqual(admin_status, None)
+
+    async def test_vlan_assignment(self):
+        conn = MockConnector()
+        root = Root(conn)
+        ifname = "Interface0"
+        data = [ifname]
+        conn.oper_data = {
+            "/goldstone-interfaces:interfaces/interface": INTF_OPER_DATA,
+            "/goldstone-interfaces:interfaces/interface/name": data,
+        }
+
+        root.exec("vlan 1-10", no_fail=False)
+
+        ifctx = root.exec("interface Interface0", no_fail=False)
+        with self.assertRaisesRegex(
+            InvalidInput, "only one VLAN can be assigned when the mode is access"
+        ):
+            ifctx.exec("switchport mode access vlan 2-5", no_fail=False)
+
+        ifctx.exec("switchport mode trunk vlan 2-5", no_fail=False)
+
+        v = conn.get(
+            "/goldstone-interfaces:interfaces/interface/switched-vlan/config/trunk-vlans",
+            one=True,
+        )
+        self.assertEqual(v, [2, 3, 4, 5])
+
+        ifctx.exec("no switchport mode trunk vlan 2-5", no_fail=False)
+        ifctx.exec("switchport mode trunk vlan 1-3", no_fail=False)
+        v = conn.get(
+            "/goldstone-interfaces:interfaces/interface/switched-vlan/config/trunk-vlans",
+            one=True,
+        )
+        self.assertEqual(v, [1, 2, 3])
