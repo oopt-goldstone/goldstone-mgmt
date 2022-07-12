@@ -209,6 +209,8 @@ RUN --mount=type=bind,source=src/north/cli,target=/src,rw pip install /src
 RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
     cd /root/sm/oopt-tai/tools/meta-generator && pip install .
 
+RUN groupadd gsmgmt
+
 #---
 # host-packages
 #---
