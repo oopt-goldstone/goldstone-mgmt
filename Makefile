@@ -60,6 +60,9 @@ snmpd:
 tester:
 	$(call build_image,$@,builder.Dockerfile)
 
+rust-tester:
+	$(call build_image,$@,builder.Dockerfile)
+
 builder:
 	$(call build_image,$@,builder.Dockerfile)
 
@@ -71,6 +74,12 @@ yang:
 
 bash:
 	DOCKER_RUN_OPTION='-it --cap-add IPC_OWNER --cap-add IPC_LOCK' $(MAKE) cmd
+
+rust:
+	DOCKER_IMAGE=$(call image_name,rust-tester) DOCKER_RUN_OPTION='-it -v /var/lib/sysrepo:/var/lib/sysrepo -v /dev/shm:/dev/shm --privileged' $(MAKE) cmd
+
+python:
+	DOCKER_IMAGE=$(call image_name,tester) DOCKER_RUN_OPTION='-it -v /var/lib/sysrepo:/var/lib/sysrepo -v /dev/shm:/dev/shm --privileged' $(MAKE) cmd
 
 tester-bash:
 	DOCKER_RUN_OPTION='-it' DOCKER_IMAGE=$(call image_name,tester) $(MAKE) cmd

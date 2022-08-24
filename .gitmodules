@@ -37,3 +37,6 @@
 [submodule "sm/sonic-py-swsssdk"]
 	path = sm/sonic-py-swsssdk
 	url = https://github.com/Azure/sonic-py-swsssdk.git
+[submodule "sm/sysrepo2-rs"]
+	path = sm/sysrepo2-rs
+	url = https://github.com/ishidawataru/sysrepo2-rs.git
