@@ -1,0 +1,17 @@
+[package]
+name = "netlink"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sysrepo2 = { path = "../../../sm/sysrepo2-rs" }
+yang2 = { path = "../../../sm/sysrepo2-rs/sm/yang2-rs" }
+futures = "0.3.11"
+rtnetlink = "0.11.0"
+env_logger = "0.8.2"
+log = "0.4"
+lazy_static = "1"
+regex = "1"
+tokio = { version = "1.20.1", features = ["macros", "rt", "rt-multi-thread", "time", "signal"] }
+clap = { version = "3.2.20", features = ["derive"] }
+anyhow = { version = "1" }

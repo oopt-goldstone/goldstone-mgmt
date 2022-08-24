@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 import subprocess
@@ -28,6 +28,7 @@ MODELS = {
         "goldstone-synce",
         "goldstone-dpll",
     ],
+    "south-netlink": ["goldstone-interfaces"],
     "south-dpll": ["goldstone-dpll"],
     "south-system": [
         "goldstone-aaa",
@@ -72,7 +73,7 @@ def run(cmd):
     return "".join(output)
 
 
-def install_model(model_name: str, search_dirs: list[str] = []) -> None:
+def install_model(model_name: str, search_dirs=[]) -> None:
     with open("/run/gs-yang-lock", "wt") as f:
         try:
             fcntl.flock(f, fcntl.LOCK_EX)
@@ -116,7 +117,7 @@ def install(name, yang_dir):
         install_model(model, yang_dir)
 
 
-def lint(daemons, search_dirs: list[str] = []):
+def lint(daemons, search_dirs=[]):
     if not search_dirs:
         search_dirs = [DEFAULT_YANG_DIR, "/usr/local/share/yang/modules/ietf"]
 

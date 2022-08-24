@@ -230,6 +230,21 @@ RUN --mount=type=bind,source=src/south/system,target=/src,rw \
     && rm -rf /usr/share/wheels/system && mkdir -p /usr/share/wheels/system && cp dist/*.whl /usr/share/wheels/system
 
 #---
+# rust-tester
+#---
+
+FROM rust:1-buster AS rust-tester
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends libclang1 clang libpcre2-dev
+
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i
+
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | xargs dpkg -i
+
+RUN groupadd gsmgmt
+
+#---
 # default image
 #---
 
