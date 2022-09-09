@@ -1,0 +1,142 @@
+module goldstone-ipv4 {
+
+  yang-version "1";
+
+  namespace "http://goldstone.net/yang/goldstone-ipv4";
+
+  prefix gs-ipv4;
+
+  import goldstone-mgmt-interfaces {
+    prefix mgmt-if;
+  }
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+
+  import ietf-yang-types {
+    prefix yang;
+  }
+
+  organization
+    "Goldstone";
+
+  description
+    "This module contains a collection of YANG definitions for
+    configuring IPv4 implementations.";
+
+  revision "2022-09-09" {
+      description "Initial revision.";
+      reference "0.1.0";
+  }
+
+  typedef ip-address-origin {
+    type enumeration {
+      enum OTHER;
+      enum STATIC;
+      enum DHCP;
+      enum LINK_LAYER;
+      enum RANDOM;
+    }
+  }
+
+  typedef neighbor-origin {
+    type enumeration {
+      enum OTHER;
+      enum STATIC;
+      enum DYNAMIC;
+    }
+  }
+
+  grouping ipv4-config {
+  }
+
+  grouping ipv4-state {
+  }
+
+  grouping ipv4-address-config {
+    leaf ip {
+     type inet:ipv4-address;
+    }
+    leaf prefix-length {
+      type uint8 {
+        range "0..32";
+      }
+    }
+  }
+
+  grouping ipv4-address-state {
+    leaf origin {
+      type ip-address-origin;
+    }
+  }
+
+  grouping ipv4-neighbor-config {
+    leaf ip {
+      type inet:ipv4-address;
+    }
+    leaf link-layer-address {
+      type yang:phys-address;
+    }
+  }
+
+  grouping ipv4-neighbor-state {
+    leaf origin {
+      type neighbor-origin;
+    }
+  }
+
+  grouping ipv4-top {
+    container ipv4 {
+      container addresses {
+        list address {
+          key "ip";
+          leaf ip {
+            type leafref {
+              path "../config/ip";
+            }
+          }
+          container config {
+            uses ipv4-address-config;
+          }
+          container state {
+            config false;
+            uses ipv4-address-config;
+            uses ipv4-address-state;
+          }
+        }
+      }
+      container neighbors {
+        list neighbor {
+          key "ip";
+          leaf ip {
+            type leafref {
+              path "../config/ip";
+            }
+          }
+          container config {
+            uses ipv4-neighbor-config;
+          }
+          container state {
+            config false;
+            uses ipv4-neighbor-config;
+            uses ipv4-neighbor-state;
+          }
+        }
+      }
+      container config {
+        uses ipv4-config;
+      }
+      container state {
+        config false;
+        uses ipv4-config;
+        uses ipv4-state;
+      }
+    }
+  }
+
+  augment "/mgmt-if:interfaces/mgmt-if:interface" {
+    uses ipv4-top;
+  }
+
+}  // module goldstone-ipv4

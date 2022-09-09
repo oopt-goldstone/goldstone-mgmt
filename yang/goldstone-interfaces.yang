@@ -247,6 +247,10 @@ module goldstone-interfaces {
 
   grouping ethernet-interface-config {
 
+    leaf mac-address {
+      type yang:phys-address;
+    }
+
     leaf mtu {
       type uint16;
       units "octets";
