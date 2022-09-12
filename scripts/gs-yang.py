@@ -15,7 +15,6 @@ MODELS = {
         "goldstone-sonic",
         "goldstone-vlan",
         "goldstone-uplink-failure-detection",
-        "goldstone-ip",
         "goldstone-portchannel",
         "goldstone-component-connection",
     ],
@@ -32,10 +31,7 @@ MODELS = {
     "south-dpll": ["goldstone-dpll"],
     "south-system": [
         "goldstone-aaa",
-        "goldstone-mgmt-interfaces",
-        "goldstone-ip",
         "goldstone-system",
-        "goldstone-routing",
     ],
     "xlate-oc": [
         "iana-if-type",
