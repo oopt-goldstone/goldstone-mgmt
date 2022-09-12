@@ -116,6 +116,8 @@ unittest-cli:
 	sysrepoctl --search-dirs yang --install yang/goldstone-transponder.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-system.yang
 	sysrepoctl --search-dirs yang --install yang/goldstone-aaa.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-mgmt-interfaces.yang
+	sysrepoctl --search-dirs yang --install yang/goldstone-ipv4.yang
 	cd src/north/cli        && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-gearbox:
