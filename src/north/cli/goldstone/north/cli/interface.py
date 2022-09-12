@@ -63,19 +63,16 @@ def breakout_yang_to_human(breakout):
     return f"{numch}X{speed}"
 
 
-XPATH = "/goldstone-interfaces:interfaces/interface"
+def ifxpath(ifname, model="goldstone-interfaces"):
+    return f"/{model}:interfaces/interface[name='{ifname}']"
 
 
-def ifxpath(ifname):
-    return f"{XPATH}[name='{ifname}']"
+def interface_names(session, ptn=None, model="goldstone-interfaces"):
+    return object_names(session, f"/{model}:interfaces/interface", ptn)
 
 
-def interface_names(session, ptn=None):
-    return object_names(session, XPATH, ptn)
-
-
-def get_interface_list(session, datastore):
-    return get_object_list(session, XPATH, datastore)
+def get_interface_list(session, datastore, model="goldstone-interfaces"):
+    return get_object_list(session, f"/{model}:interfaces/interface", datastore)
 
 
 def show_interface(session, details="description"):
@@ -109,14 +106,14 @@ def show_interface(session, details="description"):
     stdout.info(tabulate(rows, headers, tablefmt="pretty"))
 
 
-def show_counters(session, ifnames, table):
+def show_counters(session, ifnames, table, model):
     rows = []
     for ifname in ifnames:
         if len(ifnames) > 1:
             if not table:
                 stdout.info(f"Interface {ifname}:")
 
-        xpath = f"{XPATH}[name='{ifname}']/state/counters"
+        xpath = ifxpath(ifname, model) + "/state/counters"
         data = session.get_operational(xpath, one=True)
         if data == None:
             stdout.info(f"no counter info for Interface {ifname}")
@@ -323,9 +320,9 @@ def show_macsec_counters(session, ifnames):
         stdout.info(tabulate([(k, v) for k, v in data["egress"]["channel"].items()]))
 
 
-def _set(session, ifnames, attr, value):
+def _set(session, ifnames, attr, value, model):
     for ifname in ifnames:
-        xpath = ifxpath(ifname)
+        xpath = ifxpath(ifname, model)
         if value:
             session.set(f"{xpath}/config/name", ifname)
             session.set(f"{xpath}/{attr}", value)
@@ -334,26 +331,29 @@ def _set(session, ifnames, attr, value):
     session.apply()
 
 
-def set_mtu(session, ifnames, value):
-    return _set(session, ifnames, "ethernet/config/mtu", value)
+def set_mtu(session, ifnames, value, model):
+    return _set(session, ifnames, "ethernet/config/mtu", value, model)
 
 
-def set_speed(session, ifnames, speed):
+def set_speed(session, ifnames, speed, model):
     return _set(
         session,
         ifnames,
         "ethernet/config/speed",
         speed_human_to_yang(speed) if speed else None,
+        model,
     )
 
 
-def set_auto_nego(session, ifnames, value):
-    return _set(session, ifnames, "ethernet/auto-negotiate/config/enabled", value)
+def set_auto_nego(session, ifnames, value, model):
+    return _set(
+        session, ifnames, "ethernet/auto-negotiate/config/enabled", value, model
+    )
 
 
-def set_auto_nego_adv_speed(session, ifnames, speeds):
+def set_auto_nego_adv_speed(session, ifnames, speeds, model):
     for ifname in ifnames:
-        xpath = ifxpath(ifname)
+        xpath = ifxpath(ifname, model)
         if speeds:
             session.set(f"{xpath}/config/name", ifname)
             xpath = f"{xpath}/ethernet/auto-negotiate/config/advertised-speeds"
@@ -367,9 +367,9 @@ def set_auto_nego_adv_speed(session, ifnames, speeds):
     session.apply()
 
 
-def set_interface_type(session, ifnames, value):
+def set_interface_type(session, ifnames, value, model):
     for ifname in ifnames:
-        xpath = ifxpath(ifname)
+        xpath = ifxpath(ifname, model)
         if value:
             session.set(f"{xpath}/config/name", ifname)
             session.set(f"{xpath}/config/interface-type", "IF_ETHERNET")
@@ -382,9 +382,9 @@ def set_interface_type(session, ifnames, value):
     session.apply()
 
 
-def set_otn_interface_type(session, ifnames, value):
+def set_otn_interface_type(session, ifnames, value, model):
     for ifname in ifnames:
-        xpath = ifxpath(ifname)
+        xpath = ifxpath(ifname, model)
         if value:
             session.set(f"{xpath}/config/name", ifname)
             session.set(f"{xpath}/config/interface-type", "IF_OTN")
@@ -436,7 +436,7 @@ def valid_tx_timing_mode(session):
     return session.find_node(xpath).enums()
 
 
-def set_breakout(session, ifnames, numch, speed):
+def set_breakout(session, ifnames, numch, speed, model):
     if (numch == None) != (speed == None):
         raise InvalidInput(f"unsupported combination: {numch}, {speed}")
 
@@ -452,7 +452,7 @@ def set_breakout(session, ifnames, numch, speed):
             )
 
         if is_delete:
-            xpath = ifxpath(ifname)
+            xpath = ifxpath(ifname, model)
             xpath = f"{xpath}/ethernet/breakout/config"
             data = session.get(xpath)
             if data == None:
@@ -461,7 +461,7 @@ def set_breakout(session, ifnames, numch, speed):
 
             stdout.info("Sub Interfaces will be deleted")
 
-            data = session.get_operational(XPATH, [])
+            data = session.get_operational(f"/{model}:interfaces/interface", [])
 
             interfaces = [ifname]
             for intf in data:
@@ -476,11 +476,11 @@ def set_breakout(session, ifnames, numch, speed):
 
             stdout.info("Existing configurations on parent interfaces will be flushed")
             for i in interfaces:
-                session.delete(ifxpath(i))
+                session.delete(ifxpath(i, model))
 
         else:
             stdout.info("Existing configurations on parent interfaces will be flushed")
-            xpath = ifxpath(ifname)
+            xpath = ifxpath(ifname, model)
             session.delete(xpath)
             session.set(f"{xpath}/config/name", ifname)
             session.set(
@@ -495,11 +495,11 @@ def set_breakout(session, ifnames, numch, speed):
     session.apply()
 
 
-def show(session, ifnames):
+def show(session, ifnames, model):
     for ifname in ifnames:
         if len(ifnames) > 1:
             stdout.info(f"Interface {ifname}:")
-        xpath = ifxpath(ifname)
+        xpath = ifxpath(ifname, model)
         data = session.get_operational(xpath, one=True)
         if data == None:
             if len(ifnames) > 1:
@@ -593,14 +593,55 @@ def show(session, ifnames):
 
         stdout.info(tabulate(rows))
 
+        ipv4 = data.get("ipv4", {})
+
+        if not ipv4:
+            return
+
+        stdout.info("")
+        stdout.info("IPv4 address")
+
+        addrs = ipv4.get("addresses", {}).get("address", [])
+        stdout.info(
+            tabulate(
+                [(f"{addr['ip']}/{addr['state']['prefix-length']}",) for addr in addrs]
+            )
+        )
+
+        stdout.info("")
+        stdout.info("IPv4 neighbor")
+
+        neighs = ipv4.get("neighbors", {}).get("neighbor", [])
+        stdout.info(
+            tabulate(
+                [
+                    (
+                        n["ip"],
+                        n.get("state", {}).get("link-layer-address", "incomplete"),
+                    )
+                    for n in neighs
+                ]
+            )
+        )
+
 
 class ShutdownCommand(Command):
+    def __init__(self, context, parent, name, **options):
+        self.model = options.get("model", "goldstone-interfaces")
+        super().__init__(context, parent, name, **options)
+
     def exec(self, line):
         if len(line) != 0:
             raise InvalidInput(f"usage: {self.name_all()}")
 
         admin_status = "UP" if self.parent.name == "no" else "DOWN"
-        _set(self.conn, self.context.ifnames, "config/admin-status", admin_status)
+        _set(
+            self.conn,
+            self.context.ifnames,
+            "config/admin-status",
+            admin_status,
+            self.model,
+        )
 
 
 def eth_config(data, key):
@@ -609,26 +650,38 @@ def eth_config(data, key):
 
 class IfConfigCommand(ConfigCommand):
     NODE = []
-    XPATH = "".join(
-        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
-    )
+
+    def __init__(self, context, parent, name, **options):
+        self.model = options.get("model", "goldstone-interfaces")
+        super().__init__(context, parent, name, **options)
+
+    def xpath(self):
+        return "".join(
+            f"/{self.model}:{v}" for v in ["interfaces", "interface"] + self.NODE
+        )
 
     def arguments(self):
         if self.root.name != "no":
-            node = self.conn.find_node(self.XPATH)
+            node = self.conn.find_node(self.xpath())
             return [v.lower() for v in node.enums()]
 
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            _set(self.conn, self.context.ifnames, "/".join(self.NODE), None)
+            _set(self.conn, self.context.ifnames, "/".join(self.NODE), None, self.model)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            _set(self.conn, self.context.ifnames, "/".join(self.NODE), line[0].upper())
+            _set(
+                self.conn,
+                self.context.ifnames,
+                "/".join(self.NODE),
+                line[0].upper(),
+                self.model,
+            )
 
     @classmethod
     def to_command(cls, conn, data, **options):
@@ -641,40 +694,25 @@ class IfConfigCommand(ConfigCommand):
 
 class AdminStatusCommand(IfConfigCommand):
     NODE = ["config", "admin-status"]
-    XPATH = "".join(
-        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
-    )
 
 
 class PinModeCommand(IfConfigCommand):
     NODE = ["config", "pin-mode"]
-    XPATH = "".join(
-        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
-    )
 
 
 class LoopbackModeCommand(IfConfigCommand):
     NODE = ["config", "loopback-mode"]
-    XPATH = "".join(
-        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
-    )
 
 
 class PRBSModeCommand(IfConfigCommand):
     NODE = ["config", "prbs-mode"]
-    XPATH = "".join(
-        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
-    )
 
 
 class FECCommand(IfConfigCommand):
     NODE = ["ethernet", "config", "fec"]
-    XPATH = "".join(
-        f"/goldstone-interfaces:{v}" for v in ["interfaces", "interface"] + NODE
-    )
 
 
-class SpeedCommand(ConfigCommand):
+class SpeedCommand(IfConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return valid_speeds(self.conn)
@@ -683,13 +721,13 @@ class SpeedCommand(ConfigCommand):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_speed(self.conn, self.context.ifnames, None)
+            set_speed(self.conn, self.context.ifnames, None, self.model)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_speed(self.conn, self.context.ifnames, line[0])
+            set_speed(self.conn, self.context.ifnames, line[0], self.model)
 
     @classmethod
     def to_command(cls, conn, data, **options):
@@ -698,7 +736,7 @@ class SpeedCommand(ConfigCommand):
             return f"speed {speed_yang_to_human(speed)}"
 
 
-class InterfaceTypeOTNCommand(ConfigCommand):
+class InterfaceTypeOTNCommand(IfConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return ["otl", "foic"]
@@ -707,16 +745,16 @@ class InterfaceTypeOTNCommand(ConfigCommand):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_otn_interface_type(self.conn, self.context.ifnames, None)
+            set_otn_interface_type(self.conn, self.context.ifnames, None, self.model)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_otn_interface_type(self.conn, self.context.ifnames, line[0])
+            set_otn_interface_type(self.conn, self.context.ifnames, line[0], self.model)
 
 
-class InterfaceTypeCommand(ConfigCommand):
+class InterfaceTypeCommand(IfConfigCommand):
     COMMAND_DICT = {"otn": InterfaceTypeOTNCommand}
 
     def arguments(self):
@@ -727,13 +765,13 @@ class InterfaceTypeCommand(ConfigCommand):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_interface_type(self.conn, self.context.ifnames, None)
+            set_interface_type(self.conn, self.context.ifnames, None, self.model)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_interface_type(self.conn, self.context.ifnames, line[0])
+            set_interface_type(self.conn, self.context.ifnames, line[0], self.model)
 
     @classmethod
     def to_command(cls, conn, data, **options):
@@ -748,12 +786,15 @@ class InterfaceTypeCommand(ConfigCommand):
             return f"interface-type {iftype}"
 
 
-class MTUCommand(ConfigCommand):
+class MTUCommand(IfConfigCommand):
+    def arguments(self):
+        return None
+
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_mtu(self.conn, self.context.ifnames, None)
+            set_mtu(self.conn, self.context.ifnames, None, self.model)
         else:
             if len(line) != 1:
                 range_ = mtu_range(self.conn)
@@ -761,7 +802,7 @@ class MTUCommand(ConfigCommand):
                 raise InvalidInput(f"usage: mtu{range_}")
             if line[0].isdigit():
                 mtu = int(line[0])
-                set_mtu(self.conn, self.context.ifnames, mtu)
+                set_mtu(self.conn, self.context.ifnames, mtu, self.model)
             else:
                 raise InvalidInput("Argument must be numbers and not letters")
 
@@ -772,7 +813,7 @@ class MTUCommand(ConfigCommand):
             return f"mtu {mtu}"
 
 
-class AutoNegoAdvertiseCommand(Command):
+class AutoNegoAdvertiseCommand(IfConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return valid_speeds(self.conn)
@@ -781,16 +822,18 @@ class AutoNegoAdvertiseCommand(Command):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_auto_nego_adv_speed(self.conn, self.context.ifnames, None)
+            set_auto_nego_adv_speed(self.conn, self.context.ifnames, None, self.model)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_auto_nego_adv_speed(self.conn, self.context.ifnames, line[0])
+            set_auto_nego_adv_speed(
+                self.conn, self.context.ifnames, line[0], self.model
+            )
 
 
-class AutoNegoCommand(ConfigCommand):
+class AutoNegoCommand(IfConfigCommand):
     COMMAND_DICT = {
         "advertise": AutoNegoAdvertiseCommand,
     }
@@ -803,13 +846,15 @@ class AutoNegoCommand(ConfigCommand):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_auto_nego(self.conn, self.context.ifnames, None)
+            set_auto_nego(self.conn, self.context.ifnames, None, self.model)
         else:
             if len(line) != 1:
                 raise InvalidInput(
                     f"usage: {self.name_all()} [{'|'.join(self.list())}]"
                 )
-            set_auto_nego(self.conn, self.context.ifnames, line[0] == "enable")
+            set_auto_nego(
+                self.conn, self.context.ifnames, line[0] == "enable", self.model
+            )
 
     @classmethod
     def to_command(cls, conn, data, **options):
@@ -830,7 +875,7 @@ class AutoNegoCommand(ConfigCommand):
         return lines
 
 
-class BreakoutCommand(ConfigCommand):
+class BreakoutCommand(IfConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return ["2X50G", "2X20G", "4X25G", "4X10G"]
@@ -839,7 +884,7 @@ class BreakoutCommand(ConfigCommand):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
-            set_breakout(self.conn, self.context.ifnames, None, None)
+            set_breakout(self.conn, self.context.ifnames, None, None, self.model)
         else:
             valid_speed = ["50G", "20G", "10G", "25G"]
             usage = f'usage: {self.name_all()} [{"|".join(self.list())}]'
@@ -861,6 +906,7 @@ class BreakoutCommand(ConfigCommand):
                 self.context.ifnames,
                 input_values[0],
                 input_values[1],
+                self.model,
             )
 
     @classmethod
@@ -871,14 +917,17 @@ class BreakoutCommand(ConfigCommand):
         return "breakout " + breakout_yang_to_human(config)
 
 
-class StaticMACSECCommand(ConfigCommand):
+class StaticMACSECCommand(IfConfigCommand):
+    def arguments(self):
+        return None
+
     def exec(self, line):
         if self.root.name == "no":
             if len(line) != 0:
                 raise InvalidInput(f"usage: {self.name_all()}")
             for name in self.context.ifnames:
                 self.conn.delete(
-                    f"{ifxpath(name)}/ethernet/goldstone-static-macsec:static-macsec"
+                    f"{ifxpath(name, self.model)}/ethernet/goldstone-static-macsec:static-macsec"
                 )
             self.conn.apply()
         else:
@@ -890,7 +939,7 @@ class StaticMACSECCommand(ConfigCommand):
                 raise InvalidInput(self.usage())
 
             attr = "ethernet/goldstone-static-macsec:static-macsec/config/key"
-            _set(self.conn, self.context.ifnames, attr, key)
+            _set(self.conn, self.context.ifnames, attr, key, self.model)
 
     def usage(self):
         return f"usage: {self.name_all()} <static-macsec-key> (<uint32>,<uint32>,<uint32>,<uint32>)"
@@ -903,7 +952,7 @@ class StaticMACSECCommand(ConfigCommand):
             return f"static-macsec-key {key}"
 
 
-class TXTimingModeCommand(ConfigCommand):
+class TXTimingModeCommand(IfConfigCommand):
     def arguments(self):
         if self.root.name != "no":
             return valid_tx_timing_mode(self.conn)
@@ -914,7 +963,7 @@ class TXTimingModeCommand(ConfigCommand):
                 raise InvalidInput(f"usage: {self.name_all()}")
             for name in self.context.ifnames:
                 self.conn.delete(
-                    f"{ifxpath(name)}/ethernet/goldstone-synce:synce/config/tx-timing-mode"
+                    f"{ifxpath(name, self.model)}/ethernet/goldstone-synce:synce/config/tx-timing-mode"
                 )
             self.conn.apply()
         else:
@@ -922,7 +971,7 @@ class TXTimingModeCommand(ConfigCommand):
                 raise InvalidInput(self.usage())
 
             attr = "ethernet/goldstone-synce:synce/config/tx-timing-mode"
-            _set(self.conn, self.context.ifnames, attr, line[0])
+            _set(self.conn, self.context.ifnames, attr, line[0], self.model)
 
     def usage(self):
         return f"usage: {self.name_all()} [{'|'.join(self.list())}]"
@@ -1044,22 +1093,27 @@ class InterfaceCounterCommand(Command):
 class InterfaceShowCommand(Command):
     COMMAND_DICT = {"counters": InterfaceCounterCommand}
 
+    def __init__(self, context, parent, name, **options):
+        self.model = options.get("model", "goldstone-interfaces")
+        super().__init__(context, parent, name, **options)
+
     def exec(self, line):
         if len(line) != 0:
             return self.context.root().exec(f"show {' '.join(line)}")
         else:
-            show(self.conn, self.context.ifnames)
+            show(self.conn, self.context.ifnames, self.model)
 
 
 class InterfaceContext(Context):
     REGISTERED_COMMANDS = {}
     OBJECT_NAME = "interface"
+    MODEL = "goldstone-interfaces"
 
     def __init__(self, parent, ifname=None):
         super().__init__(parent, name=ifname)
 
         if ifname:  # ifname == None when running config
-            ifnames = interface_names(self.conn, ifname)
+            ifnames = interface_names(self.conn, ifname, self.MODEL)
 
             if len(ifnames) == 0:
                 raise InvalidInput(f"no interface found: {ifname}")
@@ -1074,8 +1128,22 @@ class InterfaceContext(Context):
 
             self.ifnames = ifnames
 
-        self.add_command("shutdown", ShutdownCommand, add_no=True)
-        self.add_command("admin-status", AdminStatusCommand, add_no=True)
+        self.add_command(
+            "show",
+            InterfaceShowCommand,
+            additional_completer=parent.get_completer("show"),
+            model=self.MODEL,
+        )
+
+        self.add_command("shutdown", ShutdownCommand, add_no=True, model=self.MODEL)
+        self.add_command(
+            "admin-status", AdminStatusCommand, add_no=True, model=self.MODEL
+        )
+        self.add_command("mtu", MTUCommand, add_no=True, model=self.MODEL)
+
+        if self.MODEL != "goldstone-interfaces":
+            return
+
         self.add_command("pin-mode", PinModeCommand, add_no=True)
         self.add_command("loopback-mode", LoopbackModeCommand, add_no=True)
         self.add_command("prbs-mode", PRBSModeCommand, add_no=True)
@@ -1087,7 +1155,6 @@ class InterfaceContext(Context):
             fuzzy=False,
         )
         self.add_command("interface-type", InterfaceTypeCommand, add_no=True)
-        self.add_command("mtu", MTUCommand, add_no=True)
         self.add_command("auto-negotiate", AutoNegoCommand, add_no=True)
         self.add_command("breakout", BreakoutCommand, add_no=True)
 
@@ -1097,14 +1164,8 @@ class InterfaceContext(Context):
         if ModelExists("goldstone-synce")(self):
             self.add_command("tx-timing-mode", TXTimingModeCommand, add_no=True)
 
-        self.add_command(
-            "show",
-            InterfaceShowCommand,
-            additional_completer=parent.get_completer("show"),
-        )
-
     def xpath(self):
-        return XPATH
+        return f"/{self.MODEL}:interfaces/interface"
 
 
 class Show(Command):
