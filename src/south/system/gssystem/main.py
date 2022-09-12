@@ -8,7 +8,6 @@ from goldstone.lib.connector.sysrepo import Connector
 
 from .system import SystemServer
 from .aaa import AAAServer
-from .mgmtif import ManagementInterfaceServer
 from .k8s import KubernetesServer
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,6 @@ def main():
         servers = [
             SystemServer(conn.conn),
             AAAServer(conn),
-            ManagementInterfaceServer(conn.conn),
             KubernetesServer(conn.conn),
         ]
 
