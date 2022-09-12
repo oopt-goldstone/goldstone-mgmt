@@ -96,6 +96,8 @@ lint:
 
 unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-sonic
 
+rust-unittest: unittest-netlink
+
 clean-sysrepo:
 	rm -rf /dev/shm/sr* /var/lib/sysrepo
 
@@ -146,3 +148,8 @@ unittest-sonic:
 	scripts/gs-yang.py --install south-sonic --search-dirs yang
 	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 	cd src/south/sonic      && make clean
+
+unittest-netlink:
+	$(MAKE) clean-sysrepo
+	scripts/gs-yang.py --install south-netlink --search-dirs yang
+	cd src/south/netlink && cargo test -- --nocapture

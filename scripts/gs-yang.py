@@ -27,7 +27,11 @@ MODELS = {
         "goldstone-synce",
         "goldstone-dpll",
     ],
-    "south-netlink": ["goldstone-interfaces"],
+    "south-netlink": [
+        "goldstone-interfaces",
+        "goldstone-mgmt-interfaces",
+        "goldstone-ipv4",
+    ],
     "south-dpll": ["goldstone-dpll"],
     "south-system": [
         "goldstone-aaa",
