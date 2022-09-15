@@ -39,7 +39,7 @@ all: builder images tester host-packages
 
 images: south-images north-images xlate-images
 
-GS_SOUTH_AGENTS ?= south-sonic south-tai south-onlp south-system south-gearbox south-dpll
+GS_SOUTH_AGENTS ?= south-sonic south-tai south-onlp south-system south-gearbox south-dpll south-netlink
 GS_NORTH_AGENTS ?= north-cli north-snmp north-netconf north-notif
 GS_XLATE_AGENTS ?= xlate-oc
 
