@@ -38,4 +38,4 @@ jobs:
       file: ./docker/agent.Dockerfile
       build-args: GS_MGMT_BUILDER_IMAGE=${{ needs.builder.outputs.tags }}
       targets: >-
-        ["north-cli", "north-snmp", "north-netconf", "north-notif", "south-sonic", "south-tai", "south-onlp", "south-system", "south-gearbox", "south-dpll", "xlate-oc"]
+        ["north-cli", "north-snmp", "north-netconf", "north-notif", "south-sonic", "south-tai", "south-onlp", "south-system", "south-gearbox", "south-dpll", "south-netlink", "xlate-oc"]

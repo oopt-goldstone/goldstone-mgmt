@@ -178,6 +178,35 @@ RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wh
 RUN --mount=type=bind,source=src/south/dpll,target=/src,rw pip install /src
 
 #---
+# south-netlink
+#---
+
+FROM rust:1-buster AS rust-builder
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends libclang1 clang libpcre2-dev
+
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | xargs dpkg -i
+
+RUN --mount=type=bind,source=src/south/netlink,target=/src,rw \
+    --mount=type=bind,source=sm/sysrepo2-rs,target=/sm/sysrepo2-rs \
+    cd /src && cargo build -r && mv ./target/release/netlink /south-netlink
+
+FROM debian:buster-slim AS south-netlink
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
+            apt update && apt install -qy --no-install-recommends libatomic1 libpcre2-8-0
+
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
+
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
+
+COPY --from=rust-builder /south-netlink /usr/bin/
+
+RUN groupadd gsmgmt
+
+#---
 # xlate-oc (OpenConfig translator)
 #---
 
