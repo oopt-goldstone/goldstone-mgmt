@@ -15,7 +15,7 @@ RUN --mount=type=bind,source=sm/OpenNetworkLinux,target=/root/sm/OpenNetworkLinu
 
 FROM $GS_MGMT_BUILDER_BASE AS base
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy gcc make pkg-config curl doxygen libi2c-dev git cmake libpcre2-dev bison graphviz libcmocka-dev valgrind quilt libcurl4-gnutls-dev swig debhelper devscripts libpam-dev autoconf-archive libssl-dev dbus libffi-dev build-essential
 
 RUN pip install --upgrade pip
@@ -84,7 +84,7 @@ RUN --mount=type=bind,source=sm/libnss-tacplus,target=/root/sm/libnss-tacplus,rw
 
 FROM sysrepo AS python
 
-RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy libdbus-glib-1-dev
 
 RUN pip install grpcio-tools grpclib
@@ -145,12 +145,12 @@ RUN --mount=type=bind,source=scripts,target=/src \
 
 FROM $GS_MGMT_BUILDER_BASE AS tester
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp software-properties-common make pkg-config curl git cmake libssh-4 libssh-dev libpcre2-dev quilt
 
 RUN apt-add-repository non-free
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp-mibs-downloader
 
 RUN pip install paramiko scp black pyang prompt_toolkit tabulate natsort kubernetes setuptools
@@ -235,7 +235,7 @@ RUN --mount=type=bind,source=src/south/system,target=/src,rw \
 
 FROM rust:1-buster AS rust-tester
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends libclang1 clang libpcre2-dev
 
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i

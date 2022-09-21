@@ -10,7 +10,7 @@ ARG https_proxy
 
 FROM $GS_MGMT_BASE as base
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && apt install -qy --no-install-recommends libatomic1 libpcre2-8-0
 
 RUN pip install --upgrade pip
@@ -61,7 +61,7 @@ RUN --mount=type=bind,source=src/north/notif,target=/src,rw pip install /src
 
 FROM debian:10 AS north-netconf
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy make pkg-config curl git cmake libssh-4 libssh-dev libpcre2-dev quilt
 
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i
@@ -102,7 +102,7 @@ RUN --mount=type=bind,source=src/north/snmp,target=/src,rw pip install /src
 
 FROM base AS south-system
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && apt install -qy --no-install-recommends libdbus-1-3
 
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
@@ -116,7 +116,7 @@ RUN --mount=type=bind,source=src/south/system,target=/src,rw pip install /src
 
 FROM base AS south-onlp
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && apt install -qy --no-install-recommends libi2c0
 
 RUN --mount=type=bind,from=builder,source=/usr/share/onlp,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
@@ -183,7 +183,7 @@ RUN --mount=type=bind,source=src/south/dpll,target=/src,rw pip install /src
 
 FROM rust:1-buster AS rust-builder
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends libclang1 clang libpcre2-dev
 
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i
@@ -195,7 +195,7 @@ RUN --mount=type=bind,source=src/south/netlink,target=/src,rw \
 
 FROM debian:buster-slim AS south-netlink
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=private --mount=type=cache,target=/var/lib/apt,sharing=private \
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && apt install -qy --no-install-recommends libatomic1 libpcre2-8-0
 
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | awk '$0 !~ /python/ && $0 !~ /-dbg_/ && $0 !~ /-dev_/ { print $0 }' | xargs dpkg -i
