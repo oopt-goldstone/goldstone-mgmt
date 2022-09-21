@@ -102,10 +102,12 @@ fn get_link_info_from_nlas<'a>(
                 mtu = Some(m);
             }
             Nla::Address(a) => {
-                lladdr = Some(format!(
-                    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                    a[0], a[1], a[2], a[3], a[4], a[5]
-                ));
+                if a.len() == 6 {
+                    lladdr = Some(format!(
+                        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                        a[0], a[1], a[2], a[3], a[4], a[5]
+                    ));
+                }
             }
             _ => (),
         }
