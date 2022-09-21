@@ -189,9 +189,14 @@ RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i
 RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | xargs dpkg -i
 
-RUN --mount=type=bind,source=src/south/netlink,target=/src,rw \
-    --mount=type=bind,source=sm/sysrepo2-rs,target=/sm/sysrepo2-rs \
-    cd /src && cargo build -r && mv ./target/release/netlink /south-netlink
+WORKDIR /app
+
+COPY sm/sysrepo2-rs sm/sysrepo2-rs
+COPY src/south/netlink src/south/netlink
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cd src/south/netlink && cargo build -r && mv ./target/release/netlink /south-netlink
 
 FROM debian:buster-slim AS south-netlink
 
