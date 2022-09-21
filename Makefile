@@ -1,6 +1,6 @@
 .PHONY: builder images tester host-packages bash yang
 
-ARCH ?= amd64
+ARCH ?= $(subst x86_64,amd64,$(shell uname -m))
 
 DOCKER_CMD ?= bash
 DOCKER_BUILD_OPTION ?= --platform linux/$(ARCH)
