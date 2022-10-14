@@ -759,14 +759,29 @@ class InterfaceServer(ServerBase):
             await obj.set("auto-negotiation", "true" if anlt else "false")
 
     async def reconcile(self):
-        prefix = "/goldstone-interfaces:interfaces/interface"
+        xpath = "/goldstone-interfaces:interfaces/interface/config"
+        config = self.get_running_data(xpath, default=[])
 
-        for ifname, obj, _ in await self.get_ifname_list():
-            xpath = f"{prefix}[name='{ifname}']"
-            config = self.get_running_data(
-                xpath, default={}, include_implicit_defaults=True
-            )
-            await self.reconcile_interface(ifname, obj, config)
+        remove = set()
+
+        for intf in config:
+            ifname = intf["name"]
+            pin_mode = intf.get("pin-mode")
+            if pin_mode:
+                info = self.get_interface_info(ifname, pin_mode.lower())
+                remove |= set(info["interface"].get("conflicts-with", []))
+
+        create = set(self._interface_info.keys()) - remove
+
+        h = PinModeHandler(self, None)
+        h.user = {}
+        # ensure TAI doesn't have interfaces that conflict with the current
+        # pin-mode configuration
+        await h.remove(remove)
+
+        # ensure TAI has all interfaces that doesn't conflict with the current
+        # pin-mode configuration
+        await h.create(create)
 
     async def tai_cb(self, obj, attr_meta, msg):
         logger.info(f"{obj}, {obj.obj}")
@@ -930,9 +945,15 @@ class InterfaceServer(ServerBase):
 
         index = v[2] - 1
         if v[1] == 0:  # hostif
-            obj = await m.create_hostif(index)
+            try:
+                obj = m.get_hostif(index)
+            except taish.TAIException:
+                obj = await m.create_hostif(index)
         elif v[1] == 1:  # netif
-            obj = await m.create_netif(index)
+            try:
+                obj = m.get_netif(index)
+            except taish.TAIException:
+                obj = await m.create_netif(index)
 
         await self.reconcile_interface(ifname, obj, config)
 

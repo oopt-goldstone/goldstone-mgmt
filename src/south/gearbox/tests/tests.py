@@ -44,12 +44,16 @@ class TestInterfaceServerMethods(unittest.IsolatedAsyncioTestCase):
 
 class TestBase(unittest.IsolatedAsyncioTestCase):
     def patch_taish(self):
-        async def set_(*args):
-            self.set_logs.append(args)
+        async def set_(oid, *args):
+            logs = self.set_logs.get(oid, {})
+            logs[args[0]] = args[1]
+            self.set_logs[oid] = logs
 
-        async def set_multiple(*args):
+        async def set_multiple(*args, oid):
             for a in args[0]:
-                self.set_logs.append(a)
+                logs = self.set_logs.get(oid, {})
+                logs[a[0]] = a[1]
+                self.set_logs[oid] = logs
 
         async def module_get(*args, **kwargs):
             if args[0] in ["alarm-notification", "notify"]:
@@ -192,8 +196,8 @@ class TestBase(unittest.IsolatedAsyncioTestCase):
             obj = mock.AsyncMock(spec=spec)
             obj.monitor = lambda *args, **kwargs: monitor(spec, *args, **kwargs)
             obj.get = lambda *args, **kwargs: get(spec, *args, **kwargs)
-            obj.set = set_
-            obj.set_multiple = set_multiple
+            obj.set = lambda *args: set_(oid, *args)
+            obj.set_multiple = lambda *args: set_multiple(*args, oid=oid)
             obj.get_multiple = lambda *args, **kwargs: get_multiple(
                 spec, *args, **kwargs
             )
@@ -211,12 +215,12 @@ class TestBase(unittest.IsolatedAsyncioTestCase):
         module = mock.AsyncMock(spec=Module(None, None))
         module.monitor = monitor
         module.get = module_get
-        module.set = set_
-        module.set_multiple = set_multiple
+        module.set = lambda *args: set_(0x1, *args)
+        module.set_multiple = lambda *args: set_multiple(*args, oid=0x1)
         module.get_multiple = lambda *args, **kwargs: get_multiple(
             Module(None, None), *args, **kwargs
         )
-        module.oid = 1
+        module.oid = 0x1
         module.get_netif = get_netif
         module.get_hostif = get_hostif
         module.get_attribute_capability = get_attribute_capability
@@ -255,7 +259,7 @@ class TestInterfaceServer(TestBase):
         self.conn.delete_all("goldstone-interfaces")
         self.conn.apply()
 
-        self.set_logs = []
+        self.set_logs = {}
 
         self.patch_taish()
 
@@ -398,17 +402,16 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("provision-mode", "none"),
-                    ("provision-mode", "none"),
-                    ("signal-rate", "otu4"),
-                    ("loopback-type", "none"),
-                    ("prbs-type", "none"),
-                    ("fec-type", "rs"),
-                    ("auto-negotiation", "false"),
-                    ("tx-timing-mode", "auto"),
-                ],
+                self.set_logs[0x2000000010000],
+                {
+                    "provision-mode": "none",
+                    "signal-rate": "otu4",
+                    "loopback-type": "none",
+                    "prbs-type": "none",
+                    "fec-type": "rs",
+                    "auto-negotiation": "false",
+                    "tx-timing-mode": "auto",
+                },
             )
 
         await asyncio.to_thread(test)
@@ -428,17 +431,15 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("provision-mode", "none"),
-                    ("provision-mode", "none"),
-                    ("loopback-type", "none"),
-                    ("prbs-type", "none"),
-                    ("fec-type", "rs"),
-                    ("tx-timing-mode", "auto"),
-                ],
+                self.set_logs[0x3000000010000],
+                {
+                    "provision-mode": "none",
+                    "loopback-type": "none",
+                    "prbs-type": "none",
+                    "fec-type": "rs",
+                    "tx-timing-mode": "auto",
+                },
             )
-
             xpath = "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']"
             v = conn.get_operational(xpath, one=True)
             self.assertTrue("static-macsec" in v["ethernet"])
@@ -460,14 +461,13 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("provision-mode", "none"),
-                    ("provision-mode", "none"),
-                    ("loopback-type", "none"),
-                    ("prbs-type", "none"),
-                    ("tx-timing-mode", "auto"),
-                ],
+                self.set_logs[0x2000000010000],
+                {
+                    "provision-mode": "none",
+                    "loopback-type": "none",
+                    "prbs-type": "none",
+                    "tx-timing-mode": "auto",
+                },
             )
 
             xpath = "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']"
@@ -506,15 +506,14 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("provision-mode", "none"),
-                    ("provision-mode", "none"),
-                    ("loopback-type", "none"),
-                    ("prbs-type", "none"),
-                    ("fec-type", "rs"),
-                    ("auto-negotiation", "false"),
-                ],
+                self.set_logs[0x2000000010000],
+                {
+                    "provision-mode": "none",
+                    "loopback-type": "none",
+                    "prbs-type": "none",
+                    "fec-type": "rs",
+                    "auto-negotiation": "false",
+                },
             )
 
             xpath = "/goldstone-interfaces:interfaces/interface[name='Interface1/0/1']"
@@ -543,15 +542,14 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("provision-mode", "none"),
-                    ("provision-mode", "none"),
-                    ("loopback-type", "none"),
-                    ("prbs-type", "none"),
-                    ("fec-type", "rs"),
-                    ("tx-timing-mode", "auto"),
-                ],
+                self.set_logs[0x3000000010000],
+                {
+                    "provision-mode": "none",
+                    "loopback-type": "none",
+                    "prbs-type": "none",
+                    "fec-type": "rs",
+                    "tx-timing-mode": "auto",
+                },
             )
 
         await asyncio.to_thread(test)
@@ -570,17 +568,17 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("provision-mode", "none"),
-                    ("provision-mode", "none"),
-                    ("loopback-type", "shallow"),
-                    ("prbs-type", "none"),
-                    ("fec-type", "rs"),
-                    ("tx-timing-mode", "auto"),
-                ],
+                self.set_logs[0x3000000010000],
+                {
+                    "provision-mode": "none",
+                    "loopback-type": "shallow",
+                    "prbs-type": "none",
+                    "fec-type": "rs",
+                    "tx-timing-mode": "auto",
+                },
             )
-            self.set_logs = []  # clear set_logs
+
+            self.set_logs = {}  # clear set_logs
 
             conn.set(
                 "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
@@ -589,12 +587,13 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("loopback-type", "deep"),
-                ],
+                self.set_logs[0x3000000010000],
+                {
+                    "loopback-type": "deep",
+                },
             )
-            self.set_logs = []  # clear set_logs
+
+            self.set_logs = {}  # clear set_logs
 
             conn.delete(
                 "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/loopback-mode",
@@ -602,10 +601,10 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("loopback-type", "none"),
-                ],
+                self.set_logs[0x3000000010000],
+                {
+                    "loopback-type": "none",
+                },
             )
 
         await asyncio.to_thread(test)
@@ -624,17 +623,17 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("provision-mode", "none"),
-                    ("provision-mode", "none"),
-                    ("loopback-type", "none"),
-                    ("prbs-type", "prbs7"),
-                    ("fec-type", "rs"),
-                    ("tx-timing-mode", "auto"),
-                ],
+                self.set_logs[0x3000000010000],
+                {
+                    "provision-mode": "none",
+                    "loopback-type": "none",
+                    "prbs-type": "prbs7",
+                    "fec-type": "rs",
+                    "tx-timing-mode": "auto",
+                },
             )
-            self.set_logs = []  # clear set_logs
+
+            self.set_logs = {}  # clear set_logs
 
             conn.set(
                 "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
@@ -650,12 +649,13 @@ class TestInterfaceServer(TestBase):
             self.assertAlmostEqual(v, 1.20e-03)
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("prbs-type", "prbs31"),
-                ],
+                self.set_logs[0x3000000010000],
+                {
+                    "prbs-type": "prbs31",
+                },
             )
-            self.set_logs = []  # clear set_logs
+
+            self.set_logs = {}  # clear set_logs
 
             conn.delete(
                 "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/prbs-mode",
@@ -663,10 +663,10 @@ class TestInterfaceServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("prbs-type", "none"),
-                ],
+                self.set_logs[0x3000000010000],
+                {
+                    "prbs-type": "none",
+                },
             )
 
         await asyncio.to_thread(test)
@@ -681,7 +681,7 @@ class TestGearboxServer(TestBase):
         self.conn.delete_all("goldstone-interfaces")
         self.conn.apply()
 
-        self.set_logs = []
+        self.set_logs = {}
 
         self.patch_taish()
 
@@ -694,7 +694,7 @@ class TestGearboxServer(TestBase):
     async def test_synce_reference_clocks(self):
 
         self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
-        self.set_logs = []
+        self.set_logs = {}
 
         def test():
             conn = Connector()
@@ -714,14 +714,11 @@ class TestGearboxServer(TestBase):
             conn.apply()
 
             self.assertEqual(
-                self.set_logs,
-                [
-                    ("pgmrclk-assignment", "oid:0x3000000010000,oid:0x3000000010000"),
-                    (
-                        "tributary-mapping",
-                        '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                    ),
-                ],
+                self.set_logs[0x1],
+                {
+                    "pgmrclk-assignment": "oid:0x3000000010000,oid:0x3000000010000",
+                    "tributary-mapping": '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                },
             )
 
         await asyncio.to_thread(test)
@@ -768,14 +765,18 @@ class TestGearboxServer(TestBase):
             )
             conn.apply()
 
-            self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
-            self.set_logs = []  # clear set_logs
+            self.assertTrue(self.set_logs[0x1]["tributary-mapping"], [])
+            self.set_logs = {}  # clear set_logs
             conn.set(
                 "/goldstone-gearbox:gearboxes/gearbox[name='1']/config/enable-flexible-connection",
                 False,
             )
             conn.apply()
-            self.assertTrue("tributary-mapping" in (v[0] for v in self.set_logs))
+
+            self.assertTrue(
+                self.set_logs[0x1]["tributary-mapping"],
+                '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+            )
 
         await asyncio.to_thread(test)
 
@@ -827,28 +828,37 @@ class TestGearboxServer(TestBase):
     async def test_reconcile(self):
         self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
         self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("pin-mode", "nrz"),
-                ("fec-type", "rs"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
-                ("auto-negotiation", "false"),
-                ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("pin-mode", "pam4"),
-                ("fec-type", "rs"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
-                ("macsec-static-key", ""),
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-                ("admin-status", "up"),
-            ],
+            self.set_logs[0x1],
+            {
+                "tributary-mapping": '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                "admin-status": "up",
+            },
+        )
+
+        self.assertEqual(
+            self.set_logs[0x3000000010000],
+            {
+                "provision-mode": "none",
+                "signal-rate": "100-gbe",
+                "pin-mode": "pam4",
+                "fec-type": "rs",
+                "mtu": DEFAULT_MTU,
+                "mru": DEFAULT_MTU,
+                "macsec-static-key": "",
+            },
+        )
+
+        self.assertEqual(
+            self.set_logs[0x2000000010000],
+            {
+                "provision-mode": "none",
+                "signal-rate": "100-gbe",
+                "pin-mode": "nrz",
+                "fec-type": "rs",
+                "mtu": DEFAULT_MTU,
+                "mru": DEFAULT_MTU,
+                "auto-negotiation": "false",
+            },
         )
 
     async def test_reconcile_with_admin_status_down(self):
@@ -864,29 +874,13 @@ class TestGearboxServer(TestBase):
         await asyncio.to_thread(setup)
 
         self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
         self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("pin-mode", "nrz"),
-                ("fec-type", "rs"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
-                ("auto-negotiation", "false"),
-                ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("pin-mode", "pam4"),
-                ("fec-type", "rs"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
-                ("macsec-static-key", ""),
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-                ("admin-status", "down"),
-            ],
+            self.set_logs[0x1],
+            {
+                "tributary-mapping": '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                "admin-status": "down",
+            },
         )
 
     async def test_reconcile_with_admin_status_up(self):
@@ -902,29 +896,39 @@ class TestGearboxServer(TestBase):
         await asyncio.to_thread(setup)
 
         self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
         self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("pin-mode", "nrz"),
-                ("fec-type", "rs"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
-                ("auto-negotiation", "false"),
-                ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("pin-mode", "pam4"),
-                ("fec-type", "rs"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
-                ("macsec-static-key", ""),
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-                ("admin-status", "up"),
-            ],
+            self.set_logs[0x1],
+            {
+                "tributary-mapping": '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
+                "admin-status": "up",
+            },
+        )
+
+        self.assertEqual(
+            self.set_logs[0x2000000010000],
+            {
+                "provision-mode": "none",
+                "signal-rate": "100-gbe",
+                "pin-mode": "nrz",
+                "fec-type": "rs",
+                "mtu": DEFAULT_MTU,
+                "mru": DEFAULT_MTU,
+                "auto-negotiation": "false",
+            },
+        )
+
+        self.assertEqual(
+            self.set_logs[0x3000000010000],
+            {
+                "provision-mode": "none",
+                "signal-rate": "100-gbe",
+                "pin-mode": "pam4",
+                "fec-type": "rs",
+                "mtu": DEFAULT_MTU,
+                "mru": DEFAULT_MTU,
+                "macsec-static-key": "",
+            },
         )
 
     async def test_reconcile_with_intf_admin_status_up(self):
@@ -945,26 +949,49 @@ class TestGearboxServer(TestBase):
         self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
 
         self.assertEqual(
-            self.set_logs,
-            [
-                ("provision-mode", "normal"),
-                ("signal-rate", "100-gbe"),
-                ("pin-mode", "nrz"),
-                ("fec-type", "rs"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
-                ("auto-negotiation", "false"),
-                ("provision-mode", "none"),
-                ("signal-rate", "100-gbe"),
-                ("pin-mode", "pam4"),
-                ("fec-type", "rs"),
-                ("mtu", DEFAULT_MTU),
-                ("mru", DEFAULT_MTU),
-                ("macsec-static-key", ""),
-                (
-                    "tributary-mapping",
-                    '[{"oid:0x3000000010000": ["oid:0x2000000010000"]}]',
-                ),
-                ("admin-status", "up"),
-            ],
+            self.set_logs[0x2000000010000],
+            {
+                "auto-negotiation": "false",
+                "fec-type": "rs",
+                "mru": DEFAULT_MTU,
+                "mtu": DEFAULT_MTU,
+                "pin-mode": "nrz",
+                "provision-mode": "normal",
+                "signal-rate": "100-gbe",
+            },
+        )
+
+    async def test_reconcile_with_intf_pin_mode(self):
+        def setup():
+            conn = Connector()
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/name",
+                "Interface1/1/1",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/pin-mode",
+                "NRZ",
+            )
+            conn.set(
+                "/goldstone-interfaces:interfaces/interface[name='Interface1/1/1']/config/admin-status",
+                "UP",
+            )
+
+            conn.apply()
+
+        await asyncio.to_thread(setup)
+
+        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+
+        self.assertEqual(
+            self.set_logs[0x3000000010000],
+            {
+                "fec-type": "rs",
+                "macsec-static-key": "",
+                "mru": DEFAULT_MTU,
+                "mtu": DEFAULT_MTU,
+                "pin-mode": "nrz",
+                "provision-mode": "normal",
+                "signal-rate": "100-gbe",
+            },
         )
