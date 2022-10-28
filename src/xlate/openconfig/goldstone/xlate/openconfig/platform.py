@@ -605,10 +605,11 @@ class OpticalChannelOperationalModeHandler(PlatformChangeHandler):
             self._set(user, self.fec_type_xpath, value[2])
         else:
             self._delete(user, self.fec_type_xpath)
-        if value[3] is not None:
-            self._set(user, self.client_signal_mapping_type_xpath, value[3])
-        else:
-            self._delete(user, self.client_signal_mapping_type_xpath)
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # if value[3] is not None:
+        #     self._set(user, self.client_signal_mapping_type_xpath, value[3])
+        # else:
+        #     self._delete(user, self.client_signal_mapping_type_xpath)
 
     def _delete_item(self, user):
         if self.module_created:
@@ -619,7 +620,8 @@ class OpticalChannelOperationalModeHandler(PlatformChangeHandler):
             self._delete(user, self.line_rate_xpath)
             self._delete(user, self.modulation_format_xpath)
             self._delete(user, self.fec_type_xpath)
-            self._delete(user, self.client_signal_mapping_type_xpath)
+            # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+            # self._delete(user, self.client_signal_mapping_type_xpath)
 
     def _translate(self, user, value):
         return self._tranmission_mode(value)
@@ -1131,9 +1133,12 @@ class OpticalChannel(Component):
                 line_rate == mode["line-rate"]
                 and modulation_format == mode["modulation-format"]
                 and fec_type == mode["fec-type"]
-                and client_signal_mapping_type == mode["client-signal-mapping-type"]
             ):
-                return id_
+                if (
+                    client_signal_mapping_type == mode["client-signal-mapping-type"]
+                    or client_signal_mapping_type is None
+                ):
+                    return id_
 
     def translate(self):
         if self.network_interface:
@@ -1195,7 +1200,8 @@ class OpticalChannel(Component):
                     line_rate
                     and modulation_format
                     and fec_type
-                    and client_signal_mapping_type
+                    # NOTE: Current implementation may not return clinet-signal-mapping-type.
+                    # and client_signal_mapping_type
                 ):
                     self.data["optical-channel"]["state"][
                         "operational-mode"
