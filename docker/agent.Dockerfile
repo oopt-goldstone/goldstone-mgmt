@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.4
 
 ARG GS_MGMT_BUILDER_IMAGE
-ARG GS_MGMT_BASE=python:3-slim-buster
+ARG GS_MGMT_BASE=python:3.10-slim-buster
 
 FROM $GS_MGMT_BUILDER_IMAGE as builder
 
