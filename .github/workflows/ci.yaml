@@ -7,6 +7,7 @@ on:
 jobs:
   builder:
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     with:
       file: ./docker/builder.Dockerfile
       platforms: linux/amd64
@@ -14,6 +15,7 @@ jobs:
         ["builder"]
   build-snmpd:
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     with:
       file: ./docker/snmpd.Dockerfile
       platforms: linux/amd64
@@ -22,6 +24,7 @@ jobs:
   build-agents:
     needs: builder
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     # using matrix here is not supported yet
     # https://github.community/t/reusable-workflow-with-strategy-matrix/205676/8
     with:
@@ -32,6 +35,7 @@ jobs:
         ["north-cli", "north-snmp", "north-netconf", "north-notif", "south-sonic", "south-tai", "south-onlp", "south-system", "south-gearbox", "south-dpll", "south-netlink", "xlate-oc"]
   tester:
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     with:
       file: ./docker/builder.Dockerfile
       platforms: linux/amd64
@@ -42,11 +46,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       -
-        name: Checkout
+        name: Checkout - same repo
         uses: actions/checkout@v3
+        if: github.event.pull_request.head.repo.fork == false
         with:
           submodules: recursive
           fetch-depth: 0
+      -
+        name: Checkout - forked repo
+        uses: actions/checkout@v3
+        if: >-
+          ( github.event_name == 'pull_request_target' ) &&
+          ( github.event.pull_request.head.repo.fork == true )
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
       -
         name: Lint
         run: "docker run -t -v `pwd`:`pwd` -w `pwd` ${{ needs.tester.outputs.tags }} make lint"
@@ -55,6 +71,7 @@ jobs:
         run: "docker run -t -v `pwd`:`pwd` -w `pwd` ${{ needs.tester.outputs.tags }} make unittest"
   rust-tester:
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     with:
       file: ./docker/builder.Dockerfile
       platforms: linux/amd64
@@ -65,11 +82,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       -
-        name: Checkout
+        name: Checkout - same repo
         uses: actions/checkout@v3
+        if: github.event.pull_request.head.repo.fork == false
         with:
           submodules: recursive
           fetch-depth: 0
+      -
+        name: Checkout - forked repo
+        uses: actions/checkout@v3
+        if: >-
+          ( github.event_name == 'pull_request_target' ) &&
+          ( github.event.pull_request.head.repo.fork == true )
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
       -
         name: Unittest
         run: "docker run -t -v `pwd`:`pwd` -w `pwd` ${{ needs.rust-tester.outputs.tags }} make rust-unittest"
