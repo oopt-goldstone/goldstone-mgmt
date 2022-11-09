@@ -12,6 +12,7 @@ on:
 jobs:
   builder:
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     with:
       file: ./docker/builder.Dockerfile
       targets: >-
@@ -19,12 +20,14 @@ jobs:
   build-host-packages:
     needs: builder
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     with:
       file: ./docker/builder.Dockerfile
       targets: >-
         ["host-packages"]
   build-snmpd:
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     with:
       file: ./docker/snmpd.Dockerfile
       targets: >-
@@ -32,6 +35,7 @@ jobs:
   build-agents:
     needs: builder
     uses: ./.github/workflows/build_image.yaml
+    secrets: inherit
     # using matrix here is not supported yet
     # https://github.community/t/reusable-workflow-with-strategy-matrix/205676/8
     with:
