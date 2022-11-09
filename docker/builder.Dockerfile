@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.4
 
-ARG GS_MGMT_BUILDER_BASE=python:3-buster
+ARG GS_MGMT_BUILDER_BASE=python:3.10-buster
 
 FROM opennetworklinux/builder10:1.2 AS onlp
 ARG TARGETARCH
