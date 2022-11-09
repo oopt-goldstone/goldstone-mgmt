@@ -43,6 +43,7 @@ jobs:
       labels: ${{ steps.meta.outputs.labels }}
 
     steps:
+      - run: "echo ${{ github.event_name }}, ${{ secrets.GHCR_USER }}"
       -
         name: Checkout - same repo
         uses: actions/checkout@v3
