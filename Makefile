@@ -88,7 +88,6 @@ cmd:
 	docker run $(DOCKER_RUN_OPTION) -v `pwd`:/data -w /data -v /etc/onl/platform:/etc/onl/platform $(DOCKER_IMAGE) $(DOCKER_CMD)
 
 lint:
-	which black && exit `black -q --diff --exclude src/north/snmp/src src | wc -l`
 	which black && exit `black -q --diff --exclude "src/north/snmp/src|src/north/gnmi/goldstone/north/gnmi/proto" src | wc -l`
 	TRANSPONDER_YANG=/tmp/test.yang $(MAKE) yang && diff /tmp/test.yang $(TRANSPONDER_YANG)
 	scripts/gs-yang.py --lint south-sonic south-onlp south-tai south-system xlate-oc --search-dirs yang sm/openconfig
