@@ -36,7 +36,7 @@ jobs:
       platforms: linux/amd64
       build-args: GS_MGMT_BUILDER_IMAGE=${{ needs.builder.outputs.tags }}
       targets: >-
-        ["north-cli", "north-snmp", "north-netconf", "north-notif", "south-sonic", "south-tai", "south-onlp", "south-system", "south-gearbox", "south-dpll", "south-netlink", "xlate-oc"]
+        ["north-cli", "north-snmp", "north-netconf", "north-notif", "north-gnmi", "south-sonic", "south-tai", "south-onlp", "south-system", "south-gearbox", "south-dpll", "south-netlink", "xlate-oc"]
   tester:
     if: ${{ !( ( github.event_name == 'pull_request' ) && ( github.event.pull_request.head.repo.fork == true ) ) }}
     uses: ./.github/workflows/build_image.yaml
