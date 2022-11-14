@@ -52,6 +52,8 @@ MODELS = {
         "optical-transport/openconfig-terminal-device",
         "optical-transport/openconfig-transport-line-common",
         "optical-transport/openconfig-transport-types",
+        "telemetry/openconfig-telemetry",
+        "telemetry/openconfig-telemetry-types",
     ],
 }
 

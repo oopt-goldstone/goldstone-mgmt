@@ -131,12 +131,19 @@ class MockGSGearboxServer(MockGSServer):
         self.handlers = {}
 
 
+class MockGSTelemetryServer(MockGSServer):
+    def __init__(self, conn):
+        super().__init__(conn, "goldstone-telemetry")
+        self.handlers = {}
+
+
 MOCK_SERVERS = {
     "goldstone-interfaces": MockGSInterfaceServer,
     "goldstone-platform": MockGSPlatformServer,
     "goldstone-transponder": MockGSTransponderServer,
     "goldstone-system": MockGSSystemServer,
     "goldstone-gearbox": MockGSGearboxServer,
+    "goldstone-telemetry": MockGSTelemetryServer,
 }
 
 

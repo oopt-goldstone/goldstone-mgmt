@@ -11,6 +11,7 @@ from goldstone.lib.connector.sysrepo import Connector
 from .interfaces import InterfaceServer
 from .platform import PlatformServer
 from .terminal_device import TerminalDeviceServer
+from .telemetry import TelemetryServer
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,8 @@ def main():
         ifserver = InterfaceServer(conn)
         pfserver = PlatformServer(conn, operational_modes)
         tdserver = TerminalDeviceServer(conn, operational_modes)
-        servers = [ifserver, pfserver, tdserver]
+        tlserver = TelemetryServer(conn)
+        servers = [ifserver, pfserver, tdserver, tlserver]
 
         try:
             tasks = list(
