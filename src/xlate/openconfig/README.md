@@ -19,6 +19,8 @@ OpenConfig translator partially supports following models:
 - openconfig-transport-types 2021-03-22
 - openconfig-types 2019-04-16
 - openconfig-yang-types 2021-03-02
+- openconfig-telemetry 2018-11-21
+- openconfig-telemetry-types 2018-11-21
 
 ## Prerequisites
 
@@ -36,6 +38,7 @@ Other required python packages are listed in `requirements.txt`.
 - goldstone-platform 2019-11-01
 - goldstone-system 2020-11-23
 - goldstone-transponder 2019-11-01
+- goldstone-telemetry 2022-05-25
 
 ## Install
 
