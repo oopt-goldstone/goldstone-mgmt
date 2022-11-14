@@ -575,6 +575,16 @@ class TestCapabilities(gNMIServerTestCase):
                     "organization": "OpenConfig working group",
                     "version": "2021-03-02",
                 },
+                {
+                    "name": "openconfig-telemetry",
+                    "organization": "OpenConfig working group",
+                    "version": "2018-11-21",
+                },
+                {
+                    "name": "openconfig-telemetry-types",
+                    "organization": "OpenConfig working group",
+                    "version": "2018-11-21",
+                },
             ],
             "supported_encodings": [gnmi_pb2.Encoding.JSON],
             "gNMI_version": "0.6.0",
