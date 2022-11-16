@@ -204,22 +204,55 @@ RUN --mount=type=bind,source=src/south/dpll,target=/src,rw pip install /src
 # south-netlink
 #---
 
-FROM rust:1-buster AS rust-builder
+FROM --platform=$BUILDPLATFORM rust:1-bullseye AS rust-builder
+
+ARG TARGETPLATFORM
+RUN case "$TARGETPLATFORM" in \
+  "linux/arm64") echo aarch64-unknown-linux-gnu > /rust_target.txt; echo aarch64 > /arch.txt ;; \
+  "linux/amd64") echo x86_64-unknown-linux-gnu > /rust_target.txt; echo x86_64 > /arch.txt ;; \
+  *) exit 1 ;; \
+esac
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
-            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends libclang1 clang libpcre2-dev
+            apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends libclang1 clang apt-utils python3-pip
 
-RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i
-RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | xargs dpkg -i
+ARG TARGETARCH
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
+            if [ $TARGETARCH=arm64 ]; then dpkg --add-architecture arm64; apt update && DEBIAN_FRONTEND=noninteractive apt install -qy g++-aarch64-linux-gnu libpcre2-dev:arm64 libatomic1:arm64; fi
 
-WORKDIR /app
+RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
+            if [ $TARGETARCH=amd64 ]; then apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends libpcre2-dev; fi
 
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/libyang,target=/src ls /src/*.deb | xargs dpkg -i --force-architecture
+RUN --mount=type=bind,from=builder,source=/usr/share/debs/sysrepo,target=/src ls /src/*.deb | xargs dpkg -i --force-architecture
+
+RUN pip3 install cargo-zigbuild
 COPY sm/sysrepo2-rs sm/sysrepo2-rs
-COPY src/south/netlink src/south/netlink
+
+WORKDIR /src/south/
+RUN cargo new --bin netlink
+
+WORKDIR /src/south/netlink
+
+COPY src/south/netlink/Cargo.toml Cargo.toml
+
+RUN rustup target add $(cat /rust_target.txt)
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/target \
-    cd src/south/netlink && cargo build -r && mv ./target/release/netlink /south-netlink
+    --mount=type=cache,target=/src/south/netlink/target \
+    cargo zigbuild --release --target $(cat /rust_target.txt)
+
+WORKDIR /
+
+RUN rm -r src/south/netlink/src
+
+COPY src/south/netlink/src src/south/netlink/src
+
+WORKDIR /src/south/netlink
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/south/netlink/target \
+    export CARGO_TARGET_$(cat /rust_target.txt | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS="-L /usr/lib/$(cat /arch.txt)-linux-gnu"; cargo zigbuild -r --target $(cat /rust_target.txt) && mv ./target/$(cat /rust_target.txt)/release/netlink /south-netlink
 
 FROM debian:buster-slim AS south-netlink
 
