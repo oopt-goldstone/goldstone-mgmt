@@ -19,6 +19,8 @@ OpenConfig translator partially supports following models:
 - openconfig-transport-types 2021-03-22
 - openconfig-types 2019-04-16
 - openconfig-yang-types 2021-03-02
+- openconfig-telemetry 2018-11-21
+- openconfig-telemetry-types 2018-11-21
 
 ## Prerequisites
 
@@ -36,6 +38,7 @@ Other required python packages are listed in `requirements.txt`.
 - goldstone-platform 2019-11-01
 - goldstone-system 2020-11-23
 - goldstone-transponder 2019-11-01
+- goldstone-telemetry 2022-05-25
 
 ## Install
 
@@ -47,7 +50,7 @@ sudo pip3 install .
 
 ```sh
 $ gsxlated-openconfig -h
-usage: gsxlated-openconfig [-h] [-v] operational-modes-file
+usage: gsxlated-openconfig [-h] [-v] [-c {none,in-memory}] operational-modes-file
 
 positional arguments:
   operational-modes-file
@@ -56,10 +59,12 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -v, --verbose         enable detailed output
+  -c {none,in-memory}, --cache-datastore {none,in-memory}
+                        select cache datastore
 ```
 
 Example:
 
 ```sh
-gsxlated-openconfig operational-modes.json
+gsxlated-openconfig -c none operational-modes.json
 ```

@@ -1,4 +1,4 @@
-"""Tests of OpenConfig translater for openconfig-interfaces."""
+"""Tests of OpenConfig translator for openconfig-interfaces."""
 
 
 import unittest
@@ -399,7 +399,7 @@ class TestInterfaceEnabledHandler(unittest.TestCase):
 
     def test_set_interface_not_configured(self):
         # Target interface has not been configured.
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/enabled"
         value = True
         change = Change(sysrepo.ChangeCreated(xpath, value))
@@ -440,7 +440,7 @@ class TestInterfaceEnabledHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/enabled"
         value = True
         change = Change(sysrepo.ChangeCreated(xpath, value))
@@ -483,7 +483,7 @@ class TestInterfaceEnabledHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/enabled"
         value = True
         change = Change(sysrepo.ChangeCreated(xpath, value))
@@ -516,7 +516,7 @@ class TestInterfaceEnabledHandler(unittest.TestCase):
 
     def test_delete_interface_not_configured(self):
         # Target interface has not been configured.
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/enabled"
         change = Change(sysrepo.ChangeDeleted(xpath))
         user = {
@@ -553,7 +553,7 @@ class TestInterfaceEnabledHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/enabled"
         change = Change(sysrepo.ChangeDeleted(xpath))
         user = {
@@ -592,7 +592,7 @@ class TestInterfaceEnabledHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/config/enabled"
         change = Change(sysrepo.ChangeDeleted(xpath))
         user = {
@@ -641,7 +641,7 @@ class TestInterfaceFECModeHandler(unittest.TestCase):
 
     def test_set_interface_not_configured(self):
         # Target interface has not been configured.
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/ethernet/config/fec-mode"
         value = "FEC_FC"
         change = Change(sysrepo.ChangeCreated(xpath, value))
@@ -682,7 +682,7 @@ class TestInterfaceFECModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/ethernet/config/fec-mode"
         value = "FEC_FC"
         change = Change(sysrepo.ChangeCreated(xpath, value))
@@ -725,7 +725,7 @@ class TestInterfaceFECModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/ethernet/config/fec-mode"
         value = "FEC_FC"
         change = Change(sysrepo.ChangeCreated(xpath, value))
@@ -758,7 +758,7 @@ class TestInterfaceFECModeHandler(unittest.TestCase):
 
     def test_delete_interface_not_configured(self):
         # Target interface has not been configured.
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/ethernet/config/fec-mode"
         change = Change(sysrepo.ChangeDeleted(xpath))
         user = {
@@ -795,7 +795,7 @@ class TestInterfaceFECModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/ethernet/config/fec-mode"
         change = Change(sysrepo.ChangeDeleted(xpath))
         user = {
@@ -834,7 +834,7 @@ class TestInterfaceFECModeHandler(unittest.TestCase):
         )
         self.conn.apply()
 
-        server = InterfaceServer(self.conn)
+        server = InterfaceServer(self.conn, None)
         xpath = "/openconfig-interfaces:interfaces/interface[name='Ethernet1/0/1']/ethernet/config/fec-mode"
         change = Change(sysrepo.ChangeDeleted(xpath))
         user = {

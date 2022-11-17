@@ -18,7 +18,7 @@ from abc import abstractmethod
 import logging
 import struct
 import base64
-from .lib import OpenConfigObjectFactory, OpenConfigServer
+from .lib import OpenConfigObjectFactory, OpenConfigServer, OpenConfigObjectTree
 from .platform import ComponentFactory, ComponentNameResolver
 
 
@@ -855,6 +855,33 @@ class OperationalModeFactory(OpenConfigObjectFactory):
         return operational_modes
 
 
+class TerminalDeviceObjectTree(OpenConfigObjectTree):
+    """OpenConfigObjectTree for the openconfig-terminal-device module.
+
+    It creates an operational state data tree of the openconfig-terminal-device module.
+
+    Args:
+        operational_modes (dict): Supported operational-modes.
+    """
+
+    def __init__(self, operational_modes):
+        super().__init__()
+        cnr = ComponentNameResolver()
+        self.objects = {
+            "terminal-device": {
+                "logical-channels": {
+                    "channel": LogicalChannelFactory(
+                        cnr,
+                        ComponentFactory(operational_modes, cnr),
+                    )
+                },
+                "operational-modes": {
+                    "mode": OperationalModeFactory(operational_modes)
+                },
+            }
+        }
+
+
 class TerminalDeviceServer(OpenConfigServer):
     """TerminalDeviceServer provides a service for the openconfig-terminal-device module to central datastore.
 
@@ -865,20 +892,13 @@ class TerminalDeviceServer(OpenConfigServer):
         operational_modes (dict): Suppoerted operational-modes.
     """
 
-    def __init__(self, conn, operational_modes, reconciliation_interval=10):
-        super().__init__(conn, "openconfig-terminal-device", reconciliation_interval)
+    def __init__(self, conn, cache, operational_modes, reconciliation_interval=10):
+        super().__init__(
+            conn, "openconfig-terminal-device", cache, reconciliation_interval
+        )
         self.handlers = {"terminal-device": {}}
         self.operational_modes = operational_modes
-        cnr = ComponentNameResolver()
-        cf = ComponentFactory(self.operational_modes, cnr)
-        self.objects = {
-            "terminal-device": {
-                "logical-channels": {"channel": LogicalChannelFactory(cnr, cf)},
-                "operational-modes": {
-                    "mode": OperationalModeFactory(self.operational_modes)
-                },
-            }
-        }
+        self._object_tree = TerminalDeviceObjectTree(self.operational_modes)
 
     async def reconcile(self):
         pass

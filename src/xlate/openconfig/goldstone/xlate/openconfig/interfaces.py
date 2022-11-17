@@ -15,6 +15,7 @@ from goldstone.lib.core import NoOp
 from .lib import (
     OpenConfigChangeHandler,
     OpenConfigObjectFactory,
+    OpenConfigObjectTree,
     OpenConfigServer,
 )
 from .platform import ComponentNameResolver
@@ -471,11 +472,24 @@ class InterfaceFactory(OpenConfigObjectFactory):
         return result
 
 
+class InterfacesObjectTree(OpenConfigObjectTree):
+    """OpenConfigObjectTree for the openconfig-interfaces module.
+
+    It creates an operational state tree of the openconfig-interfaces module.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.objects = {
+            "interfaces": {"interface": InterfaceFactory(ComponentNameResolver())}
+        }
+
+
 class InterfaceServer(OpenConfigServer):
     """InterfaceServer provides a service for the openconfig-interfaces module to central datastore."""
 
-    def __init__(self, conn, reconciliation_interval=10):
-        super().__init__(conn, "openconfig-interfaces", reconciliation_interval)
+    def __init__(self, conn, cache, reconciliation_interval=10):
+        super().__init__(conn, "openconfig-interfaces", cache, reconciliation_interval)
         self.handlers = {
             "interfaces": {
                 "interface": {
@@ -498,9 +512,7 @@ class InterfaceServer(OpenConfigServer):
                 }
             }
         }
-        self.objects = {
-            "interfaces": {"interface": InterfaceFactory(ComponentNameResolver())}
-        }
+        self._object_tree = InterfacesObjectTree()
 
     async def reconcile(self):
         # NOTE: This should be implemented as a separated class of function to remove the dependency from the

@@ -13,7 +13,9 @@ The framework provides a mechanism for:
 The classes this framework library provides are:
 
 - OpenConfigServer: provides a service for an OpenConfig module. e.g. "openconfig-interfaces"
-      It has "OpenConfigObjectFactory"s and "OpenConfigChangeHandler"s.
+      It has "OpenConfigObjectTree"s and "OpenConfigChangeHandler"s.
+- OpenConfigObjectTree: creates a data tree instance that includes operational states for an OpenConfig module.
+      It has "OpenConfigObjectFactory"s.
 - OpenConfigObjectFactory: creates OpenConfig objects by translating Goldstone operational state data.
 - OpenConfigChangeHandler: configure a device with provided OpenConfig configuration state data.
 
@@ -27,6 +29,7 @@ import asyncio
 import libyang
 from goldstone.lib.core import ChangeHandler, ServerBase
 from goldstone.lib.errors import Error, InvalArgError, NotFoundError
+from .cache import CacheDataNotExistError
 
 
 logger = logging.getLogger(__name__)
@@ -180,7 +183,7 @@ class OpenConfigObjectFactory:
 
     @abstractmethod
     def required_data(self):
-        """Return required data list to create OpenConfig objects.
+        """Return a list of required data to create OpenConfig objects.
 
         Returns:
             list: List of required data dictionaries.
@@ -205,6 +208,64 @@ class OpenConfigObjectFactory:
         pass
 
 
+class OpenConfigObjectTree:
+    """Data tree factory base for OpenConfig modules.
+
+    It creates an operational state data tree of an OpenConfig module. It has "OpenConfigObjectFactory"s related to the
+    module. You should implement the "self.objects" attribute in your subclass.
+
+    Attributes:
+        objects (dict): OpenConfigObjectFactory instances for an OpenConfig module.
+            A dictionary key represents a data node.
+    """
+
+    def __init__(self):
+        self.objects = {}
+
+    def _create_tree(self, gs, subtree):
+        result = {}
+        for k, v in subtree.items():
+            if isinstance(v, dict):
+                result[k] = self._create_tree(gs, v)
+            elif isinstance(v, OpenConfigObjectFactory):
+                result[k] = v.create(gs)
+        return result
+
+    def _get_factories(self, subtree):
+        result = []
+        for _, v in subtree.items():
+            if isinstance(v, dict):
+                result += self._get_factories(v)
+            elif isinstance(v, OpenConfigObjectFactory):
+                result.append(v)
+        return result
+
+    def required_data(self):
+        """Return a list of required data to create OpenConfig objects.
+
+        Returns:
+            list: List of required data dictionaries. See OpenConfigObjectFactory.required_data().
+        """
+        required_data = []
+        factories = self._get_factories(self.objects)
+        for factory in factories:
+            for data in factory.required_data():
+                if not data in required_data:
+                    required_data.append(data)
+        return required_data
+
+    def create(self, gs):
+        """Create an operational state data tree of an OpenConfig module.
+
+        Args:
+            gs (dict): Data from Goldstone native/primitive models.
+
+        Returns:
+            dict: Operational state data tree of an Openconfig module.
+        """
+        return self._create_tree(gs, self.objects)
+
+
 class OpenConfigServer(ServerBase):
     """Server base for OpenConfig translators.
 
@@ -222,6 +283,8 @@ class OpenConfigServer(ServerBase):
     Args:
         conn (Connector): Connection to the central datastore.
         module (str): YANG module name of the service. e.g. "openconfig-interfaces"
+        cache (Cache): Cache datastore instance to store operational state data of OpenConfig modules.
+            If it is None, OpenConfigServer does not use cached data.
         reconciliation_interval (int): Interval seconds between executions of the reconcile task.
 
     Attributes:
@@ -239,21 +302,16 @@ class OpenConfigServer(ServerBase):
                     }
                 }
             }
-        objects (dict): "OpenConfigObjectFactory" instances for each OpenConfig subtree.
-            e.g.
-            {
-                "interfaces": {
-                    "interface": InterfaceFactory(ComponentNameResolver()) # InterfaceFactory for /interfaces/interface
-                }
-            }
     """
 
-    def __init__(self, conn, module, reconciliation_interval=10):
+    def __init__(self, conn, module, cache, reconciliation_interval=10):
         super().__init__(conn, module)
+        self.module = module
         self.reconciliation_interval = reconciliation_interval
         self.reconcile_task = None
         self.handlers = {}
-        self.objects = {}
+        self._cache = cache
+        self._object_tree = None
 
     async def reconcile(self):
         """Reconcile between OpenConfig configuration state and Goldstone configuration state."""
@@ -307,22 +365,12 @@ class OpenConfigServer(ServerBase):
             logger.error("Failed to apply changes. %s", e)
             raise e
 
-    async def _create_objects(self, factory):
-        required_data = factory.required_data()
-        src = {}
+    def _get_gs(self, required_data):
+        gs = {}
         for d in required_data:
             data = self.get_operational_data(d["xpath"], d["default"])
-            src[d["name"]] = data
-        return factory.create(src)
-
-    async def _create_tree(self, subtree):
-        result = {}
-        for k, v in subtree.items():
-            if isinstance(v, dict):
-                result[k] = await self._create_tree(v)
-            elif isinstance(v, OpenConfigObjectFactory):
-                result[k] = await self._create_objects(v)
-        return result
+            gs[d["name"]] = data
+        return gs
 
     async def oper_cb(self, xpath, priv):
         """Callback function to get operational state of the service.
@@ -335,9 +383,33 @@ class OpenConfigServer(ServerBase):
                     {"name": "Ethernet1/0/2", "state": {"oper-status": "DOWN"}},
                 ]}}
         """
-        try:
-            result = await self._create_tree(self.objects)
-        except Exception as e:
-            logger.error("Operational state creation failed. %s", e)
-            raise e
+        if self._cache is None:
+            try:
+                required_data = self._object_tree.required_data()
+                gs = self._get_gs(required_data)
+                result = self._object_tree.create(gs)
+            except Exception as e:
+                logger.error(
+                    "Failed to create operational state data for %s by an error: %s",
+                    self.module,
+                    e,
+                )
+                raise e
+        else:
+            try:
+                result = self._cache.get(self.module)
+            except CacheDataNotExistError as e:
+                logger.error(
+                    "The operational state data for %s was not cached in the cache datastore. %s",
+                    self.module,
+                    e,
+                )
+                raise e
+            except Exception as e:
+                logger.error(
+                    "Failed to get operational state data for %s from the cache datastore by an error: %s",
+                    self.module,
+                    e,
+                )
+                raise e
         return result

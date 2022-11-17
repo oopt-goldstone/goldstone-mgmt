@@ -1,5 +1,6 @@
 """Library for tests for translator services."""
 
+# pylint: disable=C0103
 
 import unittest
 import os
@@ -11,7 +12,6 @@ from multiprocessing import Process, Queue
 from queue import Empty
 from goldstone.lib.core import ServerBase, ChangeHandler, NoOp
 from goldstone.lib.connector.sysrepo import Connector
-from goldstone.lib.util import call
 
 
 def load_operational_modes():
@@ -131,12 +131,19 @@ class MockGSGearboxServer(MockGSServer):
         self.handlers = {}
 
 
+class MockGSTelemetryServer(MockGSServer):
+    def __init__(self, conn):
+        super().__init__(conn, "goldstone-telemetry")
+        self.handlers = {}
+
+
 MOCK_SERVERS = {
     "goldstone-interfaces": MockGSInterfaceServer,
     "goldstone-platform": MockGSPlatformServer,
     "goldstone-transponder": MockGSTransponderServer,
     "goldstone-system": MockGSSystemServer,
     "goldstone-gearbox": MockGSGearboxServer,
+    "goldstone-telemetry": MockGSTelemetryServer,
 }
 
 
@@ -197,6 +204,10 @@ def run_mock_server(q, mock_modules):
     conn.stop()
 
 
+class NoneClass:
+    pass
+
+
 class XlateTestCase(unittest.IsolatedAsyncioTestCase):
     """Test case base class for translator servers.
 
@@ -205,10 +216,22 @@ class XlateTestCase(unittest.IsolatedAsyncioTestCase):
         XLATE_SERVER_OPT (list): Arguments that will be given to the server.
         XLATE_MODULES (list): Module names the server will provide.
         MOCK_MODULES (list): Module names the server will use.
+        CACHE_DATASTORE (Cache): Cache class for XLATE_SERVER and CACHE_UPDATER.
+        CACHE_UPDATER (CacheUpdater): CacheUpdater class to test.
     """
 
+    XLATE_SERVER = NoneClass
+    XLATE_SERVER_OPT = []
+    XLATE_MODULES = []
+    MOCK_MODULES = []
+    CACHE_DATASTORE = NoneClass
+    CACHE_UPDATER = NoneClass
+
     async def asyncSetUp(self):
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.CRITICAL)
+        # NOTE: Enable for debugging.
+        # logging.basicConfig(level=logging.DEBUG)
+        # self.maxDiff = None
         self.conn = Connector()
 
         for module in self.MOCK_MODULES:
@@ -221,10 +244,27 @@ class XlateTestCase(unittest.IsolatedAsyncioTestCase):
         self.process = Process(target=run_mock_server, args=(self.q, self.MOCK_MODULES))
         self.process.start()
 
-        self.server = self.XLATE_SERVER(
-            self.conn, reconciliation_interval=1, *self.XLATE_SERVER_OPT
-        )
-        self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
+        cache = None
+        if self.CACHE_DATASTORE is not NoneClass:
+            cache = self.CACHE_DATASTORE()
+        self.servers = []
+        if self.XLATE_SERVER is not NoneClass:
+            self.server = self.XLATE_SERVER(
+                self.conn, cache, reconciliation_interval=1, *self.XLATE_SERVER_OPT
+            )
+            self.servers.append(self.server)
+        if self.CACHE_UPDATER is not NoneClass:
+            operational_mode = load_operational_modes()
+            self.cache_updater = self.CACHE_UPDATER(
+                cache,
+                operational_mode,
+                update_interval=0.1,
+            )
+            self.servers.append(self.cache_updater)
+
+        self.tasks = []
+        for server in self.servers:
+            self.tasks += list(asyncio.create_task(c) for c in await server.start())
 
     async def run_xlate_test(self, test):
         """Run a test as a thread.
@@ -262,7 +302,8 @@ class XlateTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def asyncTearDown(self):
-        await call(self.server.stop)
+        for server in self.servers:
+            await server.stop()
         self.tasks = [t.cancel() for t in self.tasks]
         self.conn.stop()
         self.q.put({"type": "stop"})
