@@ -22,7 +22,7 @@ from . import system
 from . import ufd
 from . import portchannel
 from . import vlan
-from . import mgmt_if
+from . import management_interface
 from . import gearbox
 from . import dpll
 
@@ -107,7 +107,7 @@ async def loop_async(shell):
                 await shell.exec(line)
 
 
-def main():
+def main(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="count", default=0)
     parser.add_argument("-c", "--command-string")
@@ -118,7 +118,7 @@ def main():
     )
     parser.add_argument("--connector-opts", default="")
 
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     formatter = logging.Formatter(
         "[%(asctime)s][%(levelname)-5s][%(name)s] %(message)s",
