@@ -268,6 +268,17 @@ COPY --from=rust-builder /south-netlink /usr/bin/
 RUN groupadd gsmgmt
 
 #---
+# south-ocnos
+#---
+
+FROM base AS south-ocnos
+
+RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
+            pip install /usr/share/wheels/ocnos/*.whl
+
+RUN --mount=type=bind,source=src/south/ocnos,target=/src,rw pip install /src
+
+#---
 # xlate-oc (OpenConfig translator)
 #---
 

@@ -58,6 +58,13 @@ MODELS = {
     "system-telemetry": [
         "goldstone-telemetry",
     ],
+    "south-ocnos": [
+        "iana-if-type",
+        "goldstone-interfaces",
+        "goldstone-uplink-failure-detection",
+        "goldstone-vlan",
+        "goldstone-portchannel",
+    ],
 }
 
 DEFAULT_YANG_DIR = "/var/lib/goldstone/yang"

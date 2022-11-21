@@ -1,0 +1,139 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocnos-config
+data:
+  conf.host: "localhost"
+  conf.port: "30830"
+  conf.user: "ocnos"
+  conf.pass: "ocnos"
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: south-ocnos
+    labels:
+        gs-mgmt: south-ocnos
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+    name: south-ocnos
+    labels:
+        gs-mgmt: south-ocnos
+roleRef:
+  kind: ClusterRole
+  name: ocnos-manage
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+ - kind: ServiceAccount
+   name: south-ocnos
+   namespace: default
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    name: ocnos-manage
+    labels:
+        gs-mgmt: south-ocnos
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get","update","patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get","list","watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["get","list","watch"]
+- apiGroups: ["extensions", "apps"]
+  resources: ["deployments"]
+  verbs: ["*"]
+- apiGroups: ["batch", "extensions"]
+  resources: ["jobs"]
+  verbs: ["*"]
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+    name: south-ocnos
+    labels:
+        app: gs-mgmt
+        gs-mgmt: south-ocnos
+spec:
+    selector:
+        matchLabels:
+            app: south-ocnos
+    template:
+        metadata:
+            labels:
+                app: south-ocnos
+        spec:
+            serviceAccountName: south-ocnos
+            initContainers:
+            - name: wait-prep
+              image: docker.io/bitnami/kubectl:latest
+              imagePullPolicy: IfNotPresent
+              command: ['kubectl', 'wait', '--for=condition=complete', 'job/prep-gs-mgmt']
+            containers:
+            - name: south-ocnos
+              image: ghcr.io/oopt-goldstone/goldstone-mgmt/gs-mgmt-south-ocnos:latest-amd64
+              imagePullPolicy: Never
+              command: ['gssouthd-ocnos']
+              args: ['--verbose', '--host', '$(HOST)', '--port', '$(PORT)', '--username', '$(USERNAME)', '--password', '$(PASSWORD)']
+              env:
+              - name: HOST
+                valueFrom:
+                  configMapKeyRef:
+                    name: ocnos-config
+                    key: conf.host
+              - name: PORT
+                valueFrom:
+                  configMapKeyRef:
+                    name: ocnos-config
+                    key: conf.port
+              - name: USERNAME
+                valueFrom:
+                  configMapKeyRef:
+                    name: ocnos-config
+                    key: conf.username
+              - name: PASSWORD
+                valueFrom:
+                  configMapKeyRef:
+                    name: ocnos-config
+                    key: conf.password
+              volumeMounts:
+              - name: shm
+                mountPath: /dev/shm
+              - name: sysrepo
+                mountPath: /var/lib/sysrepo
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 2
+                periodSeconds: 10
+              startupProbe:
+                httpGet:
+                  path: /healthz
+                  port: liveness-port
+                failureThreshold: 120
+                periodSeconds: 1
+              ports:
+              - name: liveness-port
+                containerPort: 8080
+            volumes:
+            - name: shm
+              hostPath:
+                  path: /dev/shm
+            - name: sysrepo
+              hostPath:
+                  path: /var/lib/sysrepo

@@ -114,6 +114,12 @@ RUN --mount=type=bind,source=src/south/sonic,target=/src,rw \
     && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
     && mkdir -p /usr/share/wheels/sonic && cp dist/*.whl /usr/share/wheels/sonic
 
+FROM python AS ocnos
+
+RUN --mount=type=bind,source=src/south/ocnos,target=/src,rw \
+    cd /src && python setup.py bdist_wheel && pip wheel -r requirements.txt -w dist \
+    && mkdir -p /usr/share/wheels/ocnos && cp dist/*.whl /usr/share/wheels/ocnos
+
 FROM python AS system
 
 RUN --mount=type=bind,source=src/south/system,target=/src,rw \
@@ -135,6 +141,7 @@ RUN --mount=type=bind,source=sm/oopt-tai,target=/root/sm/oopt-tai,rw \
 COPY --from=cli /usr/share/wheels/cli /usr/share/wheels/cli
 COPY --from=sonic /usr/share/wheels/sonic /usr/share/wheels/sonic
 COPY --from=system /usr/share/wheels/system /usr/share/wheels/system
+COPY --from=ocnos /usr/share/wheels/ocnos /usr/share/wheels/ocnos
 
 RUN --mount=type=bind,source=scripts,target=/src \
     cd /src && cp /src/gs-yang.py /usr/local/bin/
