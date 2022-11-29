@@ -97,7 +97,7 @@ lint:
 	scripts/gs-yang.py --lint south-gearbox south-onlp south-tai south-system xlate-oc system-telemetry --search-dirs yang sm/openconfig
 	grep -rnI 'print(' src || exit 0 && exit 1
 
-unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-sonic unittest-gnmi unittest-telemetry
+unittest: unittest-lib unittest-cli unittest-gearbox unittest-dpll unittest-openconfig unittest-tai unittest-ocnos unittest-sonic unittest-gnmi unittest-telemetry
 
 rust-unittest: unittest-netlink
 
@@ -156,6 +156,11 @@ unittest-sonic:
 	scripts/gs-yang.py --install south-sonic --search-dirs yang
 	cd src/south/sonic      && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 	cd src/south/sonic      && make clean
+
+unittest-ocnos:
+	$(MAKE) clean-sysrepo
+	scripts/gs-yang.py --install south-ocnos --search-dirs yang --search-dirs yang sm/openconfig
+	cd src/south/ocnos && PYTHONPATH=../../lib python -m unittest -v -f $(TEST_CASE)
 
 unittest-netlink:
 	$(MAKE) clean-sysrepo

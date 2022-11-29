@@ -153,7 +153,7 @@ RUN apt-add-repository non-free
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
             apt update && DEBIAN_FRONTEND=noninteractive apt install -qy --no-install-recommends snmp-mibs-downloader
 
-RUN pip install paramiko scp black pyang prompt_toolkit tabulate natsort kubernetes setuptools
+RUN pip install paramiko scp black pyang prompt_toolkit tabulate natsort kubernetes setuptools xmltodict
 
 COPY scripts/snmp.conf /etc/snmp/snmp.conf
 
