@@ -1,0 +1,128 @@
+module goldstone-nexthop {
+
+  yang-version "1";
+
+  namespace "http://goldstone.net/yang/goldstone-nexthop";
+  prefix gs-nexthop;
+
+  import goldstone-interfaces { prefix gs-if; }
+  import goldstone-routing { prefix gs-rt; }
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+
+  organization
+    "GoldStone";
+
+  description
+    "Goldstone Nexthop";
+
+  revision 2022-12-14 {
+    description
+      "Initial revision.";
+  }
+
+  typedef blackhole-type {
+    type enumeration {
+      enum "unspec" {
+        description
+          "Generic unreachable.";
+      }
+      enum "null" {
+        description
+          "Null type.";
+      }
+      enum "reject" {
+        description
+          "ICMP unreachable.";
+      }
+      enum "prohibited" {
+        description
+          "ICMP admin-prohibited.";
+      }
+    }
+    default "null";
+    description
+      "Nexthop blackhole types.";
+  }
+
+  grouping nexthop-config {
+    leaf index {
+      type uint32;
+      description
+        "An user-specified identifier utilised to uniquely reference
+        the next-hop entry in the next-hop list.";
+    }
+
+    leaf gateway {
+      type inet:ipv4-address;
+      description
+        "The nexthop gateway address.";
+    }
+
+    leaf interface {
+      type gs-if:interface-ref;
+      description
+        "The nexthop egress interface.";
+    }
+
+    leaf distance {
+      type gs-rt:administrative-distance;
+      description
+        "Admin distance associated with this route.";
+    }
+
+    leaf blackhole-type {
+      type blackhole-type;
+      description
+        "A blackhole sub-type, if the nexthop is a blackhole type.";
+    }
+
+    leaf onlink {
+      type boolean;
+      default "false";
+      description
+        "Nexthop is directly connected.";
+    }
+  }
+
+  grouping nexthop-state {
+    leaf active {
+      type boolean;
+      description
+        "Nexthop is active.";
+    }
+
+    leaf fib {
+      type boolean;
+      description
+        "Nexthop is installed in fib.";
+    }
+  }
+
+  grouping nexthops-top {
+    container nexthops {
+      list nexthop {
+        key "index";
+        description
+          "A list of nexthop objects.";
+
+        leaf index {
+          type leafref {
+            path "../config/index";
+          }
+        }
+
+        container config {
+          uses nexthop-config;
+        }
+        container state {
+          config false;
+          uses nexthop-config;
+          uses nexthop-state;
+        }
+      }
+    }
+  }
+}
