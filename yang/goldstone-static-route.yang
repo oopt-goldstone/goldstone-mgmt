@@ -1,0 +1,80 @@
+module goldstone-static-route {
+
+  yang-version "1";
+
+  namespace "http://goldstone.net/yang/goldstone-static-route";
+  prefix gs-static-route;
+
+  import goldstone-routing {
+    prefix gs-rt;
+  }
+
+  import goldstone-nexthop {
+    prefix nexthop;
+  }
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+
+  organization
+    "GoldStone";
+
+  description
+    "This module contains a collection of YANG definitions for
+    managing and configuring static route";
+
+  revision 2022-12-14 {
+    description
+      "Initial revision.";
+  }
+
+  grouping static-route-config {
+    description
+      "Configuration data for static routes.";
+
+    leaf prefix {
+      type inet:ipv4-prefix;
+      description
+        "Destination IPv4 prefix for the static route";
+    }
+  }
+
+  grouping static-route-state {
+  }
+
+  augment "/gs-rt:routing" {
+    container static-route {
+      when "../gs-rt:config/gs-rt:type = 'STATIC'" {
+        description
+          "This container is only valid for the static routing
+           protocol in goldstone.";
+      }
+      description
+        "List of configured static routes";
+
+      list route-list {
+        key "prefix";
+        description
+          "List of configured static routes";
+
+        leaf prefix {
+          type leafref {
+            path "../config/prefix";
+          }
+        }
+
+        container config {
+          uses static-route-config;
+        }
+        container state {
+          config false;
+          uses static-route-config;
+          uses static-route-state;
+        }
+
+        uses nexthop:nexthops-top;
+      }
+    }
+  }
+}
