@@ -1,0 +1,71 @@
+module goldstone-routing {
+
+  yang-version "1";
+
+  namespace "http://goldstone.net/yang/goldstone-routing";
+  prefix gs-routing;
+
+  organization
+    "GoldStone";
+
+  contact
+    "Goldstone";
+
+  description
+    "Goldstone Routing";
+
+  revision 2022-12-14 {
+    description
+      "Initial revision.";
+  }
+
+  typedef control-plane-protocol {
+    type enumeration {
+      enum STATIC;
+    }
+  }
+
+  typedef administrative-distance {
+    type uint8 {
+      range "1..255";
+    }
+    description
+      "Admin distance associated with the route.";
+  }
+
+  grouping routing-config {
+    description
+      "Configuration data nodes common to the routing
+      subsystems";
+
+    leaf type {
+      type control-plane-protocol;
+      description
+        "Type of the control-plane protocol";
+    }
+
+    leaf name {
+      type string;
+      description
+        "An arbitrary name of the control-plane protocol
+         instance.";
+    }
+  }
+
+  grouping routing-state {
+  }
+
+  container routing {
+    description
+      "Configuration parameters for the routing subsystem.";
+
+    container config {
+      uses routing-config;
+    }
+    container state {
+      config false;
+      uses routing-config;
+      uses routing-state;
+    }
+  }
+}
