@@ -265,4 +265,16 @@ typedef enum _custom_network_interface_attr_t
 
 } custom_network_interface_attr_t;
 
+/** @custom tai_network_interface_modulation_format_t */
+typedef enum _tai_network_interface_custom_modulation_format_t
+{
+    TAI_NETWORK_INTERFACE_MODULATION_FORMAT_DP_16_QAM_PS = 14,
+} tai_network_interface_custom_modulation_format_t;
+
+/** @custom tai_network_interface_fec_type_t */
+typedef enum _tai_network_interface_custome_fec_type_t
+{
+    TAI_NETWORK_INTERFACE_FEC_TYPE_NONE = 6,
+} tai_network_interface_custom_fec_type_t;
+
 #endif

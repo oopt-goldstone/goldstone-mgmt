@@ -25,3 +25,4 @@ sonic-py-swsssdk/comment_out_getting_lag_name_map.patch
 sysrepo-python/update.patch
 libyang-python/support_getting_leaves_and_non-key_conditions.patch
 sysrepo-python/support_include_implicit_defaults.patch
+openroadm/openroadm.patch

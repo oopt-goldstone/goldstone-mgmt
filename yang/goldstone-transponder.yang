@@ -301,6 +301,7 @@ module goldstone-transponder {
         enum dp-32-qam;
         enum 64-qam;
         enum dp-64-qam;
+        enum dp-16-qam-ps;
       }
     }
     leaf fec-type {
@@ -312,6 +313,7 @@ module goldstone-transponder {
         enum cfec;
         enum ofec;
         enum hg-fec;
+        enum none;
       }
     }
     leaf client-signal-mapping-type {
