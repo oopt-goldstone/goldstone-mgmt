@@ -1,0 +1,59 @@
+Index: goldstone-mgmt/sm/openroadm/model/Device/org-openroadm-optical-tributary-signal-interfaces.yang
+===================================================================
+--- goldstone-mgmt.orig/sm/openroadm/model/Device/org-openroadm-optical-tributary-signal-interfaces.yang
++++ goldstone-mgmt/sm/openroadm/model/Device/org-openroadm-optical-tributary-signal-interfaces.yang
+@@ -184,7 +184,7 @@ module org-openroadm-optical-tributary-s
+     }
+ 
+     uses org-openroadm-common-types:fec-grouping {
+-      when "provision-mode = 'explicit'";
++    //  when "provision-mode = 'explicit'";
+       description
+         "OTSi FEC / Forward Error Correction";
+     }
+Index: goldstone-mgmt/sm/openroadm/model/Common/org-openroadm-common-phy-codes.yang
+===================================================================
+--- goldstone-mgmt.orig/sm/openroadm/model/Common/org-openroadm-common-phy-codes.yang
++++ goldstone-mgmt/sm/openroadm/model/Common/org-openroadm-common-phy-codes.yang
+@@ -315,13 +315,13 @@ module org-openroadm-common-phy-codes {
+   }
+ 
+   typedef compliance-codes-union {
+-    type union {
++   // type union {
+       type identityref { base client-phy-code-identity; }
+-      type identityref { base compliance-code-identity; }
+-    }
+-    default "org-openroadm-common-phy-codes:phy-code-none";
++  //  type identityref { base compliance-code-identity; }
++  //  }
++  //  default "org-openroadm-common-phy-codes:phy-code-none";
+     description
+       "Compliance codes supported in OpenROADM.";
+   }
+   // END section for client phy code entities
+-}
+\ No newline at end of file
++}
+Index: goldstone-mgmt/sm/openroadm/model/Device/org-openroadm-device.yang
+===================================================================
+--- goldstone-mgmt.orig/sm/openroadm/model/Device/org-openroadm-device.yang
++++ goldstone-mgmt/sm/openroadm/model/Device/org-openroadm-device.yang
+@@ -12,7 +12,7 @@ module org-openroadm-device {
+   }
+   import ietf-netconf {
+     prefix ietf-nc;
+-    revision-date 2011-06-01;
++    revision-date 2013-09-29;
+   }
+   import org-openroadm-common-types {
+     prefix org-openroadm-common-types;
+@@ -293,7 +293,7 @@ module org-openroadm-device {
+     leaf node-type {
+       type org-openroadm-common-node-types:node-types;
+       config true;
+-      mandatory true;
++      // mandatory true;
+       description
+         "Identifier for node-type e.g Roadm, xponder.
+          Once the node-type is configured, it should not be modified.";

@@ -11,7 +11,7 @@ ARG https_proxy
 FROM $GS_MGMT_BASE as base
 
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt,sharing=locked \
-            apt update && apt install -qy --no-install-recommends libatomic1 libpcre2-8-0
+            apt update && apt install -qy --no-install-recommends libatomic1 libpcre2-8-0 quilt
 
 RUN pip install --upgrade pip
 
@@ -29,6 +29,8 @@ COPY sm/openconfig/release/models/ /var/lib/goldstone/yang/oc/
 ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
 COPY sm/openconfig/third_party/ietf/ /var/lib/goldstone/yang/ietf
 ENV IETF_YANG_REPO /var/lib/goldstone/yang/ietf
+COPY sm/openroadm/model /var/lib/goldstone/yang/or/
+ENV OR_YANG_REPO /var/lib/goldstone/yang/or
 
 RUN --mount=type=bind,source=scripts,target=/src \
     cd /src && cp /src/gs-yang.py /usr/local/bin/
@@ -285,6 +287,23 @@ RUN --mount=type=bind,source=src/south/ocnos,target=/src,rw pip install /src
 FROM base AS xlate-oc
 
 RUN --mount=type=bind,source=src/xlate/openconfig,target=/src,rw pip install /src
+
+RUN mkdir -p /current
+RUN --mount=type=bind,source=scripts/,target=/scripts,rw cp /scripts/operational-modes.json /current
+
+#---
+# xlate-or (OpenROADM translator)
+#---
+
+FROM base AS xlate-or
+
+RUN --mount=type=bind,source=sm/openroadm,target=/root/sm/openroadm,rw \
+    --mount=type=bind,source=patches/openroadm,target=/root/patches \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && \
+    cp -r /root/sm/openroadm/model/* /var/lib/goldstone/yang/or
+
+RUN --mount=type=bind,source=src/xlate/openroadm,target=/src,rw pip install /src
 
 RUN mkdir -p /current
 RUN --mount=type=bind,source=scripts/,target=/scripts,rw cp /scripts/operational-modes.json /current

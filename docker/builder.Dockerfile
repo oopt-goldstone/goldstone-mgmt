@@ -182,6 +182,15 @@ RUN --mount=type=bind,source=sm/netopeer2,target=/root/sm/netopeer2,rw \
 
 RUN ldconfig
 
+RUN --mount=type=bind,source=sm/openroadm,target=/root/sm/openroadm,rw \
+    --mount=type=bind,source=patches/openroadm,target=/root/patches \
+    --mount=type=tmpfs,target=/root/.pc,rw \
+    cd /root && quilt upgrade && quilt push -a && \
+    mkdir -p /usr/local/share/openroadm && \
+    cp -r /root/sm/openroadm/model/* /usr/local/share/openroadm && \
+    mkdir -p /var/lib/goldstone/yang/or/ && \
+    cp -r /root/sm/openroadm/model/* /var/lib/goldstone/yang/or
+
 RUN --mount=type=bind,from=builder,source=/usr/share/wheels,target=/usr/share/wheels \
             pip install /usr/share/wheels/libyang/*.whl /usr/share/wheels/sysrepo/*.whl
 
@@ -191,6 +200,7 @@ COPY sm/openconfig/release/models/ /var/lib/goldstone/yang/oc/
 ENV OC_YANG_REPO /var/lib/goldstone/yang/oc
 COPY sm/openconfig/third_party/ietf/ /var/lib/goldstone/yang/ietf
 ENV IETF_YANG_REPO /var/lib/goldstone/yang/ietf
+ENV OR_YANG_REPO /var/lib/goldstone/yang/or
 
 RUN --mount=type=bind,source=scripts,target=/src \
     cd /src && cp /src/gs-yang.py /usr/local/bin/

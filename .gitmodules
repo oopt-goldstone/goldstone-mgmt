@@ -43,3 +43,6 @@
 [submodule "sm/gnmi"]
 	path = sm/gnmi
 	url = https://github.com/openconfig/gnmi.git
+[submodule "sm/openroadm"]
+	path = sm/openroadm
+	url = https://github.com/OpenROADM/OpenROADM_MSA_Public.git
