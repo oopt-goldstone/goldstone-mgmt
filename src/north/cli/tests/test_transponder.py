@@ -67,7 +67,6 @@ class Test(unittest.IsolatedAsyncioTestCase):
         self.conn.apply()
 
     async def test_show_transponder_details(self):
-
         root = Root(self.conn)
         self.conn.oper_data = {
             "/goldstone-transponder:modules/module/name": ["piu1"],

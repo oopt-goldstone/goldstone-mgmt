@@ -122,7 +122,6 @@ class ServerBase(object):
         logger.debug(f"id: {req_id}, event: {event}, changes: {changes}")
 
         async with self.lock:
-
             if event not in ["change", "done", "abort"]:
                 logger.warning(f"unsupported event: {event}")
                 return

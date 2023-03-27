@@ -36,7 +36,6 @@ class Server(object):
         logger.info(f"{notification=}")
 
     async def start(self):
-
         logger.info("**********Inside Start**********")
 
         self.sess.subscribe_notifications(self.notification_cb)

@@ -77,7 +77,6 @@ class TestAbort(unittest.IsolatedAsyncioTestCase):
         self.conn.apply()
 
     async def test_abort(self):
-
         ifserver = MockInterfaceServer(self.conn)
         xpserver = MockTransponderServer(self.conn)
 

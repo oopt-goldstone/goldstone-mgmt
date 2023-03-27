@@ -40,7 +40,6 @@ def get_interface_mode(session, ifname):
 
 
 def show_vlans(session, details="details"):
-
     data = session.get_operational(XPATH)
     if data == None:
         stderr.info("no vlan configured")

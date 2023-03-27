@@ -211,7 +211,6 @@ class GearboxServer(ServerBase):
                 raise task.exception()
 
     async def start(self):
-
         self.taish._ignored_module = []  # modules to ignore
 
         await self.ifserver.reconcile()

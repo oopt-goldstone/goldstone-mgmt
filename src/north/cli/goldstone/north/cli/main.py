@@ -175,7 +175,6 @@ def main(args=None):
     shell = GoldstoneShell(conn, prefix=prefix)
 
     async def _main():
-
         if args.stdin or args.command_string:
             stream = sys.stdin if args.stdin else args.command_string.split(";")
             for line in stream:

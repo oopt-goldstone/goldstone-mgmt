@@ -24,7 +24,6 @@ class Test(unittest.IsolatedAsyncioTestCase):
         root.exec("clear datastore all", no_fail=False)
 
     async def test_aaa(self):
-
         conn = MockConnector()
         root = Root(conn)
         logger = logging.getLogger("stdout")
@@ -55,7 +54,6 @@ class Test(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(v, None)
 
     async def test_tacacs(self):
-
         conn = MockConnector()
         root = Root(conn)
         logger = logging.getLogger("stdout")

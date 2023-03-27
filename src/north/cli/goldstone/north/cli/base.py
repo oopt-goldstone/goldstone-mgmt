@@ -70,7 +70,6 @@ class Completer(PromptCompleter):
 
 
 class Command(object):
-
     COMMAND_DICT = {}
 
     def __init__(self, context, parent, name, **options):

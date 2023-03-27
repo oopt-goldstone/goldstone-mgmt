@@ -171,7 +171,6 @@ class TestBase(unittest.IsolatedAsyncioTestCase):
 
 class TestTransponderServer(TestBase):
     async def test_tai_init(self):
-
         # this needs to run in another thread because TransponderServer queries
         # /goldstone-platform in the main event loop
         # * sysrepo-python doesn't support getting items asynchronously
@@ -296,7 +295,6 @@ class TestTransponderServer(TestBase):
         await server.stop()
 
     async def test_component_connection(self):
-
         with open(os.path.dirname(__file__) + "/platform.json") as f:
             platform_info = json.loads(f.read())
 

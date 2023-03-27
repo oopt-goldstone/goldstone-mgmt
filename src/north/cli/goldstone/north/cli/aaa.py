@@ -30,7 +30,6 @@ class TACACS(object):
         self.name = TACACS_NAME
 
     def set_tacacs_server(self, ipAddress, key, port, timeout):
-
         xpath = self.xpath(self.name, ipAddress)
         self.conn.set(
             f"{self.xpath_server_group(self.name)}/config/name",
@@ -73,7 +72,6 @@ class TACACS(object):
 
 
 class AAA(object):
-
     xpath = "/goldstone-aaa:aaa/authentication/config/authentication-method"
 
     def __init__(self, conn):

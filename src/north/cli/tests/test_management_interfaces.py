@@ -84,7 +84,6 @@ class Test(unittest.IsolatedAsyncioTestCase):
         root.exec("clear datastore all", no_fail=False)
 
     async def test_aaa(self):
-
         conn = MockConnector()
         root = Root(conn)
         data = ["eth0"]

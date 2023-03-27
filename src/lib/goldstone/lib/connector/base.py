@@ -107,7 +107,6 @@ class Connector(object):
         one=False,
         ds="running",
     ):
-
         fname = sys._getframe().f_code.co_name
         raise UnsupportedError(f"{fname}() not supported by {self.type} connector")
 

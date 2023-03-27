@@ -443,7 +443,6 @@ def set_breakout(session, ifnames, numch, speed, model):
     is_delete = numch == None
 
     for ifname in ifnames:
-
         # TODO use the parent leaf to detect if this is a sub-interface or not
         # using "_1" is vulnerable to the interface nameing schema change
         if "_1" not in ifname:

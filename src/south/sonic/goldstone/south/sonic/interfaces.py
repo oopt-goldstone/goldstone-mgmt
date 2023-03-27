@@ -232,7 +232,6 @@ class BreakoutHandler(IfChangeHandler):
         cache = self.setup_cache(user)
 
         if self.type in ["created", "modified"]:
-
             if "_1" not in self.ifname:
                 raise InvalArgError("breakout cannot be configured on a sub-interface")
 
@@ -313,7 +312,6 @@ class InterfaceServer(ServerBase):
         }
 
     def breakout_update_usonic(self, config):
-
         logger.debug("Starting to Update usonic's configMap and deployment")
 
         intfs = {}
@@ -455,7 +453,6 @@ class InterfaceServer(ServerBase):
                 pass
 
     async def event_handler(self):
-
         redis = aioredis.from_url(f"redis://{REDIS_SERVICE_HOST}:{REDIS_SERVICE_PORT}")
         psub = redis.pubsub()
         await psub.psubscribe("__keyspace@0__:PORT_TABLE:Ethernet*")
@@ -661,7 +658,6 @@ class InterfaceServer(ServerBase):
             intf["state"]["counters"] = self.sonic.get_counters(ifname)
 
             if not counter_only:
-
                 intf["state"]["oper-status"] = self.get_oper_status(ifname)
 
                 config = self.sonic.hgetall("APPL_DB", f"PORT_TABLE:{ifname}")
