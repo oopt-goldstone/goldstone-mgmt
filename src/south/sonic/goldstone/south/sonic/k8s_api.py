@@ -195,7 +195,6 @@ class incluster_apis(object):
         return w
 
     async def run_bcmcmd_port(self, ports, subcmd="", cmd="port"):
-
         ports_no = []
 
         if type(ports) == str:
@@ -365,7 +364,6 @@ class incluster_apis(object):
         return True
 
     def restart_usonic(self):
-
         api = k.client.AppsV1Api()
 
         l = api.list_namespaced_deployment(

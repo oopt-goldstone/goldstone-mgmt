@@ -692,7 +692,6 @@ class TestGearboxServer(TestBase):
         self.server = GearboxServer(self.conn, ifserver)
 
     async def test_synce_reference_clocks(self):
-
         self.tasks = list(asyncio.create_task(c) for c in await self.server.start())
         self.set_logs = []
 

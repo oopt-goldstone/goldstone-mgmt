@@ -97,7 +97,6 @@ def remove_interfaces(session, ifnames):
 
 
 def run_conf(session):
-
     n = 0
     for data in get_list(session, "running", False):
         stdout.info("portchannel {}".format(data["config"]["portchannel-id"]))
@@ -114,7 +113,6 @@ def run_conf(session):
 
 
 def show(session, id=None):
-
     if id != None:
         items = session.get_operational(pcxpath(id))
     else:

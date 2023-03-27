@@ -102,7 +102,6 @@ def show(session, id=None):
                 downlink_ports.append([])
 
         for i in range(len(ids)):
-
             if len(uplink_ports[i]) > 0:
                 if len(downlink_ports[i]) > 0:
                     data_tabulate.append(

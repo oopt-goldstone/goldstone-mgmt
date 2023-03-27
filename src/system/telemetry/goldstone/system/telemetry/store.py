@@ -87,7 +87,8 @@ class TelemetryStore:
 class InMemoryTelemetryStore(TelemetryStore):
     """A telemetry datastore implementation using volatile memory.
 
-    If you want to keep telemetry data after rebooting your application, you should not use this."""
+    If you want to keep telemetry data after rebooting your application, you should not use this.
+    """
 
     def __init__(self):
         self._data = {}
@@ -200,7 +201,8 @@ class SubscriptionStore:
 class InMemorySubscriptionStore(SubscriptionStore):
     """A subscription datastore implementation using volatile memory.
 
-    If you want to keep subscriptions after rebooting your application, you should not use this."""
+    If you want to keep subscriptions after rebooting your application, you should not use this.
+    """
 
     def __init__(self):
         self._subscriptions = {}

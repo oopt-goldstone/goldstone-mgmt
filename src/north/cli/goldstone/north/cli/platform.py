@@ -70,7 +70,6 @@ class Component(object):
         return table
 
     def show_platform(self, option="all", format=""):
-
         if option == "all":
             types = ["fan", "psu", "led", "piu", "transceiver", "thermal", "sys"]
             for type_ in types:

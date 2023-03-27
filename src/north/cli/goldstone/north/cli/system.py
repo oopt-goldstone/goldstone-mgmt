@@ -18,7 +18,6 @@ stderr = logging.getLogger("stderr")
 
 
 class NACM(Context):
-
     XPATH = "/ietf-netconf-acm:nacm"
 
     def __init__(self, conn, parent):
@@ -43,7 +42,6 @@ class NACM(Context):
 
 
 class Netconf(Context):
-
     XPATH = "/goldstone-system:system/netconf"
 
     def __init__(self, conn, parent):

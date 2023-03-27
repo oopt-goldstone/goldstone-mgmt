@@ -34,6 +34,7 @@ _errors = [(v, getattr(goldstone.lib.errors, v)) for v in dir(goldstone.lib.erro
 _errors = [(n, t) for n, t in _errors if type(t) == type]
 _error_map = {t: getattr(sysrepo, f"Sysrepo{n}") for n, t in _errors}
 
+
 # convert goldstone.lib.errors to sysrepo.errors
 def convert2sysrepo(e):
     sr_e = _error_map.get(type(e))

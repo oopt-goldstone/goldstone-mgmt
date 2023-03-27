@@ -45,13 +45,11 @@ class KubernetesServer:
         return True
 
     async def monitor(self):
-
         while not os.path.exists(KUBECONFIG):
             logger.warn(f"{KUBECONFIG} doesn't exist. sleep 10sec")
             await asyncio.sleep(10)
 
         while True:
-
             # TODO wait longer for initial bootup
             # get uptime and decide what to do
             if await self.ping():
@@ -72,5 +70,4 @@ class KubernetesServer:
                     logger.debug(f"{str(error)}")
 
     async def start(self):
-
         return [self.monitor()]

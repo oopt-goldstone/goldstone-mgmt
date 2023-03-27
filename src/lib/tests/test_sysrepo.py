@@ -119,7 +119,6 @@ class TestConcurrentAccess(unittest.IsolatedAsyncioTestCase):
         self.conn.apply()
 
     async def test_concurrent_update(self):
-
         if_server = MockInterfaceServer(self.conn)
         xp_server = MockTransponderServer(self.conn)
 

@@ -200,7 +200,6 @@ class InterfaceHandler(TAIHandler):
         await super().revert(user)
 
         if self.attr_name == "line-rate":
-
             modules = self.server.modules[self.module.location]
             async with modules["lock"]:
                 for obj in self.created:
@@ -360,7 +359,6 @@ class TransponderServer(ServerBase):
         return asyncio.gather(*tasks)
 
     async def initialize_piu(self, config, location):
-
         name = self.location2name(location)
         if not name:
             logger.warning(f"failed to get module name from location: {location}")
@@ -371,7 +369,6 @@ class TransponderServer(ServerBase):
         self.modules[location] = {"lock": asyncio.Lock()}
 
         async with self.modules[location]["lock"]:
-
             logger.info(f"initializing module({name})")
 
             attrs = [
@@ -486,7 +483,6 @@ class TransponderServer(ServerBase):
     async def cleanup_piu(self, location):
         m = self.modules[location]
         async with m["lock"]:
-
             try:
                 module = await self.taish.get_module(location)
             except taish.TAIException:
@@ -741,7 +737,6 @@ class TransponderServer(ServerBase):
         )
 
         if xpath[0][1] in ["network-interface", "host-interface"]:
-
             intf = xpath[0][1]
 
             if len(xpath[0][2]) == 0:
@@ -891,7 +886,6 @@ class TransponderServer(ServerBase):
                     data["host-interface"] = [v]
 
             else:
-
                 if item:
                     attr = await get(module, item)
                     data["state"] = {item.name(): attr}
