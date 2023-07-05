@@ -473,8 +473,32 @@ class InterfaceServer(ServerBase):
                 "if-name": ifname,
                 "oper-status": self.get_oper_status(ifname),
             }
+            self.ufd_handler(ifname, oper_status)
             self.send_notification(eventname, notif)
             self.sonic.notif_if[ifname] = oper_status
+
+    def ufd_handler(self, ifname, uplink_oper_status):
+        uplink, downlink, downlink_port = self.is_uplink_port(ifname)
+        if uplink and downlink:
+            if uplink_oper_status == "down":
+                for port in downlink_port:
+                    self.sonic.set_config_db(port, "admin_status", "down")
+            elif uplink_oper_status == "up":
+                for port in downlink_port:
+                    downlink_admin_status = self.get_running_data(f"/goldstone-interfaces:interfaces/interface[name='{port}']/config/admin-status",None)
+                    if downlink_admin_status == "UP":
+                        self.sonic.set_config_db(port, "admin_status", "up")
+
+    def is_uplink_port(self,ifname):
+        ufd_list = self.get_ufd()
+        for data in ufd_list:
+            try:
+                if "uplink" in data["config"] and ifname in data["config"]["uplink"] and "downlink" in data["config"]:
+                    return True, True, list(data["config"]["downlink"])
+            except:
+                pass
+
+        return False, False, None
 
     def clear_counters(self, xpath, input_params, event, priv):
         logger.debug(
