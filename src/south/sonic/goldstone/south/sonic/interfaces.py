@@ -477,28 +477,30 @@ class InterfaceServer(ServerBase):
             self.send_notification(eventname, notif)
             self.sonic.notif_if[ifname] = oper_status
 
-    def ufd_handler(self, ifname, uplink_oper_status):
-        uplink, downlink, downlink_port = self.is_uplink_port(ifname)
-        if uplink and downlink:
-            if uplink_oper_status == "down":
-                for port in downlink_port:
-                    self.sonic.set_config_db(port, "admin_status", "down")
-            elif uplink_oper_status == "up":
-                for port in downlink_port:
-                    downlink_admin_status = self.get_running_data(f"/goldstone-interfaces:interfaces/interface[name='{port}']/config/admin-status",None)
-                    if downlink_admin_status == "UP":
-                        self.sonic.set_config_db(port, "admin_status", "up")
+    def ufd_handler(self, ifname, oper_status):
+        downlinks = self.get_downlinks(ifname)
 
-    def is_uplink_port(self,ifname):
+        if not downlinks:
+            return
+
+        if oper_status == "down":
+            for port in downlinks:
+                self.sonic.set_config_db(port, "admin_status", "down")
+        elif oper_status == "up":
+            for port in downlinks:
+                downlink_admin_status = self.get_running_data(
+                    f"/goldstone-interfaces:interfaces/interface[name='{port}']/config/admin-status",
+                    None,
+                )
+                if downlink_admin_status == "UP":
+                    self.sonic.set_config_db(port, "admin_status", "up")
+
+    def get_downlinks(self, ifname):
         ufd_list = self.get_ufd()
         for data in ufd_list:
-            try:
-                if "uplink" in data["config"] and ifname in data["config"]["uplink"] and "downlink" in data["config"]:
-                    return True, True, list(data["config"]["downlink"])
-            except:
-                pass
-
-        return False, False, None
+            uplinks = data.get("config", {}).get("uplink", [])
+            if ifname in uplinks:
+                return list(data.get("config", {}).get("downlink", []))
 
     def clear_counters(self, xpath, input_params, event, priv):
         logger.debug(
