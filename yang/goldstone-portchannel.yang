@@ -19,7 +19,7 @@ module goldstone-portchannel {
   description
     "Goldstone portchannel";
 
-  revision 2021-05-30 {
+  revision 2023-07-10 {
     description
       "Initial revision.";
   }
@@ -47,6 +47,16 @@ module goldstone-portchannel {
       }
       units "octets";
       default 9100;
+    }
+
+   leaf mode {
+     type enumeration{
+	enum dynamic;
+	enum static;
+	enum none;
+      }
+      description "portchannel mode";
+      default none;
     }
 
     uses gs-if:interface-common-config;
