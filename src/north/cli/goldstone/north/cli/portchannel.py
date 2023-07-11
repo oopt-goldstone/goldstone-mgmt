@@ -55,7 +55,6 @@ def get_list(session, ds, include_implicit_defaults=True):
 
 def add_interfaces(session, id, ifnames, mode):
     session.set(f"{pcxpath(id)}/config/mode", mode)
-    session.apply()
     prefix = "/goldstone-interfaces:interfaces"
     for ifname in ifnames:
         xpath = f"{prefix}/interface[name='{ifname}']"
@@ -99,7 +98,6 @@ def remove_interfaces(session, ifnames):
 
 
 def run_conf(session):
-
     n = 0
     for data in get_list(session, "running", False):
         stdout.info("portchannel {}".format(data["config"]["portchannel-id"]))
@@ -116,7 +114,6 @@ def run_conf(session):
 
 
 def show(session, id=None):
-
     if id != None:
         items = session.get_operational(pcxpath(id))
     else:
@@ -124,23 +121,17 @@ def show(session, id=None):
 
     rows = []
     for item in items:
-        if "config" in item and item["config"]["mode"] == "dynamic":
+        if (
+            "config" in item
+            and item["config"]["mode"] == "dynamic"
+            or item["config"]["mode"] == "static"
+        ):
             rows.append(
                 [
                     item["portchannel-id"],
                     item["state"]["oper-status"].lower(),
                     item["state"]["admin-status"].lower(),
                     ", ".join(natsorted(list(item["state"].get("interface", [])))),
-                    item["config"]["mode"],
-                ]
-            )
-        elif "config" in item and item["config"]["mode"] == "static":
-            rows.append(
-                [
-                    item["portchannel-id"],
-                    item["state"]["oper-status"].lower(),
-                    item["state"]["admin-status"].lower(),
-                    ", ".join(natsorted(list(item["config"].get("interface", [])))),
                     item["config"]["mode"],
                 ]
             )
@@ -294,13 +285,15 @@ def get_portchannel(conn, ifname):
 class PortChannelModeOptions(ConfigCommand):
     COMMAND_DICT = {"dynamic": Command, "static": Command}
 
+
 class PortChannelModeCommand(ConfigCommand):
     def __init__(
         self, context: Context = None, parent: Command = None, name=None, **options
     ):
         super().__init__(context, parent, name, **options)
         if self.root.name != "no":
-            self.add_command("mode",PortChannelModeOptions)
+            self.add_command("mode", PortChannelModeOptions)
+
 
 class InterfacePortchannelCommand(ConfigCommand):
     def arguments(self):
@@ -313,7 +306,9 @@ class InterfacePortchannelCommand(ConfigCommand):
             remove_interfaces(self.conn, self.context.ifnames)
         else:
             if len(line) != 3 and (line[2] != "dynamic" or line[2] != "static"):
-                raise InvalidInput(f"usage: {self.name_all()} <portchannel_id> mode [dynamic|static]")
+                raise InvalidInput(
+                    f"usage: {self.name_all()} <portchannel_id> mode [dynamic|static]"
+                )
             add_interfaces(self.conn, line[0], self.context.ifnames, line[2])
 
     @classmethod
