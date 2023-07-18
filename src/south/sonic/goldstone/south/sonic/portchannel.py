@@ -175,6 +175,15 @@ class PortChannelServer(ServerBase):
             members = self.sonic.get_keys(f"LAG_MEMBER_TABLE:{name}:*", "APPL_DB")
             members = [m.split(":")[-1] for m in members]
             state["interface"] = members
+            state["interface"] = members
+            static = self.sonic.sonic_db.get(
+                self.sonic.sonic_db.CONFIG_DB, f"PORTCHANNEL|{name}", "static"
+            )
+            if static is not None and static == "true":
+                state["mode"] = "static"
+            else:
+                state["mode"] = "dynamic"
+
             r.append({"portchannel-id": name, "state": state})
 
         logger.debug(f"portchannel: {r}")

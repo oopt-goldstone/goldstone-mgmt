@@ -53,10 +53,8 @@ module goldstone-portchannel {
      type enumeration{
 	enum dynamic;
 	enum static;
-	enum none;
       }
       description "portchannel mode";
-      default none;
     }
 
     uses gs-if:interface-common-config;

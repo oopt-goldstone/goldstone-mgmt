@@ -121,28 +121,24 @@ def show(session, id=None):
 
     rows = []
     for item in items:
-        if (
-            "config" in item
-            and item["config"]["mode"] == "dynamic"
-            or item["config"]["mode"] == "static"
-        ):
+        if "config" in item and "mode" in item["config"]:
             rows.append(
                 [
                     item["portchannel-id"],
                     item["state"]["oper-status"].lower(),
                     item["state"]["admin-status"].lower(),
                     ", ".join(natsorted(list(item["state"].get("interface", [])))),
-                    item["config"]["mode"],
+                    item["state"]["mode"],
                 ]
             )
-        elif "config" in item and item["config"]["mode"] == "none":
+        elif "config" in item:
             rows.append(
                 [
                     item["portchannel-id"],
                     "-",
                     item["config"]["admin-status"].lower(),
                     ", ".join(natsorted(list(item["config"].get("interface", [])))),
-                    item["config"]["mode"],
+                    "none",
                 ]
             )
 
