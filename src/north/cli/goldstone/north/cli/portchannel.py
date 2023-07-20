@@ -121,27 +121,21 @@ def show(session, id=None):
 
     rows = []
     for item in items:
-        if "config" in item and "mode" in item["config"]:
-            rows.append(
-                [
-                    item["portchannel-id"],
-                    item["state"]["oper-status"].lower(),
-                    item["state"]["admin-status"].lower(),
-                    ", ".join(natsorted(list(item["state"].get("interface", [])))),
-                    item["state"]["mode"],
-                ]
-            )
-        elif "config" in item:
-            rows.append(
-                [
-                    item["portchannel-id"],
-                    "-",
-                    item["config"]["admin-status"].lower(),
-                    ", ".join(natsorted(list(item["config"].get("interface", [])))),
-                    "none",
-                ]
-            )
-
+        rows.append(
+            [
+                item["portchannel-id"],
+                item["state"]["oper-status"].lower() if "state" in item else "-",
+                item["state"]["admin-status"].lower()
+                if "state" in item
+                else item["config"]["admin-status"].lower(),
+                ", ".join(natsorted(list(item["state"].get("interface", []))))
+                if "state" in item
+                else None,
+                item["state"]["mode"]
+                if "state" in item and "mode" in item["state"]
+                else "None",
+            ]
+        )
     stdout.info(
         tabulate(
             rows,

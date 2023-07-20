@@ -35,21 +35,15 @@ class PortChannelIDHandler(PortChannelChangeHandler):
             self.mode = self.change.value
             admin = self.server.get_default("admin-status")
             mtu = value = self.server.get_default("mtu")
-            if self.mode == "dynamic":
-                self.server.sonic.set_config_db(self.pid, "mode", self.mode, "PORTMODE")
-                self.server.sonic.set_config_db(
-                    self.pid, "admin-status", admin, "PORTCHANNEL"
-                )
-                self.server.sonic.set_config_db(self.pid, "mtu", mtu, "PORTCHANNEL")
-            elif self.mode == "static":
+            if self.mode == "static":
                 self.server.sonic.set_config_db(
                     self.pid, "static", "true", "PORTCHANNEL"
                 )
-                self.server.sonic.set_config_db(self.pid, "mode", self.mode, "PORTMODE")
-                self.server.sonic.set_config_db(
-                    self.pid, "admin-status", admin, "PORTCHANNEL"
-                )
-                self.server.sonic.set_config_db(self.pid, "mtu", mtu, "PORTCHANNEL")
+            self.server.sonic.set_config_db(self.pid, "mode", self.mode, "PORTMODE")
+            self.server.sonic.set_config_db(
+                self.pid, "admin-status", admin, "PORTCHANNEL"
+            )
+            self.server.sonic.set_config_db(self.pid, "mtu", mtu, "PORTCHANNEL")
         else:
             self.server.sonic.sonic_db.delete(
                 self.server.sonic.sonic_db.CONFIG_DB, f"PORTMODE|{self.pid}"
@@ -179,7 +173,7 @@ class PortChannelServer(ServerBase):
             static = self.sonic.sonic_db.get(
                 self.sonic.sonic_db.CONFIG_DB, f"PORTCHANNEL|{name}", "static"
             )
-            if static is not None and static == "true":
+            if static == "true":
                 state["mode"] = "static"
             else:
                 state["mode"] = "dynamic"
