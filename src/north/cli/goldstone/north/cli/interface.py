@@ -1086,25 +1086,11 @@ class InterfaceCounterCommand(Command):
                 table = line[0] == "table"
 
             ifnames = self.context.ifnames
-            model   = self.model
+            model = self.model
 
         show_counters(self.conn, ifnames, table, model)
-
-
-class InterfaceShowCommand(Command):
-    COMMAND_DICT = {"counters": InterfaceCounterCommand}
-
-    def __init__(self, context, parent, name, **options):
-        self.model = options.get("model", "goldstone-interfaces")
-        super().__init__(context, parent, name, **options)
-
-    def exec(self, line):
-        if len(line) != 0:
-            return self.context.root().exec(f"show {' '.join(line)}")
-        else:
-            show(self.conn, self.context.ifnames, self.model)
-
-
+        
+        
 class InterfaceContext(Context):
     REGISTERED_COMMANDS = {}
     OBJECT_NAME = "interface"
