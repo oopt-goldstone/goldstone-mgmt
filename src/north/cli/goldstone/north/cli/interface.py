@@ -1046,6 +1046,7 @@ class InterfaceCounterCommand(Command):
     def __init__(self, context, parent, name, **options):
         super().__init__(context, parent, name, **options)
 
+        self.model = options.get("model", "goldstone-interfaces")
         self.add_command("pcs", InterfacePCSCounterCommand)
         self.add_command("detail", InterfaceDetailCounterCommand)
 
@@ -1085,8 +1086,9 @@ class InterfaceCounterCommand(Command):
                 table = line[0] == "table"
 
             ifnames = self.context.ifnames
+            model = self.model
 
-        show_counters(self.conn, ifnames, table)
+        show_counters(self.conn, ifnames, table, model)
 
 
 class InterfaceShowCommand(Command):
