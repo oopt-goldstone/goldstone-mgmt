@@ -114,7 +114,7 @@ Using the standard YANG models ([OpenConfig](https://www.openconfig.net/), [Open
 ```bash
 $ git clone https://github.com/oopt-goldstone/goldstone-mgmt.git
 $ cd goldstone-mgmt
-$ git submodule --update --init
+$ git submodule update --init
 $ make all
 ```
 
