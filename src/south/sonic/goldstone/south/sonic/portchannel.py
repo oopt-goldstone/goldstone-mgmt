@@ -7,6 +7,12 @@ from goldstone.lib.errors import (
 )
 
 
+def _decode(string):
+    if hasattr(string, "decode"):
+        return string.decode("utf-8")
+    return str(string)
+
+
 class PortChannelChangeHandler(ChangeHandler):
     def __init__(self, server, change):
         super().__init__(server, change)
@@ -26,11 +32,22 @@ class PortChannelChangeHandler(ChangeHandler):
 class PortChannelIDHandler(PortChannelChangeHandler):
     def apply(self, user):
         if self.type in ["created", "modified"]:
-            value = self.server.get_default("admin-status")
+            self.mode = self.change.value
+            admin = self.server.get_default("admin-status")
+            mtu = value = self.server.get_default("mtu")
+            if self.mode == "static":
+                self.server.sonic.set_config_db(
+                    self.pid, "static", "true", "PORTCHANNEL"
+                )
+            self.server.sonic.set_config_db(self.pid, "mode", self.mode, "PORTMODE")
             self.server.sonic.set_config_db(
-                self.pid, "admin-status", value, "PORTCHANNEL"
+                self.pid, "admin-status", admin, "PORTCHANNEL"
             )
+            self.server.sonic.set_config_db(self.pid, "mtu", mtu, "PORTCHANNEL")
         else:
+            self.server.sonic.sonic_db.delete(
+                self.server.sonic.sonic_db.CONFIG_DB, f"PORTMODE|{self.pid}"
+            )
             self.server.sonic.sonic_db.delete(
                 self.server.sonic.sonic_db.CONFIG_DB, f"PORTCHANNEL|{self.pid}"
             )
@@ -38,12 +55,20 @@ class PortChannelIDHandler(PortChannelChangeHandler):
 
 class AdminStatusHandler(PortChannelChangeHandler):
     def apply(self, user):
+        self.mode = _decode(
+            self.server.sonic.sonic_db.get(
+                self.server.sonic.sonic_db.CONFIG_DB, f"PORTMODE|{self.pid}", "mode"
+            )
+        )
         if self.type in ["created", "modified"]:
             value = self.change.value
         else:
             value = self.server.get_default("admin-status")
         logger.debug(f"set {self.pid}'s admin-status to {value}")
-        self.server.sonic.set_config_db(self.pid, "admin-status", value, "PORTCHANNEL")
+        if self.type not in ["deleted"] and self.mode in ["dynamic", "static"]:
+            self.server.sonic.set_config_db(
+                self.pid, "admin-status", value, "PORTCHANNEL"
+            )
 
     def revert(self, user):
         # TODO
@@ -52,12 +77,18 @@ class AdminStatusHandler(PortChannelChangeHandler):
 
 class MTUHandler(PortChannelChangeHandler):
     def apply(self, user):
+        self.mode = _decode(
+            self.server.sonic.sonic_db.get(
+                self.server.sonic.sonic_db.CONFIG_DB, f"PORTMODE|{self.pid}", "mode"
+            )
+        )
         if self.type in ["created", "modified"]:
             value = self.change.value
         else:
             value = self.server.get_default("mtu")
         logger.debug(f"set {self.pid}'s mtu to {value}")
-        self.server.sonic.set_config_db(self.pid, "mtu", value, "PORTCHANNEL")
+        if self.type not in ["deleted"] and self.mode in ["dynamic", "static"]:
+            self.server.sonic.set_config_db(self.pid, "mtu", value, "PORTCHANNEL")
 
 
 class InterfaceHandler(PortChannelChangeHandler):
@@ -71,6 +102,9 @@ class InterfaceHandler(PortChannelChangeHandler):
     def apply(self, user):
         if self.type in ["created", "modified"]:
             ifname = self.xpath[-1][2][0][1]
+            self.server.sonic.set_config_db(
+                self.pid, "admin-status", "up", "PORTCHANNEL"
+            )
             self.server.sonic.sonic_db.set(
                 self.server.sonic.sonic_db.CONFIG_DB,
                 f"PORTCHANNEL_MEMBER|{self.pid}|{ifname}",
@@ -94,7 +128,8 @@ class PortChannelServer(ServerBase):
                 "portchannel-group": {
                     "portchannel-id": NoOp,
                     "config": {
-                        "portchannel-id": PortChannelIDHandler,
+                        "portchannel-id": NoOp,
+                        "mode": PortChannelIDHandler,
                         "admin-status": AdminStatusHandler,
                         "mtu": MTUHandler,
                         "interface": InterfaceHandler,
@@ -134,6 +169,15 @@ class PortChannelServer(ServerBase):
             members = self.sonic.get_keys(f"LAG_MEMBER_TABLE:{name}:*", "APPL_DB")
             members = [m.split(":")[-1] for m in members]
             state["interface"] = members
+            state["interface"] = members
+            static = self.sonic.sonic_db.get(
+                self.sonic.sonic_db.CONFIG_DB, f"PORTCHANNEL|{name}", "static"
+            )
+            if static == "true":
+                state["mode"] = "static"
+            else:
+                state["mode"] = "dynamic"
+
             r.append({"portchannel-id": name, "state": state})
 
         logger.debug(f"portchannel: {r}")
@@ -165,10 +209,15 @@ class PortChannelServer(ServerBase):
         )
         for pc in pc_list:
             pid = pc["portchannel-id"]
-            for leaf in ["admin-status", "mtu"]:
-                default = self.get_default(leaf)
-                value = pc["config"].get(leaf, default)
-                self.sonic.set_config_db(pid, leaf, value, "PORTCHANNEL")
+            mode = pc["config"].get("mode", "")
+            if mode in ["dynamic", "static"]:
+                for leaf in ["admin-status", "mtu"]:
+                    default = self.get_default(leaf)
+                    value = pc["config"].get(leaf, default)
+                    self.sonic.set_config_db(pid, "mode", mode, "PORTMODE")
+                    if mode == "static":
+                        self.sonic.set_config_db(pid, "static", "true", "PORTCHANNEL")
+                    self.sonic.set_config_db(pid, leaf, value, "PORTCHANNEL")
             for intf in pc["config"].get("interface", []):
                 self.sonic.set_config_db(
                     pid + "|" + intf, "NULL", "NULL", "PORTCHANNEL_MEMBER"
