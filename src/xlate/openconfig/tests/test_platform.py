@@ -4531,12 +4531,13 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         data = self.conn.get(xpath)
         self.assertEqual(data, "ofec")
-        xpath = (
-            "/goldstone-transponder:modules/module[name='piu1']/"
-            "network-interface[name='1']/config/client-signal-mapping-type"
-        )
-        data = self.conn.get(xpath)
-        self.assertEqual(data, "flexo-lr")
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # xpath = (
+        #     "/goldstone-transponder:modules/module[name='piu1']/"
+        #     "network-interface[name='1']/config/client-signal-mapping-type"
+        # )
+        # data = self.conn.get(xpath)
+        # self.assertEqual(data, "flexo-lr")
 
         handler.revert(user)
         self.sess["running"].apply()
@@ -4610,12 +4611,13 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         data = self.conn.get(xpath)
         self.assertEqual(data, "ofec")
-        xpath = (
-            "/goldstone-transponder:modules/module[name='piu1']/"
-            "network-interface[name='1']/config/client-signal-mapping-type"
-        )
-        data = self.conn.get(xpath)
-        self.assertEqual(data, "flexo-lr")
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # xpath = (
+        #     "/goldstone-transponder:modules/module[name='piu1']/"
+        #     "network-interface[name='1']/config/client-signal-mapping-type"
+        # )
+        # data = self.conn.get(xpath)
+        # self.assertEqual(data, "flexo-lr")
 
         handler.revert(user)
         self.sess["running"].apply()
@@ -4695,12 +4697,13 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         data = self.conn.get(xpath)
         self.assertEqual(data, "ofec")
-        xpath = (
-            "/goldstone-transponder:modules/module[name='piu1']/"
-            "network-interface[name='1']/config/client-signal-mapping-type"
-        )
-        data = self.conn.get(xpath)
-        self.assertEqual(data, "flexo-lr")
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # xpath = (
+        #     "/goldstone-transponder:modules/module[name='piu1']/"
+        #     "network-interface[name='1']/config/client-signal-mapping-type"
+        # )
+        # data = self.conn.get(xpath)
+        # self.assertEqual(data, "flexo-lr")
 
         handler.revert(user)
         self.sess["running"].apply()
@@ -4745,11 +4748,12 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
             "network-interface[name='1']/config/fec-type",
             "sc-fec",
         )
-        self.conn.set(
-            "/goldstone-transponder:modules/module[name='piu1']/"
-            "network-interface[name='1']/config/client-signal-mapping-type",
-            "otu4-lr",
-        )
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # self.conn.set(
+        #     "/goldstone-transponder:modules/module[name='piu1']/"
+        #     "network-interface[name='1']/config/client-signal-mapping-type",
+        #     "otu4-lr",
+        # )
         self.conn.apply()
 
         server = PlatformServer(self.conn, operational_modes)
@@ -4769,7 +4773,10 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
 
         handler.validate(user)
         self.assertEqual(
-            handler.original_value, ("100g", "dp-qpsk", "sc-fec", "otu4-lr")
+            # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+            # handler.original_value, ("100g", "dp-qpsk", "sc-fec", "otu4-lr")
+            handler.original_value,
+            ("100g", "dp-qpsk", "sc-fec", None),
         )
         self.assertFalse(handler.module_created)
         self.assertFalse(handler.netif_created)
@@ -4803,12 +4810,13 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         data = self.conn.get(xpath)
         self.assertEqual(data, "ofec")
-        xpath = (
-            "/goldstone-transponder:modules/module[name='piu1']/"
-            "network-interface[name='1']/config/client-signal-mapping-type"
-        )
-        data = self.conn.get(xpath)
-        self.assertEqual(data, "flexo-lr")
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # xpath = (
+        #     "/goldstone-transponder:modules/module[name='piu1']/"
+        #     "network-interface[name='1']/config/client-signal-mapping-type"
+        # )
+        # data = self.conn.get(xpath)
+        # self.assertEqual(data, "flexo-lr")
 
         handler.revert(user)
         self.sess["running"].apply()
@@ -4830,12 +4838,13 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         data = self.conn.get(xpath)
         self.assertEqual(data, "sc-fec")
-        xpath = (
-            "/goldstone-transponder:modules/module[name='piu1']/"
-            "network-interface[name='1']/config/client-signal-mapping-type"
-        )
-        data = self.conn.get(xpath)
-        self.assertEqual(data, "otu4-lr")
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # xpath = (
+        #     "/goldstone-transponder:modules/module[name='piu1']/"
+        #     "network-interface[name='1']/config/client-signal-mapping-type"
+        # )
+        # data = self.conn.get(xpath)
+        # self.assertEqual(data, "otu4-lr")
         xpath = "/goldstone-transponder:modules/module[name='piu1']/name"
         self.conn.get(xpath)
         xpath = "/goldstone-transponder:modules/module[name='piu1']/network-interface[name='1']/name"
@@ -5034,11 +5043,12 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
             "network-interface[name='1']/config/fec-type",
             "sc-fec",
         )
-        self.conn.set(
-            "/goldstone-transponder:modules/module[name='piu1']/"
-            "network-interface[name='1']/config/client-signal-mapping-type",
-            "otu4-lr",
-        )
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # self.conn.set(
+        #     "/goldstone-transponder:modules/module[name='piu1']/"
+        #     "network-interface[name='1']/config/client-signal-mapping-type",
+        #     "otu4-lr",
+        # )
         self.conn.apply()
 
         server = PlatformServer(self.conn, operational_modes)
@@ -5057,7 +5067,10 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
 
         handler.validate(user)
         self.assertEqual(
-            handler.original_value, ("100g", "dp-qpsk", "sc-fec", "otu4-lr")
+            # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+            # handler.original_value, ("100g", "dp-qpsk", "sc-fec", "otu4-lr")
+            handler.original_value,
+            ("100g", "dp-qpsk", "sc-fec", None),
         )
         self.assertFalse(handler.module_created)
         self.assertFalse(handler.netif_created)
@@ -5095,12 +5108,13 @@ class TestPlatformOpticalChannelOperationalModeHandler(unittest.TestCase):
         )
         data = self.conn.get(xpath)
         self.assertEqual(data, "sc-fec")
-        xpath = (
-            "/goldstone-transponder:modules/module[name='piu1']/"
-            "network-interface[name='1']/config/client-signal-mapping-type"
-        )
-        data = self.conn.get(xpath)
-        self.assertEqual(data, "otu4-lr")
+        # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+        # xpath = (
+        #     "/goldstone-transponder:modules/module[name='piu1']/"
+        #     "network-interface[name='1']/config/client-signal-mapping-type"
+        # )
+        # data = self.conn.get(xpath)
+        # self.assertEqual(data, "otu4-lr")
         xpath = "/goldstone-transponder:modules/module[name='piu1']/name"
         self.conn.get(xpath)
         xpath = "/goldstone-transponder:modules/module[name='piu1']/network-interface[name='1']/name"
@@ -6402,12 +6416,13 @@ class TestPlatformServer(XlateTestCase):
             data = self.conn.get(xpath)
             self.assertEqual(data, "sc-fec")
 
-            xpath = (
-                f"/goldstone-transponder:modules/module[name='{module_name}']/"
-                f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
-            )
-            data = self.conn.get(xpath)
-            self.assertEqual(data, "otu4-lr")
+            # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+            # xpath = (
+            #     f"/goldstone-transponder:modules/module[name='{module_name}']/"
+            #     f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
+            # )
+            # data = self.conn.get(xpath)
+            # self.assertEqual(data, "otu4-lr")
 
             # Set 400.
             module_name = "piu1"
@@ -6441,12 +6456,13 @@ class TestPlatformServer(XlateTestCase):
             data = self.conn.get(xpath)
             self.assertEqual(data, "ofec")
 
-            xpath = (
-                f"/goldstone-transponder:modules/module[name='{module_name}']/"
-                f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
-            )
-            data = self.conn.get(xpath)
-            self.assertEqual(data, "flexo-lr")
+            # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+            # xpath = (
+            #     f"/goldstone-transponder:modules/module[name='{module_name}']/"
+            #     f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
+            # )
+            # data = self.conn.get(xpath)
+            # self.assertEqual(data, "flexo-lr")
 
             # Delete.
             module_name = "piu1"
@@ -6479,12 +6495,13 @@ class TestPlatformServer(XlateTestCase):
             data = self.conn.get(xpath)
             self.assertEqual(data, None)
 
-            xpath = (
-                f"/goldstone-transponder:modules/module[name='{module_name}']/"
-                f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
-            )
-            data = self.conn.get(xpath)
-            self.assertEqual(data, None)
+            # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+            # xpath = (
+            #     f"/goldstone-transponder:modules/module[name='{module_name}']/"
+            #     f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
+            # )
+            # data = self.conn.get(xpath)
+            # self.assertEqual(data, None)
 
         await self.run_xlate_test(test)
 
@@ -6540,7 +6557,7 @@ class TestPlatformServer(XlateTestCase):
             )
             self.set_mock_change_handler(
                 "goldstone-transponder",
-                "/modules/module/network-interface/config/client-signal-mapping-type",
+                "/modules/module/network-interface/config/fec-type",
                 FailApplyChangeHandler,
             )
             time.sleep(1)
@@ -6641,12 +6658,13 @@ class TestPlatformServer(XlateTestCase):
             data = self.conn.get(xpath)
             self.assertEqual(data, "sc-fec")
 
-            xpath = (
-                f"/goldstone-transponder:modules/module[name='{module_name}']/"
-                f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
-            )
-            data = self.conn.get(xpath)
-            self.assertEqual(data, "otu4-lr")
+            # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+            # xpath = (
+            #     f"/goldstone-transponder:modules/module[name='{module_name}']/"
+            #     f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
+            # )
+            # data = self.conn.get(xpath)
+            # self.assertEqual(data, "otu4-lr")
 
             # Update configuration.
             self.conn.set(
@@ -6667,7 +6685,7 @@ class TestPlatformServer(XlateTestCase):
             # But failed.
             self.set_mock_change_handler(
                 "goldstone-transponder",
-                "/modules/module/network-interface/config/client-signal-mapping-type",
+                "/modules/module/network-interface/config/fec-type",
                 FailApplyChangeHandler,
             )
             time.sleep(1)
@@ -6710,12 +6728,13 @@ class TestPlatformServer(XlateTestCase):
             data = self.conn.get(xpath)
             self.assertEqual(data, "sc-fec")
 
-            xpath = (
-                f"/goldstone-transponder:modules/module[name='{module_name}']/"
-                f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
-            )
-            data = self.conn.get(xpath)
-            self.assertEqual(data, "otu4-lr")
+            # NOTE: Current implementation doesn't allow to configure client-signal-mapping-type.
+            # xpath = (
+            #     f"/goldstone-transponder:modules/module[name='{module_name}']/"
+            #     f"network-interface[name='{netif_name}']/config/client-signal-mapping-type"
+            # )
+            # data = self.conn.get(xpath)
+            # self.assertEqual(data, "otu4-lr")
 
         await self.run_xlate_test(test)
 
