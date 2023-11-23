@@ -17,12 +17,15 @@ class ChangeHandler(object):
     def __init__(self, server, change):
         self.server = server
         self.change = change
-        self.type = self.change.type
+
+    @property
+    def type(self):
+        return self.change.type
 
     def setup_cache(self, user):
         cache = user.get("cache")
         if not user.get("cache"):
-            cache = self.server.conn.get_config_cache(user["changes"])
+            cache = self.server.conn.get_config_cache(user.get("changes", {}))
             user["cache"] = cache
         return cache
 
